@@ -105,6 +105,11 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         label="Message Content",
         from_message=lambda m, e, t: get_message_content(m, t) if t else m.content,
     ),
+    ExportColumn(
+        key="moderation_status",
+        label="Moderation Status",
+        from_message=lambda m, e, t: m.moderation_status or "",
+    ),
     ExportColumn(key="platform", label="Platform", from_session=lambda s: s.get_platform_name()),
     ExportColumn(
         key="session_tags",

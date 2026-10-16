@@ -9,7 +9,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from waffle.testutils import override_flag
 
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.experiments import export as export_mod
 from apps.experiments.export import (
     EXPORT_COLUMNS,
@@ -540,6 +540,7 @@ FULL_EXPORT_HEADER = [
     "Message Date",
     "Message Type",
     "Message Content",
+    "Moderation Status",
     "Platform",
     "Session Tags",
     "Annotation Queues",
@@ -632,6 +633,29 @@ def test_unselected_columns_are_not_computed():
 def test_message_queryset_prefetches_only_selected_columns(columns, expected_prefetches):
     queryset = _build_message_queryset(ExperimentSession.objects.none(), columns=resolve_export_columns(columns))
     assert set(queryset._prefetch_related_lookups) == expected_prefetches
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_type", "moderation_status", "expected"),
+    [
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.FLAGGED, "flagged", id="flagged"),
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.SKIPPED, "skipped", id="skipped"),
+        pytest.param(ChatMessageType.HUMAN, None, "", id="not_moderated"),
+        pytest.param(ChatMessageType.AI, None, "", id="ai_message"),
+    ],
+)
+def test_moderation_status_column(message_type, moderation_status, expected):
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(
+        chat=session.chat, content="hello", message_type=message_type, moderation_status=moderation_status
+    )
+
+    header, row = list(
+        generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["moderation_status"])
+    )
+
+    assert dict(zip(header, row, strict=True))["Moderation Status"] == expected
 
 
 def _session_with_one_message():
