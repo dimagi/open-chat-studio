@@ -1,4 +1,4 @@
-{% load chat_tags form_tags json_tags waffle_tags %}
+{% load chat_tags form_tags json_tags moderation_tags waffle_tags %}
 {% url 'chatbots:chatbot_session_view' request.team.slug experiment.public_id experiment_session.external_id as session_detail_url %}
 {% for message in messages %}
   {% if message.time_gap_text %}
@@ -137,6 +137,11 @@
             {{ message.created_at|date:"DATETIME_FORMAT" }}
           </time>
         </span>
+        {% if show_moderation_markers and message.moderation_status == "flagged" %}
+          <span class="badge badge-error badge-sm" title="The moderation provider flagged this message">
+            <i class="fa-solid fa-flag mr-1"></i>flagged: {{ message.moderation_detail|flagged_strike_categories|join:", " }}
+          </span>
+        {% endif %}
         {% if show_moderation_markers and message.moderation_detail.rules %}
           <span class="badge badge-warning badge-sm" title="Abuse rules this message triggered">
             <i class="fa-solid fa-triangle-exclamation mr-1"></i>rule: {{ message.moderation_detail.rules|join:", " }}
