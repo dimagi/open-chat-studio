@@ -105,11 +105,6 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         label="Message Content",
         from_message=lambda m, e, t: get_message_content(m, t) if t else m.content,
     ),
-    ExportColumn(
-        key="moderation_status",
-        label="Moderation Status",
-        from_message=lambda m, e, t: m.moderation_status or "",
-    ),
     ExportColumn(key="platform", label="Platform", from_session=lambda s: s.get_platform_name()),
     ExportColumn(
         key="session_tags",
@@ -163,6 +158,11 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         from_message=lambda m, e, t: json.dumps(_get_participant_data_for_message(m)),
         prefetch=("input_message_trace", "output_message_trace"),
     ),
+    ExportColumn(
+        key="moderation_status",
+        label="Moderation Status",
+        from_message=lambda m, e, t: m.moderation_status or "",
+    ),
 ]
 
 
@@ -177,14 +177,26 @@ def resolve_export_columns(keys: Iterable[str] | None = None) -> list[ExportColu
     return [column for column in EXPORT_COLUMNS if column.required or column.key in selected]
 
 
-def _gate_annotation_queues(columns: list[ExportColumn], experiment) -> list[ExportColumn]:
-    """Blank the Annotation Queues cells, keeping the header, for a team without human annotations."""
-    if flag_is_active_for_team(experiment.team, Flags.HUMAN_ANNOTATIONS.slug):
-        return columns
-    return [
-        replace(column, from_session=lambda s: "", prefetch=()) if column.key == "annotation_queues" else column
-        for column in columns
-    ]
+_FLAG_GATED_COLUMNS = {
+    "annotation_queues": Flags.HUMAN_ANNOTATIONS.slug,
+    "moderation_status": Flags.ABUSE_DETECTION.slug,
+}
+
+
+def _gate_flagged_columns(columns: list[ExportColumn], experiment) -> list[ExportColumn]:
+    """Blank the cells, keeping the header, of each column whose feature flag is off for the team."""
+    return [_blank(column) if _is_gated_off(column, team=experiment.team) else column for column in columns]
+
+
+def _is_gated_off(column: ExportColumn, *, team) -> bool:
+    flag = _FLAG_GATED_COLUMNS.get(column.key)
+    return flag is not None and not flag_is_active_for_team(team, flag)
+
+
+def _blank(column: ExportColumn) -> ExportColumn:
+    if column.from_session is not None:
+        return replace(column, from_session=lambda s: "", prefetch=())
+    return replace(column, from_message=lambda m, e, t: "", prefetch=())
 
 
 def count_export_messages(sessions_queryset) -> int:
@@ -288,7 +300,7 @@ def generate_export_rows(
 
     ``columns`` is a list of column keys to include (see ``EXPORT_COLUMNS``); ``None`` includes all.
     """
-    export_columns = _gate_annotation_queues(resolve_export_columns(columns), experiment)
+    export_columns = _gate_flagged_columns(resolve_export_columns(columns), experiment)
     yield _get_export_header(columns=export_columns, translation_language=translation_language)
 
     base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)
