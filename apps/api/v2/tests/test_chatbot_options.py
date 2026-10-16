@@ -10,12 +10,13 @@ from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.test import APIClient
 
-from apps.api.v2.discovery.chatbot_settings import chatbot_setting_options
+from apps.api.v2.discovery.chatbot_settings import chatbot_setting_options, trigger_options
 from apps.api.v2.discovery.serializers import ChatbotOptionsSerializer
 from apps.api.v2.discovery.views import CHATBOT_OPTIONS_EXAMPLE
 from apps.experiments.models import SyntheticVoice, VoiceResponseBehaviours
 from apps.service_providers.models import VoiceProviderType
-from apps.utils.factories.experiment import ConsentFormFactory, SyntheticVoiceFactory
+from apps.utils.factories.experiment import ChatbotFactory, ConsentFormFactory, SyntheticVoiceFactory
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -35,6 +36,7 @@ def team_with_every_resource(team):
     SyntheticVoiceFactory.create(name="Matthew", service="AWS")
     TraceProviderFactory.create(team=team, name="Prod Langfuse")
     ConsentFormFactory.create(team=team, name="Returns consent")
+    PipelineFactory.create(team=team, name="Escalation")
     return team
 
 
@@ -67,6 +69,7 @@ def test_serves_the_settings_that_take_a_fixed_set_of_values(auth_method, team_w
         "voice_response_behaviour",
         "trace_provider",
         "consent_form",
+        "trigger_pipeline",
     }
     assert all(entries for entries in options.values()), options
 
@@ -81,7 +84,7 @@ def test_every_option_bearing_form_field_is_served(team_with_every_resource, rf)
 
     served = _options(team_with_every_resource)
 
-    assert set(served) == set(chatbot_setting_options(request))
+    assert set(served) == {*chatbot_setting_options(request), *trigger_options(request)}
 
 
 @pytest.mark.django_db()
@@ -273,3 +276,12 @@ def test_an_undeclared_key_is_served_rather_than_dropped(team, monkeypatch):
     )
 
     assert _options(team)["a_new_setting"] == [{"value": "yes", "label": "Yes"}]
+
+
+@pytest.mark.django_db()
+def test_trigger_pipeline_offers_the_pipelines_a_pipeline_start_action_may_run(team):
+    standalone = PipelineFactory.create(team=team, name="Escalation")
+    ChatbotFactory.create(team=team)
+    PipelineFactory.create(name="Other team pipeline")
+
+    assert _options(team)["trigger_pipeline"] == [{"value": standalone.id, "label": "Escalation"}]

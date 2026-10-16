@@ -4,6 +4,9 @@ The settings UI and `/chatbot/options/` therefore offer one team the same values
 scopes to the team or hides behind a feature flag is scoped and hidden the same way here, and a
 settings field that gains a choice list reaches the API the moment it reaches the form. Nothing in
 this module names a settings field, so keeping the two in sync costs no maintenance.
+
+``trigger_options`` serves the one trigger action param that draws on the team's resources, read off
+the trigger action's own form in the same way.
 """
 
 from collections.abc import Iterable
@@ -12,6 +15,7 @@ from typing import Any
 from django import forms
 
 from apps.chatbots.forms import ChatbotSettingsForm
+from apps.events.forms import PipelineStartForm
 from apps.experiments.models import SyntheticVoice
 
 
@@ -27,6 +31,12 @@ def chatbot_setting_options(request) -> dict[str, list[dict]]:
     form = ChatbotSettingsForm(request)
     options = ((name, _options_for(field)) for name, field in form.fields.items())
     return {name: entries for name, entries in options if entries is not None}
+
+
+def trigger_options(request) -> dict[str, list[dict]]:
+    """The pipelines a ``pipeline_start`` trigger action may run, keyed ``trigger_pipeline``."""
+    form = PipelineStartForm(team_id=request.team.id)
+    return {"trigger_pipeline": _options_for(form.fields["pipeline_id"]) or []}
 
 
 def _options_for(field: forms.Field) -> list[dict] | None:
