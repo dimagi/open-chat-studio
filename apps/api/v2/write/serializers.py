@@ -180,6 +180,12 @@ class ChatbotWriteSerializer(RejectsUnwritableKeys, serializers.ModelSerializer)
         return None
 
 
+VERSION_NUMBER_HELP = (
+    "The working (draft) version's number, which the next version created will take. The published "
+    "version is the one in `versions` with `is_published_version: true`."
+)
+
+
 class ChatbotDetailSerializer(serializers.ModelSerializer):
     """The create and PATCH response: the same shape the request accepts, plus read-only identity."""
 
@@ -187,7 +193,7 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
     # Declared explicitly rather than left to ModelSerializer: `version_number` is a real model
     # field and would otherwise be generated as writable in the OpenAPI schema.
     pipeline_id = serializers.IntegerField(read_only=True, allow_null=True)
-    version_number = serializers.IntegerField(read_only=True)
+    version_number = serializers.IntegerField(read_only=True, help_text=VERSION_NUMBER_HELP)
     consent_form_id = serializers.IntegerField(read_only=True, allow_null=True)
     trace_provider_id = serializers.IntegerField(read_only=True, allow_null=True)
     voice_provider_id = serializers.IntegerField(read_only=True, allow_null=True)

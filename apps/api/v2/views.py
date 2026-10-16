@@ -14,7 +14,7 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissions
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.lookups import get_working_chatbot, working_chatbots
-from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
+from apps.api.v2.serializers import ChatbotRetrieveSerializer, ChatbotSerializer, MeSerializer
 from apps.api.v2.write.archive import archive_chatbot
 from apps.api.v2.write.serializers import (
     ArchivedSerializer,
@@ -38,7 +38,11 @@ from apps.teams.models import Team
     retrieve=extend_schema(
         operation_id="chatbot_retrieve",
         summary="Retrieve Chatbot",
-        description="Retrieve a single chatbot by its ID.",
+        description=(
+            "Retrieve a single chatbot by its ID: its settings, in the shape the `chatbot_update` "
+            "endpoint accepts and returns, and its versions. The `chatbot_inspect` endpoint returns "
+            "the full configuration, including the pipeline and triggers."
+        ),
         tags=["Chatbots"],
         parameters=[
             OpenApiParameter(
@@ -78,6 +82,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return {
             "create": ChatbotCreateSerializer,
             "partial_update": ChatbotWriteSerializer,
+            "retrieve": ChatbotRetrieveSerializer,
             "inspect": ChatbotInspectSerializer,
         }.get(action, super().get_serializer_class())
 
