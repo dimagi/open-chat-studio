@@ -37,9 +37,8 @@ def unblock_participant(participant) -> bool:
     denials = DeniedParticipant.objects.filter(team_id=participant.team_id, participant=participant)
     with transaction.atomic():
         deleted, _ = denials.delete(audit_action=AuditAction.AUDIT)
-        if deleted:
-            participant.strikes = 0
-            participant.save(update_fields=["strikes", "updated_at"])
+        participant.strikes = 0
+        participant.save(update_fields=["strikes", "updated_at"])
     return bool(deleted)
 
 

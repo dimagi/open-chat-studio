@@ -188,13 +188,19 @@ class TestUnblockParticipant:
         participant.refresh_from_db()
         assert participant.strikes == 0
 
-    def test_not_blocked_redirects_back(self, client, team_with_users, team_flag, admin, participant):
+    def test_not_blocked_resets_strikes_and_redirects_back(
+        self, client, team_with_users, team_flag, admin, participant
+    ):
         team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 2
+        participant.save()
         client.force_login(admin)
 
         response = client.post(_unblock_url(team=team_with_users, participant=participant))
 
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
+        participant.refresh_from_db()
+        assert participant.strikes == 0
 
     @pytest.mark.parametrize(
         ("next_url", "follows_next"),

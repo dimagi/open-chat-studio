@@ -68,13 +68,13 @@ class TestBlockParticipant:
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("blocked", "expected_strikes"),
+    "blocked",
     [
-        pytest.param(True, 0, id="blocked"),
-        pytest.param(False, 2, id="not_blocked"),
+        pytest.param(True, id="blocked"),
+        pytest.param(False, id="not_blocked"),
     ],
 )
-def test_unblock_participant(blocked, expected_strikes):
+def test_unblock_participant(blocked):
     participant = ParticipantFactory.create(strikes=2)
     if blocked:
         DeniedParticipantFactory.create(team=participant.team, participant=participant)
@@ -82,7 +82,7 @@ def test_unblock_participant(blocked, expected_strikes):
     assert unblock_participant(participant) is blocked
 
     assert not DeniedParticipant.objects.filter(participant=participant).exists()
-    assert Participant.objects.get(id=participant.id).strikes == expected_strikes
+    assert Participant.objects.get(id=participant.id).strikes == 0
 
 
 @pytest.mark.django_db()
