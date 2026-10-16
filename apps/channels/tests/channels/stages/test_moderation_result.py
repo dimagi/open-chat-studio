@@ -14,6 +14,7 @@ from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
+from apps.experiments.models import SessionStatus
 from apps.moderation.const import FLAGGED_MESSAGE
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
@@ -194,13 +195,14 @@ class TestModerationInTheChannelPipeline:
         with override_flag(FLAG, active=True):
             yield
 
-    def _send(self, session, *, process_input):
+    def _send(self, session, *, process_input, message_text="Bad words"):
         channel = messaging_channel(session)
         with patch("apps.channels.stages.core.get_bot") as get_bot:
             get_bot.return_value.process_input.side_effect = process_input
             channel.new_user_message(
-                base_messages.text_message(participant_id=session.participant.identifier, message_text="Bad words")
+                base_messages.text_message(participant_id=session.participant.identifier, message_text=message_text)
             )
+        self.process_input = get_bot.return_value.process_input
         return channel
 
     def _human_message(self, session):
@@ -238,6 +240,22 @@ class TestModerationInTheChannelPipeline:
 
         assert channel.text_sent == ["Stopped early"]
         assert self._human_message(moderated_session).moderation_status == ModerationStatus.FLAGGED
+
+    def test_flagged_message_before_consent_is_not_answered_after_consent(self, moderated_session, moderation_task):
+        session = moderated_session
+        session.update_status(SessionStatus.SETUP)
+        session.experiment.conversational_consent_enabled = True
+        session.experiment.seed_message = "Hello"
+        session.experiment.save()
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        self._send(session, process_input=lambda *args, **kwargs: _bot_response(session))
+        self.process_input.assert_not_called()
+
+        moderation_task.get.return_value = _ok(PASSED_OUTPUT)
+        self._send(session, process_input=lambda *args, **kwargs: _bot_response(session), message_text="1")
+
+        self.process_input.assert_called_once()
+        assert self.process_input.call_args.args[0] == "Hello"
 
     @override_flag(FLAG, active=False)
     def test_flag_off_starts_no_task(self, moderated_session, moderation_task):

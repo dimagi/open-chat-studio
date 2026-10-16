@@ -16,7 +16,7 @@ from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -563,8 +563,8 @@ class ConsentFlowStage(ProcessingStage):
         triggered SETUP -> PENDING -- so it can be answered after consent.
 
         Returns None when the participant's first message was itself just the
-        consent token (no prior content), so the caller falls back to the seed
-        message / silent halt.
+        consent token (no prior content) or moderation flagged it, so the caller
+        falls back to the seed message / silent halt.
         """
         first_human_message = (
             ctx.experiment_session.chat.messages.filter(message_type=ChatMessageType.HUMAN)
@@ -574,6 +574,8 @@ class ConsentFlowStage(ProcessingStage):
         if first_human_message is None:
             return None
         if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
+            return None
+        if first_human_message.moderation_status == ModerationStatus.FLAGGED:
             return None
         return first_human_message
 
