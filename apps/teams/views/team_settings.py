@@ -23,7 +23,7 @@ from apps.teams.forms import (
     TeamPublicKeyForm,
 )
 from apps.teams.models import Invitation
-from apps.teams.settings_sections import SettingsSection, with_registered_sections
+from apps.teams.settings_sections import SettingsSection, is_team_admin, with_registered_sections
 from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
 from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
@@ -47,10 +47,6 @@ def _team_files_export_context(team):
     if team.files_export_id and team.files_export.file:
         return {"files_export_file": team.files_export}
     return {}
-
-
-def _is_team_admin(request) -> bool:
-    return request.team_membership.is_team_admin()
 
 
 def _can_view_notifications(request) -> bool:
@@ -115,7 +111,7 @@ def _data_context(request) -> dict:
 def _flags_context(request) -> dict:
     return {
         "flags_form": FeatureFlagForm(team=request.team),
-        "is_team_admin": _is_team_admin(request),
+        "is_team_admin": is_team_admin(request),
     }
 
 
@@ -159,7 +155,7 @@ _BUILT_IN_SECTIONS = [
         label=_("Data"),
         icon="fa-box-archive",
         template="teams/sections/data.html",
-        is_visible=_is_team_admin,
+        is_visible=is_team_admin,
         get_context=_data_context,
     ),
     SettingsSection(
@@ -218,7 +214,7 @@ def _settings_context(
     team = request.team
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
-        if not _is_team_admin(request):
+        if not is_team_admin(request):
             set_form_fields_disabled(team_form, True)
     stats = {
         "members": team.membership_set.count(),
@@ -256,7 +252,7 @@ def manage_team(request, team_slug, section=None):
     if request.method != "POST":
         return render_team_settings(request, section)
 
-    if not request.team_membership.is_team_admin():
+    if not is_team_admin(request):
         messages.error(request, "Sorry you don't have permission to do that.")
         return render_team_settings(request, section)
 

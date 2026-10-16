@@ -8,7 +8,7 @@ from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant
 from apps.service_providers.utils import ServiceProvider, get_available_subtypes
 from apps.teams.flags import Flags
-from apps.teams.settings_sections import SettingsSection
+from apps.teams.settings_sections import SettingsSection, is_team_admin
 from apps.web.forms import set_form_fields_disabled
 
 SETTINGS_SECTION_KEY = "moderation"
@@ -20,14 +20,14 @@ def _can_view_denylist(request) -> bool:
 
 def _can_view_settings_section(request) -> bool:
     return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug)) and (
-        request.team_membership.is_team_admin() or _can_view_denylist(request)
+        is_team_admin(request) or _can_view_denylist(request)
     )
 
 
 def moderation_settings_context(request, form: TeamModerationForm | None = None) -> dict:
     """Context for the Moderation section's settings form."""
     team = request.team
-    can_edit = request.team_membership.is_team_admin()
+    can_edit = is_team_admin(request)
     if form is None:
         form = TeamModerationForm(instance=team)
     if not can_edit:

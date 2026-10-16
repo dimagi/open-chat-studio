@@ -12,6 +12,10 @@ def _no_context(request) -> dict:
     return {}
 
 
+def is_team_admin(request) -> bool:
+    return request.team_membership.is_team_admin()
+
+
 @dataclass(frozen=True)
 class SettingsSection:
     key: str
