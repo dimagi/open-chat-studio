@@ -204,10 +204,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         null=True,
         help_text="Provider message IDs this message was built from, namespaced by platform.",
     )
-    moderation_status = models.CharField(  # noqa DJ001
+    moderation_status = models.CharField(  # noqa: DJ001
         max_length=16, null=True, blank=True, choices=ModerationStatus.choices
     )
-    moderation_detail = SchemaField(schema=ModerationDetail | None, null=True, blank=True, default=None)
+    moderation_detail = SchemaField(schema=ModerationDetail | None, null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]
@@ -220,7 +220,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             GinIndex(fields=["external_ids"], name="chatmessage_external_ids_idx"),
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
-            models.Index(fields=["moderation_status"], name="chatmessage_moderation_idx"),
+            models.Index(
+                fields=["moderation_status"],
+                name="chatmessage_moderation_idx",
+                condition=Q(moderation_status__isnull=False),
+            ),
         ]
 
     @classmethod
