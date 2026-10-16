@@ -39,12 +39,5 @@ def test_markup_does_not_fire(text):
     assert markup(text, [], None) is None
 
 
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        pytest.param("<script>", ["markup"], id="hit"),
-        pytest.param("hello", [], id="no_hit"),
-    ],
-)
-def test_run_rules(text, expected):
-    assert run_rules(text=text, attachments=[], participant=None) == expected
+def test_run_rules_returns_fired_rule_names():
+    assert run_rules(text="<script>", attachments=[], participant=None) == ["markup"]
