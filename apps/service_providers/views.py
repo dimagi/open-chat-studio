@@ -237,7 +237,7 @@ def _should_run_post_create_hook(obj, is_create: bool) -> bool:
 
 
 class CreateServiceProvider(
-    LoginAndTeamRequiredMixin, django_views.View, ServiceProviderMixin, PermissionRequiredMixin
+    LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin, django_views.View
 ):
     template_name = "service_providers/provider_form.html"
 
