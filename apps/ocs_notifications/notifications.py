@@ -5,6 +5,7 @@ from datetime import datetime
 
 from django.utils.text import slugify
 
+from apps.chat.schemas import ModerationSkipReason
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.utils import section_url
 from apps.utils.decorators import silence_exceptions
@@ -417,7 +418,7 @@ def moderation_provider_deleted_notification(team, provider_id: int, provider_na
     )
 
 
-_MODERATION_SKIP_REASONS = {
+_MODERATION_SKIP_REASONS: dict[ModerationSkipReason, str] = {
     "rate_limited": "the moderation provider's rate limit was reached",
     "error": "the moderation provider returned an error",
     "timeout": "no moderation result arrived in time",
@@ -425,13 +426,13 @@ _MODERATION_SKIP_REASONS = {
 
 
 @silence_exceptions(logger, log_message="Failed to create moderation skipped notification")
-def moderation_skipped_notification(experiment, session: ExperimentSession, reason: str) -> None:
+def moderation_skipped_notification(experiment, session: ExperimentSession, reason: ModerationSkipReason) -> None:
     """Notify a team that a participant's message was answered without moderation."""
     create_notification(
         title="Moderation skipped",
         message=(
             f"A message to '{experiment.name}' was answered without moderation because "
-            f"{_MODERATION_SKIP_REASONS.get(reason, reason)}."
+            f"{_MODERATION_SKIP_REASONS[reason]}."
         ),
         level=LevelChoices.WARNING,
         team=experiment.team,

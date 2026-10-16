@@ -780,10 +780,7 @@ class ErrorGuardStage(ProcessingStage):
 
 
 class AbuseRulesStage(ProcessingStage):
-    """Records the abuse rules the human message triggers and starts moderation of its text.
-
-    Messages from exempt participants are moderated too.
-    """
+    """Records the abuse rules the human message triggers and starts moderation of its text."""
 
     span_input_fields = ("human_message.id",)
     span_output_fields = ("human_message.moderation_detail.rules", "moderation_task_id")

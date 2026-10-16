@@ -277,15 +277,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
     @property
     def is_excluded_from_history(self) -> bool:
-        """A human message that led to a refused or filtered turn, or that moderation flagged, is not replayed.
-
-        Replaying a refused or filtered message makes the next turn fail the same way.
-        """
-        if not self.is_human_message:
-            return False
-        if self.moderation_status == ModerationStatus.FLAGGED:
-            return True
-        return ChatMessageMetadataKeys.MODEL_REFUSED in self.metadata
+        """A human message that moderation flagged, or that led to a refused or filtered turn, is not replayed."""
+        return self.is_human_message and (
+            self.moderation_status == ModerationStatus.FLAGGED or ChatMessageMetadataKeys.MODEL_REFUSED in self.metadata
+        )
 
     @property
     def is_summary(self):
