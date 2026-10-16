@@ -1,8 +1,6 @@
-"""Team settings page, rendering one section at a time from ``SETTINGS_SECTIONS``."""
+"""Team settings page, rendering one section at a time."""
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
 
 from celery.result import AsyncResult
 from celery_progress.backend import PROGRESS_STATE
@@ -25,6 +23,7 @@ from apps.teams.forms import (
     TeamPublicKeyForm,
 )
 from apps.teams.models import Invitation
+from apps.teams.settings_sections import SettingsSection, with_registered_sections
 from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
 from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
@@ -48,28 +47,6 @@ def _team_files_export_context(team):
     if team.files_export_id and team.files_export.file:
         return {"files_export_file": team.files_export}
     return {}
-
-
-def _always_visible(request) -> bool:
-    return True
-
-
-def _no_context(request) -> dict:
-    return {}
-
-
-@dataclass(frozen=True)
-class SettingsSection:
-    key: str
-    label: str
-    icon: str
-    template: str
-    #: Key into the page's `stats` dict whose value is shown as a badge next to the nav item.
-    count_key: str | None = None
-    is_visible: Callable[..., bool] = _always_visible
-    get_context: Callable[..., dict] = _no_context
-    #: Returns the nav badge count for sections whose count is not in `stats`.
-    get_count: Callable[..., int | None] | None = None
 
 
 def _is_team_admin(request) -> bool:
@@ -146,7 +123,7 @@ def _internal_metadata_context(request) -> dict:
     return {"metadata_form": TeamMetadataForm(team=request.team)}
 
 
-SETTINGS_SECTIONS = [
+_BUILT_IN_SECTIONS = [
     SettingsSection(
         key="integrations",
         label=_("Integrations"),
@@ -203,16 +180,8 @@ SETTINGS_SECTIONS = [
 ]
 
 
-def register_settings_section(section: SettingsSection, *, after: str) -> None:
-    """Add a section from another app to the settings page, placed after the section keyed `after`."""
-    keys = [existing.key for existing in SETTINGS_SECTIONS]
-    if section.key in keys:
-        raise ValueError(f"Team settings section '{section.key}' is already registered")
-    SETTINGS_SECTIONS.insert(keys.index(after) + 1, section)
-
-
 def _visible_sections(request) -> list[SettingsSection]:
-    return [section for section in SETTINGS_SECTIONS if section.is_visible(request)]
+    return [section for section in with_registered_sections(_BUILT_IN_SECTIONS) if section.is_visible(request)]
 
 
 def _get_section(visible_sections: list[SettingsSection], section_key: str | None) -> SettingsSection:
