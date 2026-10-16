@@ -2,6 +2,7 @@ import re
 from unittest import mock
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -325,6 +326,35 @@ class TestProviderDialog:
         provider.refresh_from_db()
         assert provider.name == "After"
         assert response.context["moderation_form"]["moderation_provider"].value() == provider.pk
+
+    @pytest.mark.parametrize(
+        ("method", "url_name"),
+        [
+            pytest.param("get", "provider_new", id="get_new"),
+            pytest.param("post", "provider_new", id="post_new"),
+            pytest.param("get", "provider_edit", id="get_edit"),
+            pytest.param("post", "provider_edit", id="post_edit"),
+        ],
+    )
+    def test_requires_team_admin(self, client, team, method, url_name):
+        provider = ModerationProviderFactory.create(team=team, name="Before")
+        user = member_with_groups(team=team, group_names=NORMAL_USER_GROUPS)
+        user.user_permissions.add(
+            *Permission.objects.filter(codename__in=["add_moderationprovider", "change_moderationprovider"])
+        )
+        client.force_login(user)
+        url = (
+            _new_provider_url(team)
+            if url_name == "provider_new"
+            else reverse("moderation:provider_edit", args=[team.slug, provider.pk])
+        )
+
+        response = getattr(client, method)(url, {"name": "After", "openai_api_key": "sk-new"})
+
+        assert response.status_code == 403
+        provider.refresh_from_db()
+        assert provider.name == "Before"
+        assert ModerationProvider.objects.filter(team=team).count() == 1
 
     def test_cannot_edit_another_teams_provider(self, client, admin, team):
         other = ModerationProviderFactory.create()

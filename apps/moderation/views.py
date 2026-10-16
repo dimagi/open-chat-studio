@@ -129,6 +129,9 @@ class ModerationProviderDialog(CreateServiceProvider):
 
     template_name = "moderation/components/provider_dialog.html"
 
+    def get_permission_required(self):
+        return (*super().get_permission_required(), "teams.change_team")
+
     def saved_response(self, *, obj, had_connection_test_warning: bool):
         # The settings form's own fields are posted along with the dialog, so unsaved switch changes are kept.
         form = TeamModerationForm(
