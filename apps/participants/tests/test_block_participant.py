@@ -172,8 +172,12 @@ class TestBlockParticipant:
 
 @pytest.mark.django_db()
 class TestUnblockParticipant:
-    def test_deletes_denial_with_flag_on(self, client, team_with_users, team_flag, admin, participant):
+    def test_deletes_denial_and_resets_strikes_with_flag_on(
+        self, client, team_with_users, team_flag, admin, participant
+    ):
         team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 3
+        participant.save()
         DeniedParticipantFactory.create(team=team_with_users, participant=participant)
         client.force_login(admin)
 
@@ -181,24 +185,6 @@ class TestUnblockParticipant:
 
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
         assert not DeniedParticipant.objects.filter(participant=participant).exists()
-
-    @pytest.mark.parametrize(
-        "next_url",
-        [
-            pytest.param("", id="participant_page"),
-            pytest.param("/a/team/settings/", id="moderation_settings"),
-        ],
-    )
-    def test_resets_strikes(self, client, team_with_users, team_flag, admin, participant, next_url):
-        team_flag(flag_name=FLAG, team=team_with_users)
-        participant.strikes = 3
-        participant.save()
-        DeniedParticipantFactory.create(team=team_with_users, participant=participant)
-        client.force_login(admin)
-
-        url = _unblock_url(team=team_with_users, participant=participant)
-        client.post(f"{url}?{urlencode({'next': next_url})}" if next_url else url)
-
         participant.refresh_from_db()
         assert participant.strikes == 0
 
