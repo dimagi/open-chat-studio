@@ -78,24 +78,16 @@ class ChannelPlatform(models.TextChoices):
         elif settings.COMMCARE_CONNECT_ENABLED:
             platform_availability[cls.COMMCARE_CONNECT] = True
 
-        cls._gate_by_flag(platform_availability, team, cls.EMAIL, "flag_email_channel")
+        if flag_is_active_for_team(team, "flag_email_channel") and settings.EMAIL_CHANNEL_ALLOWED_DOMAINS:
+            platform_availability[cls.EMAIL] = True
+        else:
+            platform_availability.pop(cls.EMAIL, None)
 
         # Platforms already used should not be displayed
         for platform in used_platforms:
             platform_availability.pop(platform, None)
 
         return cast("dict[Self, bool]", platform_availability)
-
-    @classmethod
-    def _gate_by_flag(cls, platform_availability: dict, team, platform, flag_name: str) -> None:
-        """Offer `platform` only when its flag is on for the team (and, for email, domains are configured)."""
-        offered = flag_is_active_for_team(team, flag_name)
-        if platform == cls.EMAIL:
-            offered = offered and bool(settings.EMAIL_CHANNEL_ALLOWED_DOMAINS)
-        if offered:
-            platform_availability[platform] = True
-        else:
-            platform_availability.pop(platform, None)
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm  # noqa: PLC0415 - circular: channels.forms imports channels.models
