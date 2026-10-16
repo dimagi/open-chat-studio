@@ -1,7 +1,8 @@
 import pytest
+from django.contrib import admin
 
 from apps.service_providers.admin import LlmProviderModelAdmin
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProviderModel, ModerationProvider
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
@@ -47,3 +48,7 @@ def test_related_nodes_escapes_the_pipeline_name():
 
     assert "<script>" not in rendered
     assert "&lt;script&gt;" in rendered
+
+
+def test_moderation_provider_is_registered():
+    assert admin.site.is_registered(ModerationProvider)
