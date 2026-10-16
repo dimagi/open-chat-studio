@@ -964,6 +964,7 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
     publish_version(experiment)
+    messages.success(request, f"{experiment.version_display} is now the published version")
     url = (
         reverse(
             "chatbots:single_chatbot_home",
@@ -992,8 +993,10 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
         + "#versions"
     )
     if experiment.is_default_version:
+        messages.error(request, "The published version cannot be archived")
         return redirect(url)
     experiment.archive()
+    messages.success(request, f"{experiment.version_display} archived")
     return redirect(url)
 
 

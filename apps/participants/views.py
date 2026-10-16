@@ -8,11 +8,14 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
+from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
+from waffle.decorators import waffle_flag
 
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
@@ -21,8 +24,17 @@ from apps.cost_tracking.services.reporting import CostFilters, costs_by_particip
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.generics.breadcrumbs import Crumb
-from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
+from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt
+from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
+from apps.participants.forms import (
+    BlockParticipantForm,
+    ParticipantExportForm,
+    ParticipantForm,
+    ParticipantImportForm,
+    TriggerBotForm,
+)
 from apps.teams.decorators import login_and_team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from ..events.models import ScheduledMessage
@@ -187,6 +199,13 @@ def single_participant_home_context(
     )
     if participant.platform not in ChannelPlatform.team_global_platforms():
         context["trigger_bot_form"] = TriggerBotForm(participant=participant)
+    if abuse_detection_enabled(team):
+        denial = (
+            DeniedParticipant.objects.filter(team=team, participant=participant).select_related("created_by").first()
+        )
+        context["denial"] = denial
+        context["block_form"] = BlockParticipantForm()
+        context["can_block"] = denial is None and not is_exempt(participant=participant, team=team)
     return context
 
 
@@ -592,6 +611,52 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
     messages.success(request, f"Bot message triggered for {participant}")
     return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+
+
+@login_and_team_required
+@waffle_flag(Flags.ABUSE_DETECTION.slug)
+@permission_required("experiments.change_participant")
+@require_POST
+def block(request, team_slug: str, participant_id: int):
+    """Add the participant to the team's denylist."""
+    participant = get_object_or_404(Participant, id=participant_id, team=request.team)
+    if is_exempt(participant=participant, team=request.team):
+        messages.error(request, "Team members cannot be blocked")
+        return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+    form = BlockParticipantForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid block reason")
+        return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+    reason = form.cleaned_data["reason"]
+    _denial, created = block_participant(
+        participant=participant,
+        source=DeniedParticipantSource.MANUAL,
+        reason=reason,
+        created_by=request.user,
+    )
+    # Messages are rendered as HTML, and participants can set their own name.
+    if created:
+        messages.success(request, format_html("{} is blocked", participant))
+    else:
+        messages.info(request, format_html("{} was already blocked", participant))
+    return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+
+
+@login_and_team_required
+@waffle_flag(Flags.ABUSE_DETECTION.slug)
+@permission_required("experiments.change_participant")
+@require_POST
+def unblock(request, team_slug: str, participant_id: int):
+    """Remove the participant from the team's denylist."""
+    participant = get_object_or_404(Participant, id=participant_id, team=request.team)
+    denial = DeniedParticipant.objects.filter(team=request.team, participant=participant).first()
+    if denial:
+        denial.delete()
+        messages.success(request, format_html("{} is unblocked", participant))
+    else:
+        messages.info(request, format_html("{} was not blocked", participant))
+    url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
+    return HttpResponseClientRedirect(url)
 
 
 def _render_trigger_bot_form(request, participant_id: int, form: TriggerBotForm):

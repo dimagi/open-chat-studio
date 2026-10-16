@@ -43,6 +43,8 @@ version section when a release is cut.
   operator or team sets one. (#4371)
 - `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
   rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
+- New `moderation` app with a `moderation_deniedparticipant` table. Creates a table only; no
+  existing rows change. Nothing reads it unless the `flag_abuse_detection` flag is on. (#4698)
 - New `web_superuserelevation` table records each privilege elevation (grant, expiry, release,
   client IP and user agent). Additive only; nothing is backfilled. (#4693)
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action
@@ -55,6 +57,12 @@ version section when a release is cut.
   release. (#4254)
 
 ### Deprecations and removals
+- The `flag_public_channel` feature flag is removed. The public link channel is offered to every
+  team; a deployment that kept the flag off now shows it in the channel dropdown. Public links
+  are served on the Django `Site` domain, so check it matches the deployed host (see
+  [Public link host](docs/hosting/configuration.md#public-link-host)). The orphaned flag row
+  appears under Legacy on the Feature Flags page at `/admin/flags/` and can be deleted there.
+  (#4793)
 - The OpenAI Assistants feature is fully removed (#4254). The `Assistant Admin` role is gone —
   members holding it lose add/change/delete on files, which no other role grants; re-grant file
   access through another role if a team relied on it. `Attachment.upload_to_assistant` no longer

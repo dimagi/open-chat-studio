@@ -1,6 +1,6 @@
 """End-to-end behaviour of a channel an admin has disabled (issue #4200)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Permission
@@ -13,7 +13,7 @@ from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.registry import PLATFORM_CHANNEL_CLASSES
-from apps.channels.stages.core import AttachmentHydrationStage, ChannelDisabledStage
+from apps.channels.stages.core import ChannelDisabledStage
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -25,7 +25,7 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
-from .conftest import StubChannel, make_trace_service
+from .conftest import StubChannel, core_stages, make_trace_service
 
 
 def _disable(session, message=""):
@@ -163,13 +163,9 @@ class TestDisabledEmbeddedWidget:
 class TestDisabledStageIsWired:
     """Every channel a participant can reach must honour the toggle."""
 
-    def _core_stages(self, channel_cls):
-        stub_self = MagicMock(attachment_hydration_stage_class=AttachmentHydrationStage)
-        return channel_cls._build_pipeline(stub_self).core_stages
-
     @pytest.mark.parametrize("platform", sorted(PLATFORM_CHANNEL_CLASSES, key=str))
     def test_every_registered_platform_enforces_the_toggle(self, platform):
-        stages = self._core_stages(PLATFORM_CHANNEL_CLASSES[platform])
+        stages = core_stages(PLATFORM_CHANNEL_CLASSES[platform])
 
         assert any(isinstance(stage, ChannelDisabledStage) for stage in stages), (
             f"{platform} does not enforce the channel enabled/disabled toggle"
@@ -177,14 +173,14 @@ class TestDisabledStageIsWired:
 
     @pytest.mark.parametrize("channel_cls", [ChannelBase, ApiChannel, WebChannel])
     def test_pipelines_that_are_not_reached_through_the_registry(self, channel_cls):
-        stages = self._core_stages(channel_cls)
+        stages = core_stages(channel_cls)
 
         assert any(isinstance(stage, ChannelDisabledStage) for stage in stages)
 
     def test_evaluations_are_deliberately_exempt(self):
         """An eval run is not participant access; substituting the static message for the
         bot's output would corrupt the run."""
-        stages = self._core_stages(EvaluationChannel)
+        stages = core_stages(EvaluationChannel)
 
         assert not any(isinstance(stage, ChannelDisabledStage) for stage in stages)
 

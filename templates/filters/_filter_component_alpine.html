@@ -607,7 +607,7 @@
       },
 
       async deleteSavedFilter(id, name) {
-        if(!confirm(`Delete "${name}"?`)) return;
+        if (!(await confirmDialog(`Delete "${name}"?`))) return;
 
         try {
           await this.makeSavedFilterDeleteRequest(id);

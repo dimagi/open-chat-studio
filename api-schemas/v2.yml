@@ -2101,8 +2101,9 @@ paths:
           content:
             application/json:
               schema:
-                description: The OAuth application is not authorized for this chatbot
-          description: ''
+                $ref: '#/components/schemas/ForbiddenOrParticipantBlocked'
+          description: The OAuth application is not authorized for this chatbot, or
+            the participant is blocked (`code` is `participant_blocked`)
         '404':
           content:
             application/json:
@@ -3205,6 +3206,10 @@ components:
           nullable: true
           description: Use the provider's neural (higher-quality) voice engine, where
             supported.
+    ForbiddenOrParticipantBlocked:
+      oneOf:
+      - $ref: '#/components/schemas/PermissionDeniedResponse'
+      - $ref: '#/components/schemas/ParticipantBlockedResponse'
     GroupedUsageResponse:
       type: object
       description: |-
@@ -4105,6 +4110,18 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    ParticipantBlockedResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Always `participant_blocked`.
+        detail:
+          type: string
+          description: A message that can be shown to the participant.
+      required:
+      - code
+      - detail
     ParticipantIdentity:
       type: object
       properties:
@@ -4375,6 +4392,13 @@ components:
             web app.
         action:
           $ref: '#/components/schemas/TriggerAction'
+    PermissionDeniedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
