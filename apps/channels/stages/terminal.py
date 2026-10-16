@@ -18,7 +18,7 @@ from apps.moderation.services import (
     add_strike,
     get_moderation_result,
     record_moderation_result,
-    remove_turn_from_pipeline_histories,
+    replace_turn_in_pipeline_histories,
 )
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
@@ -72,8 +72,9 @@ class FileDeliveryFailure(Exception):
 class ModerationResultStage(ProcessingStage):
     """TERMINAL STAGE: Records the moderation result on the human message and replaces the reply to a flagged one.
 
-    A flagged message also gives the participant a strike (see `add_strike`), and the flagged turn is removed
-    from the pipeline's node and named histories, so it is not replayed.
+    A flagged message also gives the participant a strike (see `add_strike`). In the pipeline's node and named
+    histories the flagged turn is replaced by a placeholder and the replacement reply, so the flagged text is
+    not replayed and the LLM sees that a message was declined.
 
     A terminal stage so that it also runs when a core stage exits early. A failure to get a result is
     recorded as a skip, and the response is sent as normal. Any other error is logged, and the later
@@ -106,9 +107,14 @@ class ModerationResultStage(ProcessingStage):
         elif status == ModerationStatus.FLAGGED:
             assert output is not None
             self._add_strike(ctx=ctx, output=output)
-            remove_turn_from_pipeline_histories(human_message=ctx.human_message, bot_response=ctx.bot_response)
-            if ctx.bot_response is not None:
-                self._replace_response(ctx)
+            reply = FLAGGED_MESSAGE if ctx.bot_response is not None else None
+            try:
+                if ctx.bot_response is not None:
+                    reply = self._replace_response(ctx)
+            finally:
+                replace_turn_in_pipeline_histories(
+                    human_message=ctx.human_message, bot_response=ctx.bot_response, reply=reply
+                )
 
     def _add_strike(self, ctx: MessageProcessingContext, output: ModerationOutput) -> None:
         """Give the participant a strike, logging any error so the reply is still replaced."""
@@ -124,8 +130,8 @@ class ModerationResultStage(ProcessingStage):
         except Exception:
             logger.exception("Could not add a strike for message %s", ctx.human_message.id)
 
-    def _replace_response(self, ctx: MessageProcessingContext) -> None:
-        """Replace the stored bot reply with a notice that the message will not be answered, and send only that.
+    def _replace_response(self, ctx: MessageProcessingContext) -> str:
+        """Replace the stored bot reply with a notice that the message will not be answered, and return the notice.
 
         The fixed notice is saved before EventBot writes one, so the original reply is not in the
         conversation history EventBot reads.
@@ -136,6 +142,7 @@ class ModerationResultStage(ProcessingStage):
         )
         if reply != FLAGGED_MESSAGE:
             self._save_reply(ctx, reply)
+        return reply
 
     def _save_reply(self, ctx: MessageProcessingContext, reply: str) -> None:
         """Save `reply` as the bot response, without attachments, and make it the reply to send."""

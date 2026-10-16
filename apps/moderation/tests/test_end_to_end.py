@@ -462,13 +462,7 @@ def test_code_node_blocks_the_participant(make_chatbot, httpx_mock, admin, clien
     "history_type",
     [
         pytest.param(PipelineChatHistoryTypes.GLOBAL, id="global_history"),
-        pytest.param(
-            PipelineChatHistoryTypes.NODE,
-            id="node_history",
-            marks=pytest.mark.xfail(
-                strict=True, reason="node history drops the flagged turn but never records the replacement reply"
-            ),
-        ),
+        pytest.param(PipelineChatHistoryTypes.NODE, id="node_history"),
     ],
 )
 def test_flagged_turn_is_left_out_of_the_next_prompt(make_chatbot, httpx_mock, history_type):

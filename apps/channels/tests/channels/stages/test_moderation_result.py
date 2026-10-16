@@ -18,7 +18,7 @@ from apps.chat.bots import EventBot
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.experiments.models import Participant, SessionStatus
-from apps.moderation.const import FLAGGED_MESSAGE, STRIKE_LIMIT
+from apps.moderation.const import FLAGGED_MESSAGE, REMOVED_MESSAGE_PLACEHOLDER, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
@@ -184,14 +184,27 @@ class TestModerationResultStage:
         assert ctx.unsupported_files == []
 
     @pytest.mark.parametrize(
-        ("output", "expected_rows"),
+        ("output", "event_bot_reply", "expected_rows"),
         [
-            pytest.param(PASSED_OUTPUT, ["Bad words"], id="passed_keeps_the_turn"),
-            pytest.param(STRIKE_OUTPUT, [], id="flagged_removes_the_turn"),
+            pytest.param(
+                PASSED_OUTPUT, {"return_value": "Flagged reply"}, [("Bad words", "Answer")], id="passed_keeps_the_turn"
+            ),
+            pytest.param(
+                STRIKE_OUTPUT,
+                {"return_value": "Flagged reply"},
+                [(REMOVED_MESSAGE_PLACEHOLDER, "Flagged reply")],
+                id="flagged_replaces_the_turn",
+            ),
+            pytest.param(
+                STRIKE_OUTPUT,
+                {"side_effect": Exception("no LLM provider")},
+                [(REMOVED_MESSAGE_PLACEHOLDER, FLAGGED_MESSAGE)],
+                id="flagged_with_fallback_reply",
+            ),
         ],
     )
-    def test_flagged_turn_is_removed_from_pipeline_histories(
-        self, moderated_session, moderation_task, output, expected_rows
+    def test_flagged_turn_is_replaced_in_pipeline_histories(
+        self, moderated_session, moderation_task, output, event_bot_reply, expected_rows
     ):
         moderation_task.get.return_value = _ok(output)
         history = PipelineChatHistoryFactory.create(session=moderated_session)
@@ -200,10 +213,27 @@ class TestModerationResultStage:
         ctx.bot_response = _bot_response(moderated_session)
 
         with patch(EVENT_BOT) as event_bot:
-            event_bot.return_value.get_user_message.return_value = "Flagged reply"
+            event_bot.return_value.get_user_message.configure_mock(**event_bot_reply)
             ModerationResultStage()(ctx)
 
-        assert [row.human_message for row in history.messages.all()] == expected_rows
+        assert [(row.human_message, row.ai_message) for row in history.messages.all()] == expected_rows
+
+    def test_failed_save_still_removes_the_flagged_text_from_pipeline_histories(
+        self, moderated_session, moderation_task
+    ):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        history = PipelineChatHistoryFactory.create(session=moderated_session)
+        ctx = _context(moderated_session)
+        PipelineChatMessagesFactory.create(chat_history=history, human_message="Bad words", ai_message="Answer")
+        bot_response = _bot_response(moderated_session)
+        ctx.bot_response = bot_response
+
+        with patch.object(bot_response, "save", side_effect=DatabaseError("connection lost")), patch(EVENT_BOT):
+            ModerationResultStage()(ctx)
+
+        assert [(row.human_message, row.ai_message) for row in history.messages.all()] == [
+            (REMOVED_MESSAGE_PLACEHOLDER, FLAGGED_MESSAGE)
+        ]
 
     def test_event_bot_history_omits_the_original_answer(self, moderated_session, moderation_task):
         moderation_task.get.return_value = _ok(STRIKE_OUTPUT)

@@ -20,3 +20,6 @@ FLAGGED_MESSAGE = "Your message was flagged by our content moderation, so it wil
 
 MAX_BLOCK_REASON_LENGTH = 500
 """Characters of a code node's block reason that are saved."""
+
+REMOVED_MESSAGE_PLACEHOLDER = "[Message removed by moderation]"
+"""Human text stored in pipeline node and named histories in place of a flagged message."""
