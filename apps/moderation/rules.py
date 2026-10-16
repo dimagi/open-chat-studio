@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 type Rule = Callable[[str, Sequence[Attachment], Participant | None], str | None]
 
 MARKUP_PATTERN = re.compile(
-    r"<script|<iframe|\bon\w+\s*=|javascript:|data:text/html|<svg|<img\b[^>]*\bsrc\s*=",
+    r"<script|<iframe|\bon\w{1,30}\s*=|javascript:|data:text/html|<svg|<img\b[^>]{0,500}\bsrc\s*=",
     re.IGNORECASE,
 )
 
