@@ -22,11 +22,9 @@ from apps.moderation.const import FLAGGED_MESSAGE, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
-from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatMessageFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
-from apps.utils.factories.service_provider_factories import ModerationProviderFactory
-from apps.utils.factories.team import MembershipFactory, TeamFactory
-from apps.utils.tests.moderation_helpers import select_moderation_provider
+from apps.utils.factories.team import MembershipFactory
 from apps.utils.tests.provider_errors import connection_error
 
 FLAG = Flags.ABUSE_DETECTION.slug
@@ -69,16 +67,14 @@ def _strikes(session) -> int:
     return Participant.objects.get(id=session.participant_id).strikes
 
 
-def _in_app_session(team, *, published: bool):
-    """A session started from the app by a team member, on the working or a published version."""
-    experiment = ExperimentFactory.create(team=team)
+def _make_in_app_session(session, *, published: bool):
+    """Make `session` one a team member started from the app, on the working or a published version."""
     if published:
-        experiment = experiment.create_new_version(make_default=True)
-    session = ExperimentSessionFactory.create(experiment=experiment)
-    session.participant.user = MembershipFactory.create(team=team).user
+        session.experiment = session.experiment.create_new_version(make_default=True)
+        session.save()
+    session.participant.user = MembershipFactory.create(team=session.experiment.team).user
     session.participant.platform = ChannelPlatform.WEB
     session.participant.save()
-    return session
 
 
 def _bot_response(session, content="The bot's answer"):
@@ -272,26 +268,26 @@ class TestModerationResultStage:
 @pytest.mark.django_db()
 class TestModerationResultStageStrikes:
     @pytest.mark.parametrize(
-        ("output", "expected_strikes"),
+        ("output", "has_bot_response", "expected_strikes"),
         [
-            pytest.param(STRIKE_OUTPUT, 1, id="flagged"),
-            pytest.param(NON_STRIKE_OUTPUT, 0, id="passed"),
+            pytest.param(STRIKE_OUTPUT, True, 1, id="flagged"),
+            pytest.param(STRIKE_OUTPUT, False, 1, id="no_bot_response"),
+            pytest.param(NON_STRIKE_OUTPUT, True, 0, id="passed"),
         ],
     )
-    def test_flagged_message_gives_a_strike(self, auto_block_session, moderation_task, output, expected_strikes):
+    def test_flagged_message_gives_a_strike(
+        self, auto_block_session, moderation_task, output, has_bot_response, expected_strikes
+    ):
         moderation_task.get.return_value = _ok(output)
+        if has_bot_response:
+            ctx = _context(auto_block_session, bot_response=_bot_response(auto_block_session))
+        else:
+            ctx = _context(auto_block_session, early_exit_response="Something went wrong")
 
         with _flagged_reply():
-            ModerationResultStage()(_context(auto_block_session, bot_response=_bot_response(auto_block_session)))
+            ModerationResultStage()(ctx)
 
         assert _strikes(auto_block_session) == expected_strikes
-
-    def test_flagged_message_without_a_bot_response_gives_a_strike(self, auto_block_session, moderation_task):
-        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
-
-        ModerationResultStage()(_context(auto_block_session, early_exit_response="Something went wrong"))
-
-        assert _strikes(auto_block_session) == 1
 
     def test_failed_reply_replacement_still_gives_a_strike(self, auto_block_session, moderation_task):
         moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
@@ -327,10 +323,9 @@ class TestModerationResultStageStrikes:
             pytest.param(True, id="published_version"),
         ],
     )
-    def test_team_member_in_app_gets_no_strike(self, moderation_task, published):
-        team = TeamFactory.create(auto_block_enabled=True)
-        select_moderation_provider(team, ModerationProviderFactory.create(team=team))
-        session = _in_app_session(team, published=published)
+    def test_team_member_in_app_gets_no_strike(self, auto_block_session, moderation_task, published):
+        session = auto_block_session
+        _make_in_app_session(session, published=published)
         moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
 
         with _flagged_reply(), patch(BLOCKED_NOTIFICATION) as notification:
