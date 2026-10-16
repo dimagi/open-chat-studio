@@ -12,6 +12,7 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.models import ExperimentChannel
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.stages.core import (
+    AbuseRulesStage,
     BlockedParticipantStage,
     BotInteractionStage,
     ChannelDisabledStage,
@@ -88,6 +89,7 @@ class WebChannel(ChannelBase):
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 ErrorGuardStage(),
+                AbuseRulesStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
