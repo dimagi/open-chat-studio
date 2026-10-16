@@ -35,9 +35,9 @@ export class ChatAuthError extends Error {
 }
 
 /**
- * The server refused to start a session because the participant is on the
- * team's denylist (403 `participant_blocked`). Raised only by `startSession`;
- * the message is the server's notice for the participant.
+ * The server refused to start a session or take a message because the participant
+ * is on the team's denylist (403 `participant_blocked`). Raised only by `startSession`
+ * and `sendMessage`; the message is the server's notice for the participant.
  */
 export class ParticipantBlockedError extends Error {
   constructor(message: string) {
@@ -184,8 +184,8 @@ const CONSENT_REFUSAL_CODES = [CONSENT_REQUIRED_CODE, 'consent_stale'];
 const SESSION_EXPIRED_CODE = 'session_expired';
 
 /**
- * The 403 code for a participant on the team's denylist. A refused start shows the
- * server's notice; any other refused request reports a generic failure and keeps the session.
+ * The 403 code for a participant on the team's denylist. A refused start, send or upload
+ * shows the server's notice; any other refused request reports a generic failure and keeps the session.
  */
 export const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
 
@@ -345,10 +345,10 @@ export class ChatSessionService {
     return response;
   }
 
-  private async sessionRequest(sessionId: string, url: string, init: () => RequestInit, fallbackPrefix: string): Promise<Response> {
+  private async sessionRequest(sessionId: string, url: string, init: () => RequestInit, fallbackPrefix: string, options: RefusalOptions = {}): Promise<Response> {
     const response = await this.sessionFetch(sessionId, url, init);
     if (!response.ok) {
-      await this.raiseForStatus(response, fallbackPrefix);
+      await this.raiseForStatus(response, fallbackPrefix, options);
     }
     return response;
   }
@@ -363,6 +363,7 @@ export class ChatSessionService {
         body: JSON.stringify(payload),
       }),
       'Failed to send message',
+      { revealBlock: true },
     );
 
     return response.json() as Promise<ChatSendMessageResponse>;

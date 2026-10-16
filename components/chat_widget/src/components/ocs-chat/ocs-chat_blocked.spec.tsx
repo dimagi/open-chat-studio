@@ -4,8 +4,12 @@ import { ParticipantBlockedError, SessionAccessError } from '../../services/chat
 import { installWebCrypto, stubChatService } from './ocs-chat.test-helpers';
 
 const BLOCKED_MESSAGE = 'You have been blocked from using this chatbot.';
+const SESSION_KEY = 'ocs-chat-session-bot-1';
+const MESSAGES_KEY = 'ocs-chat-messages-bot-1';
+const RESTORED_MESSAGE = { created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'Hello again', attachments: [] };
 
 describe('ocs-chat blocked participant', () => {
+  let store: Record<string, string>;
   let startSession: jest.Mock;
 
   function newChatButton(page: SpecPage): Element | null {
@@ -16,12 +20,28 @@ describe('ocs-chat blocked participant', () => {
     return page.root.shadowRoot.querySelector('textarea');
   }
 
+  async function mountWidget(attrs = ''): Promise<SpecPage> {
+    const page = await newSpecPage({ components: [OcsChat], html: `<open-chat-studio-widget chatbot-id="bot-1" visible="true" ${attrs}></open-chat-studio-widget>` });
+    stubChatService(page, { startMessagePolling: jest.fn(() => ({ stop: jest.fn() })) });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+    return page;
+  }
+
   async function widgetAfterRefusedStart(refusal: Error): Promise<SpecPage> {
-    const page = await newSpecPage({ components: [OcsChat], html: '<open-chat-studio-widget chatbot-id="bot-1" visible="true"></open-chat-studio-widget>' });
+    const page = await mountWidget();
     startSession = jest.fn().mockRejectedValue(refusal);
     stubChatService(page, { startSession });
-    await page.waitForChanges();
     await send(page, 'hello');
+    return page;
+  }
+
+  async function restoredWidget(attrs = ''): Promise<SpecPage> {
+    store[SESSION_KEY] = 's-restored';
+    store[MESSAGES_KEY] = JSON.stringify([RESTORED_MESSAGE]);
+    const page = await mountWidget(attrs);
+    startSession = jest.fn();
+    stubChatService(page, { startSession });
     return page;
   }
 
@@ -32,8 +52,18 @@ describe('ocs-chat blocked participant', () => {
 
   beforeEach(() => {
     installWebCrypto();
+    store = {};
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn(), clear: jest.fn() },
+      value: {
+        getItem: jest.fn((key: string) => (key in store ? store[key] : null)),
+        setItem: jest.fn((key: string, value: string) => {
+          store[key] = value;
+        }),
+        removeItem: jest.fn((key: string) => {
+          delete store[key];
+        }),
+        clear: jest.fn(),
+      },
       writable: true,
     });
   });
@@ -42,6 +72,17 @@ describe('ocs-chat blocked participant', () => {
     jest.restoreAllMocks();
   });
 
+  function expectBlocked(page: SpecPage) {
+    const notice = page.rootInstance.messages.at(-1);
+    expect(notice.role).toBe('system');
+    expect(notice.content).toBe(BLOCKED_MESSAGE);
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
+    expect(composer(page).hasAttribute('disabled')).toBe(true);
+    expect(newChatButton(page)).toBeNull();
+    expect(store[SESSION_KEY]).toBeUndefined();
+    expect(store[MESSAGES_KEY]).toBeUndefined();
+  }
+
   describe('when the start is refused with participant_blocked', () => {
     let page: SpecPage;
 
@@ -49,23 +90,63 @@ describe('ocs-chat blocked participant', () => {
       page = await widgetAfterRefusedStart(new ParticipantBlockedError(BLOCKED_MESSAGE));
     });
 
-    it('shows the server detail without asking the participant to try again', () => {
-      const notice = page.rootInstance.messages.at(-1);
-      expect(notice.role).toBe('system');
-      expect(notice.content).toBe(BLOCKED_MESSAGE);
-      expect(page.rootInstance.activeSessionId).toBeUndefined();
+    it('shows the server detail, locks the composer and keeps nothing in storage', () => {
+      expectBlocked(page);
     });
 
-    it('locks the composer and does not start another session on a later send', async () => {
+    it('does not start another session on a later send', async () => {
       await send(page, 'again');
 
       expect(startSession).toHaveBeenCalledTimes(1);
-      expect(composer(page).hasAttribute('disabled')).toBe(true);
+    });
+  });
+
+  describe('when a restored session is refused with participant_blocked', () => {
+    it('on send, shows the server detail, locks the widget and clears the stored session', async () => {
+      const page = await restoredWidget();
+      const sendMessage = jest.fn().mockRejectedValue(new ParticipantBlockedError(BLOCKED_MESSAGE));
+      stubChatService(page, { sendMessage });
+
+      await send(page, 'hello');
+
+      expectBlocked(page);
+      expect(page.rootInstance.messages.map(m => m.content)).toEqual([RESTORED_MESSAGE.content, BLOCKED_MESSAGE]);
+      await send(page, 'again');
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      expect(startSession).not.toHaveBeenCalled();
     });
 
-    it('does not offer the new-chat button', () => {
-      expect(newChatButton(page)).toBeNull();
+    it('on upload, shows the server detail, locks the widget and clears the stored session', async () => {
+      const page = await restoredWidget('allow-attachments="true"');
+      const sendMessage = jest.fn();
+      stubChatService(page, { sendMessage });
+      page.rootInstance.selectedFiles = [{ file: new File(['hello'], 'a.txt', { type: 'text/plain' }) }];
+      jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({
+        selectedFiles: [{ file: new File(['hello'], 'a.txt', { type: 'text/plain' }) }],
+        uploadedIds: [],
+        tokenRejected: false,
+        participantBlocked: { detail: BLOCKED_MESSAGE },
+      });
+
+      await send(page, 'hello');
+
+      expectBlocked(page);
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(page.rootInstance.selectedFiles).toEqual([]);
     });
+  });
+
+  it('keeps the generic send failure and the session for another error', async () => {
+    const page = await restoredWidget();
+    stubChatService(page, { sendMessage: jest.fn().mockRejectedValue(new Error('Something went wrong.')) });
+
+    await send(page, 'hello');
+
+    const notice = page.rootInstance.messages.at(-1);
+    expect(notice.content).toContain('Something went wrong.');
+    expect(notice.content).toContain('Please try again.');
+    expect(page.rootInstance.activeSessionId).toBe('s-restored');
+    expect(composer(page).hasAttribute('disabled')).toBe(false);
   });
 
   it('keeps the generic start failure for another 403', async () => {
