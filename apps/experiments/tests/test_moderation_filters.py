@@ -141,3 +141,14 @@ def test_all_of_operator_has_no_effect(sessions, query_param):
     )
 
     assert result.count() == 4
+
+
+def test_moderation_status_filter_labels_skipped_as_not_moderated(sessions):
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+        options = ExperimentSessionFilter.columns(sessions.team)["moderation_status"]["options"]
+
+    assert [(option["id"], str(option["label"])) for option in options] == [
+        ("passed", "Passed"),
+        ("flagged", "Flagged"),
+        ("skipped", "Not moderated"),
+    ]

@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import classproperty
+from django.utils.translation import gettext_lazy as _
 from django_pydantic_field import SchemaField
 from langchain_core.messages import BaseMessage, messages_from_dict
 
@@ -143,6 +144,13 @@ class ModerationStatus(models.TextChoices):
     PASSED = "passed", "Passed"
     FLAGGED = "flagged", "Flagged"
     SKIPPED = "skipped", "Skipped"
+
+
+MODERATION_STATUS_LABELS = {
+    ModerationStatus.PASSED: _("Passed"),
+    ModerationStatus.FLAGGED: _("Flagged"),
+    ModerationStatus.SKIPPED: _("Not moderated"),
+}
 
 
 class ChatMessageMetadataKeys(StrEnum):

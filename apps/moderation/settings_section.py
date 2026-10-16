@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from waffle import flag_is_active
 
-from apps.chat.models import ModerationStatus
+from apps.chat.models import MODERATION_STATUS_LABELS, ModerationStatus
 from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant
 from apps.moderation.services import ModerationCounts, count_moderated_messages
@@ -18,11 +18,6 @@ from apps.web.forms import set_form_fields_disabled
 
 SETTINGS_SECTION_KEY = "moderation"
 COUNTS_PERIOD = timedelta(days=7)
-STATUS_TITLES = {
-    ModerationStatus.PASSED: _("Passed"),
-    ModerationStatus.FLAGGED: _("Flagged"),
-    ModerationStatus.SKIPPED: _("Not moderated"),
-}
 
 
 def _can_view_denylist(request) -> bool:
@@ -67,7 +62,7 @@ def _message_counts_context(counts: ModerationCounts) -> dict:
     skip_reasons = sorted(counts.skip_reasons.items(), key=lambda item: (-item[1], item[0]))
     reason_counts = [(reason.label, count) for reason, count in skip_reasons]
     stats = []
-    for status, title in STATUS_TITLES.items():
+    for status, title in MODERATION_STATUS_LABELS.items():
         count = counts.by_status.get(status, 0)
         stats.append(
             {

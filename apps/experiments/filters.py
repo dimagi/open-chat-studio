@@ -6,7 +6,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
-from apps.chat.models import Chat, ChatMessage, ModerationStatus
+from apps.chat.models import MODERATION_STATUS_LABELS, Chat, ChatMessage
 from apps.experiments.models import Experiment
 from apps.teams.flags import Flags
 from apps.web.dynamic_filters.base import (
@@ -267,7 +267,9 @@ class ModerationStatusFilter(ChoiceColumnFilter):
     query_param: str = "moderation_status"
     label: str = "Moderation Status"
     description: str = "Filter by moderation status. A session matches when any of its messages has the status."
-    options: list[str | dict] = [{"id": value, "label": label} for value, label in ModerationStatus.choices]
+    options: list[str | dict] = [
+        {"id": status.value, "label": label} for status, label in MODERATION_STATUS_LABELS.items()
+    ]
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(_session_has_message(moderation_status__in=value))
