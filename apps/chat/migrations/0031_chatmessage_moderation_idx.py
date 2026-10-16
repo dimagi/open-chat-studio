@@ -12,6 +12,10 @@ class Migration(migrations.Migration):
     operations = [
         AddIndexConcurrently(
             model_name="chatmessage",
-            index=models.Index(fields=["moderation_status"], name="chatmessage_moderation_idx"),
+            index=models.Index(
+                condition=models.Q(("moderation_status__isnull", False)),
+                fields=["moderation_status"],
+                name="chatmessage_moderation_idx",
+            ),
         ),
     ]

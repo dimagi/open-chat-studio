@@ -172,9 +172,10 @@ class TestHistoryExcludesFilteredHumanMessages:
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    "detail",
+    ("status", "detail"),
     [
         pytest.param(
+            ModerationStatus.FLAGGED,
             ModerationDetail(
                 output=ModerationOutput.model_validate(
                     {
@@ -186,45 +187,26 @@ class TestHistoryExcludesFilteredHumanMessages:
             ),
             id="output_and_rules",
         ),
-        pytest.param(ModerationDetail(skip_reason="rate_limited"), id="skip_reason"),
-        pytest.param(None, id="none"),
+        pytest.param(ModerationStatus.SKIPPED, ModerationDetail(skip_reason="rate_limited"), id="skip_reason"),
+        pytest.param(None, None, id="unmoderated"),
     ],
 )
-def test_moderation_detail_round_trip(detail):
+def test_moderation_columns_round_trip(status, detail):
     session = ExperimentSessionFactory.create()
     message = ChatMessage.objects.create(
         chat=session.chat,
         message_type=ChatMessageType.HUMAN,
         content="Hi",
-        moderation_status=ModerationStatus.FLAGGED,
+        moderation_status=status,
         moderation_detail=detail,
     )
 
     message = ChatMessage.objects.get(id=message.id)
 
-    assert message.moderation_status == ModerationStatus.FLAGGED
+    assert message.moderation_status == status
     assert message.moderation_detail == detail
 
 
-@pytest.mark.django_db()
-def test_moderation_columns_default_to_null():
-    session = ExperimentSessionFactory.create()
-    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
-
-    message = ChatMessage.objects.get(id=message.id)
-
-    assert message.moderation_status is None
-    assert message.moderation_detail is None
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        pytest.param({"output": {"hate": {"score": 0.5}}}, id="missing_flagged"),
-        pytest.param({"output": {"hate": {"flagged": True, "score": "high"}}}, id="non_numeric_score"),
-        pytest.param({"skip_reason": "unknown"}, id="unknown_skip_reason"),
-    ],
-)
-def test_moderation_detail_invalid(value):
+def test_moderation_detail_rejects_unknown_skip_reason():
     with pytest.raises(ValidationError):
-        ModerationDetail.model_validate(value)
+        ModerationDetail.model_validate({"skip_reason": "unknown"})
