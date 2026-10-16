@@ -347,9 +347,10 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
 @csrf_exempt
 @permission_required("pipelines.change_pipeline")
 def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
+    pipeline = get_object_or_404(Pipeline, id=pipeline_pk, team=request.team)
     message = json.loads(request.body).get("message")
     result = get_response_for_pipeline_test_message.delay(
-        pipeline_id=pipeline_pk, message_text=message, user_id=request.user.id
+        pipeline_id=pipeline.id, message_text=message, user_id=request.user.id
     )
     return JsonResponse({"task_id": result.task_id})
 
