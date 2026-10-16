@@ -1,6 +1,5 @@
 from unittest import mock
 
-import httpx
 import openai
 import pytest
 from django.urls import reverse
@@ -13,22 +12,20 @@ from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.tests.moderation_helpers import DELETED_PROVIDER_NOTIFICATION, select_moderation_provider
+from apps.utils.tests.provider_errors import connection_error, status_error
 
 FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
-NOTIFY = "apps.moderation.signals.moderation_provider_deleted_notification"
-_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/moderations")
 
 
 def _auth_error(error_cls=openai.AuthenticationError, status_code=401):
-    response = httpx.Response(status_code, request=_REQUEST, json={"error": {"message": "Incorrect API key provided"}})
-    return error_cls(f"Error code: {status_code}", response=response, body=response.json()["error"])
-
-
-def _select(team, provider):
-    team.moderation_enabled = True
-    team.moderation_provider = provider
-    team.save()
+    return status_error(
+        cls=error_cls,
+        status=status_code,
+        message=f"Error code: {status_code}",
+        body={"message": "Incorrect API key provided"},
+    )
 
 
 @pytest.fixture()
@@ -55,7 +52,7 @@ class TestConfigForm:
         "error",
         [
             pytest.param(_auth_error(), id="authentication"),
-            pytest.param(_auth_error(openai.PermissionDeniedError, status_code=403), id="permission_denied"),
+            pytest.param(_auth_error(error_cls=openai.PermissionDeniedError, status_code=403), id="permission_denied"),
         ],
     )
     def test_rejected_credentials_are_a_form_error(self, error):
@@ -68,7 +65,7 @@ class TestConfigForm:
         "error",
         [
             pytest.param(ModerationRateLimited("Rate limited"), id="rate_limited"),
-            pytest.param(openai.APIConnectionError(request=_REQUEST), id="connection_error"),
+            pytest.param(connection_error(openai.APIConnectionError), id="connection_error"),
         ],
     )
     def test_other_errors_do_not_block_saving(self, error):
@@ -201,10 +198,10 @@ def test_delete_view_turns_moderation_off_and_notifies(
     team_with_users, admin_client, django_capture_on_commit_callbacks
 ):
     provider = ModerationProviderFactory.create(team=team_with_users, name="Main moderation")
-    _select(team_with_users, provider)
+    select_moderation_provider(team=team_with_users, provider=provider)
     method, url = _urls(team_with_users, provider)["delete"]
 
-    with mock.patch(NOTIFY) as notify, django_capture_on_commit_callbacks(execute=True):
+    with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
         response = getattr(admin_client, method)(url)
 
     assert response.status_code == 200
