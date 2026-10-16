@@ -32,6 +32,8 @@ from apps.service_providers.forms import (
     LlmProviderModelForm,
     PricingOverrideForm,
     WhatsappTestMessageForm,
+    has_config_changed,
+    normalize_config,
     whatsapp_number_label,
 )
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -210,19 +212,6 @@ def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: i
     return HttpResponse()
 
 
-def _normalize_config(config: dict) -> dict:
-    """Drops blank optional fields cleaned_data fills in even when the user never touched
-    them, so an untouched field doesn't look like a change against an older, sparser saved
-    config."""
-    return {k: v for k, v in config.items() if v}
-
-
-def _has_config_changed(is_create: bool, old_config: dict | None, obj) -> bool:
-    """Whether obj's current config differs from old_config. Always True for a create -
-    there's nothing to compare against yet."""
-    return is_create or old_config != _normalize_config(obj.config)
-
-
 def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bool:
     """Whether the automatic connection test should run for this save.
 
@@ -233,7 +222,7 @@ def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bo
     """
     if not isinstance(obj, LlmProvider) or not obj.supports_connection_test:
         return False
-    return _has_config_changed(is_create, old_config, obj) or not obj.credentials_verified
+    return is_create or has_config_changed(old_config=old_config, new_config=obj.config) or not obj.credentials_verified
 
 
 def _can_verify_credentials(provider_type, subtype) -> bool:
@@ -328,7 +317,7 @@ class CreateServiceProvider(
             # Captured before config_form.save() overwrites obj.config, so the check below
             # can tell whether credentials actually changed - re-testing on an unrelated
             # edit (e.g. renaming the provider) wastes an external call for no reason.
-            old_config = None if is_create else _normalize_config(obj.config)
+            old_config = None if is_create else normalize_config(obj.config)
             config_form.save(obj)
             obj.save()
             if file_formset:

@@ -50,6 +50,18 @@ class ProviderTypeConfigForm(forms.Form):
         return instance
 
 
+def normalize_config(config: dict) -> dict:
+    """Drops blank optional fields cleaned_data fills in even when the user never touched
+    them, so an untouched field doesn't look like a change against an older, sparser saved
+    config."""
+    return {k: v for k, v in config.items() if v}
+
+
+def has_config_changed(*, old_config: dict | None, new_config: dict) -> bool:
+    """Whether ``new_config`` differs from the normalized ``old_config``. Always True when there is no old config."""
+    return old_config is None or old_config != normalize_config(new_config)
+
+
 class ObfuscatingMixin:
     """Mixin that obfuscate configured field values for display."""
 
@@ -107,12 +119,15 @@ CREDENTIAL_CHECK_TIMEOUT_SECONDS = 5
 
 class OpenAIModerationConfigForm(OpenAIConfigForm):
     def clean(self):
-        """Reject credentials the provider refuses. Other failures are reported as a warning after saving."""
+        """Check new or changed credentials. Reject those the provider refuses; report other failures as a warning."""
         cleaned_data = super().clean()
         if self.errors:
             return cleaned_data
+        old_config = normalize_config(self.initial_raw) if self.initial_raw else None
+        if not has_config_changed(old_config=old_config, new_config=cleaned_data):
+            return cleaned_data
         service = ModerationProviderType.openai.get_moderation_service(
-            cleaned_data, timeout=CREDENTIAL_CHECK_TIMEOUT_SECONDS, max_retries=0
+            config=cleaned_data, timeout=CREDENTIAL_CHECK_TIMEOUT_SECONDS, max_retries=0
         )
         try:
             service.moderate("Hello")
@@ -120,9 +135,7 @@ class OpenAIModerationConfigForm(OpenAIConfigForm):
             self.add_error("openai_api_key", f"The provider rejected these credentials: {provider_error_message(e)}")
         except Exception as e:
             logger.warning("Could not check moderation provider credentials: %s", e)
-            self.warnings.append(
-                f"Provider saved, but the credentials could not be checked: {provider_error_message(e)}"
-            )
+            self.warnings.append("Provider saved, but the credentials could not be checked right now.")
         return cleaned_data
 
 
