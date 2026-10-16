@@ -8,6 +8,7 @@ from waffle.testutils import override_flag
 
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import get_enabled_providers
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.flags import Flags
 from apps.teams.utils import current_team
@@ -15,6 +16,7 @@ from apps.teams.views.integrations_views import (
     build_integration_filter_pills,
     get_integration_new_choices,
     get_integration_rows,
+    get_visible_categories,
 )
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
@@ -39,6 +41,10 @@ def request_for(team):
         return request
 
     return _make
+
+
+def _visible_categories(request):
+    return get_visible_categories(request, get_enabled_providers(request))
 
 
 @pytest.mark.django_db()
@@ -68,12 +74,12 @@ def test_get_integration_rows_composite_ids_are_prefixed_by_provider_type(team, 
 @pytest.mark.django_db()
 def test_mcp_rows_excluded_when_flag_off(team, request_for):
     McpServer.objects.create(team=team, name="Zapier", server_url="https://example.org/mcp")
-    user = UserFactory()
+    request = request_for(UserFactory())
 
-    rows = get_integration_rows(request_for(user), team)
+    rows = get_integration_rows(request, team)
     assert rows == []
 
-    pills = build_integration_filter_pills(rows, None, show_mcp=False)
+    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
     labels = [pill.label for pill in pills]
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing"]
     assert "MCP" not in labels
@@ -84,45 +90,61 @@ def test_mcp_rows_excluded_when_flag_off(team, request_for):
 @override_flag("flag_mcp", active=True)
 def test_mcp_rows_included_when_flag_on(team, request_for):
     McpServer.objects.create(team=team, name="Zapier", server_url="https://example.org/mcp")
-    user = UserFactory()
+    request = request_for(UserFactory())
 
-    rows = get_integration_rows(request_for(user), team)
+    rows = get_integration_rows(request, team)
     assert len(rows) == 1
     assert rows[0]["category"] == "MCP"
     assert rows[0]["name"] == "Zapier"
 
-    pills = build_integration_filter_pills(rows, None, show_mcp=True)
+    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
     labels = [pill.label for pill in pills]
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "MCP"]
     mcp_pill = pills[-1]
     assert mcp_pill.count == 1
 
 
-@pytest.mark.django_db()
-@pytest.mark.parametrize("flag_on", [pytest.param(True, id="flag_on"), pytest.param(False, id="flag_off")])
-def test_moderation_rows_and_menu_follow_the_abuse_detection_flag(flag_on, team, request_for):
+@pytest.fixture()
+def moderation_setup(team, request_for):
+    """A team with one moderation provider, and a request from a team owner."""
     ModerationProviderFactory(team=team, name="Main moderation")
     admin = UserFactory()
     make_user_team_owner(team, admin)
-    request = request_for(admin)
+    return request_for(admin)
 
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_on), current_team(team):
+
+@pytest.mark.django_db()
+@override_flag(Flags.ABUSE_DETECTION.slug, active=True)
+def test_moderation_rows_menu_and_pill_shown_with_the_abuse_detection_flag_on(team, moderation_setup):
+    request = moderation_setup
+
+    with current_team(team):
         rows = get_integration_rows(request, team)
         menu_categories = [group.category for group in get_integration_new_choices(request, team)]
+    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
+    pill_labels = [pill.label for pill in pills]
 
-    assert [row["name"] for row in rows] == (["Main moderation"] if flag_on else [])
-    assert ("Moderation" in menu_categories) is flag_on
-    if flag_on:
-        assert rows[0]["category"] == "Moderation"
-        assert rows[0]["provider"] == "OpenAI"
+    assert [(row["name"], row["category"], row["provider"]) for row in rows] == [
+        ("Main moderation", "Moderation", "OpenAI")
+    ]
+    assert "Moderation" in menu_categories
+    assert pill_labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation"]
 
 
-def test_moderation_pill_shown_only_when_enabled():
-    labels_off = [pill.label for pill in build_integration_filter_pills([], None)]
-    labels_on = [pill.label for pill in build_integration_filter_pills([], None, show_moderation=True)]
+@pytest.mark.django_db()
+@override_flag(Flags.ABUSE_DETECTION.slug, active=False)
+def test_moderation_rows_menu_and_pill_hidden_with_the_abuse_detection_flag_off(team, moderation_setup):
+    request = moderation_setup
 
-    assert "Moderation" not in labels_off
-    assert labels_on == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation"]
+    with current_team(team):
+        rows = get_integration_rows(request, team)
+        menu_categories = [group.category for group in get_integration_new_choices(request, team)]
+    pills = build_integration_filter_pills(rows, None, visible_categories=_visible_categories(request))
+    pill_labels = [pill.label for pill in pills]
+
+    assert rows == []
+    assert "Moderation" not in menu_categories
+    assert "Moderation" not in pill_labels
 
 
 @pytest.mark.django_db()
