@@ -5386,12 +5386,6 @@ components:
         remote_id:
           type: string
           maxLength: 255
-        strikes:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: Flagged messages counted towards automatic blocking since the
-            participant was last unblocked.
         user:
           type: integer
           nullable: true
