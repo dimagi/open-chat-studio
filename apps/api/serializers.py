@@ -333,7 +333,7 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             platform=ChannelPlatform.API,
             defaults={"user": acting_user},
         )
-        if is_participant_blocked(team=request.team, participant=participant):
+        if is_participant_blocked(team=request.team, participant_id=participant.id):
             raise ParticipantBlocked()
         validated_data["participant"] = participant
         channel = ExperimentChannel.objects.get_team_api_channel(request.team)

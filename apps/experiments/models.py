@@ -42,7 +42,7 @@ from apps.events.versioning import TriggerSyncMode, sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
-from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
+from apps.moderation.enforcement import is_participant_blocked
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
@@ -1742,7 +1742,7 @@ class ExperimentSession(BaseTeamModel):
             )
             return {}
 
-        if abuse_detection_enabled(self.team) and is_on_denylist(team=self.team, participant_id=self.participant_id):
+        if is_participant_blocked(team=self.team, participant_id=self.participant_id):
             log.info("Not sending bot message to session %s: participant is blocked", self.id)
             return {}
 
