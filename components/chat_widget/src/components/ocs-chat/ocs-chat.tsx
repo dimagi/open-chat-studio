@@ -2395,6 +2395,13 @@ export class OcsChat {
     );
   }
 
+  private composerPlaceholder(): string {
+    if (!this.isConversationClosed()) {
+      return this.translationManager.get('composer.placeholder');
+    }
+    return this.translationManager.get(this.participantBlocked ? 'status.participantBlocked' : 'status.chatEnded');
+  }
+
   private renderComposer() {
     return (
       <div class="input-container">
@@ -2402,7 +2409,7 @@ export class OcsChat {
           ref={el => (this.textareaRef = el)}
           class="message-textarea"
           rows={1}
-          placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
+          placeholder={this.composerPlaceholder()}
           value={this.messageInput}
           onInput={e => this.handleInputChange(e)}
           onKeyPress={e => this.handleKeyPress(e)}

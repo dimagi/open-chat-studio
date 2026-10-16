@@ -94,6 +94,10 @@ describe('ocs-chat blocked participant', () => {
       expectBlocked(page);
     });
 
+    it('shows the blocked placeholder in the composer', () => {
+      expect(composer(page).getAttribute('placeholder')).toBe('You can no longer send messages to this chatbot.');
+    });
+
     it('does not start another session on a later send', async () => {
       await send(page, 'again');
 
