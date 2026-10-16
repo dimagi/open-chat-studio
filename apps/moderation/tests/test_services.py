@@ -264,7 +264,7 @@ def _add_strike(session, categories=("illicit",)):
 @pytest.mark.django_db()
 class TestAddStrike:
     def test_increments_from_the_database_value(self, auto_block_session):
-        """Two increments made through stale copies of the participant both count."""
+        """Two increments made through stale copies of the participant both count, and update `updated_at`."""
         first = Participant.objects.get(id=auto_block_session.participant_id)
         second = Participant.objects.get(id=auto_block_session.participant_id)
         message = _add_strike(auto_block_session)
@@ -273,14 +273,9 @@ class TestAddStrike:
         add_strike(participant=second, experiment=auto_block_session.experiment, chat_message=message, output=OUTPUT)
 
         assert second.strikes == 3
-        assert Participant.objects.get(id=auto_block_session.participant_id).strikes == 3
-
-    def test_updates_updated_at(self, auto_block_session):
-        before = auto_block_session.participant.updated_at
-
-        _add_strike(auto_block_session)
-
-        assert Participant.objects.get(id=auto_block_session.participant_id).updated_at > before
+        saved = Participant.objects.get(id=auto_block_session.participant_id)
+        assert saved.strikes == 3
+        assert saved.updated_at > first.updated_at
 
     def test_auto_block_off_gives_no_strike(self, auto_block_session):
         auto_block_session.experiment.team.auto_block_enabled = False
