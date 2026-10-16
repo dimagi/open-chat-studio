@@ -330,6 +330,49 @@ def test_delete_archives_the_trigger(client, chatbot, kind):
     assert client.delete(kind.detail_url(chatbot, trigger.id)).status_code == 404
 
 
+# ── Read ─────────────────────────────────────────────────────────────────────────────────────────
+@pytest.mark.django_db()
+@pytest.mark.parametrize("kind", KINDS)
+def test_list_returns_the_working_chatbots_live_triggers(client, chatbot, kind):
+    created = client.post(kind.list_url(chatbot), kind.body(), format="json").json()
+    kind.factory.create(experiment=chatbot).archive()
+    kind.factory.create(experiment=ChatbotFactory.create(team=chatbot.team))
+
+    response = client.get(kind.list_url(chatbot))
+
+    assert response.status_code == 200, response.content
+    assert response.json() == [created]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("kind", KINDS)
+def test_retrieve_returns_the_trigger_as_written(client, chatbot, kind):
+    created = client.post(kind.list_url(chatbot), kind.body(), format="json").json()
+
+    response = client.get(kind.detail_url(chatbot, created["id"]))
+
+    assert response.status_code == 200, response.content
+    assert response.json() == created
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("kind", KINDS)
+def test_an_archived_trigger_cannot_be_retrieved(client, chatbot, kind):
+    trigger = kind.factory.create(experiment=chatbot)
+    trigger.archive()
+
+    assert client.get(kind.detail_url(chatbot, trigger.id)).status_code == 404
+
+
+@pytest.mark.django_db()
+def test_a_read_only_key_can_read_triggers(chatbot):
+    trigger = TIMEOUT.factory.create(experiment=chatbot)
+    client = ApiTestClient(chatbot.team.members.first(), chatbot.team, read_only=True)
+
+    assert client.get(TIMEOUT.list_url(chatbot)).status_code == 200
+    assert client.get(TIMEOUT.detail_url(chatbot, trigger.id)).status_code == 200
+
+
 # ── Which triggers can be addressed ──────────────────────────────────────────────────────────────
 @pytest.mark.django_db()
 @pytest.mark.parametrize("kind", KINDS)
