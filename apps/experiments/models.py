@@ -1127,6 +1127,11 @@ class Participant(BaseTeamModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     platform = models.CharField(max_length=32)
     remote_id = models.CharField(max_length=255, blank=True, default="")
+    strikes = models.PositiveIntegerField(
+        default=0,
+        db_default=0,
+        help_text="Flagged messages counted towards automatic blocking since the participant was last unblocked.",
+    )
 
     class Meta:
         ordering = ["platform", "identifier"]
