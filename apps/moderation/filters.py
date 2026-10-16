@@ -8,10 +8,7 @@ from apps.web.dynamic_filters.base import YesNoExistsFilter
 
 
 class ParticipantBlockedFilter(YesNoExistsFilter):
-    """Filter on whether the participant is on the team's denylist.
-
-    `participant_column` names the outer row's participant id column; the outer row must have a `team_id`.
-    """
+    """Filter rows (with `team_id` and `participant_column`) by whether the participant is on the team's denylist."""
 
     yes_label: ClassVar[str] = "Blocked"
     no_label: ClassVar[str] = "Not blocked"
