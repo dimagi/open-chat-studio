@@ -133,6 +133,8 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
         "moderation_deleted_provider_name",
     ],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
+    # The denylist (moderation.deniedparticipant) is not synced, so imported participants start with no strikes.
+    "experiments.participant": ["strikes"],
     # System-managed OAuth token cache; the target refetches it from the copied client credentials.
     "service_providers.authprovider": ["_auth_data"],
     # Collection.files / DocumentSource.files are M2M through CollectionFile (extra columns). Excluding
