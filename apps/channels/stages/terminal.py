@@ -73,7 +73,8 @@ class ModerationResultStage(ProcessingStage):
     A flagged turn is also removed from the pipeline's node and named histories, so it is not replayed.
 
     A terminal stage so that it also runs when a core stage exits early. A failure to get a result is
-    recorded as a skip, and the response is sent as normal.
+    recorded as a skip, and the response is sent as normal. Any other error is logged, and the later
+    stages still send and store the response.
     """
 
     FLAGGED_PROMPT = (
@@ -87,6 +88,12 @@ class ModerationResultStage(ProcessingStage):
         return ctx.moderation_task_id is not None and ctx.human_message is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
+        try:
+            self._apply_result(ctx)
+        except Exception:
+            logger.exception("Could not record the moderation result for task %s", ctx.moderation_task_id)
+
+    def _apply_result(self, ctx: MessageProcessingContext) -> None:
         assert ctx.moderation_task_id is not None
         assert ctx.human_message is not None
         output, skip_reason = get_moderation_result(ctx.moderation_task_id)

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import openai
 import pytest
+from django.db import DatabaseError
 from waffle.testutils import override_flag
 
 from apps.channels.api_channel import ApiChannel
@@ -296,6 +297,19 @@ class TestModerationInTheChannelPipeline:
         assert response.id == ai_message.id
         assert response.created_at == ai_message.created_at
         assert response.content == ai_message.content == "Your message was flagged."
+
+    def test_failure_in_the_stage_still_sends_the_reply(self, moderated_session, moderation_task, caplog):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with patch(
+            "apps.channels.stages.terminal.record_moderation_result", side_effect=DatabaseError("connection lost")
+        ):
+            channel = self._send(
+                moderated_session, process_input=lambda *args, **kwargs: _bot_response(moderated_session)
+            )
+
+        assert channel.text_sent == ["The bot's answer"]
+        assert "Could not record the moderation result" in caplog.text
 
     def test_passed_message_is_answered(self, moderated_session, moderation_task):
         moderation_task.get.return_value = _ok(PASSED_OUTPUT)
