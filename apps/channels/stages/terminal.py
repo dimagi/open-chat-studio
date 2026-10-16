@@ -4,31 +4,24 @@ import logging
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
-from celery.exceptions import TimeoutError as CeleryTimeoutError
-from celery.result import AsyncResult
 from django.utils import timezone
-from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
 from apps.channels.const import MESSAGE_TYPES
-from apps.channels.pipeline import MessageProcessingContext
+from apps.channels.pipeline import MessageProcessingContext, generate_user_message
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.stages.core import RESET_COMMAND
-from apps.chat.bots import EventBot
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.files.models import File, FilePurpose
-from apps.moderation.const import FLAGGED_MESSAGE, MODERATION_WAIT_TIMEOUT
-from apps.moderation.services import record_moderation_result
+from apps.moderation.const import FLAGGED_MESSAGE
+from apps.moderation.services import get_moderation_result, record_moderation_result
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
     message_delivery_failure_notification,
     moderation_skipped_notification,
 )
-from apps.service_providers.moderation_service.schemas import ModerationOutput
-from apps.service_providers.tracing import TraceInfo
 
 if TYPE_CHECKING:
-    from apps.chat.schemas import ModerationSkipReason
     from apps.service_providers.speech_service import SynthesizedAudio
 
 DeliveryErrorHandler = Callable[[MessageProcessingContext, Exception], bool]
@@ -90,59 +83,25 @@ class ModerationResultStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         assert ctx.moderation_task_id is not None
         assert ctx.human_message is not None
-        output, skip_reason = self._wait_for_result(ctx.moderation_task_id)
+        output, skip_reason = get_moderation_result(ctx.moderation_task_id)
         status = record_moderation_result(message=ctx.human_message, output=output, skip_reason=skip_reason)
         if skip_reason is not None:
             moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason=skip_reason)
         elif status == ModerationStatus.FLAGGED and ctx.bot_response is not None:
             self._replace_response(ctx)
 
-    def _wait_for_result(self, task_id: str) -> tuple[ModerationOutput | None, ModerationSkipReason | None]:
-        """Return the provider output, or the reason there is none."""
-        try:
-            # Messaging channels run the pipeline inside a Celery task, where a blocking get() is not
-            # allowed by default.
-            result = AsyncResult(task_id).get(timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False)
-        except CeleryTimeoutError:
-            logger.warning("No moderation result for task %s within %s seconds", task_id, MODERATION_WAIT_TIMEOUT)
-            return None, "timeout"
-        except Exception:
-            logger.exception("Moderation task %s failed", task_id)
-            return None, "error"
-        if result["status"] != "ok":
-            return None, result["reason"]
-        try:
-            return ModerationOutput.model_validate(result["output"]), None
-        except ValidationError:
-            logger.exception("Moderation task %s returned an invalid output", task_id)
-            return None, "error"
-
     def _replace_response(self, ctx: MessageProcessingContext) -> None:
         """Replace the stored bot reply with a notice that the message will not be answered, and send only that."""
         assert ctx.bot_response is not None
-        reply = self._flagged_reply(ctx)
+        reply = generate_user_message(
+            ctx=ctx, prompt=self.FLAGGED_PROMPT, trace_name="moderation flagged", fallback=FLAGGED_MESSAGE
+        )
         bot_response = ctx.bot_response
         bot_response.content = reply
         for key in ChatMessageMetadataKeys.attachment_keys():
             bot_response.metadata.pop(key, None)
         bot_response.save(update_fields=["content", "metadata", "updated_at"])
-
-        ctx.formatted_message = None
-        ctx.voice_audio = None
-        ctx.additional_text_message = None
-        ctx.files_to_send = []
-        ctx.unsupported_files = []
-        ctx.early_exit_response = reply
-
-    def _flagged_reply(self, ctx: MessageProcessingContext) -> str:
-        """The reply to a flagged message, in the conversation's language when the EventBot can write it."""
-        trace_info = TraceInfo(name="moderation flagged", metadata={})
-        event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
-        try:
-            return event_bot.get_user_message(self.FLAGGED_PROMPT) or FLAGGED_MESSAGE
-        except Exception:
-            logger.exception("Failed to generate the reply to a flagged message, using the fixed message")
-            return FLAGGED_MESSAGE
+        ctx.replace_response(reply)
 
 
 # ---------------------------------------------------------------------------

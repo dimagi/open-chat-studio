@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
+
+from celery.exceptions import TimeoutError as CeleryTimeoutError
+from celery.result import AsyncResult
+from pydantic import ValidationError
 
 from apps.chat.models import ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.moderation.const import STRIKE_CATEGORIES
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
+from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
@@ -16,8 +22,9 @@ if TYPE_CHECKING:
     from apps.chat.models import ChatMessage
     from apps.chat.schemas import ModerationSkipReason
     from apps.experiments.models import Participant
-    from apps.service_providers.moderation_service.schemas import ModerationOutput
     from apps.teams.models import Team
+
+logger = logging.getLogger("ocs.moderation")
 
 
 def record_rule_hits(
@@ -42,6 +49,27 @@ def start_moderation(*, team: Team, text: str | None) -> str | None:
     if not text or not text.strip() or text == EMPTY_MESSAGE_PLACEHOLDER:
         return None
     return moderate_message.delay(text=text, moderation_provider_id=team.moderation_provider_id).id
+
+
+def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, ModerationSkipReason | None]:
+    """Wait for the moderation task and return the provider output, or the reason there is none."""
+    try:
+        # Messaging channels run the pipeline inside a Celery task, where a blocking get() is not
+        # allowed by default.
+        result = AsyncResult(task_id).get(timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False, interval=0.1)
+    except CeleryTimeoutError:
+        logger.warning("No moderation result for task %s within %s seconds", task_id, MODERATION_WAIT_TIMEOUT)
+        return None, "timeout"
+    except Exception:
+        logger.exception("Moderation task %s failed", task_id)
+        return None, "error"
+    if result["status"] != "ok":
+        return None, result["reason"]
+    try:
+        return ModerationOutput.model_validate(result["output"]), None
+    except ValidationError:
+        logger.exception("Moderation task %s returned an invalid output", task_id)
+        return None, "error"
 
 
 def strike_categories(output: ModerationOutput) -> set[str]:

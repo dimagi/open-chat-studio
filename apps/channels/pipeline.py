@@ -142,6 +142,36 @@ class MessageProcessingContext:
             return self.experiment_session.last_activity_at
         return timezone.now() if self.message is not None else None
 
+    def replace_response(self, text: str) -> None:
+        """Drop the outgoing response, voice, text and files, and send `text` instead."""
+        self.formatted_message = None
+        self.voice_audio = None
+        self.additional_text_message = None
+        self.files_to_send = []
+        self.unsupported_files = []
+        self.early_exit_response = text
+
+
+def generate_user_message(
+    *,
+    ctx: MessageProcessingContext,
+    prompt: str,
+    trace_name: str,
+    fallback: str,
+    trace_metadata: dict | None = None,
+    failure_log_level: int = logging.ERROR,
+) -> str:
+    """Ask EventBot for a participant-facing message; return `fallback` when it fails or returns nothing."""
+    trace_info = TraceInfo(name=trace_name, metadata=trace_metadata or {})
+    event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
+    try:
+        return event_bot.get_user_message(prompt) or fallback
+    except Exception:
+        logger.log(
+            failure_log_level, "EventBot failed to write the %s message, using the fallback", trace_name, exc_info=True
+        )
+        return fallback
+
 
 # ---------------------------------------------------------------------------
 # Pipeline Orchestrator
@@ -334,18 +364,16 @@ class MessageProcessingPipeline:
 
     def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
         """Ask EventBot for a participant-facing message, falling back to a reply that needs no model."""
-        metadata = {"error": str(exception), **getattr(exception, "trace_metadata", {})}
-        trace_info = TraceInfo(name="error", metadata=metadata)
-        event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
-        try:
-            message = event_bot.get_user_message(prompt)
-        except Exception:
-            if isinstance(exception, UserActionableError):
-                logger.info("EventBot could not phrase a %s; replying with its text", type(exception).__name__)
-                return str(exception)
-            logger.exception("Failed to generate error message via EventBot, falling back to default")
-            return self.DEFAULT_ERROR_RESPONSE_TEXT
-        return message or self._fallback_reply(exception)
+        # A participant-actionable error has its own text to fall back on, so an EventBot failure is not an error.
+        failure_log_level = logging.INFO if isinstance(exception, UserActionableError) else logging.ERROR
+        return generate_user_message(
+            ctx=ctx,
+            prompt=prompt,
+            trace_name="error",
+            trace_metadata={"error": str(exception), **getattr(exception, "trace_metadata", {})},
+            fallback=self._fallback_reply(exception),
+            failure_log_level=failure_log_level,
+        )
 
     def _fallback_reply(self, exception: Exception) -> str:
         """Return the exception's own message for a participant-actionable error, the canned text otherwise.

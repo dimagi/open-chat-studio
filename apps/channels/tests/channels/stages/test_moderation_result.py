@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import openai
 import pytest
-from celery.exceptions import TimeoutError as CeleryTimeoutError
 from waffle.testutils import override_flag
 
 from apps.channels.api_channel import ApiChannel
@@ -14,13 +14,14 @@ from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.moderation.const import FLAGGED_MESSAGE, MODERATION_WAIT_TIMEOUT
+from apps.moderation.const import FLAGGED_MESSAGE
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ChatMessageFactory
+from apps.utils.tests.provider_errors import connection_error
 
 FLAG = Flags.ABUSE_DETECTION.slug
-EVENT_BOT = "apps.channels.stages.terminal.EventBot"
+EVENT_BOT = "apps.channels.pipeline.EventBot"
 NOTIFICATION = "apps.channels.stages.terminal.moderation_skipped_notification"
 
 PASSED_OUTPUT = {"illicit": {"flagged": False, "score": 0.01}, "hate": {"flagged": False, "score": 0.02}}
@@ -73,14 +74,6 @@ class TestShouldRun:
 
 @pytest.mark.django_db()
 class TestModerationResultStage:
-    def test_waits_for_the_task(self, moderated_session, moderation_task):
-        moderation_task.get.return_value = _ok(PASSED_OUTPUT)
-
-        ModerationResultStage()(_context(moderated_session))
-
-        moderation_task.async_result.assert_called_once_with("task-1")
-        moderation_task.get.assert_called_once_with(timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False)
-
     @pytest.mark.parametrize(
         ("output", "expected_status"),
         [
@@ -108,9 +101,9 @@ class TestModerationResultStage:
                 {"return_value": {"status": "skipped", "reason": "rate_limited"}}, "rate_limited", id="rate_limited"
             ),
             pytest.param({"return_value": {"status": "skipped", "reason": "error"}}, "error", id="task_error"),
-            pytest.param({"side_effect": CeleryTimeoutError()}, "timeout", id="timeout"),
-            pytest.param({"side_effect": RuntimeError("boom")}, "error", id="task_raised"),
-            pytest.param({"return_value": _ok({"hate": {"flagged": True, "score": 2}})}, "error", id="invalid_output"),
+            pytest.param(
+                {"side_effect": connection_error(openai.APIConnectionError)}, "error", id="task_failed_after_retries"
+            ),
         ],
     )
     def test_records_a_skip_and_notifies(self, moderated_session, moderation_task, wait, expected_reason):

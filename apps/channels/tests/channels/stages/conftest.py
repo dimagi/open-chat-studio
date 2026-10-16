@@ -23,7 +23,7 @@ def moderation_task():
     `get.side_effect`) to what waiting for its result returns (or raises)."""
     with (
         patch("apps.moderation.services.moderate_message") as task,
-        patch("apps.channels.stages.terminal.AsyncResult") as async_result,
+        patch("apps.moderation.services.AsyncResult") as async_result,
     ):
         task.delay.return_value.id = "task-1"
         yield SimpleNamespace(task=task, async_result=async_result, get=async_result.return_value.get)

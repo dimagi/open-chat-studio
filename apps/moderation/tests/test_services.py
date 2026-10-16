@@ -1,10 +1,18 @@
 from unittest import mock
 
 import pytest
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.moderation.services import record_moderation_result, record_rule_hits, start_moderation, strike_categories
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT
+from apps.moderation.services import (
+    get_moderation_result,
+    record_moderation_result,
+    record_rule_hits,
+    start_moderation,
+    strike_categories,
+)
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
@@ -146,3 +154,35 @@ def test_start_moderation(moderation_enabled, has_provider, text, started):
         task.delay.assert_called_once_with(text=text, moderation_provider_id=team.moderation_provider_id)
     else:
         task.delay.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("wait", "expected"),
+    [
+        pytest.param(
+            {"return_value": {"status": "ok", "output": {"hate": {"flagged": False, "score": 0.1}}}},
+            (ModerationOutput({"hate": ModerationCategory(flagged=False, score=0.1)}), None),
+            id="ok",
+        ),
+        pytest.param(
+            {"return_value": {"status": "skipped", "reason": "rate_limited"}}, (None, "rate_limited"), id="skipped"
+        ),
+        pytest.param({"side_effect": CeleryTimeoutError()}, (None, "timeout"), id="timeout"),
+        pytest.param({"side_effect": RuntimeError("boom")}, (None, "error"), id="task_raised"),
+        pytest.param(
+            {"return_value": {"status": "ok", "output": {"hate": {"flagged": True, "score": 2}}}},
+            (None, "error"),
+            id="invalid_output",
+        ),
+    ],
+)
+def test_get_moderation_result(wait, expected):
+    with mock.patch("apps.moderation.services.AsyncResult") as async_result:
+        async_result.return_value.get.configure_mock(**wait)
+        result = get_moderation_result("task-1")
+
+    assert result == expected
+    async_result.assert_called_once_with("task-1")
+    async_result.return_value.get.assert_called_once_with(
+        timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False, interval=0.1
+    )
