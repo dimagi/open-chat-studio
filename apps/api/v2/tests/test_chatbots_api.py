@@ -114,3 +114,15 @@ def test_chatbot_other_team_404(experiment):
 def test_chatbot_anonymous_401():
     response = APIClient().get("/api/v2/chatbots/")
     assert response.status_code == 401
+
+
+@pytest.mark.django_db()
+def test_retrieve_names_the_published_version_as_inspect_does(experiment):
+    experiment.create_new_version(make_default=True)
+    client = ApiTestClient(experiment.team.members.first(), experiment.team)
+
+    response = client.get(reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id}))
+
+    assert response.json()["versions"] == [
+        {"name": experiment.name, "version_number": 1, "is_published_version": True, "version_description": ""}
+    ]

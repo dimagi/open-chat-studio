@@ -9,9 +9,13 @@ from apps.users.models import CustomUser
 
 
 class ChatbotVersionSerializer(serializers.ModelSerializer):
+    is_published_version = serializers.BooleanField(
+        source="is_default_version", help_text="True for the version currently served to participants."
+    )
+
     class Meta:
         model = Experiment
-        fields = ["name", "version_number", "is_default_version", "version_description"]
+        fields = ["name", "version_number", "is_published_version", "version_description"]
 
 
 class ChatbotSerializer(serializers.ModelSerializer):
