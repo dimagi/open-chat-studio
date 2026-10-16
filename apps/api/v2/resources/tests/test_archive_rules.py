@@ -31,15 +31,68 @@ def test_source_material_in_use_lists_what_uses_it(client, team):
     body = client.delete(f"/api/v2/source-material/{material.id}/").json()
 
     assert body["chatbots"] == [
-        {"chatbot_id": str(chatbot.public_id), "version_number": 2, "published": False, "node_ids": [node.flow_id]},
         {
             "chatbot_id": str(chatbot.public_id),
             "version_number": 1,
             "published": True,
+            "is_working_version": False,
             "node_ids": [published.pipeline.node_set.get(source_material__isnull=False).flow_id],
+        },
+        {
+            "chatbot_id": str(chatbot.public_id),
+            "version_number": 2,
+            "published": False,
+            "is_working_version": True,
+            "node_ids": [node.flow_id],
         },
     ]
     assert body["other_pipelines"] == [{"name": orphan.pipeline.name}]
+
+
+@pytest.mark.django_db()
+def test_source_material_in_a_draft_says_to_remove_it_from_the_draft(client, team):
+    material = SourceMaterialFactory.create(team=team)
+    NodeFactory.create(pipeline=ChatbotFactory.create(team=team).pipeline, params={"source_material_id": material.id})
+
+    detail = client.delete(f"/api/v2/source-material/{material.id}/").json()["detail"]
+
+    assert "Remove it from the working version's nodes" in detail
+    assert "chatbot_version_create" not in detail
+
+
+@pytest.mark.django_db()
+def test_source_material_a_published_version_uses_says_to_publish_and_archive_it(client, team):
+    material = SourceMaterialFactory.create(team=team)
+    chatbot = ChatbotFactory.create(team=team)
+    node = NodeFactory.create(pipeline=chatbot.pipeline, params={"source_material_id": material.id})
+    chatbot.create_new_version(make_default=True)
+    node.set_params({**node.params, "source_material_id": None})
+
+    detail = client.delete(f"/api/v2/source-material/{material.id}/").json()["detail"]
+
+    assert "Remove it from" not in detail
+    assert "`chatbot_version_create`" in detail
+    assert "`chatbot_version_archive`" in detail
+
+
+@pytest.mark.django_db()
+def test_source_material_an_old_version_uses_is_listed_as_that_version(client, team):
+    material = SourceMaterialFactory.create(team=team)
+    chatbot = ChatbotFactory.create(team=team)
+    node = NodeFactory.create(pipeline=chatbot.pipeline, params={"source_material_id": material.id})
+    chatbot.create_new_version(make_default=True)
+    node.set_params({**node.params, "source_material_id": None})
+    chatbot.create_new_version(make_default=True)
+
+    body = client.delete(f"/api/v2/source-material/{material.id}/").json()
+
+    assert [(c["version_number"], c["published"], c["is_working_version"]) for c in body["chatbots"]] == [
+        (1, False, False)
+    ]
+    assert body["other_pipelines"] == []
+    assert "`chatbot_version_archive`" in body["detail"]
+    assert client.delete(f"/api/v2/chatbots/{chatbot.public_id}/versions/1/").status_code == 200
+    assert client.delete(f"/api/v2/source-material/{material.id}/").status_code == 200
 
 
 @pytest.mark.django_db()

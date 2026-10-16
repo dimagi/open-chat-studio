@@ -77,7 +77,8 @@ source_material_schema = resource_schema(
     plural="Source Material",
     archive_refusal=(
         "It is refused with `409` while a pipeline node or a live chatbot version still uses it. "
-        "The response lists each chatbot version and node that uses it."
+        "The response lists each chatbot version and node that uses it, and its `detail` says how "
+        "to clear each kind of reference."
     ),
     archive_refused_serializer=SourceMaterialInUseSerializer,
 )
