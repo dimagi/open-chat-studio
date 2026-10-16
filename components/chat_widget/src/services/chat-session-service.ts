@@ -199,6 +199,11 @@ interface ErrorBody {
   consent?: ChatConsent;
 }
 
+interface RefusalOptions {
+  /** Raise `ParticipantBlockedError` with the server's notice instead of the generic failure. */
+  revealBlock?: boolean;
+}
+
 export class ChatSessionService {
   private readonly apiBaseUrl: string;
   private readonly embedKey?: string;
@@ -248,11 +253,7 @@ export class ChatSessionService {
     );
 
     if (!response.ok) {
-      const body = await this.readErrorBody(response, 'Failed to start session');
-      if (response.status === 403 && body.code === PARTICIPANT_BLOCKED_CODE) {
-        throw new ParticipantBlockedError(body.detail || GENERIC_FAILURE_MESSAGE);
-      }
-      throw this.errorFor(response.status, body);
+      await this.raiseForStatus(response, 'Failed to start session', { revealBlock: true });
     }
 
     return response.json() as Promise<ChatStartSessionResponse>;
@@ -592,17 +593,17 @@ export class ChatSessionService {
     return match?.[1];
   }
 
-  private async raiseForStatus(response: Response, fallbackPrefix: string): Promise<never> {
-    throw this.errorFor(response.status, await this.readErrorBody(response, fallbackPrefix));
+  private async raiseForStatus(response: Response, fallbackPrefix: string, options: RefusalOptions = {}): Promise<never> {
+    throw this.errorFor(response.status, await this.readErrorBody(response, fallbackPrefix), options);
   }
 
-  private errorFor(status: number, { message, code, consent }: ErrorBody): Error {
+  private errorFor(status: number, { message, code, detail, consent }: ErrorBody, { revealBlock = false }: RefusalOptions = {}): Error {
     // Before the generic 403: a consent refusal keeps the session, a token refusal discards it.
     if (consent && CONSENT_REFUSAL_CODES.includes(code)) {
       return new ConsentRequiredError(consent, message);
     }
     if (code === PARTICIPANT_BLOCKED_CODE) {
-      return new Error(GENERIC_FAILURE_MESSAGE);
+      return revealBlock ? new ParticipantBlockedError(detail || GENERIC_FAILURE_MESSAGE) : new Error(GENERIC_FAILURE_MESSAGE);
     }
     if (status === 403) {
       return new SessionAccessError(status, code, message);

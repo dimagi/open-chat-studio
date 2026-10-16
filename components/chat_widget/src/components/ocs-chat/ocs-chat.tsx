@@ -502,17 +502,22 @@ export class OcsChat {
     return this.chatService;
   }
 
-  private addErrorMessage(errorText: string): void {
-    const errorMessage: ChatMessage = {
-      created_at: new Date().toISOString(),
-      role: 'system',
-      content: `**Error:** ${errorText}\nPlease try again.`,
-      attachments: [],
-    };
-
-    this.messages = [...this.messages, errorMessage];
+  private appendSystemNotice(content: string): void {
+    this.messages = [...this.messages, { created_at: new Date().toISOString(), role: 'system', content, attachments: [] }];
     this.saveSessionToStorage();
     this.scrollToBottom();
+  }
+
+  private addErrorMessage(errorText: string): void {
+    this.appendSystemNotice(`**Error:** ${errorText}\nPlease try again.`);
+  }
+
+  /** Clear the loading, typing and upload indicators that lock the composer. */
+  private resetBusyState(): void {
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.typingProgressMessage = '';
   }
 
   /**
@@ -522,10 +527,7 @@ export class OcsChat {
    */
   private handleSessionAccessError(): void {
     this.cleanup();
-    this.isLoading = false;
-    this.isTyping = false;
-    this.isUploadingFiles = false;
-    this.typingProgressMessage = '';
+    this.resetBusyState();
 
     // Session-scoped, so it clears for a bound session too: the panel cannot act without
     // a session, and it covers the error. The stored acceptance stays, so a fresh session
@@ -568,35 +570,20 @@ export class OcsChat {
     if (last?.role === 'system' && last.content === content) {
       return;
     }
-    const notice: ChatMessage = {
-      created_at: new Date().toISOString(),
-      role: 'system',
-      content,
-      attachments: [],
-    };
-    this.messages = [...this.messages, notice];
-    this.saveSessionToStorage();
-    this.scrollToBottom();
+    this.appendSystemNotice(content);
   }
 
   /** Show the server's blocked notice and lock the composer, with no way to retry or start a new chat. */
   private handleParticipantBlocked(notice: string): void {
     this.participantBlocked = true;
-    this.isTyping = false;
-    this.typingProgressMessage = '';
-    this.messages = [...this.messages, { created_at: new Date().toISOString(), role: 'system', content: notice, attachments: [] }];
-    this.saveSessionToStorage();
-    this.scrollToBottom();
+    this.resetBusyState();
+    this.appendSystemNotice(notice);
   }
 
   private handleError(errorText: string): void {
     // show as system message
     this.addErrorMessage(errorText);
-
-    // Clear any loading/typing states
-    this.isLoading = false;
-    this.isTyping = false;
-    this.isUploadingFiles = false;
+    this.resetBusyState();
     this.currentPollTaskId = '';
   }
 
@@ -886,7 +873,7 @@ export class OcsChat {
     // Block sending when the widget is disabled so direct calls cannot bypass
     // the hidden composer.
     if (this.disabled) return;
-    if (!message.trim() || this.sessionEnded || this.participantBlocked) return;
+    if (!message.trim() || this.isConversationClosed()) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -1267,15 +1254,7 @@ export class OcsChat {
         this.typingProgressMessage = message;
       }),
       onTimeout: this.forCurrentSession(() => {
-        const timeoutMessage: ChatMessage = {
-          created_at: new Date().toISOString(),
-          role: 'system',
-          content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
-          attachments: [],
-        };
-        this.messages = [...this.messages, timeoutMessage];
-        this.saveSessionToStorage();
-        this.scrollToBottom();
+        this.appendSystemNotice('The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.');
         this.isTyping = false;
         this.typingProgressMessage = '';
         this.currentPollTaskId = '';
@@ -2229,8 +2208,13 @@ export class OcsChat {
     );
   }
 
+  /** The session has ended or the participant is blocked; no further messages can be sent. */
+  private isConversationClosed(): boolean {
+    return this.sessionEnded || this.participantBlocked;
+  }
+
   private isComposerLocked(): boolean {
-    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || this.participantBlocked;
+    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.isConversationClosed();
   }
 
   private hasDraft(): boolean {
@@ -2239,7 +2223,7 @@ export class OcsChat {
 
   // Uploading keeps the send button styled as ready while it is disabled, so its label can say so.
   private isSendReady(): boolean {
-    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !this.participantBlocked && this.hasDraft();
+    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.isConversationClosed() && this.hasDraft();
   }
 
   private renderAttachmentControls() {
