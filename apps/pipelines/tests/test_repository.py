@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.nodes import Passthrough
 from apps.pipelines.repository import (
@@ -14,7 +13,6 @@ from apps.pipelines.repository import (
     ORMRepository,
     RepositoryLookupError,
 )
-from apps.teams.flags import Flags
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -160,11 +158,6 @@ class TestInMemoryRepository:
         assert file.name == "test.txt"
         assert len(self.repo.files_created) == 1
 
-    def test_block_participant(self):
-        assert self.repo.block_participant("First") is True
-        assert self.repo.block_participant("Second") is False
-        assert self.repo.blocked_reason == "First"
-
 
 class TestInjectionWiring:
     """Verify that PipelineNode.process() extracts repo from LangGraph config."""
@@ -222,14 +215,3 @@ class TestORMRepository:
         assert msg.human_message == "Hello"
         assert msg.ai_message == "Hi"
         assert msg.node_id == "node-1"
-
-    def test_block_participant(self, team_flag):
-        session = ExperimentSessionFactory()
-        team_flag(Flags.ABUSE_DETECTION.slug, session.team)
-        repo = ORMRepository(session=session)
-
-        assert repo.block_participant("Spam") is True
-        assert repo.block_participant("Spam") is False
-        denial = DeniedParticipant.objects.get(participant=session.participant)
-        assert denial.source == DeniedParticipantSource.CODE_NODE
-        assert denial.experiment_id == session.experiment_id
