@@ -339,6 +339,14 @@ class ExperimentSessionFilter(MultiColumnFilter):
     ]
 
 
+class ParticipantSessionFilter(ExperimentSessionFilter):
+    """Session filter for one participant's sessions, without the participant blocked filter."""
+
+    filters: ClassVar[Sequence[ColumnFilter]] = [
+        f for f in ExperimentSessionFilter.filters if not isinstance(f, ParticipantBlockedFilter)
+    ]
+
+
 class ChatMessageFilter(MultiColumnFilter):
     """Filter for chat messages using tags, timestamps, and versions."""
 

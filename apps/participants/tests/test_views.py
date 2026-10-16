@@ -10,10 +10,12 @@ from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.participants.forms import TriggerBotForm
+from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.events import ScheduledMessageFactory
@@ -148,6 +150,22 @@ def test_single_participant_home_lazy_loads_the_sessions_table(client, team_with
     for session in sessions:
         assert str(session.external_id) not in content
     assert reverse("chatbots:participant_sessions_list", args=[team_with_users.slug, participant.id]) in content
+
+
+@pytest.mark.django_db()
+def test_sessions_panel_does_not_offer_the_participant_blocked_filter(client, team_with_users):
+    participant = ParticipantFactory.create(team=team_with_users)
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:single-participant-home", args=[team_with_users.slug, participant.id])
+
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+        response = client.get(url)
+
+    assert response.status_code == 200
+    columns = response.context["df_filter_columns"]
+    assert "moderation_status" in columns
+    assert "participant_blocked" not in columns
 
 
 @pytest.mark.django_db()
