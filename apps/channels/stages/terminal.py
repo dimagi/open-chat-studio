@@ -105,7 +105,7 @@ class ModerationResultStage(ProcessingStage):
             moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason=skip_reason)
         elif status == ModerationStatus.FLAGGED:
             assert output is not None
-            self._add_strike(ctx, output)
+            self._add_strike(ctx=ctx, output=output)
             remove_turn_from_pipeline_histories(human_message=ctx.human_message, bot_response=ctx.bot_response)
             if ctx.bot_response is not None:
                 self._replace_response(ctx)
