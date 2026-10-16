@@ -41,14 +41,23 @@ def test_blocked_filter_offered_only_when_the_flag_is_on(db, team, filter_class,
     ],
 )
 def test_table_ignores_an_operator_the_filter_does_not_offer(client, team_with_users, viewname, query_param):
-    client.force_login(team_with_users.members.first())
-    url = reverse(viewname=viewname, kwargs={"team_slug": team_with_users.slug})
+    team = team_with_users
+    client.force_login(team.members.first())
+    experiment = ExperimentFactory.create(team=team)
+    blocked = ExperimentSessionFactory.create(experiment=experiment)
+    DeniedParticipantFactory.create(team=team, participant=blocked.participant)
+    ExperimentSessionFactory.create(experiment=experiment)
+    url = reverse(viewname=viewname, kwargs={"team_slug": team.slug})
     query = {"filter_0_column": query_param, "filter_0_operator": Operators.ALL_OF, "filter_0_value": '["true"]'}
 
     with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+        unfiltered = client.get(url)
         response = client.get(url, data=query)
 
     assert response.status_code == 200
+    unfiltered_rows = list(unfiltered.context_data["table"].data.data)
+    assert len(unfiltered_rows) == 2
+    assert list(response.context_data["table"].data.data) == unfiltered_rows
 
 
 BLOCKED_FILTER_QUERY = {
