@@ -1,4 +1,5 @@
 from django.db import transaction
+from field_audit.models import AuditAction
 
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
@@ -33,14 +34,13 @@ def block_participant(
 
 def unblock_participant(participant) -> bool:
     """Remove the participant from its team's denylist and reset its strikes. Returns whether it was blocked."""
-    denial = DeniedParticipant.objects.filter(team_id=participant.team_id, participant=participant).first()
-    if denial is None:
-        return False
+    denials = DeniedParticipant.objects.filter(team_id=participant.team_id, participant=participant)
     with transaction.atomic():
-        denial.delete()
-        participant.strikes = 0
-        participant.save(update_fields=["strikes", "updated_at"])
-    return True
+        deleted, _ = denials.delete(audit_action=AuditAction.AUDIT)
+        if deleted:
+            participant.strikes = 0
+            participant.save(update_fields=["strikes", "updated_at"])
+    return bool(deleted)
 
 
 def abuse_detection_enabled(team) -> bool:
