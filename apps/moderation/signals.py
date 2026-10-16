@@ -10,13 +10,15 @@ from apps.teams.models import Team
 
 @receiver(pre_delete, sender=ModerationProvider)
 def turn_moderation_off_when_selected_provider_is_deleted(sender, instance, **kwargs):
-    """If the team had this provider selected, turn moderation off and notify the team after commit."""
-    was_selected = Team.objects.filter(id=instance.team_id, moderation_provider_id=instance.id).update(
+    """If the team was moderating with this provider, turn moderation off and notify the team after commit."""
+    was_in_use = Team.objects.filter(
+        id=instance.team_id, moderation_provider_id=instance.id, moderation_enabled=True
+    ).update(
         moderation_enabled=False,
         moderation_deleted_provider_name=instance.name,
         audit_action=AuditAction.AUDIT,
     )
-    if not was_selected:
+    if not was_in_use:
         return
 
     team_id, provider_id, provider_name = instance.team_id, instance.id, instance.name
