@@ -1,4 +1,7 @@
+import signal
 from unittest.mock import MagicMock
+
+import pytest
 
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext, PipelineAccessor, StateAccessor
@@ -251,6 +254,31 @@ class TestPipelineAccessorGetNodePath:
         accessor = PipelineAccessor(state)
         path = accessor.get_node_path("nonexistent")
         assert path == ["nonexistent"]
+
+    def test_stops_when_the_execution_path_has_a_cycle(self):
+        state = _minimal_state(
+            outputs={
+                "node_a": {"node_id": "id-a", "message": "a"},
+                "node_b": {"node_id": "id-b", "message": "b"},
+            },
+            path=[
+                (1, "id-a", ["id-b"]),
+                (2, "id-b", ["id-a"]),
+            ],
+        )
+        accessor = PipelineAccessor(state)
+
+        def on_timeout(signum, frame):
+            pytest.fail("get_node_path did not terminate")
+
+        previous = signal.signal(signal.SIGALRM, on_timeout)
+        signal.alarm(5)
+        try:
+            path = accessor.get_node_path("node_b")
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
+        assert path == ["node_a", "node_b"]
 
 
 # ===========================================================================
