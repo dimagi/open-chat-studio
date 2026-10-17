@@ -59,7 +59,8 @@ be surprised on upgrade. Examples:
 * a manual step before or after the deploy
 * a migration that is long-running or locking, irreversible, needs a backfill,
   or changes behavior on upgrade
-* a setting an operator must set, or one that is renamed, removed or retyped
+* a new, renamed, retyped or removed setting configured through the process
+  environment (env var or `.env`), whether or not it is required
 * a change in deployment shape (process types, queues, backing-service versions)
 * a deprecation, a removal, or a breaking API change
 * a security fix needing operator action
@@ -71,6 +72,5 @@ RELEASING.md#what-belongs-in-changelogmd.
 
 Leave unchecked for a feature, improvement or bug fix, even one that carries an
 additive migration (new table, new nullable column, new column with a DB-level
-default) or a new optional setting that is inert by default. Those reach
-operators through the user-facing changelog.
+default). Those reach operators through the user-facing changelog.
 -->

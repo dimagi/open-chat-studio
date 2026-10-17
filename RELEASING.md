@@ -54,8 +54,10 @@ Log:
 - A manual step before or after the deploy.
 - A migration that is long-running or locking on a large table, is irreversible
   or destroys data, needs a backfill command, or changes behavior on upgrade.
-- A setting an operator must set, or one that is renamed, removed or retyped, or
-  whose changed default alters behavior they rely on.
+- Any new, renamed, retyped or removed setting that is configured through the
+  process environment (an env var or `.env` entry read by `config/settings.py`),
+  whether or not it is required and whatever its default. Also a changed default
+  that alters behavior an operator relies on.
 - A change in deployment shape: process types, queues, backing-service versions,
   new external dependencies, or a base image change that affects self-built
   images.
@@ -67,9 +69,8 @@ Do not log:
 - An additive migration that runs automatically: a new table, a new nullable
   column, or a new column with a DB-level default. [releases.md](docs/hosting/releases.md#what-a-version-number-means)
   already tells operators that MINOR releases may include these.
-- A new optional setting that is off or inert by default and matters only to
-  someone adopting a new feature. Document it in
-  [docs/hosting/configuration.md](docs/hosting/configuration.md) instead.
+- A settings constant that is not read from the process environment. Operators
+  cannot configure it, so there is nothing for them to act on.
 - A feature, UI change, API addition or bug fix that needs no operator action.
 - A refactor, dependency bump, or test or CI change.
 

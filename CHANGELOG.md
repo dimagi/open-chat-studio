@@ -6,8 +6,8 @@ operators must set or that changes behavior, deployment shape, deprecations and
 removals, and security fixes.
 
 Add an entry only if an operator would have to do something, or be surprised,
-because of the change. Additive migrations that run automatically and optional
-settings that are inert by default do not belong here. See
+because of the change. Every new, renamed, retyped or removed environment-configured
+setting belongs here. Additive migrations that run automatically do not. See
 [what belongs in the changelog](RELEASING.md#what-belongs-in-changelogmd).
 
 This is **not** the product changelog. New features, improvements and bug fixes
@@ -80,9 +80,10 @@ version section when a release is cut.
   `assistant` value from `PurposeEnum`.
 
 ### Configuration
-<!-- Settings an operator must set, or that are renamed, retyped or removed, or
-     whose changed default alters behavior. Omit optional settings that are inert
-     by default. State the default and whether it is required. -->
+<!-- Every new, renamed, retyped or removed setting that can be configured through
+     the process environment, whether or not it is required and whatever its
+     default. Also a changed default that alters behavior. State the default and
+     whether it is required. -->
 - `SENTRY_BROWSER_LOADER_KEY`: new, optional, defaults to empty (no browser-side
   Sentry). Previously every non-debug deployment loaded the Open Chat Studio
   project's Sentry browser script and reported browser errors and traces to it.
