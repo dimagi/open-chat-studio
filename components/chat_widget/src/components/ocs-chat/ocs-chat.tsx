@@ -120,6 +120,11 @@ export class OcsChat {
    * The base URL for the API.
    */
   @Prop() apiBaseUrl?: string = 'https://www.openchatstudio.com';
+  /**
+   * The resolved theme supplied by the embedding application.
+   * External embeds default to the existing light appearance.
+   */
+  @Prop({ reflect: true }) theme: 'light' | 'dark' = 'light';
 
   /**
    * The text to display on the button.
