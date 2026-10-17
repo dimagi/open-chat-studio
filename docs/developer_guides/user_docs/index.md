@@ -19,7 +19,7 @@ The PR template has two independent checkboxes, for two audiences:
 | "This PR requires docs/changelog update" | product users | docs repo, written for you by the automation |
 | "Self-hosted operators must know about or act on this change" | self-host operators | `CHANGELOG.md` at the root of this repo, written by you in the PR |
 
-Most user-facing PRs need only the first. Some need both 1 and 3 below — e.g. a user-facing feature that also requires an operator migration — and a purely internal migration needs only 3.
+Most user-facing PRs need only the first. Some need both 1 and 3 below — e.g. a user-facing feature that also requires an operator step such as a backfill command — and a purely internal change with an operator-visible effect needs only 3.
 
 ## What to do in your PR
 
@@ -42,7 +42,7 @@ If your PR touches the chat widget (files under `components/`):
 
 ### 3. Self-hosted operator-impacting changes (manual process)
 
-Check this box when an operator has to *do* something on upgrade — a migration, a new or changed setting, a change in deployment shape, a deprecation or removal, or a security fix that needs operator action such as rotating a credential. See [`RELEASING.md`](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md) for how those entries are cut into a tagged release.
+Check this box only when an operator has to *do* something on upgrade, or would be surprised by it — a manual step, a migration that is locking, irreversible or needs a backfill, a setting operators must set or that changes behavior, a change in deployment shape, a deprecation or removal, or a security fix that needs operator action such as rotating a credential. An additive migration that runs automatically, or an optional setting that is inert by default, does not qualify. See [what belongs in the changelog](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md#what-belongs-in-changelogmd) for the full list, and [`RELEASING.md`](https://github.com/dimagi/open-chat-studio/blob/main/RELEASING.md) for how entries are cut into a tagged release.
 
 1. Check the **"Self-hosted operators must know about or act on this change"** checkbox.
 2. Add an entry yourself under `[Unreleased]` in the repo-root `CHANGELOG.md` — this one is not automated.

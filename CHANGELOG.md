@@ -1,8 +1,14 @@
 # Operator Changelog
 
 Changes that a **self-hosted operator must know about or act on** when upgrading
-Open Chat Studio: migrations, configuration, deployment shape, deprecations and
+Open Chat Studio: manual steps, migrations that need attention, configuration
+operators must set or that changes behavior, deployment shape, deprecations and
 removals, and security fixes.
+
+Add an entry only if an operator would have to do something, or be surprised,
+because of the change. Additive migrations that run automatically and optional
+settings that are inert by default do not belong here. See
+[what belongs in the changelog](RELEASING.md#what-belongs-in-changelogmd).
 
 This is **not** the product changelog. New features, improvements and bug fixes
 are described for end users at
@@ -32,7 +38,9 @@ version section when a release is cut.
   nothing reads. (#4254)
 
 ### Migrations
-<!-- One line per migration. Omit the section if there are none. -->
+<!-- Only migrations that are long-running or locking, irreversible, need a
+     manual step or backfill, or change behavior on upgrade. Omit additive
+     migrations that run automatically. Omit the section if none qualify. -->
 - `SourceMaterial.owner` becomes nullable, for source material created by a client-credentials API
   token. Existing rows are unaffected. (#4679)
 - `OAuth2Application` gains an `all_data` boolean column (default `False`, safe DB-level
@@ -72,8 +80,9 @@ version section when a release is cut.
   `assistant` value from `PurposeEnum`.
 
 ### Configuration
-<!-- New, renamed, retyped or removed environment variables and settings.
-     State the default and whether it is required. -->
+<!-- Settings an operator must set, or that are renamed, retyped or removed, or
+     whose changed default alters behavior. Omit optional settings that are inert
+     by default. State the default and whether it is required. -->
 - `SENTRY_BROWSER_LOADER_KEY`: new, optional, defaults to empty (no browser-side
   Sentry). Previously every non-debug deployment loaded the Open Chat Studio
   project's Sentry browser script and reported browser errors and traces to it.
