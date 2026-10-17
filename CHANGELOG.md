@@ -41,20 +41,6 @@ version section when a release is cut.
 <!-- Only migrations that are long-running or locking, irreversible, need a
      manual step or backfill, or change behavior on upgrade. Omit additive
      migrations that run automatically. Omit the section if none qualify. -->
-- `SourceMaterial.owner` becomes nullable, for source material created by a client-credentials API
-  token. Existing rows are unaffected. (#4679)
-- `OAuth2Application` gains an `all_data` boolean column (default `False`, safe DB-level
-  default). Existing applications are unaffected; behavior is unchanged until a team admin enables
-  it. (#4679)
-- `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
-  get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
-  operator or team sets one. (#4371)
-- `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
-  rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
-- New `moderation` app with a `moderation_deniedparticipant` table. Creates a table only; no
-  existing rows change. Nothing reads it unless the `flag_abuse_detection` flag is on. (#4698)
-- New `web_superuserelevation` table records each privilege elevation (grant, expiry, release,
-  client IP and user agent). Additive only; nothing is backfilled. (#4693)
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action
   operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
   stripped from stored pipeline node params. Any `Banner` pinned to the removed
