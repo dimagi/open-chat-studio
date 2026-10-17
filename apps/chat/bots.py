@@ -384,6 +384,15 @@ class EventBot:
 
     @property
     def llm_provider(self):
+        if self.experiment.pipeline_id:
+            node = (
+                self.experiment.pipeline.node_set.filter(llm_provider__isnull=False)
+                .select_related("llm_provider")
+                .order_by("created_at")
+                .first()
+            )
+            if node:
+                return node.llm_provider
         return self.experiment.team.llmprovider_set.first()
 
     @property
