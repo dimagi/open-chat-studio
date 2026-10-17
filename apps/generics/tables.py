@@ -29,9 +29,10 @@ class ColumnWithCustomHeader(tables.Column):
 
 
 class TemplateColumn(tables.TemplateColumn):
-    """A TemplateColumn that renders `template_name` without building a new `RequestContext` per cell.
+    """A TemplateColumn that renders `template_name` without re-running context processors per cell.
 
-    django-tables2 passes `request=` to `Template.render`, which runs every context processor for each cell."""
+    django-tables2 passes `request=` to `Template.render`, which runs every context processor for each cell.
+    This reuses the table's already-rendered context instead."""
 
     def render(self, record, table, value, bound_column, **kwargs):
         if not self.template_name:

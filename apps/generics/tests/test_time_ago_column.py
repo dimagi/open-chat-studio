@@ -80,6 +80,15 @@ def test_context_processors_do_not_run_per_row():
     assert len(many_rows.captured_queries) == len(single_row.captured_queries)
 
 
+def test_template_name_column_renders_without_table_context():
+    """A table that was never rendered through `RequestConfig` has no `context` or `request`."""
+    table = ActionsTable(data=[{"name": "row"}])
+
+    html = table.rows[0].get_cell("actions")
+
+    assert "/open/" in html
+
+
 def test_renders_time_element():
     value = timezone.now() - timedelta(hours=2)
     table = TimeAgoTable(data=[{"timestamp": value}])
