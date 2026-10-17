@@ -626,7 +626,7 @@ export class OcsChat {
       link.click();
       link.remove();
       // Revoking in the same task can cancel the download in some browsers.
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
       console.error('[open-chat-studio-widget] attachment download failed', error);
       if (epoch === this.sessionEpoch) {

@@ -78,6 +78,8 @@ describe('ocs-chat attachment download', () => {
     expect(clickedLinks).toHaveLength(1);
     expect(clickedLinks[0].getAttribute('href')).toBe('blob:file-1');
     expect(clickedLinks[0].download).toBe('report.pdf');
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    await new Promise(resolve => setTimeout(resolve, 1100));
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:file-1');
   });
 
