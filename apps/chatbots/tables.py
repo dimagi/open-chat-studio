@@ -13,7 +13,7 @@ from apps.api.session_tokens import issue_session_token
 from apps.experiments.models import Experiment, ExperimentSession, last_activity_expression
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
-from apps.generics.tables import ArrayColumn, ColumnWithHelp, TimeAgoColumn
+from apps.generics.tables import ArrayColumn, ColumnWithHelp, TemplateColumn, TimeAgoColumn
 from apps.teams.utils import get_slug_for_team
 
 
@@ -114,11 +114,11 @@ class ChatbotTable(tables.Table):
     last_activity = TimeAgoColumn(verbose_name="Last Activity", orderable=True)
     session_count = ColumnWithHelp(verbose_name="Total Sessions", orderable=True)
     interaction_count = ColumnWithHelp(verbose_name="Total Interactions", orderable=True)
-    trends = columns.TemplateColumn(
+    trends = TemplateColumn(
         verbose_name="Trends (last 24h)",
         template_name="table/trends_chart.html",
     )
-    actions = columns.TemplateColumn(
+    actions = TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
     )
 
@@ -182,8 +182,8 @@ class ChatbotSessionsTable(tables.Table):
         orderable=True,
     )
     last_activity = TimeAgoColumn(accessor="last_activity", verbose_name="Last activity", orderable=True)
-    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
-    annotation_queues = columns.TemplateColumn(
+    tags = TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
+    annotation_queues = TemplateColumn(
         verbose_name="Annotation Queues",
         template_name="human_annotations/columns/session_queues.html",
         orderable=False,

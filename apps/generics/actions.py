@@ -7,7 +7,8 @@ from django.conf import settings
 from django.template import Context
 from django.template.loader import get_template
 from django.urls import reverse
-from django_tables2 import TemplateColumn
+
+from apps.generics.tables import TemplateColumn
 
 CHIP_BUTTON_STYLE = "btn-soft btn-primary"
 """Styling for chips that stand in for the record itself (a name, a participant). Mirrored by
