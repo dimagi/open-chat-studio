@@ -50,9 +50,9 @@ Each release has two sets of notes, for two different questions:
 | What do I have to *do* about it? | [`CHANGELOG.md`](https://github.com/dimagi/open-chat-studio/blob/main/CHANGELOG.md) in the repository |
 
 `CHANGELOG.md` is the operator-facing one: manual upgrade steps, migrations that
-are slow, locking or irreversible, every new, renamed or removed environment
-setting, changes to the shape of a deployment, deprecations, removals, and
-security fixes. It does not list additive migrations that run automatically.
+are long-running, locking, irreversible or need a backfill, every new, renamed,
+retyped or removed environment setting, changes to the shape of a deployment,
+deprecations, removals, and security fixes. It does not list additive migrations that run automatically.
 Read it before upgrading. Each version section links the product
 notes covering the same range, so start there and follow the link for the
 feature story.
