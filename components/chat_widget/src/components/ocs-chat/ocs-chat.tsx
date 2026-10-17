@@ -519,6 +519,20 @@ export class OcsChat {
     this.scrollToBottom();
   }
 
+  /** A server copy of a user message replaces the optimistic bubble with the same text instead of repeating it. */
+  private mergeServerMessages(incoming: ChatMessage[]): ChatMessage[] {
+    const merged = [...this.messages];
+    for (const message of incoming) {
+      const index = message.role === 'user' ? merged.findIndex(m => m.local && m.role === 'user' && m.content === message.content.trim()) : -1;
+      if (index === -1) {
+        merged.push(message);
+      } else {
+        merged[index] = message;
+      }
+    }
+    return merged;
+  }
+
   private lastServerMessageTimestamp(): string | undefined {
     for (let i = this.messages.length - 1; i >= 0; i--) {
       if (!this.messages[i].local) {
@@ -1025,6 +1039,7 @@ export class OcsChat {
               size: sf.file.size,
             }))
         : [],
+      local: true,
     };
   }
 
@@ -1331,7 +1346,7 @@ export class OcsChat {
       getSince: () => this.lastServerMessageTimestamp(),
       onMessages: this.forCurrentSession(messages => {
         if (messages.length === 0) return;
-        this.messages = [...this.messages, ...messages];
+        this.messages = this.mergeServerMessages(messages);
         this.saveSessionToStorage();
         for (const message of messages) {
           if (message.role !== 'user') {

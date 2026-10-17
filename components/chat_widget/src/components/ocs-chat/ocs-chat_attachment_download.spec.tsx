@@ -122,6 +122,28 @@ describe('ocs-chat attachment download', () => {
     expect(getSince?.()).toBe(serverMessageAt);
   });
 
+  it('replaces the optimistic user message with the server copy instead of repeating it', async () => {
+    const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3 });
+    const component = page.rootInstance as OcsChat;
+    const optimistic = { created_at: '2026-01-01T00:00:00.000Z', role: 'user' as const, content: 'hello', attachments: [], local: true };
+    const server = { created_at: '2026-01-01T00:00:01.000Z', role: 'user' as const, content: 'hello', attachments: [] };
+    component.messages = [{ ...component.messages[0], created_at: '2025-12-31T00:00:00.000Z' }, optimistic];
+    let onMessages: ((messages: (typeof server)[]) => void) | undefined;
+    stubChatService(page, {
+      startMessagePolling: jest.fn((_sessionId, callbacks) => {
+        onMessages = callbacks.onMessages;
+        return { stop: jest.fn() };
+      }),
+    });
+
+    component['startMessagePolling']();
+    expect(component['lastServerMessageTimestamp']()).toBe('2025-12-31T00:00:00.000Z');
+    onMessages?.([server]);
+
+    expect(component.messages.map(m => m.content)).toEqual(['Here is your file', 'hello']);
+    expect(component.messages.at(-1)).toEqual(server);
+  });
+
   it('does not report a failed download in a session started after it', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
     const component = page.rootInstance as OcsChat;

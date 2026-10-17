@@ -75,7 +75,7 @@ export interface ChatMessage {
   content: string;
   metadata?: unknown;
   attachments?: ChatAttachment[];
-  /** Set on notices the widget adds itself; the server never sends it. */
+  /** Set on notices and unconfirmed user messages the widget adds itself; the server never sends it. */
   local?: boolean;
 }
 
