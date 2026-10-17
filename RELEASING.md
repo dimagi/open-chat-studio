@@ -42,6 +42,45 @@ An operator release note therefore has two halves: **what changed** (link to the
 docs-repo notes for the same commit range) and **what you must do about it**
 (this repo's `CHANGELOG.md`). Nothing is written twice.
 
+## What belongs in CHANGELOG.md
+
+`CHANGELOG.md` lets an operator decide whether and how to upgrade. Log a change
+only if it passes one test: **would an operator have to do something, or be
+surprised, because of it?** If not, leave it out. Changes that don't pass reach
+operators through the product changelog.
+
+Log:
+
+- A manual step before or after the deploy.
+- A migration that is long-running or locking on a large table, is irreversible
+  or destroys data, needs a backfill command, or changes behavior on upgrade.
+- Any new, renamed, retyped or removed setting that is configured through the
+  process environment (an env var or `.env` entry read by `config/settings.py`),
+  whether or not it is required and whatever its default. Also a changed default
+  that alters behavior an operator relies on.
+- A change in deployment shape: process types, queues, backing-service versions,
+  new external dependencies, or a base image change that affects self-built
+  images.
+- A deprecation, a removal, or a breaking API or webhook change.
+- A security fix, and any action it requires.
+
+Do not log:
+
+- An additive migration that runs automatically: a new table, a new nullable
+  column, or a new column with a DB-level default. [releases.md](docs/hosting/releases.md#what-a-version-number-means)
+  already tells operators that MINOR releases may include these.
+- A settings constant that is not read from the process environment. Operators
+  cannot configure it, so there is nothing for them to act on.
+- A feature, UI change, API addition or bug fix that needs no operator action.
+- A refactor, dependency bump, or test or CI change.
+
+For a migration, log it only if you can state what the operator does
+differently. "Existing rows are unaffected" means it should be omitted.
+
+| Omit | Keep |
+|---|---|
+| `SourceMaterial.owner` becomes nullable. Existing rows are unaffected. | Every OpenAI Assistant is deleted by this release. This is irreversible, and a command must be run after the deploy. |
+
 ## Choosing the version
 
 The bump rules and their rationale are the operator contract — see
@@ -126,10 +165,15 @@ soaked commit itself.
 
 3. Move `CHANGELOG.md` `[Unreleased]` entries into a new version section. Verify
    them against the actual diff since the last tag — in particular, that every
-   migration in the range has a line, and every changed setting is listed:
+   migration and changed setting in the range has been checked against
+   [what belongs in the changelog](#what-belongs-in-changelogmd), and has a line
+   if it qualifies:
 
        git log --oneline <last-tag>..<sha>
        git diff --stat <last-tag>..<sha> -- '*/migrations/*' 'config/settings*.py' .env.example
+
+   Then remove entries that fail the same test. The release manager makes the
+   final edit, whatever the PR authors added.
 
 4. Record the bundled widget version (`LATEST_VERSION` in
    `apps/channels/widget_versions.py`) and link the docs-repo release notes
@@ -167,7 +211,8 @@ instead of from `main`, and cherry-picks the fix; everything else is unchanged.
 
 ## Writing migration notes
 
-For each Django migration in the release, state:
+For each Django migration in the release that meets the criteria in
+[what belongs in the changelog](#what-belongs-in-changelogmd), state:
 
 - **Reversible?** Yes/No.
 - **Long-running or locking?** If yes, expected duration on a representative
@@ -175,7 +220,7 @@ For each Django migration in the release, state:
 - **Manual steps?** Exact commands and their order relative to the deploy.
 - **Data backfill?** Automatic post-deploy, or a manual management command.
 
-If there are none, say "No migrations in this release."
+If none qualify, omit the section.
 
 Write these for someone with a database you cannot see. "Fast on our data" is
 not a note; a row count and a duration is.
