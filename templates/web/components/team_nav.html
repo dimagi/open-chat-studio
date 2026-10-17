@@ -7,6 +7,13 @@
     {% translate "Dashboard" %}
   </a>
   </li>
+  <li>
+    <a href="{% url 'dashboard:engagement' request.team.slug %}"
+       {% if active_tab == 'engagement_dashboard' %}class="menu-active"{% endif %}>
+      <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
+    {% translate "Engagement" %}
+  </a>
+  </li>
   {% if perms.experiments.view_experiment %}
   <li>
     <a href="{% url 'chatbots:chatbots_home' request.team.slug %}" {% if active_tab == 'chatbots' %}class="menu-active"{% endif %}>

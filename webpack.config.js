@@ -16,6 +16,7 @@ const config = {
     adminDashboard: './assets/javascript/admin-dashboard.js',
     trends: './assets/javascript/trends.js',
     dashboard: './assets/javascript/dashboard.js',  // dashboard analytics
+    engagementDashboard: './assets/javascript/engagement-dashboard.js',  // standalone engagement dashboard (#2927)
     'tagMultiselect': './assets/javascript/tag-multiselect.js',
     'tagRuleSelect': './assets/javascript/tag-rule-select.js',
     'tokenCounter': './assets/javascript/tiktoken.js',
