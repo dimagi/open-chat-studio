@@ -12,12 +12,24 @@ When an agent uses a tool like `SearchIndexTool` to query a document collection,
 
 The citation format is `<CIT file-id />`, where `file-id` is the unique identifier of the cited `File` model instance. This format is defined by the `OCS_CITATION_PATTERN` constant found in `apps.chat.agent.constants`.
 
-## 2. Building the Reference Section
+## 2. Collecting Cited Files
+
+Before the reference section is built, the LLM output is parsed into an `LlmChatResponse` whose `cited_files` field holds the `File` records the response cites. `_process_agent_output()` gets the parser from the node's LLM service (`get_output_parser()`) and passes `include_citations=node.generate_citations`.
+
+`LlmService._default_parser` fills `cited_files` from two sources:
+- The IDs found in `<CIT n />` tags in the response text (`extract_file_ids_from_ocs_citations`).
+- The provider's own citation annotations (`get_cited_file_ids`), matched to files by `File.external_id`.
+
+Both sets of IDs are resolved with a single `File` query scoped to the session's team. An ID that matches no file in the team is dropped. When `include_citations` is false, `cited_files` is left empty.
+
+Providers can override `get_output_parser()`. The **Anthropic parser** (`parse_output_for_anthropic`) does not extract `<CIT n />` tags, so `cited_files` stays empty for Anthropic-backed bots and every tag is removed in the next step.
+
+## 3. Building the Reference Section
 
 After the LLM generates a response containing these citation tags, the system processes the message to create a human-readable reference section. This is handled by `apps.service_providers.llm_service.utils.populate_reference_section_from_citations`.
 
 This method performs three main actions:
-1. It scans the AI message for all instances of the `<CIT file-id />` pattern.
+1. It scans the AI message for all instances of the `<CIT file-id />` pattern. A tag whose ID is not in `cited_files` is removed from the message.
 2. Each tag is replaced with a footnote-style reference (e.g., `[^1]`, `[^2]`). It keeps track of cited files to reuse reference numbers for multiple citations of the same file.
 3. It appends a markdown-formatted reference list to the end of the message. Each entry includes the reference number, the original file name, and a download link for that file.
 
@@ -38,7 +50,7 @@ The sky is blue [^1]. The grass is green [^2].
 [^2]: [source_b.txt](https://example.com/download/456)
 ```
 
-## 3. Final Rendering in Channels
+## 4. Final Rendering in Channels
 
 The markdown-formatted message, now including footnote-style references, is passed to the channel layer for final display to the user.
 
