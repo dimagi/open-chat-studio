@@ -2,7 +2,9 @@
 
 The platform has a built-in mechanism for citing sources used by the LLM, particularly when retrieving information from indexed documents. This process involves generation, parsing, and final rendering of citations.
 
-This page covers the `<CIT file-id />` tag mechanism used by **pipeline nodes** (`apps/pipelines/nodes/llm_node.py`). It is now the only citation mechanism; the OpenAI Assistants feature, which had its own, was removed in #4254.
+This page covers the `<CIT file-id />` tag mechanism used by **pipeline nodes** (`apps/pipelines/nodes/llm_node.py`). It is the only mechanism that produces a reference section. Two other sources interact with it:
+- Provider citation annotations (such as OpenAI file citations) add files to `cited_files`, as described in [Collecting Cited Files](#2-collecting-cited-files).
+- Anthropic's native web citations are appended to the text as plain `[title](url)` links by `parse_output_for_anthropic`. They bypass the reference section.
 
 This assumes the LLM has retrieved content from a document collection — see [Index Manager Classes](index_managers.md) for how that retrieval works.
 
