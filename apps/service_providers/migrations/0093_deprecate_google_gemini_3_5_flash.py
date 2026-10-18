@@ -1,8 +1,5 @@
 from django.db import migrations
 
-from apps.data_migrations.utils.migrations import RunDataMigration
-from apps.service_providers.migration_utils import llm_model_migration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -12,7 +9,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        llm_model_migration(),
-        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
+        # llm_model_migration(), remove_deprecated_models and notify_deprecated_models moved to
+        # 0094_auto_model_sync_20261018 so they run only once per deploy.
     ]
