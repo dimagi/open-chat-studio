@@ -1053,6 +1053,21 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
 
+    @property
+    def latest_version(self):
+        return (
+            self.versions.select_related(
+                "consent_form",
+                "synthetic_voice",
+                "voice_provider",
+                "trace_provider",
+                "pipeline",
+            )
+            .prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers")
+            .order_by("-created_at")
+            .first()
+        )
+
     def _get_version_details(self) -> VersionDetails:
         """
         Returns a `Version` instance representing the experiment version.
