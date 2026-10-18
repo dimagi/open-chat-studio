@@ -934,7 +934,6 @@ class TestExperimentModel:
 
         # latest_version should fetch the snapshot in a fixed number of queries regardless
         # of how many FK/M2M relations are defined on the experiment.
-        # Without eager loading, each FK field access would fire a separate query.
         version = experiment.latest_version
         assert version is not None
         # All FK fields must be pre-loaded (present in the instance cache, no extra queries needed)
