@@ -52,9 +52,6 @@ class ServiceProviderType:
 
     primary_fields: list[str]
 
-    # Waffle flag that must be active for this provider type to be available. None means always available.
-    flag: str | None = None
-
     def get_permission(self, action: Literal["view", "add", "change", "delete"]) -> Any:
         assert action in ("view", "add", "change", "delete")
         return f"{self.model._meta.app_label}.{action}_{self.model._meta.model_name}"
@@ -114,7 +111,6 @@ class ServiceProvider(ServiceProviderType, Enum):
         ModerationProvider,
         ModerationProviderType,
         ["name", "type"],
-        Flags.ABUSE_DETECTION.slug,
     )
 
     @property
@@ -133,7 +129,9 @@ class ServiceProvider(ServiceProviderType, Enum):
 
 def is_provider_enabled(provider: ServiceProvider, request: HttpRequest) -> bool:
     """Whether ``provider`` is available to the given request."""
-    return provider.flag is None or bool(flag_is_active(request, provider.flag))
+    if provider == ServiceProvider.moderation:
+        return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug))
+    return True
 
 
 def get_enabled_providers(request: HttpRequest) -> list[ServiceProvider]:
