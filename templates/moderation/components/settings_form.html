@@ -1,0 +1,115 @@
+{% load i18n %}
+{% with form=moderation_form %}
+<div class="app-card" id="moderation-settings"
+     x-data="{
+       provider: '{{ form.moderation_provider.value|default_if_none:''|escapejs }}',
+       enabled: {{ form.moderation_enabled.value|yesno:'true,false' }},
+       readOnly: {{ can_edit_moderation|yesno:'false,true' }},
+       openProviderDialog(url) {
+         htmx.ajax('GET', url, {target: '#moderation-provider-dialog-body'})
+           .then(() => moderation_provider_dialog.showModal());
+       },
+     }"
+     x-effect="if (!provider) enabled = false">
+  <h3 class="pg-subtitle font-bold text-sm">{% translate "Settings" %}</h3>
+
+  {% if request.team.moderation_deleted_provider_name %}
+    <div role="alert" class="alert alert-warning alert-soft text-sm mt-2" data-testid="moderation-provider-deleted">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>
+        {% blocktranslate trimmed with name=request.team.moderation_deleted_provider_name %}
+          Moderation was turned off because the provider "{{ name }}" was deleted. Select another provider to turn it back on.
+        {% endblocktranslate %}
+      </span>
+    </div>
+  {% endif %}
+
+  <form id="moderation-settings-form"
+        hx-post="{% url 'moderation:settings' request.team.slug %}"
+        hx-target="#moderation-settings" hx-swap="outerHTML"
+        class="flex flex-col gap-4 mt-2">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <div>
+      <label class="label cursor-pointer justify-start gap-2">
+        <input type="checkbox" name="moderation_enabled" class="toggle toggle-primary toggle-sm"
+               x-model="enabled" :disabled="readOnly || !provider"
+               {% if form.moderation_enabled.value %}checked{% endif %}
+               {% if not form.moderation_provider.value or not can_edit_moderation %}disabled{% endif %}>
+        <span class="font-semibold text-sm">{{ form.moderation_enabled.label }}</span>
+      </label>
+      <p class="text-neutral-500 section-subtitle whitespace-normal">
+        {% translate "Each participant message is checked by your moderation provider. Flagged messages are not answered." %}
+      </p>
+    </div>
+
+    {% if moderation_providers %}
+      <div>
+        <label class="label text-sm font-semibold" for="id_moderation_provider">{{ form.moderation_provider.label }}</label>
+        <div class="flex items-center gap-2">
+          <select name="moderation_provider" id="id_moderation_provider" class="select select-bordered select-sm w-72"
+                  x-model="provider"
+                  {% if not can_edit_moderation %}disabled{% endif %}>
+            <option value="">{% translate "Select a provider" %}</option>
+            {% for provider in moderation_providers %}
+              <option value="{{ provider.pk }}"
+                      {% if provider.pk|stringformat:"s" == form.moderation_provider.value|stringformat:"s" %}selected{% endif %}>
+                {{ provider.name }}
+              </option>
+            {% endfor %}
+          </select>
+          {% if can_change_moderation_provider %}
+            <button type="button" class="btn btn-sm btn-ghost" title="{% translate "Edit the selected provider" %}"
+                    data-testid="edit-moderation-provider"
+                    :disabled="!provider"
+                    @click="openProviderDialog('{{ moderation_provider_edit_url|escapejs }}'.replace(/\/0\/$/, `/${provider}/`))">
+              <i class="fa-solid fa-pencil"></i>
+            </button>
+          {% endif %}
+          {% if can_add_moderation_provider %}
+            <button type="button" class="btn btn-sm btn-ghost" title="{% translate "Add a moderation provider" %}"
+                    data-testid="add-moderation-provider"
+                    @click="openProviderDialog('{{ moderation_provider_new_url|escapejs }}')">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          {% endif %}
+        </div>
+        {{ form.moderation_provider.errors }}
+      </div>
+    {% else %}
+      <div class="rounded-box border border-dashed border-base-300 p-4" data-testid="moderation-empty-state">
+        <p class="text-sm whitespace-normal">
+          {% translate "Moderation uses your own OpenAI API key, so the checks run on your account's rate limits and costs. Add a moderation provider to turn moderation on." %}
+        </p>
+        {% if can_add_moderation_provider %}
+          <button type="button" class="btn btn-sm btn-primary mt-2"
+                  data-testid="add-moderation-provider"
+                  @click="openProviderDialog('{{ moderation_provider_new_url|escapejs }}')">
+            <i class="fa-solid fa-plus mr-1"></i>{% translate "Add moderation provider" %}
+          </button>
+        {% endif %}
+        {{ form.moderation_provider.errors }}
+      </div>
+    {% endif %}
+
+    <div>
+      <label class="label cursor-pointer justify-start gap-2">
+        <input type="checkbox" name="auto_block_enabled" class="toggle toggle-primary toggle-sm"
+               {% if form.auto_block_enabled.value %}checked{% endif %}
+               {% if not can_edit_moderation %}disabled{% endif %}>
+        <span class="font-semibold text-sm">{{ form.auto_block_enabled.label }}</span>
+      </label>
+      <p class="text-neutral-500 section-subtitle whitespace-normal">
+        {% translate "Participants who send three messages flagged in a strike category are blocked from all of this team's chatbots. Strikes are only counted while auto-block is on. Team members are never blocked automatically." %}
+      </p>
+    </div>
+
+    {% if can_edit_moderation %}
+      <div>
+        <input class="btn btn-primary btn-sm" type="submit" value="{% translate "Save" %}">
+      </div>
+    {% endif %}
+  </form>
+</div>
+{% endwith %}

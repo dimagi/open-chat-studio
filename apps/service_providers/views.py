@@ -237,7 +237,7 @@ def _should_run_post_create_hook(obj, is_create: bool) -> bool:
 
 
 class CreateServiceProvider(
-    LoginAndTeamRequiredMixin, django_views.View, ServiceProviderMixin, PermissionRequiredMixin
+    LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin, django_views.View
 ):
     template_name = "service_providers/provider_form.html"
 
@@ -296,7 +296,7 @@ class CreateServiceProvider(
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
             obj, had_connection_test_warning = self._save_provider(request, primary_form, config_form, file_formset)
-            return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
+            return self.saved_response(obj=obj, had_connection_test_warning=had_connection_test_warning)
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
@@ -405,6 +405,10 @@ class CreateServiceProvider(
                 ctx["credentials_checked_at"] = instance.credentials_checked_at
             ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
+
+    def saved_response(self, *, obj, had_connection_test_warning: bool) -> HttpResponse:
+        """The response after a successful save."""
+        return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
 
     def get_success_url(self, obj=None, redirect_to_own_edit_page=False):
         """Normally back to the team list, same as every save today. The one exception: a

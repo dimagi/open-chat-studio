@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from django.urls import reverse
+from django.utils.http import urlencode
 from field_audit import enable_audit
 from field_audit.models import AuditEvent
 from waffle.testutils import override_flag
@@ -26,11 +27,6 @@ def _unblock_url(team, participant):
 
 def _page_url(team, participant):
     return reverse("participants:single-participant-home", args=[team.slug, participant.id])
-
-
-@pytest.fixture()
-def admin(team_with_users):
-    return team_with_users.members.first()
 
 
 @pytest.fixture()
@@ -193,6 +189,26 @@ class TestUnblockParticipant:
         response = client.post(_unblock_url(team=team_with_users, participant=participant))
 
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
+
+    @pytest.mark.parametrize(
+        ("next_url", "follows_next"),
+        [
+            pytest.param("/a/team/settings/", True, id="same_site"),
+            pytest.param("https://evil.example.com/", False, id="other_host"),
+        ],
+    )
+    def test_redirects_to_safe_next_url(
+        self, client, team_with_users, team_flag, admin, participant, next_url, follows_next
+    ):
+        team_flag(flag_name=FLAG, team=team_with_users)
+        DeniedParticipantFactory.create(team=team_with_users, participant=participant)
+        client.force_login(admin)
+
+        url = f"{_unblock_url(team=team_with_users, participant=participant)}?{urlencode({'next': next_url})}"
+        response = client.post(url)
+
+        expected = next_url if follows_next else _page_url(team=team_with_users, participant=participant)
+        assert response.headers["HX-Redirect"] == expected
 
     @override_flag(FLAG, active=False)
     def test_not_found_with_flag_off(self, client, team_with_users, admin, participant):

@@ -29,11 +29,6 @@ def _auth_error(error_cls=openai.AuthenticationError, status_code=401):
 
 
 @pytest.fixture()
-def admin(team_with_users):
-    return team_with_users.members.first()
-
-
-@pytest.fixture()
 def admin_client(client, admin):
     client.force_login(admin)
     return client

@@ -413,5 +413,5 @@ def moderation_provider_deleted_notification(team, provider_id: int, provider_na
         slug="moderation-provider-deleted",
         event_data={"provider_id": provider_id},
         permissions=["experiments.change_experiment", "experiments.change_participant"],
-        links={"Integrations": section_url(team_slug=team.slug, section_key="integrations")},
+        links={"Moderation settings": section_url(team_slug=team.slug, section_key="moderation")},
     )
