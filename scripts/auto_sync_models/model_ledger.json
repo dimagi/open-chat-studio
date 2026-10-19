@@ -979,6 +979,15 @@
       "effort_levels": []
     }
   },
+  "google_vertex_ai/gemini-4-argon-cyber-permissive": {
+    "first_seen": "2026-10-14",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity variant of gemini-4-argon, not a general chat model.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": []
+    }
+  },
   "google_vertex_ai/gemini-omni-1.1-flash": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -1012,6 +1021,14 @@
     "first_seen": "2026-09-17",
     "verdict": "rejected",
     "reason": "Robotics embodied-reasoning model, not a chat model."
+  },
+  "google_vertex_ai/gemini-robotics-er-2-preview": {
+    "first_seen": "2026-10-14",
+    "verdict": "rejected",
+    "reason": "Robotics embodied-reasoning preview, not a chat model.",
+    "params": {
+      "reasoning": true
+    }
   },
   "google_vertex_ai/gemma-4-26b-a4b-it": {
     "first_seen": "2026-09-17",
@@ -1503,6 +1520,14 @@
       "reasoning": true
     }
   },
+  "openai/gpt-5.5-cyber-preview": {
+    "first_seen": "2026-10-16",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity specialist preview of gpt-5.5-cyber (already rejected), not a general chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
   "openai/gpt-5.5-pro": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -1600,6 +1625,11 @@
     "params": {
       "reasoning": true
     }
+  },
+  "openai/gpt-rosalind-discovery": {
+    "first_seen": "2026-10-10",
+    "verdict": "rejected",
+    "reason": "Life-sciences model restricted to approved organizations, with no published context window."
   },
   "openai/gpt-rosalind-research": {
     "first_seen": "2026-09-17",
@@ -1711,6 +1741,11 @@
     "params": {
       "reasoning": true
     }
+  },
+  "perplexity/deepseek-v4-pro-0813": {
+    "first_seen": "2026-10-10",
+    "verdict": "rejected",
+    "reason": "Open-weights model absent from Perplexity's API catalogue, with no published context window."
   },
   "perplexity/glm-5.2": {
     "first_seen": "2026-09-17",

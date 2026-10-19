@@ -176,6 +176,9 @@ omit = [
     "*/tests/*",
     "*/test_*.py",
     "*/conftest.py",
+    # Run only by the Playwright E2E job, which does not measure coverage.
+    "apps/web/e2e_data.py",
+    "apps/web/management/commands/e2e_seed.py",
     "apps/utils/factories/*",
     # Imported only by a deployed process, so it can never report anything but 0%.
     "config/settings_production.py",
@@ -203,7 +206,10 @@ indent-width = 4
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "TC", "C90", "PLC0415", "TID253"]
+select = ["E", "F", "I", "UP", "DJ", "PT", "B", "SIM", "RUF", "PERF", "PIE", "RET", "TC", "C90", "PLC0415", "TID253", "PLC2701"]
+# Only preview rules named explicitly in `select` (PLC2701) are enabled.
+preview = true
+explicit-preview-rules = true
 ignore = [
     "PT019",
     "SIM102",
@@ -299,8 +305,6 @@ dev = [
     "django-types",
     "ty>=0.0.83",
     "honcho>=2.0.0",
-    # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
-    # the CommCare Connect backend for local development.
 ]
 docs = [
     "zensical>=0.0.46",
@@ -309,11 +313,17 @@ docs = [
 prod = [
     "gunicorn",
 ]
+# Not installed by default. Install with `uv sync --group code-analysis`.
+code-analysis = [
+    "treepeat>=0.9.0",
+]
 
 [tool.uv]
 default-groups = ["dev", "docs"]
 # Keep this up to date with the version in Dockerfile and Dockerfile.dev
 required-version = ">0.11.0"
+# treepeat declares pipdeptree as a dependency but never imports it
+override-dependencies = ["pipdeptree; sys_platform == 'never'"]
 
 [tool.djlint]
 profile="django"

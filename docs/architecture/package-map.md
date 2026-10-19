@@ -24,7 +24,7 @@ foundation. The foundation depends on nothing above it.
 flowchart TD
     EP["Entry points<br/>api · web · admin · dashboard · prelogin · users · oauth · sso"]
     DOM["Domain & runtime<br/>experiments · chatbots · pipelines · custom_actions · service_providers<br/>chat · channels · participants · slack · documents · files"]
-    FEAT["Evaluation, analytics & support<br/>evaluations · human_annotations · annotations · assessments<br/>trace · events · cost_tracking · usage_metrics · analysis · ocs_notifications · banners · help · filters · mcp_integrations"]
+    FEAT["Evaluation, analytics & support<br/>evaluations · human_annotations · annotations · assessments<br/>trace · events · cost_tracking · usage_metrics · analysis · moderation · ocs_notifications · banners · help · filters · mcp_integrations"]
     FND["Foundation<br/>teams · utils · generics · web · audit · data_migrations"]
 
     EP --> DOM
@@ -83,6 +83,7 @@ Features layered on top of the domain, plus supporting services.
 | `cost_tracking` | LLM usage and cost accounting. |
 | `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Definitions in ADR-0051. Models-free. |
 | `analysis` | Analysis pipelines over conversation data. |
+| `moderation` | Abuse detection: the participant denylist (`DeniedParticipant`) and its enforcement helpers. Called from `channels`, `api`, `experiments` and `participants`. |
 | `ocs_notifications` | In-app notifications. |
 | `banners` | Site banners. |
 | `help` | In-app help / help agents. |
@@ -100,6 +101,42 @@ Top of the stack — nothing imports these; they wire the domain to the outside 
 | `dashboard` | Analytics dashboard. |
 | `prelogin` | Anonymous landing page at `/`, the shared frame for the logged-out auth pages, and permanent redirects for the marketing URLs that moved to `openchatstudio.dimagi.com`. |
 | `users` · `oauth` · `sso` | Authentication and account management. |
+
+## Where code goes within an app
+
+### Services
+
+An operation that more than one entry point uses (web view, API view, Celery task,
+channel) lives in a function in the owning app's `services` module. Each entry point
+calls that function instead of reimplementing the operation. The function:
+
+- takes the team explicitly, or derives it from a team-scoped object it is given
+- owns its transaction and any task dispatch
+
+Views and serializers only parse input and format output.
+
+Start with a single `services.py`. When it grows large or covers several unrelated
+concerns, turn it into a `services/` package with one module per concern, as
+`apps/cost_tracking/services/` does (`pricing.py`, `estimation.py`, `recorder.py`,
+`reporting.py`). Do not let `services.py` collect every operation the app has.
+
+### Helpers
+
+Before writing a helper, search for an existing one that does the same thing. To reuse
+a helper from another module, move it rather than importing it from where it is:
+
+| Callers | Destination |
+|---------|-------------|
+| All in one app | That app's `utils.py` |
+| Span several apps | `apps/utils/<domain>.py` (e.g. `time.py`, `json.py`) |
+| Helper needs domain models | The owning app's `services` module — it is not a utility |
+
+`apps/utils` must not import from domain apps.
+
+Before moving or deleting a helper, search the whole repo for its name to find every
+caller and which apps they are in. Include uses through aliases, re-exports in
+`__init__.py`, star imports, and string references (Celery task names, URL configs,
+templates).
 
 ## Blast radius
 

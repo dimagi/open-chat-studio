@@ -7,11 +7,13 @@ import {
   getConnectedEdges,
   Node,
   NodeChange,
+  NodeProps,
 } from "reactflow";
 import {create, StateCreator} from "zustand";
 import {shallow} from "zustand/shallow";
 import {temporal} from "zundo";
 import {PipelineStoreType} from "../types/pipelineStore";
+import {NodeData} from "../types/nodeParams";
 import useEditorStore from "./editorStore";
 import {getCachedData, getEdgeId, getNodeId, nodeDataFromSchema, outputHandle} from "../utils";
 import cloneDeep from "lodash/cloneDeep";
@@ -166,6 +168,19 @@ const createPipelineStore: StateCreator<
   },
   getNode: (id: string) => {
     return get().nodes.find((node) => node.id === id);
+  },
+  focusNode: (nodeId, field) => {
+    const target = get().getNode(nodeId);
+    if (!target) return;
+    // Select changes are the one node update that is allowed in read-only mode, is kept out of
+    // the undo history and does not schedule a save.
+    get().onNodesChange(
+      get().nodes.map((node) => ({id: node.id, type: "select", selected: node.id === nodeId}))
+    );
+    get().reactFlowInstance?.fitView({nodes: [{id: nodeId}], maxZoom: 1, padding: 0.4, duration: 300});
+    if (target.type === "pipelineNode") {
+      useEditorStore.getState().openEditorForNode({id: target.id, data: target.data} as NodeProps<NodeData>, field);
+    }
   },
   deleteNode: (nodeId) => {
     if (get().readOnly) return;

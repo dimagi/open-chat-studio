@@ -8,11 +8,13 @@ Usage:
     python manage.py bootstrap_data                    # Use defaults
     python manage.py bootstrap_data --email dev@test.com --team-slug dev-team
     python manage.py bootstrap_data --skip-sample-data  # Only create user/team
+    python manage.py bootstrap_data --base-url https://ocs.localhost  # Dev server not on localhost:8000
 """
 
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -34,11 +36,12 @@ from apps.evaluations.models import (
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.pipelines.models import Pipeline
+from apps.service_providers import mock_llm
 from apps.service_providers.llm_service.credentials import (
     ProviderCredentials,
     get_provider_credentials_from_env,
 )
-from apps.service_providers.models import LlmProvider, LlmProviderTypes
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
 from apps.teams.models import Membership, Team
@@ -81,6 +84,8 @@ _UNPRICED_MODEL = "experimental-model-x"
 _UNKNOWN_MODEL = "legacy-model-y"
 _USAGE_DAYS = 14
 
+_STUB_LLM_PROVIDER_NAME = "Stub LLM"
+
 
 class Command(BaseCommand):
     help = "Seeds the database with sample data for development and E2E testing."
@@ -120,6 +125,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Make the test user a superuser (default: False)",
         )
+        parser.add_argument(
+            "--base-url",
+            type=str,
+            default=settings.SITE_URL_ROOT or mock_llm.DEFAULT_SERVER_URL,
+            help=(
+                "URL of the dev server, which serves the stub LLM provider. Set it when the server"
+                f" is not at {mock_llm.DEFAULT_SERVER_URL}, as under portless (default: SITE_URL_ROOT,"
+                f" else {mock_llm.DEFAULT_SERVER_URL})"
+            ),
+        )
 
     def handle(self, *args, **options):
         email = options["email"]
@@ -128,6 +143,7 @@ class Command(BaseCommand):
         team_name = options["team_name"]
         skip_sample_data = options["skip_sample_data"]
         superuser = options["superuser"]
+        base_url = options["base_url"]
 
         self.stdout.write("=" * 50)
         self.stdout.write("Seeding development data...")
@@ -137,7 +153,7 @@ class Command(BaseCommand):
         user, team = self._create_user_and_team(email, password, team_slug, team_name, superuser)
 
         if not skip_sample_data:
-            self._seed_sample_data(user, team)
+            self._seed_sample_data(user=user, team=team, base_url=base_url)
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Setup complete!"))
@@ -197,9 +213,9 @@ class Command(BaseCommand):
 
         return user, team
 
-    def _seed_sample_data(self, user, team):
+    def _seed_sample_data(self, user, team, base_url: str):
         """Orchestrate creation of sample pipelines, experiments, tags, sessions, traces, etc."""
-        llm_provider, llm_model = self._seed_llm_providers(team)
+        llm_provider, llm_model = self._seed_llm_providers(team=team, base_url=base_url)
         pipelines = self._seed_pipelines(team, llm_provider, llm_model)
         experiments = self._seed_experiments(user, team, pipelines)
         tags = self._seed_tags(user, team)
@@ -211,33 +227,78 @@ class Command(BaseCommand):
         self._seed_evaluation(team, llm_provider, llm_model)
         self._seed_evaluation_runs(team)
 
-    def _seed_llm_providers(self, team):
+    def _seed_llm_providers(self, team, base_url: str):
         self.stdout.write("")
         self.stdout.write("--- Creating LLM Providers ---")
+        stub_provider, stub_model = self._get_or_create_stub_llm_provider(team=team, server_url=base_url)
+
         provider_credentials = get_provider_credentials_from_env()
         if not provider_credentials:
             self.stdout.write(
                 self.style.WARNING(
-                    "  No provider env vars set; creating a placeholder OpenAI provider with a dummy key."
-                    " Set OPENAI_API_KEY (or another supported key — see .env.example) to enable real LLM calls."
+                    "  No provider env vars set; the sample chatbots will use the stub provider,"
+                    " which the dev server answers itself. Set OPENAI_API_KEY (or another supported"
+                    " key — see .env.example) for real LLM calls."
                 )
             )
-            provider_credentials = [
-                ProviderCredentials(
-                    type=LlmProviderTypes.openai,
-                    name="OpenAI",
-                    config={"openai_api_key": "test-key"},
-                )
-            ]
+            return stub_provider, stub_model
 
         llm_providers = [self._get_or_create_llm_provider(team, creds) for creds in provider_credentials]
         llm_provider = llm_providers[0]
         return llm_provider, get_first_llm_provider_model(llm_provider, team.id)
 
+    def _get_or_create_stub_llm_provider(self, team, server_url: str) -> tuple[LlmProvider, LlmProviderModel]:
+        """A provider pointing at the dev server's own mock endpoints, so dev chatbots need no API key.
+
+        Seeded as an OpenAI provider so dev traffic takes the same path as a real OpenAI key:
+        that type talks the Responses API rather than chat completions, and the mock serves
+        both. Its config form has the optional base URL this needs.
+        """
+        base_url = mock_llm.base_url(server_url)
+        config = {"openai_api_key": "stub", "openai_api_base": base_url}
+        provider = LlmProvider.objects.filter(team=team, name=_STUB_LLM_PROVIDER_NAME).first()
+        created = provider is None
+        if created:
+            provider = LlmProvider.objects.create(
+                team=team,
+                type=str(LlmProviderTypes.openai),
+                name=_STUB_LLM_PROVIDER_NAME,
+                config=config,
+            )
+        elif provider.config != config:
+            # Repoint an existing provider at the current address.
+            provider.config = config
+            provider.save(update_fields=["config"])
+        self._log_created(entity_type="LLM provider", name=f"{_STUB_LLM_PROVIDER_NAME} ({base_url})", created=created)
+
+        # The mock answers to any model name. A team-scoped "stub" model gives pipeline nodes a
+        # model to select whose name says where the replies come from.
+        # The unique key includes the token limit, so the team may hold more than one "stub" model.
+        stub_models = LlmProviderModel.objects.filter(
+            team=team, name=mock_llm.MODEL_NAME, type=str(LlmProviderTypes.openai)
+        )
+        model = stub_models.filter(max_token_limit=mock_llm.MODEL_TOKEN_LIMIT).first() or stub_models.first()
+        created = model is None
+        if created:
+            model = LlmProviderModel.objects.create(
+                team=team,
+                name=mock_llm.MODEL_NAME,
+                type=str(LlmProviderTypes.openai),
+                max_token_limit=mock_llm.MODEL_TOKEN_LIMIT,
+            )
+        elif model.max_token_limit != mock_llm.MODEL_TOKEN_LIMIT:
+            model.max_token_limit = mock_llm.MODEL_TOKEN_LIMIT
+            model.save(update_fields=["max_token_limit"])
+        self._log_created(entity_type="LLM provider model", name=model.name, created=created)
+        return provider, model
+
     def _get_or_create_llm_provider(self, team, creds: ProviderCredentials) -> LlmProvider:
         # LlmProvider has no unique constraint on (team, type), so a manually-created
         # provider of the same type would make get_or_create raise MultipleObjectsReturned.
-        provider = LlmProvider.objects.filter(team=team, type=str(creds.type)).first()
+        # The stub is an "openai" provider too, and must never stand in for a real key.
+        provider = (
+            LlmProvider.objects.filter(team=team, type=str(creds.type)).exclude(name=_STUB_LLM_PROVIDER_NAME).first()
+        )
         if provider is None:
             provider = LlmProvider.objects.create(team=team, type=str(creds.type), name=creds.name, config=creds.config)
             self._log_created("LLM provider", f"{provider.name} ({creds.type})", True)

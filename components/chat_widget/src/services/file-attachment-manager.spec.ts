@@ -90,6 +90,25 @@ describe('FileAttachmentManager upload transport', () => {
     expect(result.selectedFiles[0].error).toBe('Consent is required');
   });
 
+  it('treats a participant_blocked refusal as a generic upload failure', async () => {
+    const manager = makeManager();
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: () => Promise.resolve({ error: 'You have been blocked from using this chatbot.', code: 'participant_blocked' }),
+    } as Response);
+
+    const result = await manager.uploadPendingFiles([{ file: makeFile() }], {
+      apiBaseUrl: 'https://example.com',
+      sessionId: 's1',
+      participantId: 'p1',
+    });
+
+    expect(result.tokenRejected).toBe(false);
+    expect(result.errorMessage).not.toMatch(/blocked/i);
+    expect(result.selectedFiles[0].error).toBe(result.errorMessage);
+  });
+
   it('posts with fetch and no auth headers when no transport is provided', async () => {
     const manager = makeManager();
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({

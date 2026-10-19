@@ -112,6 +112,7 @@ CONTENT_TYPES = {
         "eventuser",
     ],
     "cost_tracking": ["pricingrule", "usagerecord"],
+    "moderation": ["deniedparticipant"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

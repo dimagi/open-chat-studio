@@ -201,6 +201,10 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
         ordering = ["created_at"]
 
     def get_user_comments(self) -> UserComment:
+        if "comments" in getattr(self, "_prefetched_objects_cache", {}):
+            # Use the prefetched comments; chaining prefetch_related() would discard the cache
+            # and issue a fresh query.
+            return self.comments.all()
         return self.comments.prefetch_related("user").all()
 
     @property

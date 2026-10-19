@@ -267,7 +267,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/chat_attachments/:
     get:
@@ -381,7 +381,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/chatbots/:
     get:
@@ -743,7 +743,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/embedding_provider_models/:
     get:
@@ -1298,7 +1298,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/manifest/:
     get:
@@ -1356,7 +1356,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/notification_event_types/:
     get:
@@ -1470,7 +1470,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/participants/:
     get:
@@ -2068,7 +2068,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
   /api/export/traces/:
     get:
@@ -2325,7 +2325,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
+                $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
 components:
   schemas:
@@ -3683,6 +3683,14 @@ components:
       - cursor
       - has_more
       - results
+    ErrorDetail:
+      type: object
+      description: An error response with a single human-readable message.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     EvaluationConfigDetail:
       type: object
       properties:
@@ -6030,6 +6038,7 @@ components:
           type: boolean
         owner:
           type: integer
+          nullable: true
         working_version:
           type: integer
           nullable: true
@@ -6037,7 +6046,6 @@ components:
       - created_at
       - id
       - material
-      - owner
       - topic
       - updated_at
     SourceMaterialList:
@@ -6146,13 +6154,6 @@ components:
       - cursor
       - has_more
       - results
-    SyncErrorDetail:
-      type: object
-      properties:
-        detail:
-          type: string
-      required:
-      - detail
     SyntheticVoiceDetail:
       type: object
       properties:

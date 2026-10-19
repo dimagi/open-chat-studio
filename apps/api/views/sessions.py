@@ -11,7 +11,11 @@ from rest_framework.viewsets import GenericViewSet
 
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
-from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
+from apps.api.serializers import (
+    FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
+    ExperimentSessionCreateSerializer,
+    ExperimentSessionSerializer,
+)
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -109,6 +113,7 @@ tags_response_serializer = inline_serializer(
         summary="Create Chatbot Session",
         tags=["Experiment Sessions"],
         request=ExperimentSessionCreateSerializer,
+        responses={201: ExperimentSessionSerializer, 403: FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE},
     ),
     end_experiment_session=extend_schema(
         operation_id="session_end",

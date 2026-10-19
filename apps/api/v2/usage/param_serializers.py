@@ -10,6 +10,7 @@ explicit ``start``/``end`` into the ``[start, end)`` datetimes the service works
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -21,8 +22,8 @@ from apps.api.v2.usage.services import (
     METRIC_PARTICIPANTS,
     PERIOD_CHOICES,
     PERIOD_CURRENT_MONTH,
+    PERIOD_PREVIOUS_MONTH,
     SUPPORTED_METRICS,
-    _month_bounds,
 )
 from apps.channels.models import ChannelPlatform
 
@@ -150,7 +151,7 @@ class UsageQuerySerializer(serializers.Serializer):
         start = _localize(attrs.get("start"), tz)
         end = _localize(attrs.get("end"), tz)
         if start is None and end is None:
-            return _month_bounds(period or PERIOD_CURRENT_MONTH, tz)
+            return month_bounds(period or PERIOD_CURRENT_MONTH, tz)
         if period:
             raise serializers.ValidationError("Provide either 'period' or an explicit 'start'/'end' window, not both.")
         return _explicit_window(start, end)
@@ -166,6 +167,18 @@ class UsageQuerySerializer(serializers.Serializer):
                 f"The requested window is too large for '{granularity}' granularity "
                 f"(it would exceed {MAX_BUCKETS} buckets). Use a coarser granularity or a smaller window."
             )
+
+
+def month_bounds(period: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
+    """Half-open ``[start, end)`` for a calendar month, computed in ``tz``. Returns tz-aware
+    datetimes; Django converts them for the UTC-stored ``created_at`` column. ``relativedelta``
+    keeps the same ``tz`` instance, and midnight-on-the-1st stays midnight across a DST transition.
+    """
+    now_local = timezone.now().astimezone(tz)
+    month_start = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if period == PERIOD_PREVIOUS_MONTH:
+        return month_start - relativedelta(months=1), month_start
+    return month_start, month_start + relativedelta(months=1)
 
 
 def _explicit_window(start: datetime | None, end: datetime | None) -> tuple[datetime, datetime]:

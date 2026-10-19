@@ -82,8 +82,7 @@ class DeleteConsentForm(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
     def delete(self, request, team_slug: str, pk: int):
         consent_form = get_object_or_404(ConsentForm, id=pk, team=request.team)
-        if consent_form.is_default:
+        if not consent_form.archive():
             return HttpResponse("Cannot delete default consent form.", status=400)
-        consent_form.archive()
         messages.success(request, "Consent Form Deleted")
         return HttpResponse()

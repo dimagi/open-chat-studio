@@ -707,7 +707,7 @@ function dashboard() {
         },
 
         async deleteSavedFilter(filterId, filterName) {
-            if (!confirm(`Are you sure you want to delete the filter "${filterName}"?`)) {
+            if (!(await window.confirmDialog(`Are you sure you want to delete the filter "${filterName}"?`))) {
                 return;
             }
 

@@ -12,7 +12,7 @@ After ADR-0053, an anonymous caller can start a chat session with the chatbot's 
 
 This requires a per-chatbot setting that records the admin's choice. The channel already has `required_auth_level` (ADR-0044), but that field records the capability of the deployed widget and is raised automatically by the ADR-0045 ratchet. An admin's access policy must not change as a side effect of a widget upgrade, so it cannot be stored in that field.
 
-The widget serves two platforms: `EMBEDDED_WIDGET`, and `PUBLIC`, an OCS-hosted link enabled by `flag_public_channel`.
+The widget serves two platforms: `EMBEDDED_WIDGET`, and `PUBLIC`, an OCS-hosted link.
 
 ## Decision
 

@@ -4,14 +4,21 @@ from typing import Any, ClassVar
 from apps.ocs_notifications.models import LevelChoices
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter, Operators
 from apps.web.dynamic_filters.column_filters import TimestampFilter
-from apps.web.dynamic_filters.datastructures import (
-    FilterParams,
-    _translate_legacy_query_params,
-    serialize_csv_tilde_values,
-)
+from apps.web.dynamic_filters.datastructures import FilterParams, serialize_csv_tilde_values
 
 
-class ReadFilter(ChoiceColumnFilter):
+class BooleanChoiceFilter(ChoiceColumnFilter):
+    """Choice filter whose 'true'/'false' option ids map to booleans."""
+
+    def parse_query_value(self, query_value) -> list[bool] | None:
+        """Convert string values 'true'/'false' to boolean."""
+        values = self.values_list(query_value)
+        if not values:
+            return None
+        return [val.lower() == "true" for val in values]
+
+
+class ReadFilter(BooleanChoiceFilter):
     """Filter notifications by read status."""
 
     query_param: str = "read"
@@ -22,15 +29,8 @@ class ReadFilter(ChoiceColumnFilter):
         {"id": "false", "label": "Unread"},
     ]
 
-    def parse_query_value(self, query_value) -> list[bool] | None:
-        """Convert string values 'true'/'false' to boolean."""
-        values = self.values_list(query_value)
-        if not values:
-            return None
-        return [val.lower() == "true" for val in values]
 
-
-class MuteFilter(ChoiceColumnFilter):
+class MuteFilter(BooleanChoiceFilter):
     query_param: str = "muted"
     # The column is annotated on the queryset in the view, so we can filter on it directly
     column: str = "is_muted"
@@ -39,13 +39,6 @@ class MuteFilter(ChoiceColumnFilter):
         {"id": "true", "label": "Muted"},
         {"id": "false", "label": "Not Muted"},
     ]
-
-    def parse_query_value(self, query_value) -> list[bool] | None:
-        """Convert string values 'true'/'false' to boolean."""
-        values = self.values_list(query_value)
-        if not values:
-            return None
-        return [val.lower() == "true" for val in values]
 
 
 class SeverityLevelFilter(ChoiceColumnFilter):
@@ -119,7 +112,7 @@ def resolve_notification_filter_params(request) -> FilterParams:
     out from under a user who then clicks a toggle button.
     """
     if EXPLICIT_FILTERS_PARAM in request.GET:
-        return FilterParams(_translate_legacy_query_params(request.GET))
+        return FilterParams.from_query_params(request.GET)
     return FilterParams.from_request(request)
 
 

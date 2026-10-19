@@ -6,9 +6,9 @@ Deselected by default; run with ``pytest -m bench apps/benchmarks``.
 import pytest
 
 from apps.benchmarks import scenarios
-from apps.benchmarks.runner import invoke_once
+from apps.benchmarks.runner import TIMING, invoke_once
 
-pytestmark = [pytest.mark.bench, pytest.mark.django_db()]
+pytestmark = [pytest.mark.bench, pytest.mark.django_db(), TIMING]
 
 
 @pytest.mark.parametrize(

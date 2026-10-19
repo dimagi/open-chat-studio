@@ -1,5 +1,6 @@
 import pytest
 from django.contrib.auth.models import AnonymousUser
+from django.template.loader import render_to_string
 
 from apps.utils.factories.notifications import EventUserFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
@@ -28,3 +29,24 @@ class TestUnreadNotificationsCountContextProcessor:
         request.user = AnonymousUser()
 
         assert unread_notifications_count(request) == {"unread_notifications_count": 0}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("loader_key", "debug", "expect_script"),
+    [
+        pytest.param("abc123", False, True, id="key-set"),
+        pytest.param("", False, False, id="key-empty"),
+        pytest.param("abc123", True, False, id="debug"),
+    ],
+)
+def test_sentry_browser_loader_script(rf, settings, loader_key, debug, expect_script):
+    settings.SENTRY_BROWSER_LOADER_KEY = loader_key
+    settings.DEBUG = debug
+    request = rf.get("/")
+    request.user = AnonymousUser()
+
+    content = render_to_string("web/base.html", request=request)
+
+    assert ("https://js.sentry-cdn.com/abc123.min.js" in content) is expect_script
+    assert expect_script or "js.sentry-cdn.com" not in content

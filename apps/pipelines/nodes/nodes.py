@@ -24,7 +24,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython.PrintCollector import PrintCollector
 
-from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import BuiltInTools
 from apps.files.models import FilePurpose
@@ -53,6 +52,7 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.nodes.restricted_http import RestrictedHttpClient
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.outcomes import provider_reason
@@ -65,7 +65,6 @@ from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
-from apps.utils.restricted_http import RestrictedHttpClient
 
 from .mixins import (
     HISTORY_TYPE_DESCRIPTION,
@@ -74,6 +73,7 @@ from .mixins import (
     LLMResponseMixin,
     OutputMessageTagMixin,
     RouterMixin,
+    RouteTagMixin,
     StructuredDataSchemaValidatorMixin,
 )
 
@@ -396,8 +396,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             context["collection_index_summaries"] = [str(i) for i in self.collection_index_ids]
 
         try:
-            known_vars = set(PromptVars.values) | PromptVars.pipeline_extra_known_vars()
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.llm_node_vars())
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -474,10 +473,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         all_are_remote = all(is_remote_flags)
         if not all_are_remote and any(is_remote_flags):
             remote_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if collection.is_remote_index
             ]
             local_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if not collection.is_remote_index
             ]
             raise PydanticCustomError(
                 "mixed_collection_types",
@@ -651,17 +650,14 @@ class EndNode(Passthrough):
 
 
 @deprecated_node(message="Use the 'Router' node instead.")
-class BooleanNode(PipelineRouterNode):
+class BooleanNode(RouteTagMixin, PipelineRouterNode):
     """Branches based whether the input matches a certain value"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="Conditional Node", field_order=["input_equals", "tag_output_message"])
+    )
 
     input_equals: str
-    tag_output_message: bool = Field(
-        default=False,
-        description="Tag the output message with the selected route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
-    )
 
     def _process_conditional(self, context: "NodeContext") -> tuple[Literal["true", "false"], bool]:
         if self.input_equals == context.input:
@@ -672,17 +668,8 @@ class BooleanNode(PipelineRouterNode):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
-        if self.tag_output_message:
-            tag_name = f"{self.name}:{selected_route}"
-            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
-            if is_default_keyword:
-                tag_name += ":default"
-            return [(tag_name, tag_category)]
-        return []
 
-
-class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
+class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(
@@ -722,8 +709,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "prompt": self.prompt,
         }
         try:
-            known_vars = {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=known_vars)
+            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
             return self
         except ValidationError as e:
             raise PydanticCustomError(
@@ -796,7 +782,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         return None
 
 
-class StaticRouterNode(RouterMixin, PipelineRouterNode):
+class StaticRouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode):
     """Routes the input to a linked node using the temp state of the pipeline or participant data"""
 
     class DataSource(TextChoices):
