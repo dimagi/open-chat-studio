@@ -2890,6 +2890,14 @@ components:
           nullable: true
           description: Provider message IDs this message was built from, namespaced
             by platform.
+        moderation_status:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ModerationStatusEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        moderation_detail:
+          nullable: true
         chat:
           type: integer
       required:
@@ -5146,6 +5154,16 @@ components:
       - cursor
       - has_more
       - results
+    ModerationStatusEnum:
+      enum:
+      - passed
+      - flagged
+      - skipped
+      type: string
+      description: |-
+        * `passed` - Passed
+        * `flagged` - Flagged
+        * `skipped` - Skipped
     NodeDetail:
       type: object
       properties:
