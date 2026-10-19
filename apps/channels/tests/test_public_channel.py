@@ -127,7 +127,7 @@ def _operator(client, team, codename):
 
 
 @pytest.mark.django_db()
-def test_create_dialog_makes_a_public_channel_with_a_token(client, experiment, public_flag):
+def test_create_dialog_makes_a_public_channel_with_a_token(client, experiment):
     _operator(client, experiment.team, "add_experimentchannel")
     url = reverse("channels:channel_create_dialog", args=[experiment.team.slug, experiment.id, "public"])
     response = client.post(
@@ -149,15 +149,17 @@ def test_create_dialog_makes_a_public_channel_with_a_token(client, experiment, p
 
 
 @pytest.mark.django_db()
-def test_create_dialog_refuses_without_the_flag(client, experiment):
-    _operator(client, experiment.team, "add_experimentchannel")
-    url = reverse("channels:channel_create_dialog", args=[experiment.team.slug, experiment.id, "public"])
+def test_create_dialog_refuses_a_second_public_channel(client, public_channel):
+    _operator(client, public_channel.team, "add_experimentchannel")
+    url = reverse(
+        "channels:channel_create_dialog", args=[public_channel.team.slug, public_channel.experiment_id, "public"]
+    )
     response = client.get(url)
     assert response.status_code == 302
 
 
 @pytest.mark.django_db()
-def test_edit_dialog_regenerates_and_ends_sessions(client, public_channel, public_flag):
+def test_edit_dialog_regenerates_and_ends_sessions(client, public_channel):
     _operator(client, public_channel.team, "change_experimentchannel")
     live = ExperimentSessionFactory.create(
         experiment=public_channel.experiment, experiment_channel=public_channel, status=SessionStatus.ACTIVE
@@ -190,7 +192,7 @@ def test_blank_lines_are_dropped_from_the_lists():
 
 
 @pytest.mark.django_db()
-def test_disabling_through_the_dialog_ends_live_sessions(client, public_channel, public_flag):
+def test_disabling_through_the_dialog_ends_live_sessions(client, public_channel):
     _operator(client, public_channel.team, "change_experimentchannel")
     live = ExperimentSessionFactory.create(
         experiment=public_channel.experiment, experiment_channel=public_channel, status=SessionStatus.ACTIVE
@@ -227,7 +229,7 @@ def test_removing_a_public_channel_ends_live_sessions(client, public_channel):
 
 
 @pytest.mark.django_db()
-def test_regeneration_rolls_back_when_ending_sessions_fails(client, public_channel, public_flag, monkeypatch):
+def test_regeneration_rolls_back_when_ending_sessions_fails(client, public_channel, monkeypatch):
     _operator(client, public_channel.team, "change_experimentchannel")
 
     def boom(self):

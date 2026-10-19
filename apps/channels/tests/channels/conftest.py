@@ -9,6 +9,7 @@ from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.sender import ChannelSender
+from apps.channels.stages.core import AttachmentHydrationStage
 from apps.channels.tests.message_examples.base_messages import text_message
 
 
@@ -116,6 +117,12 @@ def make_trace_service():
     trace_service.trace.return_value = trace
     trace_service.get_trace_metadata.return_value = {}
     return trace_service
+
+
+def core_stages(channel_cls):
+    """The core stages a channel class builds, without constructing the channel."""
+    stub_self = MagicMock(attachment_hydration_stage_class=AttachmentHydrationStage)
+    return channel_cls._build_pipeline(stub_self).core_stages
 
 
 def make_capabilities(**overrides):

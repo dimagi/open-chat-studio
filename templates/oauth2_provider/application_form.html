@@ -16,6 +16,20 @@
     {% endif %}
     {% render_form_fields form "authorization_grant_type" "redirect_uris" "post_logout_redirect_uris" "allowed_origins" "algorithm" %}
     {% if "allowed_chatbots" in form.fields %}
-        {% render_form_fields form "allowed_chatbots" %}
+      <div x-data="{ allData: {{ form.all_data.value|yesno:'true,false' }} }"
+           @change="if ($event.target.name === 'all_data') allData = $event.target.checked">
+        {% render_form_fields form "all_data" %}
+        <div role="alert" class="alert alert-warning my-2" x-show="allData" x-cloak>
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>
+            {% blocktranslate trimmed %}
+              Tokens from this application can reach every chatbot in this team. If you only need to chat with a bot, select the relevant chatbots below instead.
+            {% endblocktranslate %}
+          </span>
+        </div>
+        <div :class="allData && 'opacity-50'" :inert="allData" :aria-disabled="allData.toString()">
+          {% render_form_fields form "allowed_chatbots" %}
+        </div>
+      </div>
     {% endif %}
 {% endblock form %}

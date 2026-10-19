@@ -6,7 +6,13 @@ from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    PolymorphicProxySerializer,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import (
@@ -28,7 +34,7 @@ from apps.api.authentication import (
     oauth_resolved_channel,
 )
 from apps.api.chat_consent import consent_refusal, session_consent_block
-from apps.api.exceptions import ChatApiAccessDenied
+from apps.api.exceptions import ChatApiAccessDenied, ParticipantBlocked
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.progress_messages import get_progress_message
 from apps.api.serializers import (
@@ -41,7 +47,9 @@ from apps.api.serializers import (
     ChatSessionTokenResponse,
     ChatStartSessionRequest,
     ChatStartSessionResponse,
+    ErrorDetailSerializer,
     MessageSerializer,
+    ParticipantBlockedResponse,
 )
 from apps.api.session_tokens import issue_session_token_with_expiry
 from apps.api.throttling import ChatAPIRateThrottle
@@ -63,6 +71,7 @@ from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.files.content_type import detect_content_type_from_file, read_sample
 from apps.files.models import File, FilePurpose
+from apps.moderation.enforcement import is_participant_blocked
 from apps.service_providers.file_limits import blocked_file_reason
 from apps.service_providers.llm_service.image_types import (
     ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES,
@@ -564,6 +573,11 @@ def _apply_session_data(session, user, session_data) -> None:
         # Session-authenticated callers keep their 403 (ADR-0053); a 401 at an authenticated
         # caller would read as a broken session.
         401: CHAT_ACCESS_DENIED_RESPONSE,
+        403: PolymorphicProxySerializer(
+            component_name="ChatStartSessionForbidden",
+            serializers=[CHAT_ACCESS_DENIED_RESPONSE, ParticipantBlockedResponse],
+            resource_type_field_name=None,
+        ),
         # Public-channel admission: the chatbot has no published version yet.
         409: inline_serializer(
             "ChatStartSessionRefused",
@@ -688,6 +702,8 @@ def chat_start_session(request):
     participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
     if refusal:
         return refusal
+    if is_participant_blocked(team=team, participant_id=participant.id):
+        raise ParticipantBlocked()
 
     if name or participant_timezone:
         _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
@@ -762,7 +778,14 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     summary="Send a message to a chat session",
     tags=["Chat"],
     request=ChatSendMessageRequestWithAttachments,
-    responses={202: ChatSendMessageResponse, 403: CONSENT_REQUIRED_RESPONSE},
+    responses={
+        202: ChatSendMessageResponse,
+        403: PolymorphicProxySerializer(
+            component_name="ChatSendMessageForbidden",
+            serializers=[CONSENT_REQUIRED_RESPONSE, ParticipantBlockedResponse],
+            resource_type_field_name=None,
+        ),
+    },
     parameters=[
         OpenApiParameter(
             name="session_id",
@@ -816,6 +839,9 @@ def chat_send_message(request, session_id):
 
     if refusal := consent_refusal(request, session):
         return refusal
+
+    if is_participant_blocked(team=session.team, participant_id=session.participant_id):
+        raise ParticipantBlocked()
 
     attachment_data = []
     if attachment_ids:
@@ -881,12 +907,7 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
-        404: inline_serializer(
-            "ChatTaskPollNotFound",
-            {
-                "detail": serializers.CharField(),
-            },
-        ),
+        404: ErrorDetailSerializer,
         500: inline_serializer(
             "ChatTaskPollError",
             {

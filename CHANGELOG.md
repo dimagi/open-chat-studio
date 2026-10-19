@@ -1,8 +1,14 @@
 # Operator Changelog
 
 Changes that a **self-hosted operator must know about or act on** when upgrading
-Open Chat Studio: migrations, configuration, deployment shape, deprecations and
+Open Chat Studio: manual steps, migrations that need attention, configuration
+operators must set or that changes behavior, deployment shape, deprecations and
 removals, and security fixes.
+
+Add an entry only if an operator would have to do something, or be surprised,
+because of the change. Every new, renamed, retyped or removed environment-configured
+setting belongs here. Additive migrations that run automatically do not. See
+[what belongs in the changelog](RELEASING.md#what-belongs-in-changelogmd).
 
 This is **not** the product changelog. New features, improvements and bug fixes
 are described for end users at
@@ -32,14 +38,9 @@ version section when a release is cut.
   nothing reads. (#4254)
 
 ### Migrations
-<!-- One line per migration. Omit the section if there are none. -->
-- `Experiment` gains a nullable `trace_sample_rate` column (0.0-1.0, no default). Existing rows
-  get `NULL`, meaning inherit the trace provider's sample rate. Behavior is unchanged until an
-  operator or team sets one. (#4371)
-- `Team` gains a `require_mfa` boolean column (default `False`, safe DB-level default). Existing
-  rows are unaffected; behavior is unchanged until a team admin enables it from team settings. (#147)
-- New `web_superuserelevation` table records each privilege elevation (grant, expiry, release,
-  client IP and user agent). Additive only; nothing is backfilled. (#4693)
+<!-- Only migrations that are long-running or locking, irreversible, need a
+     manual step or backfill, or change behavior on upgrade. Omit additive
+     migrations that run automatically. Omit the section if none qualify. -->
 - Every OpenAI Assistant is deleted, along with its tool resources and any custom action
   operation attached to one. `Node.assistant` is nulled and the mirrored `assistant_id` is
   stripped from stored pipeline node params. Any `Banner` pinned to the removed
@@ -58,6 +59,12 @@ version section when a release is cut.
   `410 Gone`. Invitations can no longer be created or sent. A new daily Celery beat task,
   `ocs_notifications.tasks.notify_http_sunsets` (02:30), notifies teams still using the legacy
   chat; Celery beat must be running for those notices to go out.
+- The `flag_public_channel` feature flag is removed. The public link channel is offered to every
+  team; a deployment that kept the flag off now shows it in the channel dropdown. Public links
+  are served on the Django `Site` domain, so check it matches the deployed host (see
+  [Public link host](docs/hosting/configuration.md#public-link-host)). The orphaned flag row
+  appears under Legacy on the Feature Flags page at `/admin/flags/` and can be deleted there.
+  (#4793)
 - The OpenAI Assistants feature is fully removed (#4254). The `Assistant Admin` role is gone —
   members holding it lose add/change/delete on files, which no other role grants; re-grant file
   access through another role if a team relied on it. `Attachment.upload_to_assistant` no longer
@@ -67,8 +74,10 @@ version section when a release is cut.
   `assistant` value from `PurposeEnum`.
 
 ### Configuration
-<!-- New, renamed, retyped or removed environment variables and settings.
-     State the default and whether it is required. -->
+<!-- Every new, renamed, retyped or removed setting that can be configured through
+     the process environment, whether or not it is required and whatever its
+     default. Also a changed default that alters behavior. State the default and
+     whether it is required. -->
 - `SENTRY_BROWSER_LOADER_KEY`: new, optional, defaults to empty (no browser-side
   Sentry). Previously every non-debug deployment loaded the Open Chat Studio
   project's Sentry browser script and reported browser errors and traces to it.

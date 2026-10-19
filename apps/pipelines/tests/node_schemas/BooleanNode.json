@@ -7,16 +7,16 @@
       "type": "string",
       "ui:widget": "node_name"
     },
-    "input_equals": {
-      "title": "Input Equals",
-      "type": "string"
-    },
     "tag_output_message": {
       "default": false,
       "description": "Tag the output message with the selected route",
       "title": "Tag Output Message",
       "type": "boolean",
       "ui:widget": "toggle"
+    },
+    "input_equals": {
+      "title": "Input Equals",
+      "type": "string"
     }
   },
   "required": [
@@ -31,5 +31,9 @@
   "ui:deprecation_message": "Use the 'Router' node instead.",
   "ui:flow_node_type": "pipelineNode",
   "ui:label": "Conditional Node",
+  "ui:order": [
+    "input_equals",
+    "tag_output_message"
+  ],
   "ui:removed": false
 }

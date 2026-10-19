@@ -1,8 +1,6 @@
 import json
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import connection
@@ -42,16 +40,6 @@ from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 pytestmark = pytest.mark.django_db
-
-
-@pytest.fixture()
-def keypair():
-    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_pem = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return seal_mod.load_public_key(public_pem), private
 
 
 def _serialize(model, instance, public_key=None):

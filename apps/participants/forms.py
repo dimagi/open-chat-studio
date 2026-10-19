@@ -50,7 +50,17 @@ class ParticipantForm(forms.ModelForm):
         return cleaned
 
 
-class ParticipantImportForm(forms.Form):
+class TeamChatbotChoiceForm(forms.Form):
+    """Limits the subclass's `experiment` field to the team's working chatbots."""
+
+    def __init__(self, *args, **kwargs):
+        team = kwargs.pop("team", None)
+        super().__init__(*args, **kwargs)
+        if team:
+            self.fields["experiment"].queryset = Experiment.objects.filter(team=team, working_version__isnull=True)
+
+
+class ParticipantImportForm(TeamChatbotChoiceForm):
     file = forms.FileField(
         help_text="CSV file with participant data. "
         "Supported columns: identifier, platform, name, data.* (for custom data fields)."
@@ -62,12 +72,6 @@ class ParticipantImportForm(forms.Form):
         "This is only required if your CSV file contains 'data.*' fields.",
         required=False,
     )
-
-    def __init__(self, *args, **kwargs):
-        team = kwargs.pop("team", None)
-        super().__init__(*args, **kwargs)
-        if team:
-            self.fields["experiment"].queryset = Experiment.objects.filter(team=team, working_version__isnull=True)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -98,18 +102,12 @@ class ParticipantImportForm(forms.Form):
         return cleaned_data
 
 
-class ParticipantExportForm(forms.Form):
+class ParticipantExportForm(TeamChatbotChoiceForm):
     experiment = forms.ModelChoiceField(
         label="Chatbot",
         queryset=Experiment.objects.none(),
         required=False,
     )
-
-    def __init__(self, *args, **kwargs):
-        team = kwargs.pop("team", None)
-        super().__init__(*args, **kwargs)
-        if team:
-            self.fields["experiment"].queryset = Experiment.objects.filter(team=team, working_version__isnull=True)
 
 
 class TriggerBotForm(forms.Form):
@@ -152,3 +150,12 @@ class TriggerBotForm(forms.Form):
                 experimentchannel__platform=participant.platform,
                 experimentchannel__deleted=False,
             )
+
+
+class BlockParticipantForm(forms.Form):
+    reason = forms.CharField(
+        label="Reason",
+        widget=forms.Textarea(attrs={"rows": 3}),
+        required=False,
+        help_text="Why this participant is being blocked. Shown on the participant page.",
+    )

@@ -8,7 +8,7 @@
       </a>
       {% translate "Remove this member from the team?" as confirm_remove_message %}
       <form method="post" action="{% url 'single_team:remove_team_membership' request.team.slug record.membership_pk %}"
-            onsubmit="return confirm('{{ confirm_remove_message }}');">
+            onsubmit="confirmThenSubmit(event, '{{ confirm_remove_message|escapejs }}')">
         {% csrf_token %}
         <button type="submit" class="btn btn-square btn-sm btn-outline" title="{% translate 'Remove' %}">
           <i class="fa-solid fa-xmark"></i>

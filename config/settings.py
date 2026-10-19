@@ -62,6 +62,10 @@ PROVIDER_REPORTING_API_TOKEN = env("PROVIDER_REPORTING_API_TOKEN", default=None)
 DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
 USE_DEBUG_TOOLBAR = env.bool("USE_DEBUG_TOOLBAR", default=DEBUG)
+# Set by GitHub Actions.
+IS_CI = env.bool("CI", default=False)
+# Serve the mock LLM provider (apps/service_providers/mock_llm), so the E2E tests can use it without DEBUG.
+MOCK_LLM_ENABLED = DEBUG or IS_CI
 if IS_TESTING:
     USE_DEBUG_TOOLBAR = False
     # Use a fast (insecure) hasher in tests; the default PBKDF2 hasher is deliberately slow.
@@ -154,6 +158,7 @@ PROJECT_APPS = [
     "apps.prelogin",
     "apps.cost_tracking",
     "apps.usage_metrics",
+    "apps.moderation",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -519,6 +524,9 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    # Redoc 3's standalone bundle uses `import.meta`, which fails in the classic <script> tag
+    # drf-spectacular renders, leaving the docs page blank.
+    "REDOC_DIST": "https://cdn.jsdelivr.net/npm/redoc@2.5.4",
     "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {

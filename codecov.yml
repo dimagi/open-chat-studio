@@ -13,6 +13,8 @@ ignore:
     - "**/test_*.py"
     - "**/conftest.py"
     - "apps/utils/factories/**"
+    - "apps/web/e2e_data.py"
+    - "apps/web/management/commands/e2e_seed.py"
     - "config/settings_production.py"
     - "scripts/**"
     - "tasks.py"

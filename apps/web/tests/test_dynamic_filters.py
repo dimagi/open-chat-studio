@@ -63,6 +63,7 @@ class TestExperimentSessionFilterSchema:
             "state",
             "remote_id",
             "session_id",
+            "annotation_queue",
         }
         assert set(schema.keys()) == expected_keys
 
