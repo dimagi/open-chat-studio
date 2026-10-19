@@ -6,7 +6,6 @@ from datetime import datetime
 from django.utils.text import slugify
 
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.teams.utils import section_url
 from apps.utils.decorators import silence_exceptions
 
 from .models import LevelChoices
@@ -396,22 +395,4 @@ def deleted_model_notification(
         permissions=["service_providers.change_llmprovidermodel"],
         links=affected.links(),
         once_per_event_type=True,
-    )
-
-
-@silence_exceptions(logger, log_message="Failed to create moderation provider deleted notification")
-def moderation_provider_deleted_notification(team, provider_id: int, provider_name: str) -> None:
-    """Notify a team that its selected moderation provider was deleted and moderation was turned off."""
-    create_notification(
-        title="Moderation provider deleted",
-        message=(
-            f"The moderation provider '{provider_name}' was deleted, so message moderation has been turned off. "
-            "Add or select another moderation provider to turn it back on."
-        ),
-        level=LevelChoices.WARNING,
-        team=team,
-        slug="moderation-provider-deleted",
-        event_data={"provider_id": provider_id},
-        permissions=["experiments.change_experiment", "experiments.change_participant"],
-        links={"Integrations": section_url(team_slug=team.slug, section_key="integrations")},
     )

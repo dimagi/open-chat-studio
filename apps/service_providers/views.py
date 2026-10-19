@@ -43,6 +43,7 @@ from apps.service_providers.models import (
     LlmProviderModel,
     MessagingProvider,
     MessagingProviderType,
+    ModerationProvider,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -156,6 +157,12 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
     if not request.user.has_perm(provider.get_permission("delete")):
         raise PermissionDenied()
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
+    if (
+        isinstance(service_config, ModerationProvider)
+        and request.team.moderation_enabled
+        and request.team.moderation_provider_id == service_config.id
+    ):
+        return render_referenced_objects_modal("service provider", team_settings=[_("Message moderation")])
     related_objects = get_related_objects(service_config)
 
     if related_objects:

@@ -14,7 +14,6 @@ from apps.ocs_notifications.notifications import (
     deprecated_model_notification,
     file_delivery_failure_notification,
     message_delivery_failure_notification,
-    moderation_provider_deleted_notification,
     trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -74,12 +73,6 @@ def _pair_for_file_delivery():
         pytest.param(
             lambda: file_delivery_failure_notification(*_pair_for_file_delivery()),
             id="file-delivery",
-        ),
-        pytest.param(
-            lambda: moderation_provider_deleted_notification(
-                team=TeamFactory.create(), provider_id=1, provider_name="OpenAI moderation"
-            ),
-            id="moderation-provider-deleted",
         ),
     ],
 )
