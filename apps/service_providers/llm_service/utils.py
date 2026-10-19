@@ -36,6 +36,14 @@ def extract_file_ids_from_ocs_citations(text: str) -> list[str]:
     return [match.group("file_id") for match in re.finditer(OCS_CITATION_PATTERN, text)]
 
 
+def get_cited_files_from_text(text: str, team_id: int) -> set[File]:
+    """Return the team's files referenced by `<CIT n />` markers in the text."""
+    file_ids = extract_file_ids_from_ocs_citations(text)
+    if not file_ids:
+        return set()
+    return set(File.objects.filter(id__in=file_ids, team_id=team_id))
+
+
 def populate_reference_section_from_citations(text: str, cited_files: list[File], session: ExperimentSession) -> str:
     """
     Parse the AI message for citations in the format <CIT the-file-id /> to build a reference section at the end.

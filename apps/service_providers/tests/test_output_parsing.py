@@ -169,7 +169,6 @@ class TestParseOutputForAnthropic:
 class TestParseOutputForAnthropicOcsCitations:
     """A `<CIT n />` marker for a team file must survive into a reference section, as it does for other providers."""
 
-    # Expected to fail until #4821 is fixed: the marker is removed and no reference section is built.
     def test_marker_becomes_footnote_and_reference(self, team_with_users):
         session = Mock(id=1, team_id=team_with_users.id)
         file = FileFactory.create(team=team_with_users)
@@ -181,7 +180,6 @@ class TestParseOutputForAnthropicOcsCitations:
         assert text.startswith("Fact [^1].")
         assert f"[^1]: [{file.citation_text}]" in text
 
-    # Expected to fail until #4821 is fixed (all four cases): `cited_files` is empty.
     @pytest.mark.parametrize(
         "content_template",
         [
@@ -213,7 +211,6 @@ class TestParseOutputForAnthropicOcsCitations:
 
         assert result.text == text
 
-    # Expected to fail until #4821 is fixed: `cited_files` is empty.
     def test_repeated_marker_cites_file_once(self, team_with_users):
         session = Mock(team_id=team_with_users.id)
         file = FileFactory.create(team=team_with_users)
@@ -224,7 +221,6 @@ class TestParseOutputForAnthropicOcsCitations:
 
         assert result.cited_files == {file}
 
-    # Expected to fail until #4821 is fixed: `cited_files` is empty.
     def test_multiple_files(self, team_with_users):
         session = Mock(team_id=team_with_users.id)
         file_1, file_2 = FileFactory.create_batch(2, team=team_with_users)
@@ -260,7 +256,6 @@ class TestParseOutputForAnthropicOcsCitations:
 
         assert result.cited_files == set()
 
-    # Expected to fail until #4821 is fixed: the default parser finds the file, the Anthropic parser does not.
     def test_matches_default_parser(self, team_with_users):
         """Providers must agree on which files a response cites."""
         session = Mock(team_id=team_with_users.id)
