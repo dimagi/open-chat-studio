@@ -15,6 +15,7 @@ from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
     message_delivery_failure_notification,
     moderation_provider_deleted_notification,
+    moderation_skipped_notification,
     trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -80,6 +81,10 @@ def _pair_for_file_delivery():
                 team=TeamFactory.create(), provider_id=1, provider_name="OpenAI moderation"
             ),
             id="moderation-provider-deleted",
+        ),
+        pytest.param(
+            lambda: moderation_skipped_notification(*_session(), reason="timeout"),
+            id="moderation-skipped",
         ),
     ],
 )

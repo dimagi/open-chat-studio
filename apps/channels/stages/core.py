@@ -16,7 +16,7 @@ from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -29,7 +29,7 @@ from apps.experiments.models import (
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
-from apps.moderation.services import record_rule_hits
+from apps.moderation.services import record_rule_hits, start_moderation
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
@@ -563,8 +563,8 @@ class ConsentFlowStage(ProcessingStage):
         triggered SETUP -> PENDING -- so it can be answered after consent.
 
         Returns None when the participant's first message was itself just the
-        consent token (no prior content), so the caller falls back to the seed
-        message / silent halt.
+        consent token (no prior content) or moderation flagged it, so the caller
+        falls back to the seed message / silent halt.
         """
         first_human_message = (
             ctx.experiment_session.chat.messages.filter(message_type=ChatMessageType.HUMAN)
@@ -574,6 +574,8 @@ class ConsentFlowStage(ProcessingStage):
         if first_human_message is None:
             return None
         if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
+            return None
+        if first_human_message.moderation_status == ModerationStatus.FLAGGED:
             return None
         return first_human_message
 
@@ -780,10 +782,10 @@ class ErrorGuardStage(ProcessingStage):
 
 
 class AbuseRulesStage(ProcessingStage):
-    """Records the abuse rules the human message triggers on its `moderation_detail`."""
+    """Records the abuse rules the human message triggers and starts moderation of its text."""
 
     span_input_fields = ("human_message.id",)
-    span_output_fields = ("human_message.moderation_detail.rules",)
+    span_output_fields = ("human_message.moderation_detail.rules", "moderation_task_id")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.human_message is not None and abuse_detection_enabled(ctx.experiment.team)
@@ -795,8 +797,7 @@ class AbuseRulesStage(ProcessingStage):
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-
-        # Start moderation of the message here.
+        ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
 
 
 # ---------------------------------------------------------------------------

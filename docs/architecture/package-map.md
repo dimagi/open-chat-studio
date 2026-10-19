@@ -83,7 +83,7 @@ Features layered on top of the domain, plus supporting services.
 | `cost_tracking` | LLM usage and cost accounting. |
 | `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Definitions in ADR-0051. Models-free. |
 | `analysis` | Analysis pipelines over conversation data. |
-| `moderation` | Abuse detection: the participant denylist (`DeniedParticipant`), the abuse rules, the enforcement helpers, and the Moderation section of team settings (added with `register_settings_section` in `ModerationConfig.ready()`). Moderation providers live in `service_providers`. Called from `channels`, `api`, `experiments` and `participants`. |
+| `moderation` | Abuse detection: the participant denylist (`DeniedParticipant`), the abuse rules, the `moderate_message` task that runs a message through the team's moderation provider, the services that record the result on the message, the enforcement helpers, and the Moderation section of team settings (added with `register_settings_section` in `ModerationConfig.ready()`). Moderation providers live in `service_providers`. Called from `channels`, `api`, `experiments` and `participants`. |
 | `ocs_notifications` | In-app notifications. |
 | `banners` | Site banners. |
 | `help` | In-app help / help agents. |
