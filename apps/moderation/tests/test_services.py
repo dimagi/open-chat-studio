@@ -8,14 +8,14 @@ from django.db import DatabaseError, connections
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
-from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_LIMIT
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT, REMOVED_MESSAGE_PLACEHOLDER, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.moderation.services import (
     add_strike,
     get_moderation_result,
     record_moderation_result,
     record_rule_hits,
-    remove_turn_from_pipeline_histories,
+    replace_turn_in_pipeline_histories,
     start_moderation,
     strike_categories,
 )
@@ -220,22 +220,30 @@ def test_get_moderation_result(wait, expected):
         pytest.param(PipelineChatHistoryTypes.NAMED, id="named_history"),
     ],
 )
-def test_remove_turn_from_pipeline_histories(history_type):
+@pytest.mark.parametrize(
+    ("reply", "expected_turn"),
+    [
+        pytest.param("Declined", [REMOVED_MESSAGE_PLACEHOLDER, "Declined"], id="replaced"),
+        pytest.param(None, [], id="no_reply_removes_the_turn"),
+    ],
+)
+def test_replace_turn_in_pipeline_histories(history_type, reply, expected_turn):
     session = ExperimentSessionFactory.create()
     other_session = ExperimentSessionFactory.create()
     history = PipelineChatHistoryFactory.create(session=session, type=history_type, name="history")
     other_history = PipelineChatHistoryFactory.create(session=other_session, type=history_type, name="history")
     PipelineChatMessagesFactory.create(chat_history=history, human_message="Earlier", ai_message="Earlier answer")
     human_message = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Bad")
-    PipelineChatMessagesFactory.create(chat_history=history, human_message="Bad", ai_message="Original answer")
+    PipelineChatMessagesFactory.create(chat_history=history, human_message="Bad", ai_message="First answer")
+    PipelineChatMessagesFactory.create(chat_history=history, human_message="Bad", ai_message="Second answer")
     PipelineChatMessagesFactory.create(chat_history=other_history, human_message="Other", ai_message="Other answer")
     bot_response = ChatMessageFactory.create(chat=session.chat, message_type=ChatMessageType.AI, content="Answer")
 
-    remove_turn_from_pipeline_histories(human_message=human_message, bot_response=bot_response)
+    replace_turn_in_pipeline_histories(human_message=human_message, bot_response=bot_response, reply=reply)
 
     node_history = ORMRepository(session=session).get_pipeline_chat_history(history_type, "history")
     messages = node_history.get_langchain_messages_until_marker(PipelineChatHistoryModes.TRUNCATE_TOKENS)
-    assert [message.content for message in messages] == ["Earlier", "Earlier answer"]
+    assert [message.content for message in messages] == ["Earlier", "Earlier answer", *expected_turn]
     assert other_history.messages.count() == 1
 
 
