@@ -19,11 +19,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name='team',
-            name='moderation_deleted_provider_name',
-            field=models.CharField(blank=True, db_default='', default='', help_text='Name of the selected moderation provider, if it was deleted. Cleared when a provider is selected.', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='team',
             name='moderation_enabled',
             field=models.BooleanField(db_default=False, default=False, help_text='When set, participant messages are checked by the moderation provider.'),
         ),
