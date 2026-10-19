@@ -17,9 +17,7 @@
          data-new-vs-returning-url="{% url 'dashboard:api_new_vs_returning' request.team.slug %}"
          data-session-duration-url="{% url 'dashboard:api_average_session_duration' request.team.slug %}"
          data-breakdown-chatbot-url="{% url 'dashboard:api_engagement_breakdown_chatbot' request.team.slug %}"
-         data-breakdown-channel-url="{% url 'dashboard:api_engagement_breakdown_channel' request.team.slug %}"
-         data-chatbots-url="{% url 'chatbots:chatbots_home' request.team.slug %}"
-         data-sessions-url="{% url 'chatbots:all_sessions_home' request.team.slug %}"></div>
+         data-breakdown-channel-url="{% url 'dashboard:api_engagement_breakdown_channel' request.team.slug %}"></div>
 
     <div>
       <h1 data-cy="title" class="text-3xl font-bold text-gray-900 dark:text-gray-100">{% translate "Engagement Dashboard" %}</h1>
@@ -45,15 +43,6 @@
           <div class="form-control">
             <label class="label label-text">{% translate "Channels" %}</label>
             {% with field=filter_form.channels %}
-              <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
-                {% for option in field %}{{ option }}{% endfor %}
-              </select>
-            {% endwith %}
-          </div>
-
-          <div class="form-control">
-            <label class="label label-text">{% translate "Participants" %}</label>
-            {% with field=filter_form.participants %}
               <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
                 {% for option in field %}{{ option }}{% endfor %}
               </select>
@@ -187,12 +176,6 @@
                 </template>
               </tbody>
             </table>
-
-            <div class="mt-3 text-right">
-              <a class="link link-primary text-sm" :href="panel.drilldown">
-                <span x-text="panel.drilldownLabel"></span> <span aria-hidden="true">→</span>
-              </a>
-            </div>
           </div>
         </div>
       </template>

@@ -14,7 +14,6 @@ const TOM_SELECT_CONFIG = {
 const FILTER_PLACEHOLDERS = {
     experiments: 'All chatbots',
     channels: 'All channels',
-    participants: 'All participants',
     tags: 'All tags'
 };
 
@@ -24,7 +23,7 @@ const WEEK_BUCKETS = ['1_week', '2_weeks', '3_weeks', '4_plus_weeks'];
 
 function engagementDashboard() {
     return {
-        filters: {experiments: [], channels: [], participants: [], tags: []},
+        filters: {experiments: [], channels: [], tags: []},
         summaryStats: [],
         headlineMonth: '',
         hasFrequencyData: true,
@@ -33,7 +32,6 @@ function engagementDashboard() {
         payloads: {summary: null, avgDuration: null, frequency: null, newVsReturning: null},
         loadingStates: {summary: false, frequency: false, newVsReturning: false, chatbot: false, channel: false},
         endpoints: {summary: '', frequency: '', newVsReturning: '', sessionDuration: '', breakdownChatbot: '', breakdownChannel: ''},
-        links: {chatbots: '', sessions: ''},
 
         init() {
             this.loadEndpoints();
@@ -53,7 +51,6 @@ function engagementDashboard() {
                 breakdownChatbot: config.breakdownChatbotUrl,
                 breakdownChannel: config.breakdownChannelUrl
             };
-            this.links = {chatbots: config.chatbotsUrl, sessions: config.sessionsUrl};
         },
 
         setupTomSelect() {
@@ -68,7 +65,7 @@ function engagementDashboard() {
             const form = document.getElementById('engagementFilterForm');
             if (!form) return;
             const formData = new FormData(form);
-            const filters = {experiments: [], channels: [], participants: [], tags: []};
+            const filters = {experiments: [], channels: [], tags: []};
             for (const [key, value] of formData.entries()) {
                 if (filters[key]) filters[key].push(value);
             }
@@ -248,13 +245,11 @@ function engagementDashboard() {
             const panels = [
                 {
                     key: 'chatbot', title: 'Top chatbots', dimensionLabel: 'Chatbot',
-                    endpoint: this.endpoints.breakdownChatbot,
-                    drilldown: this.links.chatbots, drilldownLabel: 'View chatbots'
+                    endpoint: this.endpoints.breakdownChatbot
                 },
                 {
                     key: 'channel', title: 'Engagement by channel', dimensionLabel: 'Channel',
-                    endpoint: this.endpoints.breakdownChannel,
-                    drilldown: this.links.sessions, drilldownLabel: 'View sessions'
+                    endpoint: this.endpoints.breakdownChannel
                 }
             ];
 

@@ -2,14 +2,17 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
+from waffle.decorators import waffle_flag
 
 from apps.teams.decorators import login_and_team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from .engagement_forms import EngagementFilterForm
 from .engagement_service import EngagementDashboardService
 
 
+@method_decorator(waffle_flag(Flags.ENGAGEMENT_DASHBOARD.slug), name="dispatch")
 @method_decorator(login_and_team_required, name="dispatch")
 class EngagementDashboardView(LoginAndTeamRequiredMixin, TemplateView):
     template_name = "dashboard/engagement.html"
@@ -28,6 +31,7 @@ class EngagementDashboardView(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
+@method_decorator(waffle_flag(Flags.ENGAGEMENT_DASHBOARD.slug), name="dispatch")
 @method_decorator(login_and_team_required, name="dispatch")
 class EngagementApiView(LoginAndTeamRequiredMixin, TemplateView):
     def get_service(self) -> EngagementDashboardService:

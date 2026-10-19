@@ -98,6 +98,11 @@ class Flags(FlagInfo, Enum):
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
     )
 
+    ENGAGEMENT_DASHBOARD = (
+        "flag_engagement_dashboard",
+        "Engagement dashboard - user engagement and adoption metrics (issue #2927)",
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

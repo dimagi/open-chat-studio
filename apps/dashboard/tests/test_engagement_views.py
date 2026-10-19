@@ -1,11 +1,19 @@
 import pytest
 from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment
 
 
+@pytest.fixture()
+def _engagement_flag_on():
+    with override_flag("flag_engagement_dashboard", active=True):
+        yield
+
+
 @pytest.mark.django_db()
+@pytest.mark.usefixtures("_engagement_flag_on")
 class TestEngagementDashboardView:
     def test_renders_page(self, authenticated_client, team):
         url = reverse("dashboard:engagement", kwargs={"team_slug": team.slug})
@@ -24,6 +32,7 @@ class TestEngagementDashboardView:
 
 
 @pytest.mark.django_db()
+@pytest.mark.usefixtures("_engagement_flag_on")
 class TestEngagementApiViews:
     def test_summary_api(self, authenticated_client, team, experiment, participant, experiment_session, chat):
         ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
