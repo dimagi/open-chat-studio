@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.stages.core import (
+    AbuseRulesStage,
     AttachmentHydrationStage,
     BlockedParticipantStage,
     BotInteractionStage,
@@ -153,6 +154,7 @@ class ChannelBase(ABC):
                 # of still appears in the history and on the trace. Every pipeline with a
                 # QueryExtractionStage needs this stage, in this position.
                 ErrorGuardStage(),
+                AbuseRulesStage(),
                 ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),

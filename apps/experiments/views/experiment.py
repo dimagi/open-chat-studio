@@ -732,6 +732,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         "show_original_translation": show_original_translation,
         "default_message": default_message,
         "highlight_message_id": highlight_message_id,
+        "show_rule_hits": bool(request.team_membership),
     }
 
     return context, messages_queryset
