@@ -33,6 +33,7 @@ from apps.service_providers.llm_service.utils import (
     extract_file_ids_from_ocs_citations,
     get_openai_container_file_contents,
 )
+from apps.service_providers.openai_client import build_openai_client
 from apps.web.meta import get_server_root
 
 if TYPE_CHECKING:
@@ -277,10 +278,8 @@ class OpenAILlmService(OpenAIGenericService):
         }
 
     def get_raw_client(self) -> OpenAI:
-        return OpenAI(
-            api_key=self.openai_api_key.get_secret_value(),
-            organization=self.openai_organization,
-            base_url=self.openai_api_base,
+        return build_openai_client(
+            api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base
         )
 
     def transcribe_audio(self, audio: BytesIO) -> str:

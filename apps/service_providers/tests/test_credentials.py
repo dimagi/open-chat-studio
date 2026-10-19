@@ -186,6 +186,7 @@ CHAT_OPENAI = "langchain_openai.chat_models.ChatOpenAI"
 AZURE_CHAT_OPENAI = "langchain_openai.chat_models.AzureChatOpenAI"
 TWILIO_VALIDATOR = "apps.channels.tasks.RequestValidator"
 SPEECH_OPENAI = "apps.service_providers.speech_service.OpenAI"
+OPENAI_CLIENT = "apps.service_providers.openai_client.OpenAI"
 LLM = "apps.service_providers.llm_service.main"
 
 # (service class, patch target standing in for the provider client, how to reach it)
@@ -220,7 +221,7 @@ CREDENTIAL_BOUNDARIES = [
         id="meta-media-upload",
     ),
     pytest.param(llm_service.OpenAIGenericService, CHAT_OPENAI, chat_model, id="openai-generic"),
-    pytest.param(llm_service.OpenAILlmService, f"{LLM}.OpenAI", lambda s: s.get_raw_client(), id="openai-raw-client"),
+    pytest.param(llm_service.OpenAILlmService, OPENAI_CLIENT, lambda s: s.get_raw_client(), id="openai-raw-client"),
     pytest.param(llm_service.OpenAILlmService, f"{LLM}.OpenAILocalIndexManager", local_index, id="openai-index"),
     pytest.param(
         llm_service.OpenAILlmService,
