@@ -39,6 +39,11 @@ def api_exception_handler(exc, context):
 
 
 def _v2_not_found_message(message: str) -> str:
+    """Replace the model class name in a `get_object_or_404` message with the resource name v2 clients know.
+
+    Django's message names internal classes, such as "No Experiment matches...", which mean nothing to an API
+    client. A model with no known name gets a plain "Not found." so the class name is never exposed.
+    """
     match = _DJANGO_NOT_FOUND.match(message)
     if match is None:
         return message
