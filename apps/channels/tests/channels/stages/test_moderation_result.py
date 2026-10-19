@@ -9,6 +9,7 @@ from apps.channels.api_channel import ApiChannel
 from apps.channels.channel_base import ChannelBase
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import EarlyExitResponse
+from apps.channels.models import ChannelPlatform
 from apps.channels.stages.terminal import ModerationResultStage
 from apps.channels.tests.channels.conftest import make_context, make_trace_service, messaging_channel
 from apps.channels.tests.message_examples import base_messages
@@ -16,17 +17,20 @@ from apps.channels.web_channel import WebChannel
 from apps.chat.bots import EventBot
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.experiments.models import SessionStatus
-from apps.moderation.const import FLAGGED_MESSAGE
+from apps.experiments.models import Participant, SessionStatus
+from apps.moderation.const import FLAGGED_MESSAGE, STRIKE_LIMIT
+from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ChatMessageFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
+from apps.utils.factories.team import MembershipFactory
 from apps.utils.tests.provider_errors import connection_error
 
 FLAG = Flags.ABUSE_DETECTION.slug
 EVENT_BOT = "apps.channels.pipeline.EventBot"
 NOTIFICATION = "apps.channels.stages.terminal.moderation_skipped_notification"
+BLOCKED_NOTIFICATION = "apps.moderation.services.participant_auto_blocked_notification"
 
 PASSED_OUTPUT = {"illicit": {"flagged": False, "score": 0.01}, "hate": {"flagged": False, "score": 0.02}}
 NON_STRIKE_OUTPUT = {"illicit": {"flagged": False, "score": 0.01}, "harassment": {"flagged": True, "score": 0.7}}
@@ -53,6 +57,24 @@ def _context(session, *, bot_response=None, **kwargs):
         moderation_task_id="task-1",
         **kwargs,
     )
+
+
+def _flagged_reply():
+    return patch(EVENT_BOT, **{"return_value.get_user_message.return_value": "Flagged reply"})
+
+
+def _strikes(session) -> int:
+    return Participant.objects.get(id=session.participant_id).strikes
+
+
+def _make_in_app_session(session, *, published: bool):
+    """Make `session` one a team member started from the app, on the working or a published version."""
+    if published:
+        session.experiment = session.experiment.create_new_version(make_default=True)
+        session.save()
+    session.participant.user = MembershipFactory.create(team=session.experiment.team).user
+    session.participant.platform = ChannelPlatform.WEB
+    session.participant.save()
 
 
 def _bot_response(session, content="The bot's answer"):
@@ -244,6 +266,96 @@ class TestModerationResultStage:
 
 
 @pytest.mark.django_db()
+class TestModerationResultStageStrikes:
+    @pytest.mark.parametrize(
+        ("output", "has_bot_response", "expected_strikes"),
+        [
+            pytest.param(STRIKE_OUTPUT, True, 1, id="flagged"),
+            pytest.param(STRIKE_OUTPUT, False, 1, id="no_bot_response"),
+            pytest.param(NON_STRIKE_OUTPUT, True, 0, id="passed"),
+        ],
+    )
+    def test_flagged_message_gives_a_strike(
+        self, auto_block_session, moderation_task, output, has_bot_response, expected_strikes
+    ):
+        moderation_task.get.return_value = _ok(output)
+        if has_bot_response:
+            ctx = _context(auto_block_session, bot_response=_bot_response(auto_block_session))
+        else:
+            ctx = _context(auto_block_session, early_exit_response="Something went wrong")
+
+        with _flagged_reply():
+            ModerationResultStage()(ctx)
+
+        assert _strikes(auto_block_session) == expected_strikes
+
+    def test_failed_reply_replacement_still_gives_a_strike(self, auto_block_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        bot_response = _bot_response(auto_block_session)
+
+        with patch.object(bot_response, "save", side_effect=DatabaseError("connection lost")), _flagged_reply():
+            ModerationResultStage()(_context(auto_block_session, bot_response=bot_response))
+
+        assert _strikes(auto_block_session) == 1
+
+    def test_failed_strike_still_replaces_the_reply(self, auto_block_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+        ctx = _context(auto_block_session, bot_response=_bot_response(auto_block_session))
+
+        with patch("apps.channels.stages.terminal.add_strike", side_effect=DatabaseError("connection lost")):
+            with _flagged_reply():
+                ModerationResultStage()(ctx)
+
+        assert ctx.formatted_message == "Flagged reply"
+
+    def test_auto_block_off_gives_no_strike(self, moderated_session, moderation_task):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with _flagged_reply():
+            ModerationResultStage()(_context(moderated_session, bot_response=_bot_response(moderated_session)))
+
+        assert _strikes(moderated_session) == 0
+
+    @pytest.mark.parametrize(
+        "published",
+        [
+            pytest.param(False, id="working_version"),
+            pytest.param(True, id="published_version"),
+        ],
+    )
+    def test_team_member_in_app_gets_no_strike(
+        self, auto_block_session, moderation_task, published, django_capture_on_commit_callbacks
+    ):
+        session = auto_block_session
+        _make_in_app_session(session, published=published)
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with (
+            _flagged_reply(),
+            patch(BLOCKED_NOTIFICATION) as notification,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            for _ in range(STRIKE_LIMIT):
+                ModerationResultStage()(_context(session, bot_response=_bot_response(session)))
+
+        assert _strikes(session) == 0
+        assert not DeniedParticipant.objects.filter(participant=session.participant).exists()
+        notification.assert_not_called()
+
+    def test_team_member_on_telegram_gets_a_strike(self, auto_block_session, moderation_task):
+        """A team member's Telegram participant has no linked user, so it is not exempt."""
+        MembershipFactory.create(team=auto_block_session.experiment.team)
+        auto_block_session.participant.platform = ChannelPlatform.TELEGRAM
+        auto_block_session.participant.save()
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with _flagged_reply():
+            ModerationResultStage()(_context(auto_block_session, bot_response=_bot_response(auto_block_session)))
+
+        assert _strikes(auto_block_session) == 1
+
+
+@pytest.mark.django_db()
 class TestModerationInTheChannelPipeline:
     @pytest.fixture(autouse=True)
     def _flag_on(self):
@@ -373,6 +485,29 @@ class TestModerationInTheChannelPipeline:
 
         self.process_input.assert_called_once()
         assert self.process_input.call_args.args[0] == "Hello"
+
+    def test_third_flagged_message_blocks_the_participant(
+        self, auto_block_session, moderation_task, django_capture_on_commit_callbacks
+    ):
+        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
+
+        with (
+            _flagged_reply(),
+            patch(BLOCKED_NOTIFICATION) as notification,
+            django_capture_on_commit_callbacks(execute=True),
+        ):
+            for _ in range(STRIKE_LIMIT):
+                self._send(auto_block_session, process_input=lambda *args, **kwargs: _bot_response(auto_block_session))
+
+        denial = DeniedParticipant.objects.get(participant=auto_block_session.participant)
+        assert denial.source == DeniedParticipantSource.AUTO
+        assert denial.reason == "illicit/violent"
+        assert (
+            denial.chat_message
+            == ChatMessage.objects.filter(chat=auto_block_session.chat, message_type=ChatMessageType.HUMAN).last()
+        )
+        notification.assert_called_once()
+        assert _strikes(auto_block_session) == STRIKE_LIMIT
 
     @override_flag(FLAG, active=False)
     def test_flag_off_starts_no_task(self, moderated_session, moderation_task):

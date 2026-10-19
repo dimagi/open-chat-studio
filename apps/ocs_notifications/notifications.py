@@ -418,6 +418,25 @@ def moderation_provider_deleted_notification(team, provider_id: int, provider_na
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create participant blocked notification")
+def participant_auto_blocked_notification(experiment, denial, reason: str) -> None:
+    """Notify a team that a participant reached the strike limit and was blocked by the `denial` row."""
+    participant = denial.participant
+    create_notification(
+        title="Participant blocked automatically",
+        message=(
+            f"Participant '{participant.identifier}' was blocked after repeated flagged messages to "
+            f"'{experiment.name}'. Flagged categories: {reason}."
+        ),
+        level=LevelChoices.WARNING,
+        team=experiment.team,
+        slug="participant-auto-blocked",
+        event_data={"participant_id": participant.id, "denied_participant_id": denial.id},
+        permissions=["experiments.change_experiment", "experiments.change_participant"],
+        links={"View Participant": participant.get_absolute_url(), "View Bot": experiment.get_absolute_url()},
+    )
+
+
 _MODERATION_SKIP_REASONS: dict[ModerationSkipReason, str] = {
     "rate_limited": "the moderation provider's rate limit was reached",
     "error": "the moderation provider returned an error",

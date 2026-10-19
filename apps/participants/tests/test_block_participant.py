@@ -172,8 +172,12 @@ class TestBlockParticipant:
 
 @pytest.mark.django_db()
 class TestUnblockParticipant:
-    def test_deletes_denial_with_flag_on(self, client, team_with_users, team_flag, admin, participant):
+    def test_deletes_denial_and_resets_strikes_with_flag_on(
+        self, client, team_with_users, team_flag, admin, participant
+    ):
         team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 3
+        participant.save()
         DeniedParticipantFactory.create(team=team_with_users, participant=participant)
         client.force_login(admin)
 
@@ -181,14 +185,22 @@ class TestUnblockParticipant:
 
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
         assert not DeniedParticipant.objects.filter(participant=participant).exists()
+        participant.refresh_from_db()
+        assert participant.strikes == 0
 
-    def test_not_blocked_redirects_back(self, client, team_with_users, team_flag, admin, participant):
+    def test_not_blocked_resets_strikes_and_redirects_back(
+        self, client, team_with_users, team_flag, admin, participant
+    ):
         team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 2
+        participant.save()
         client.force_login(admin)
 
         response = client.post(_unblock_url(team=team_with_users, participant=participant))
 
         assert response.headers["HX-Redirect"] == _page_url(team=team_with_users, participant=participant)
+        participant.refresh_from_db()
+        assert participant.strikes == 0
 
     @pytest.mark.parametrize(
         ("next_url", "follows_next"),
@@ -341,6 +353,17 @@ class TestParticipantPageBlockControls:
 
         assert _unblock_url(team=team_with_users, participant=participant) in content
 
+    def test_shows_strike_count_with_flag_on(self, client, team_with_users, team_flag, viewer, participant):
+        team_flag(flag_name=FLAG, team=team_with_users)
+        participant.strikes = 2
+        participant.save()
+        client.force_login(viewer)
+
+        content = client.get(_page_url(team=team_with_users, participant=participant)).content.decode()
+
+        assert '<div class="text-lg font-extrabold self-end" id="participant-strikes">2</div>' in content
+        assert "Strikes" in content
+
     @override_flag(FLAG, active=False)
     def test_hides_block_controls_with_flag_off(self, client, team_with_users, admin, participant):
         DeniedParticipantFactory.create(team=team_with_users, participant=participant, reason="Spamming links")
@@ -349,6 +372,7 @@ class TestParticipantPageBlockControls:
         response = client.get(_page_url(team=team_with_users, participant=participant))
 
         content = response.content.decode()
+        assert 'id="participant-strikes"' not in content
         assert response.context.get("denial") is None
         assert "Spamming links" not in content
         assert _block_url(team=team_with_users, participant=participant) not in content

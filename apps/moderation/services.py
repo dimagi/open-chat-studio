@@ -5,13 +5,20 @@ from typing import TYPE_CHECKING
 
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from celery.result import AsyncResult
+from django.db import transaction
+from django.db.models import F
+from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.chat.models import ModerationStatus
 from apps.chat.schemas import ModerationDetail
-from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES
+from apps.experiments.models import Participant
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
+from apps.moderation.enforcement import block_participant, is_exempt
+from apps.moderation.models import DeniedParticipantSource
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
+from apps.ocs_notifications.notifications import participant_auto_blocked_notification
 from apps.pipelines.models import PipelineChatMessages
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
@@ -22,7 +29,7 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import Attachment
     from apps.chat.models import ChatMessage
     from apps.chat.schemas import ModerationSkipReason
-    from apps.experiments.models import Participant
+    from apps.experiments.models import Experiment
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.moderation")
@@ -103,6 +110,45 @@ def record_moderation_result(
     message.moderation_status = status
     message.save(update_fields=["moderation_status", "moderation_detail", "updated_at"])
     return status
+
+
+def add_strike(
+    *, participant: Participant, experiment: Experiment, chat_message: ChatMessage, output: ModerationOutput
+) -> None:
+    """Give the participant a strike for the flagged `chat_message`, and block them at the strike limit.
+
+    `output` is the moderation result for the message. Does nothing when the team has auto-block off or the
+    participant is exempt.
+    """
+    team = experiment.team
+    if not team.auto_block_enabled or is_exempt(participant=participant, team=team):
+        return
+    with transaction.atomic():
+        strikes = _increment_strikes(participant)
+        if strikes < STRIKE_LIMIT:
+            return
+        reason = ", ".join(sorted(strike_categories(output)))
+        denial, created = block_participant(
+            participant=participant,
+            source=DeniedParticipantSource.AUTO,
+            reason=reason,
+            experiment=experiment,
+            chat_message=chat_message,
+        )
+    if created:
+        transaction.on_commit(
+            lambda: participant_auto_blocked_notification(experiment=experiment, denial=denial, reason=reason)
+        )
+
+
+def _increment_strikes(participant: Participant) -> int:
+    """Add one strike in the database and return the new count. Call inside a transaction.
+
+    The update locks the row until the transaction ends, so the count read back is this increment's.
+    """
+    Participant.objects.filter(id=participant.id).update(strikes=F("strikes") + 1, updated_at=timezone.now())
+    participant.refresh_from_db(fields=["strikes"])
+    return participant.strikes
 
 
 def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_response: ChatMessage | None) -> None:
