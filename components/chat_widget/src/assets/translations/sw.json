@@ -13,6 +13,7 @@
   "status.sessionExpired": "Kipindi chako cha gumzo kimeisha. Gumzo jipya linaanza — tafadhali tuma tena ujumbe wako.",
   "status.sessionError": "Kipindi hiki cha gumzo hakipatikani tena.",
   "status.chatEnded": "Mazungumzo haya yamekamilika.",
+  "status.participantBlocked": "Huwezi tena kutuma ujumbe kwa chatbot hii.",
   "modal.newChatTitle": "Anza gumzo jipya",
   "modal.newChatBody": "Kuanza gumzo jipya kutafuta gumzo lako la sasa. Je, ungependa kuendelea?",
   "modal.cancel": "Ghairi",

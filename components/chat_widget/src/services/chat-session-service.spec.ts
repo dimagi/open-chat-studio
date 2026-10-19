@@ -1,4 +1,4 @@
-import { ChatSessionService, SessionAccessError, ChatAuthError, ConsentRequiredError } from './chat-session-service';
+import { ChatSessionService, SessionAccessError, ChatAuthError, ConsentRequiredError, ParticipantBlockedError } from './chat-session-service';
 
 function progressMessage(content: string) {
   return {
@@ -483,16 +483,46 @@ describe('ChatSessionService consent', () => {
     await expect(service.sendMessage('s1', { message: 'hi' })).rejects.toBeInstanceOf(SessionAccessError);
   });
 
-  it('raises a plain Error that does not mention the block on 403 participant_blocked', async () => {
-    const service = makeService();
-    jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(
-        jsonResponse({ code: 'participant_blocked', error: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
-      );
+  const BLOCKED_BODY = { code: 'participant_blocked', detail: 'You have been blocked from using this chatbot.' };
+  const BLOCKED_REQUESTS: Array<[string, (service: ChatSessionService) => Promise<unknown>]> = [
+    ['start', service => service.startSession({ chatbot_id: 'c1' })],
+    ['send', service => service.sendMessage('s1', { message: 'hi' })],
+  ];
 
-    const error = await service.sendMessage('s1', { message: 'hi' }).catch(e => e);
+  it.each(BLOCKED_REQUESTS)('raises ParticipantBlockedError with the server detail when the %s is refused with participant_blocked', async (_label, call) => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse(BLOCKED_BODY, { ok: false, status: 403, statusText: 'Forbidden' }));
+
+    const error = (await call(service).catch(e => e)) as ParticipantBlockedError;
+    expect(error).toBeInstanceOf(ParticipantBlockedError);
+    expect(error.detail).toBe(BLOCKED_BODY.detail);
+  });
+
+  it.each(BLOCKED_REQUESTS)('raises ParticipantBlockedError with no detail when the %s refusal carries none', async (_label, call) => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ code: 'participant_blocked' }, { ok: false, status: 403, statusText: 'Forbidden' }));
+
+    const error = (await call(service).catch(e => e)) as ParticipantBlockedError;
+    expect(error).toBeInstanceOf(ParticipantBlockedError);
+    expect(error.detail).toBeUndefined();
+  });
+
+  it.each(BLOCKED_REQUESTS)('raises SessionAccessError when the %s is refused with another 403 code', async (_label, call) => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Forbidden', code: 'permission_denied' }, { ok: false, status: 403, statusText: 'Forbidden' }));
+
+    const error = (await call(service).catch(e => e)) as Error;
+    expect(error).toBeInstanceOf(SessionAccessError);
+    expect(error.message).toBe('Forbidden');
+  });
+
+  it('raises a plain Error that does not mention the block when a poll is refused with participant_blocked', async () => {
+    const service = makeService();
+    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse(BLOCKED_BODY, { ok: false, status: 403, statusText: 'Forbidden' }));
+
+    const error = await service.fetchMessages('s1').catch(e => e);
     expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(ParticipantBlockedError);
     expect(error).not.toBeInstanceOf(SessionAccessError);
     expect(error.message).not.toMatch(/blocked/i);
   });

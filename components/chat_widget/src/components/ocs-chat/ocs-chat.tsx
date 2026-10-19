@@ -24,6 +24,7 @@ import {
   AuthTokenProvider,
   ChatConsent,
   ConsentRequiredError,
+  ParticipantBlockedError,
 } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
@@ -312,6 +313,10 @@ export class OcsChat {
   @State() isFullscreen: boolean = false;
   @State() showNewChatConfirmation: boolean = false;
   @State() sessionEnded: boolean = false;
+  /** The server refused a start, send or upload because the participant is blocked. */
+  @State() participantBlocked: boolean = false;
+  /** The blocked notice, rendered as plain text because its wording comes from the server. */
+  private blockedNotice?: ChatMessage;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -499,17 +504,26 @@ export class OcsChat {
     return this.chatService;
   }
 
-  private addErrorMessage(errorText: string): void {
-    const errorMessage: ChatMessage = {
-      created_at: new Date().toISOString(),
-      role: 'system',
-      content: `**Error:** ${errorText}\nPlease try again.`,
-      attachments: [],
-    };
-
-    this.messages = [...this.messages, errorMessage];
-    this.saveSessionToStorage();
+  private appendSystemNotice(content: string, { persist = true }: { persist?: boolean } = {}): ChatMessage {
+    const notice: ChatMessage = { created_at: new Date().toISOString(), role: 'system', content, attachments: [] };
+    this.messages = [...this.messages, notice];
+    if (persist) {
+      this.saveSessionToStorage();
+    }
     this.scrollToBottom();
+    return notice;
+  }
+
+  private addErrorMessage(errorText: string): void {
+    this.appendSystemNotice(`**Error:** ${errorText}\nPlease try again.`);
+  }
+
+  /** Clear the loading, typing and upload indicators that lock the composer. */
+  private resetBusyState(): void {
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.typingProgressMessage = '';
   }
 
   /**
@@ -519,10 +533,7 @@ export class OcsChat {
    */
   private handleSessionAccessError(): void {
     this.cleanup();
-    this.isLoading = false;
-    this.isTyping = false;
-    this.isUploadingFiles = false;
-    this.typingProgressMessage = '';
+    this.resetBusyState();
 
     // Session-scoped, so it clears for a bound session too: the panel cannot act without
     // a session, and it covers the error. The stored acceptance stays, so a fresh session
@@ -565,25 +576,35 @@ export class OcsChat {
     if (last?.role === 'system' && last.content === content) {
       return;
     }
-    const notice: ChatMessage = {
-      created_at: new Date().toISOString(),
-      role: 'system',
-      content,
-      attachments: [],
-    };
-    this.messages = [...this.messages, notice];
-    this.saveSessionToStorage();
-    this.scrollToBottom();
+    this.appendSystemNotice(content);
+  }
+
+  /**
+   * Show the server's blocked notice and lock the widget, with no way to retry or start a
+   * new chat. An unbound widget discards its stored session, so a reload starts a new one,
+   * which the server refuses again. The notice is not stored.
+   */
+  private handleParticipantBlocked(error: ParticipantBlockedError): void {
+    this.cleanup();
+    this.resetBusyState();
+    this.participantBlocked = true;
+    this.selectedFiles = [];
+    this.consent = undefined;
+    this.heldMessage = undefined;
+    if (!this.isSessionBound()) {
+      this.sessionEpoch += 1;
+      this.activeSessionId = undefined;
+      this.applySessionToken(undefined);
+      this.clearSessionStorage();
+    }
+    const notice = error.detail || this.translationManager.get('status.participantBlocked', 'You can no longer send messages to this chatbot.');
+    this.blockedNotice = this.appendSystemNotice(notice, { persist: false });
   }
 
   private handleError(errorText: string): void {
     // show as system message
     this.addErrorMessage(errorText);
-
-    // Clear any loading/typing states
-    this.isLoading = false;
-    this.isTyping = false;
-    this.isUploadingFiles = false;
+    this.resetBusyState();
     this.currentPollTaskId = '';
   }
 
@@ -796,6 +817,10 @@ export class OcsChat {
         this.handleError(error.message);
         return;
       }
+      if (error instanceof ParticipantBlockedError) {
+        this.handleParticipantBlocked(error);
+        return;
+      }
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
@@ -856,6 +881,9 @@ export class OcsChat {
       if (uploadResult.consent) {
         throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
       }
+      if (uploadResult.participantBlocked) {
+        throw new ParticipantBlockedError(uploadResult.participantBlocked.detail);
+      }
       if (uploadResult.tokenRejected) {
         throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
       }
@@ -869,7 +897,7 @@ export class OcsChat {
     // Block sending when the widget is disabled so direct calls cannot bypass
     // the hidden composer.
     if (this.disabled) return;
-    if (!message.trim() || this.sessionEnded) return;
+    if (!message.trim() || this.isConversationClosed()) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -997,7 +1025,7 @@ export class OcsChat {
 
   /**
    * A consent refusal keeps the session and puts the send back the way it was, so accepting
-   * retries it whole. A token refusal ends the session. Anything else is reported as is.
+   * retries it whole. A block or token refusal ends the session. Anything else is reported as is.
    */
   private handleSendFailure(error: unknown, message: string, optimisticMessage: ChatMessage | undefined, filesBeforeSend: SelectedFile[]): void {
     if (error instanceof ConsentRequiredError) {
@@ -1008,6 +1036,11 @@ export class OcsChat {
         this.selectedFiles = filesBeforeSend;
       }
       this.holdForConsent(message);
+      return;
+    }
+    if (error instanceof ParticipantBlockedError) {
+      this.dropOptimisticUserMessage(optimisticMessage);
+      this.handleParticipantBlocked(error);
       return;
     }
     if (error instanceof SessionAccessError) {
@@ -1250,15 +1283,7 @@ export class OcsChat {
         this.typingProgressMessage = message;
       }),
       onTimeout: this.forCurrentSession(() => {
-        const timeoutMessage: ChatMessage = {
-          created_at: new Date().toISOString(),
-          role: 'system',
-          content: 'The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.',
-          attachments: [],
-        };
-        this.messages = [...this.messages, timeoutMessage];
-        this.saveSessionToStorage();
-        this.scrollToBottom();
+        this.appendSystemNotice('The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.');
         this.isTyping = false;
         this.typingProgressMessage = '';
         this.currentPollTaskId = '';
@@ -2153,6 +2178,8 @@ export class OcsChat {
     this.messages = [];
     this.isTyping = false;
     this.sessionEnded = false;
+    this.participantBlocked = false;
+    this.blockedNotice = undefined;
     this.currentPollTaskId = '';
     // The stored acceptance stays: consent memory follows the persistence store, not the session.
     this.consent = undefined;
@@ -2211,8 +2238,13 @@ export class OcsChat {
     );
   }
 
+  /** The session has ended or the participant is blocked; no further messages can be sent. */
+  private isConversationClosed(): boolean {
+    return this.sessionEnded || this.participantBlocked;
+  }
+
   private isComposerLocked(): boolean {
-    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded;
+    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.isConversationClosed();
   }
 
   private hasDraft(): boolean {
@@ -2221,7 +2253,7 @@ export class OcsChat {
 
   // Uploading keeps the send button styled as ready while it is disabled, so its label can say so.
   private isSendReady(): boolean {
-    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && this.hasDraft();
+    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.isConversationClosed() && this.hasDraft();
   }
 
   private renderAttachmentControls() {
@@ -2282,6 +2314,13 @@ export class OcsChat {
     );
   }
 
+  private composerPlaceholder(): string {
+    if (!this.isConversationClosed()) {
+      return this.translationManager.get('composer.placeholder');
+    }
+    return this.translationManager.get(this.participantBlocked ? 'status.participantBlocked' : 'status.chatEnded');
+  }
+
   private renderComposer() {
     return (
       <div class="input-container">
@@ -2289,7 +2328,7 @@ export class OcsChat {
           ref={el => (this.textareaRef = el)}
           class="message-textarea"
           rows={1}
-          placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
+          placeholder={this.composerPlaceholder()}
           value={this.messageInput}
           onInput={e => this.handleInputChange(e)}
           onKeyPress={e => this.handleKeyPress(e)}
@@ -2308,7 +2347,7 @@ export class OcsChat {
   }
 
   private renderMessageContent(message: ChatMessage) {
-    if (message.role === 'user') {
+    if (message.role === 'user' || message === this.blockedNotice) {
       return <div class="chat-plain-text">{message.content}</div>;
     }
     return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
@@ -2344,8 +2383,8 @@ export class OcsChat {
                 </div>
                 <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
                 <div class="header-buttons">
-                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) */}
-                  {this.messages.length > 0 && !this.isSessionBound() && (
+                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) and for a blocked participant */}
+                  {this.messages.length > 0 && !this.isSessionBound() && !this.participantBlocked && (
                     <button
                       class="header-button"
                       onClick={() => this.showConfirmationDialog()}
