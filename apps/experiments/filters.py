@@ -8,6 +8,7 @@ from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import MODERATION_STATUS_LABELS, Chat, ChatMessage
 from apps.experiments.models import Experiment
+from apps.moderation.filters import ParticipantBlockedFilter
 from apps.teams.flags import Flags
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
@@ -15,6 +16,7 @@ from apps.web.dynamic_filters.base import (
     ChoiceColumnFilter,
     ColumnFilter,
     MultiColumnFilter,
+    YesNoExistsFilter,
 )
 from apps.web.dynamic_filters.column_filters import (
     AnnotationQueueFilter,
@@ -282,41 +284,18 @@ class ModerationStatusFilter(ChoiceColumnFilter):
         return queryset
 
 
-class RuleHitFilter(ChoiceColumnFilter):
+class RuleHitFilter(YesNoExistsFilter):
     """Session filter on whether an abuse rule fired on any of the session's messages."""
 
-    RULE_HIT: ClassVar[str] = "true"
-    NO_RULE_HIT: ClassVar[str] = "false"
+    yes_label: ClassVar[str] = "A rule fired"
+    no_label: ClassVar[str] = "No rule fired"
 
     query_param: str = "rule_hit"
     label: str = "Rule Hit"
     description: str = "Filter by whether an abuse rule fired on any message in the session"
-    options: list[str | dict] = [
-        {"id": RULE_HIT, "label": "A rule fired"},
-        {"id": NO_RULE_HIT, "label": "No rule fired"},
-    ]
 
-    def _matching(self, value) -> Exists | None:
-        """The condition for the selected options, or None when they select every session (or none)."""
-        any_rule_hit = _session_has_message(moderation_detail__rules__0__isnull=False)
-        selected = set(value) & {self.RULE_HIT, self.NO_RULE_HIT}
-        if selected == {self.RULE_HIT}:
-            return any_rule_hit
-        if selected == {self.NO_RULE_HIT}:
-            return ~any_rule_hit
-        return None
-
-    def apply_any_of(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.filter(condition)
-
-    def apply_excludes(self, queryset, value, timezone=None):
-        condition = self._matching(value)
-        return queryset if condition is None else queryset.exclude(condition)
-
-    def apply_all_of(self, queryset, value, timezone=None):
-        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
-        return queryset
+    def _condition(self) -> Exists:
+        return _session_has_message(moderation_detail__rules__0__isnull=False)
 
 
 class ExperimentSessionFilter(MultiColumnFilter):
@@ -356,6 +335,15 @@ class ExperimentSessionFilter(MultiColumnFilter):
         SessionIdFilter(),
         ModerationStatusFilter(required_flag=Flags.ABUSE_DETECTION.slug),
         RuleHitFilter(required_flag=Flags.ABUSE_DETECTION.slug),
+        ParticipantBlockedFilter(required_flag=Flags.ABUSE_DETECTION.slug),
+    ]
+
+
+class ParticipantSessionFilter(ExperimentSessionFilter):
+    """Session filter for one participant's sessions, without the participant blocked filter."""
+
+    filters: ClassVar[Sequence[ColumnFilter]] = [
+        f for f in ExperimentSessionFilter.filters if not isinstance(f, ParticipantBlockedFilter)
     ]
 
 

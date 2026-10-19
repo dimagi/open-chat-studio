@@ -5,7 +5,7 @@ import logging
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
-from django.db.models import Q, QuerySet
+from django.db.models import Exists, Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
 from apps.teams.utils import flag_is_active_for_team
@@ -218,6 +218,44 @@ class ChoiceColumnFilter(ColumnFilter):
         return queryset.exclude(**{f"{self.column}__in": value})
 
 
+class YesNoExistsFilter(ChoiceColumnFilter):
+    """Choice filter with a "true" and a "false" option that select rows where `_condition` holds or not."""
+
+    YES: ClassVar[str] = "true"
+    NO: ClassVar[str] = "false"
+    yes_label: ClassVar[str] = "Yes"
+    no_label: ClassVar[str] = "No"
+
+    def model_post_init(self, context: Any, /) -> None:
+        super().model_post_init(context)
+        if "options" not in self.model_fields_set:
+            self.options = [{"id": self.YES, "label": self.yes_label}, {"id": self.NO, "label": self.no_label}]
+
+    def _condition(self) -> Exists:
+        raise NotImplementedError
+
+    def _matching(self, value) -> Exists | None:
+        """The condition for the selected options, or None when they select every row (or none)."""
+        selected = set(value) & {self.YES, self.NO}
+        if selected == {self.YES}:
+            return self._condition()
+        if selected == {self.NO}:
+            return ~self._condition()
+        return None
+
+    def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.filter(condition)
+
+    def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.exclude(condition)
+
+    def apply_all_of(self, queryset, value, timezone=None) -> QuerySet:
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
+
+
 class StringColumnFilter(ColumnFilter):
     type: str = TYPE_STRING
     columns: list[str] = Field(default_factory=list)
@@ -269,14 +307,23 @@ class StringColumnFilter(ColumnFilter):
         return queryset
 
 
+def _schema_option(option: str | dict[str, Any]) -> str | dict[str, Any]:
+    """A static option as the filter agent sees it: a plain value, or its id with its label."""
+    if isinstance(option, str):
+        return option
+    if "id" not in option:
+        return str(option.get("label", option))
+    return {"id": option["id"], "label": str(option.get("label", option["id"]))}
+
+
 def get_filter_schema(filter_class: type[MultiColumnFilter], team=None) -> dict[str, dict]:
     """Extract static schema from a MultiColumnFilter for use in AI prompts.
 
     Returns a dict keyed by query_param with label, type, description, and operators.
-    For choice filters with pre-populated (static) options the options list is included
-    so agents can use values directly without a tool call.  Dynamic filters (whose options
-    come from prepare()) have no options entry, signalling that get_filter_options must be
-    called to discover valid IDs.
+    For choice filters with pre-populated (static) options the options list is included, each option
+    as a plain value or an `{"id", "label"}` dict, so agents can use values directly without a tool call.
+    Dynamic filters (whose options come from prepare()) have no options entry, signalling that
+    get_filter_options must be called to discover valid IDs.
     Does not call prepare(). When `team` is given, filters whose feature flag is off for it are left out.
     """
     filters = filter_class.filters if team is None else filter_class.available_filters(team)
@@ -289,9 +336,7 @@ def get_filter_schema(filter_class: type[MultiColumnFilter], team=None) -> dict[
             "operators": [op.value for op in FIELD_TYPE_FILTERS[f.type]],
         }
         if isinstance(f, ChoiceColumnFilter) and f.options:
-            entry["options"] = [
-                opt if isinstance(opt, str) else opt.get("id", opt.get("label", str(opt))) for opt in f.options
-            ]
+            entry["options"] = [_schema_option(opt) for opt in f.options]
         schema[f.query_param] = entry
     return schema
 

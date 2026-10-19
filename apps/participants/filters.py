@@ -2,6 +2,8 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from apps.experiments.filters import ChannelsFilter
+from apps.moderation.filters import ParticipantBlockedFilter
+from apps.teams.flags import Flags
 from apps.web.dynamic_filters.base import ColumnFilter, MultiColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
@@ -20,4 +22,10 @@ class ParticipantFilter(MultiColumnFilter):
         ),
         StringColumnFilter(label="Remote ID", columns=["remote_id"], query_param="remote_id"),
         ChannelsFilter(column="platform"),
+        ParticipantBlockedFilter(
+            query_param="blocked",
+            label="Blocked",
+            participant_column="id",
+            required_flag=Flags.ABUSE_DETECTION.slug,
+        ),
     ]

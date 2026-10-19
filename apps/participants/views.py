@@ -40,7 +40,7 @@ from apps.utils.redirects import safe_redirect_url
 
 from ..events.models import ScheduledMessage
 from ..events.tables import SchedulesTable
-from ..experiments.filters import ExperimentSessionFilter, get_filter_context_data
+from ..experiments.filters import ParticipantSessionFilter, get_filter_context_data
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
 from .filters import ParticipantFilter
@@ -100,8 +100,8 @@ def _sessions_panel_context(
     total_session_count = ExperimentSession.objects.filter(team=team, participant=participant).count()
     filter_context = get_filter_context_data(
         team=team,
-        columns=ExperimentSessionFilter.columns(team),
-        filter_class=ExperimentSessionFilter,
+        columns=ParticipantSessionFilter.columns(team),
+        filter_class=ParticipantSessionFilter,
         table_url=reverse("chatbots:participant_sessions_list", args=[team.slug, participant.id]),
         table_container_id="participant-sessions-table",
         table_type=FilterSet.TableType.ALL_SESSIONS,
