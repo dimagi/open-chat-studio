@@ -18,13 +18,13 @@ The citation format is `<CIT file-id />`, where `file-id` is the unique identifi
 
 Before the reference section is built, the LLM output is parsed into an `LlmChatResponse` whose `cited_files` field holds the `File` records the response cites. `_process_agent_output()` gets the parser from the node's LLM service (`get_output_parser()`) and passes `include_citations=node.generate_citations`.
 
-`LlmService._default_parser` fills `cited_files` from two sources:
+`LlmService._default_parser`, used by every provider except Anthropic, fills `cited_files` from two sources:
 - The IDs found in `<CIT n />` tags in the response text (`extract_file_ids_from_ocs_citations`).
-- The provider's own citation annotations (`get_cited_file_ids`), matched to files by `File.external_id`.
+- The provider's own citation annotations (`get_cited_file_ids`), matched to files by `File.external_id`. Only `OpenAILlmService` returns annotation IDs; the base implementation returns none.
 
 Both sets of IDs are resolved with a single `File` query scoped to the session's team. An ID that matches no file in the team is dropped. When `include_citations` is false, `cited_files` is left empty.
 
-Providers can override `get_output_parser()`. The **Anthropic parser** (`parse_output_for_anthropic`) does not extract `<CIT n />` tags, so `cited_files` stays empty for Anthropic-backed bots and every tag is removed in the next step.
+The Anthropic parser (`parse_output_for_anthropic`) overrides `get_output_parser()`. It fills `cited_files` from the `<CIT n />` tags only (`get_cited_files_from_text`), looked up once on the assembled response text with the same team scoping and `include_citations` behaviour. It also appends Anthropic's native web citations to the text as `[title](url)` links, which do not affect `cited_files`.
 
 ## 3. Building the Reference Section
 
