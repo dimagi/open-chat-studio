@@ -1,9 +1,10 @@
 import pytest
+from django.db.models.fields.json import KeyTextTransform
 from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
-from apps.chat.schemas import ModerationDetail
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.pipelines.models import PipelineChatHistoryModes
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -253,6 +254,36 @@ def test_moderation_columns_default_to_null():
 
     assert message.moderation_status is None
     assert message.moderation_detail is None
+
+
+@pytest.mark.django_db()
+def test_skip_reason_is_stored_as_its_plain_value():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        content="Hi",
+        moderation_detail=ModerationDetail(skip_reason=ModerationSkipReason.RATE_LIMITED),
+    )
+
+    stored = ChatMessage.objects.filter(id=message.id).values_list(
+        KeyTextTransform("skip_reason", "moderation_detail"), flat=True
+    )
+
+    assert list(stored) == ["rate_limited"]
+
+
+@pytest.mark.django_db()
+def test_skip_reason_written_as_a_plain_string_loads_as_the_choice():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+    ChatMessage.objects.filter(id=message.id).update(
+        moderation_detail={"output": None, "skip_reason": "timeout", "rules": []}
+    )
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_detail.skip_reason is ModerationSkipReason.TIMEOUT
 
 
 def test_moderation_detail_rejects_unknown_skip_reason():

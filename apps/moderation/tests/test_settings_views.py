@@ -10,6 +10,8 @@ from django.utils.http import urlencode
 from field_audit.models import AuditAction
 from waffle.testutils import override_flag
 
+from apps.chat.models import ChatMessageType, ModerationStatus
+from apps.chat.schemas import ModerationDetail
 from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.models import ModerationProvider
@@ -18,7 +20,7 @@ from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMI
 from apps.teams.flags import Flags
 from apps.teams.models import Team
 from apps.teams.utils import section_url
-from apps.utils.factories.experiment import ParticipantFactory
+from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
@@ -229,6 +231,59 @@ class TestSectionRendering:
 
         assert ('id="moderation_provider_dialog"' in content) is can_edit
         assert ("denied-participants-table-container" in content) is sees_denylist
+        assert 'id="moderation-message-counts"' in content
+
+
+def _moderated_message(*, team, status, skip_reason=None):
+    detail = ModerationDetail(skip_reason=skip_reason) if skip_reason else None
+    return ChatMessageFactory.create(
+        chat=ChatFactory.create(team=team),
+        message_type=ChatMessageType.HUMAN,
+        content="hi",
+        moderation_status=status,
+        moderation_detail=detail,
+    )
+
+
+@pytest.mark.django_db()
+class TestMessageCounts:
+    def test_shows_counts_shares_and_skip_reasons(self, client, admin, team):
+        _moderated_message(team=team, status=ModerationStatus.PASSED)
+        _moderated_message(team=team, status=ModerationStatus.FLAGGED)
+        for _ in range(2):
+            _moderated_message(team=team, status=ModerationStatus.SKIPPED, skip_reason="timeout")
+        client.force_login(admin)
+
+        response = client.get(_section_url(team))
+
+        stats = {stat["status"]: stat for stat in response.context["message_counts"]["stats"]}
+        assert (stats["passed"]["count"], stats["passed"]["share"]) == (1, 25)
+        assert (stats["flagged"]["count"], stats["flagged"]["share"]) == (1, 25)
+        assert (stats["skipped"]["count"], stats["skipped"]["share"]) == (2, 50)
+        assert re.search(r"\(Timeout 2\)", response.content.decode())
+
+    def test_no_shares_without_moderated_messages(self, client, admin, team):
+        client.force_login(admin)
+
+        stats = client.get(_section_url(team)).context["message_counts"]["stats"]
+
+        assert [(stat["count"], stat["share"], stat["reasons"]) for stat in stats] == [(0, None, [])] * 3
+
+    @pytest.mark.parametrize(
+        ("skip_reasons", "hint_shown"),
+        [
+            pytest.param(["rate_limited", "rate_limited", "timeout"], True, id="mostly-rate-limited"),
+            pytest.param(["error"], False, id="other-reason"),
+        ],
+    )
+    def test_rate_limit_hint(self, client, admin, team, skip_reasons, hint_shown):
+        for reason in skip_reasons:
+            _moderated_message(team=team, status=ModerationStatus.SKIPPED, skip_reason=reason)
+        client.force_login(admin)
+
+        content = client.get(_section_url(team)).content.decode()
+
+        assert ('data-testid="moderation-rate-limit-hint"' in content) is hint_shown
 
 
 @pytest.mark.django_db()

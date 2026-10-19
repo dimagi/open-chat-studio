@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from django.db.models import Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
+from apps.teams.utils import flag_is_active_for_team
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -93,8 +95,13 @@ class MultiColumnFilter:
                 )
 
     @classmethod
+    def available_filters(cls, team) -> list[ColumnFilter]:
+        """The filters `team` may use: those with no `required_flag`, or whose flag is active for it."""
+        return [f for f in cls.filters if f.is_available_for(team)]
+
+    @classmethod
     def columns(cls, team, **kwargs) -> dict[str, dict]:
-        instances = [f.prepare(team, **kwargs) for f in cls.filters]
+        instances = [f.prepare(team, **kwargs) for f in cls.available_filters(team)]
         return {filter_component.query_param: filter_component.model_dump() for filter_component in instances}
 
     def prepare_queryset(self, queryset):
@@ -103,6 +110,9 @@ class MultiColumnFilter:
 
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
         """Applies the filters to the given queryset based on the `self.filter_params`.
+
+        Every filter is applied, including one whose `required_flag` is off, so saved filters
+        keep working after a flag is turned off.
 
         Contract: every `ColumnFilter` in `self.filters` must produce a queryset with at
         most one row per outer-model row. There is no trailing ``.distinct()`` to dedupe
@@ -133,6 +143,7 @@ class ColumnFilter(BaseModel):
 
     Attributes:
         query_param: The name of the query parameter used in the URL to identify this filter.
+        required_flag: A feature flag that must be active for the team before the filter is offered.
     """
 
     query_param: str
@@ -140,11 +151,16 @@ class ColumnFilter(BaseModel):
     type: TYPE_ANNOTATION
     column: str | None = None
     description: str = ""
+    required_flag: str | None = Field(default=None, exclude=True)
 
     @computed_field
     @property
     def operators(self) -> list[Operators]:
         return FIELD_TYPE_FILTERS[self.type]
+
+    def is_available_for(self, team) -> bool:
+        """True when the filter needs no feature flag, or `team` has the flag active."""
+        return self.required_flag is None or flag_is_active_for_team(team, self.required_flag)
 
     def prepare(self, team, **kwargs) -> ColumnFilter:
         """Return this filter, or a copy with options set -- `filters` lists on
@@ -253,7 +269,7 @@ class StringColumnFilter(ColumnFilter):
         return queryset
 
 
-def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
+def get_filter_schema(filter_class: type[MultiColumnFilter], team=None) -> dict[str, dict]:
     """Extract static schema from a MultiColumnFilter for use in AI prompts.
 
     Returns a dict keyed by query_param with label, type, description, and operators.
@@ -261,10 +277,11 @@ def get_filter_schema(filter_class: type[MultiColumnFilter]) -> dict[str, dict]:
     so agents can use values directly without a tool call.  Dynamic filters (whose options
     come from prepare()) have no options entry, signalling that get_filter_options must be
     called to discover valid IDs.
-    Does not call prepare() -- no DB access needed.
+    Does not call prepare(). When `team` is given, filters whose feature flag is off for it are left out.
     """
+    filters = filter_class.filters if team is None else filter_class.available_filters(team)
     schema = {}
-    for f in filter_class.filters:
+    for f in filters:
         entry: dict[str, Any] = {
             "label": f.label,
             "type": f.type,

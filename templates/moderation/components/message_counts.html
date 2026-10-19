@@ -1,0 +1,31 @@
+{% load i18n %}
+<div class="app-card" id="moderation-message-counts">
+  <h3 class="pg-subtitle font-bold text-sm">{% translate "Last 7 days" %}</h3>
+  <span class="text-neutral-500 section-subtitle">{% translate "Participant messages checked by your moderation provider, and messages it could not check." %}</span>
+  <div class="stats stats-vertical sm:stats-horizontal bg-base-200 rounded-box mt-2 w-full">
+    {% for stat in message_counts.stats %}
+      <div class="stat" data-testid="moderation-count-{{ stat.status }}">
+        <div class="stat-title">{{ stat.title }}</div>
+        <div class="stat-value text-2xl">{{ stat.count }}</div>
+        <div class="stat-desc">
+          {% if stat.share is not None %}{{ stat.share }}%{% else %}—{% endif %}
+          {% if stat.reasons %}
+            <span data-testid="moderation-skip-reasons">
+              ({% for label, count in stat.reasons %}{{ label }} {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %})
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% if message_counts.mostly_rate_limited %}
+    <div role="alert" class="alert alert-warning alert-soft text-sm mt-2" data-testid="moderation-rate-limit-hint">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>
+        {% blocktranslate trimmed with provider=moderation_subtype_label %}
+          Most of the messages that could not be moderated were skipped because your {{ provider }} account reached its rate limit.
+        {% endblocktranslate %}
+      </span>
+    </div>
+  {% endif %}
+</div>

@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from celery.result import AsyncResult
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Count, F
+from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.chat.models import ModerationStatus
-from apps.chat.schemas import ModerationDetail
+from apps.chat.models import ChatMessage, ModerationStatus
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
 from apps.moderation.enforcement import block_participant, is_exempt
@@ -25,10 +27,9 @@ from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import datetime
 
     from apps.channels.datamodels import Attachment
-    from apps.chat.models import ChatMessage
-    from apps.chat.schemas import ModerationSkipReason
     from apps.experiments.models import Experiment
     from apps.teams.models import Team
 
@@ -68,18 +69,27 @@ def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, Modera
         result = AsyncResult(task_id).get(timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False, interval=0.1)
     except CeleryTimeoutError:
         logger.warning("No moderation result for task %s within %s seconds", task_id, MODERATION_WAIT_TIMEOUT)
-        return None, "timeout"
+        return None, ModerationSkipReason.TIMEOUT
     except Exception as error:
         # The task's own failure is already reported by Celery.
         logger.warning("Moderation task %s failed: %r", task_id, error)
-        return None, "error"
+        return None, ModerationSkipReason.ERROR
     if result["status"] != "ok":
-        return None, result["reason"]
+        return None, _parse_skip_reason(result.get("reason"))
     try:
         return ModerationOutput.model_validate(result["output"]), None
     except ValidationError:
         logger.exception("Moderation task %s returned an invalid output", task_id)
-        return None, "error"
+        return None, ModerationSkipReason.ERROR
+
+
+def _parse_skip_reason(value: str | None) -> ModerationSkipReason:
+    """The skip reason for `value`, or ERROR when it is not a known reason."""
+    try:
+        return ModerationSkipReason(value)
+    except ValueError:
+        logger.warning("Unknown moderation skip reason %r", value)
+        return ModerationSkipReason.ERROR
 
 
 def strike_categories(output: ModerationOutput) -> set[str]:
@@ -163,3 +173,45 @@ def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_respo
     if bot_response is not None:
         rows = rows.filter(created_at__lte=bot_response.created_at)
     rows.delete()
+
+
+@dataclass(frozen=True)
+class ModerationCounts:
+    """How many moderated messages had each moderation status, and the skips by reason."""
+
+    by_status: dict[ModerationStatus, int] = field(default_factory=lambda: dict.fromkeys(ModerationStatus, 0))
+    skip_reasons: dict[ModerationSkipReason, int] = field(default_factory=dict)
+
+    @property
+    def total(self) -> int:
+        return sum(self.by_status.values())
+
+    @property
+    def mostly_rate_limited(self) -> bool:
+        """True when more than half of the skipped messages were skipped because of the provider's rate limit."""
+        skipped = self.by_status.get(ModerationStatus.SKIPPED, 0)
+        return self.skip_reasons.get(ModerationSkipReason.RATE_LIMITED, 0) * 2 > skipped
+
+
+def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts:
+    """Count the team's messages moderated since `since`, by status and by skip reason."""
+    rows = (
+        ChatMessage.objects.filter(
+            chat__team=team,
+            # An IN list on the leading column lets the planner use `chatmessage_moderation_idx` for each status.
+            moderation_status__in=ModerationStatus.values,
+            created_at__gte=since,
+        )
+        .values("moderation_status", skip_reason=KeyTextTransform("skip_reason", "moderation_detail"))
+        .annotate(count=Count("id"))
+        .order_by()
+    )
+    by_status = dict.fromkeys(ModerationStatus, 0)
+    skip_reasons: dict[ModerationSkipReason, int] = {}
+    for row in rows:
+        status = ModerationStatus(row["moderation_status"])
+        by_status[status] += row["count"]
+        if status == ModerationStatus.SKIPPED and row["skip_reason"]:
+            reason = _parse_skip_reason(row["skip_reason"])
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + row["count"]
+    return ModerationCounts(by_status=by_status, skip_reasons=skip_reasons)

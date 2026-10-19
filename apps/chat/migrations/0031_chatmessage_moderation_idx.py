@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             model_name="chatmessage",
             index=models.Index(
                 condition=models.Q(("moderation_status__isnull", False)),
-                fields=["moderation_status"],
+                fields=["moderation_status", "created_at"],
                 name="chatmessage_moderation_idx",
             ),
         ),

@@ -438,9 +438,9 @@ def participant_auto_blocked_notification(experiment, denial, reason: str) -> No
 
 
 _MODERATION_SKIP_REASONS: dict[ModerationSkipReason, str] = {
-    "rate_limited": "the moderation provider's rate limit was reached",
-    "error": "the moderation provider returned an error",
-    "timeout": "no moderation result arrived in time",
+    ModerationSkipReason.RATE_LIMITED: "the moderation provider's rate limit was reached",
+    ModerationSkipReason.ERROR: "the moderation provider returned an error",
+    ModerationSkipReason.TIMEOUT: "no moderation result arrived in time",
 }
 
 

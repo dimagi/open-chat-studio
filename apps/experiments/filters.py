@@ -6,10 +6,9 @@ from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import MODERATION_STATUS_LABELS, Chat, ChatMessage
 from apps.experiments.models import Experiment
 from apps.teams.flags import Flags
-from apps.teams.utils import flag_is_active_for_team
 from apps.web.dynamic_filters.base import (
     DATE_RANGE_OPTIONS,
     TYPE_CHOICE,
@@ -56,6 +55,11 @@ class LastActivityFilter(TimestampFilter):
         )
 
 
+def _session_has_message(**lookups) -> Exists:
+    """``EXISTS`` matching outer rows whose chat has a message that satisfies ``lookups``."""
+    return Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **lookups))
+
+
 class MessageTimestampFilter(TimestampFilter):
     """Timestamp filter that traverses ``chat__messages`` without multiplying rows.
 
@@ -65,9 +69,7 @@ class MessageTimestampFilter(TimestampFilter):
     """
 
     def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
-        return queryset.filter(
-            Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), **{f"created_at__{lookup_suffix}": value}))
-        )
+        return queryset.filter(_session_has_message(**{f"created_at__{lookup_suffix}": value}))
 
 
 def get_filter_context_data(
@@ -119,8 +121,7 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
                 tag_id__in=tag_ids,
             )
         )
-        message_tag_exists = Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__in=tag_ids))
-        return chat_tag_exists | message_tag_exists
+        return chat_tag_exists | _session_has_message(tags__in=tag_ids)
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(self._chat_or_message_tag_exists(value))
@@ -260,6 +261,64 @@ class ChannelsFilter(ChoiceColumnFilter):
         return [val for val in selected_values if val is not None]
 
 
+class ModerationStatusFilter(ChoiceColumnFilter):
+    """Session filter on the moderation status of the session's messages."""
+
+    query_param: str = "moderation_status"
+    label: str = "Moderation Status"
+    description: str = "Filter by moderation status. A session matches when any of its messages has the status."
+    options: list[str | dict] = [
+        {"id": status.value, "label": label} for status, label in MODERATION_STATUS_LABELS.items()
+    ]
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        return queryset.filter(_session_has_message(moderation_status__in=value))
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        return queryset.exclude(_session_has_message(moderation_status__in=value))
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
+
+
+class RuleHitFilter(ChoiceColumnFilter):
+    """Session filter on whether an abuse rule fired on any of the session's messages."""
+
+    RULE_HIT: ClassVar[str] = "true"
+    NO_RULE_HIT: ClassVar[str] = "false"
+
+    query_param: str = "rule_hit"
+    label: str = "Rule Hit"
+    description: str = "Filter by whether an abuse rule fired on any message in the session"
+    options: list[str | dict] = [
+        {"id": RULE_HIT, "label": "A rule fired"},
+        {"id": NO_RULE_HIT, "label": "No rule fired"},
+    ]
+
+    def _matching(self, value) -> Exists | None:
+        """The condition for the selected options, or None when they select every session (or none)."""
+        any_rule_hit = _session_has_message(moderation_detail__rules__0__isnull=False)
+        selected = set(value) & {self.RULE_HIT, self.NO_RULE_HIT}
+        if selected == {self.RULE_HIT}:
+            return any_rule_hit
+        if selected == {self.NO_RULE_HIT}:
+            return ~any_rule_hit
+        return None
+
+    def apply_any_of(self, queryset, value, timezone=None):
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.filter(condition)
+
+    def apply_excludes(self, queryset, value, timezone=None):
+        condition = self._matching(value)
+        return queryset if condition is None else queryset.exclude(condition)
+
+    def apply_all_of(self, queryset, value, timezone=None):
+        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
+        return queryset
+
+
 class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
@@ -288,22 +347,16 @@ class ExperimentSessionFilter(MultiColumnFilter):
             description="Filter by message date",
         ),
         ChatMessageTagsFilter(),
-        AnnotationQueueFilter(),
+        AnnotationQueueFilter(required_flag=Flags.HUMAN_ANNOTATIONS.slug),
         VersionsFilter(),
         ChannelsFilter(),
         ExperimentFilter(),
         SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
         SessionIdFilter(),
+        ModerationStatusFilter(required_flag=Flags.ABUSE_DETECTION.slug),
+        RuleHitFilter(required_flag=Flags.ABUSE_DETECTION.slug),
     ]
-
-    @classmethod
-    def columns(cls, team, **kwargs) -> dict[str, dict]:
-        """Offer the annotation queue filter only to teams with human annotations turned on."""
-        columns = super().columns(team, **kwargs)
-        if not flag_is_active_for_team(team, Flags.HUMAN_ANNOTATIONS.slug):
-            columns.pop(AnnotationQueueFilter().query_param, None)
-        return columns
 
 
 class ChatMessageFilter(MultiColumnFilter):

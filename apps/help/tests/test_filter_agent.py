@@ -2,16 +2,20 @@ from unittest import mock
 
 import pytest
 from pydantic import ValidationError
+from waffle.testutils import override_flag
 
 import apps.experiments.filters  # noqa: F401 — ensure filter subclasses are registered
 from apps.help.agents.filter import FilterAgent, FilterInput, FilterOutput, make_get_options_tool
+from apps.teams.flags import Flags
+from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import ParticipantFilter
 
 
+@pytest.mark.django_db()
 class TestFilterAgentPrompt:
-    def test_system_prompt_contains_schema(self):
-        input_data = FilterInput(query="test", filter_slug="session", team_id=1)
+    def test_system_prompt_contains_schema(self, team):
+        input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
         prompt = FilterAgent.get_system_prompt(input_data)
         # Should contain column names from ExperimentSessionFilter
         assert "participant" in prompt
@@ -19,14 +23,14 @@ class TestFilterAgentPrompt:
         assert "channels" in prompt
         assert "state" in prompt
 
-    def test_system_prompt_contains_operators(self):
-        input_data = FilterInput(query="test", filter_slug="session", team_id=1)
+    def test_system_prompt_contains_operators(self, team):
+        input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
         prompt = FilterAgent.get_system_prompt(input_data)
         assert "contains" in prompt
         assert "any of" in prompt
 
-    def test_system_prompt_for_message_slug(self):
-        input_data = FilterInput(query="test", filter_slug="message", team_id=1)
+    def test_system_prompt_for_message_slug(self, team):
+        input_data = FilterInput(query="test", filter_slug="message", team_id=team.id)
         prompt = FilterAgent.get_system_prompt(input_data)
         # ChatMessageFilter columns
         assert "tags" in prompt
@@ -34,6 +38,23 @@ class TestFilterAgentPrompt:
         assert "versions" in prompt
         # Should NOT have session-only columns
         assert '"participant"' not in prompt
+
+    @pytest.mark.parametrize(
+        ("flag_active", "expected"),
+        [pytest.param(True, True, id="flag-on"), pytest.param(False, False, id="flag-off")],
+    )
+    def test_system_prompt_lists_flag_gated_filters_only_when_the_flag_is_on(self, team, flag_active, expected):
+        input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
+
+        with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
+            prompt = FilterAgent.get_system_prompt(input_data)
+
+        assert ('"moderation_status"' in prompt) is expected
+
+    def test_unknown_team_raises(self):
+        input_data = FilterInput(query="test", filter_slug="session", team_id=0)
+        with pytest.raises(ValueError, match="Team with id 0 not found"):
+            FilterAgent.get_system_prompt(input_data)
 
     def test_unknown_slug_raises(self):
         input_data = FilterInput(query="test", filter_slug="nonexistent", team_id=1)
@@ -157,6 +178,16 @@ class TestMakeGetOptionsTool:
 
         assert "error" in result
 
+    def test_error_for_a_filter_whose_flag_is_off(self):
+        gated = ChoiceColumnFilter(query_param="gated", label="Gated", required_flag=Flags.ABUSE_DETECTION.slug)
+        filter_class = self._make_filter_class([gated])
+
+        tool_fn = make_get_options_tool(filter_class, mock.Mock())
+        with mock.patch("apps.web.dynamic_filters.base.flag_is_active_for_team", return_value=False):
+            result = tool_fn.invoke({"param": "gated"})
+
+        assert "error" in result
+
     def test_prepare_is_called_with_team_and_its_return_value_is_used(self):
         """prepare(team) must be called, and the filter it *returns* (not the original instance)
         must supply the options -- prepare() no longer mutates in place. See #4363."""
@@ -177,6 +208,7 @@ class TestMakeGetOptionsTool:
         assert result["options"] == [{"id": 99, "label": "Mocked"}]
 
 
+@pytest.mark.django_db()
 class TestFilterAgentRun:
     @mock.patch("apps.help.agents.filter.Team")
     @mock.patch("apps.help.agents.filter.build_system_agent")
@@ -186,7 +218,7 @@ class TestFilterAgentRun:
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
         mock_build.return_value = mock_agent
-        mock_team_cls.objects.get.return_value = mock.Mock(id=1)
+        mock_team_cls.objects.get.return_value = TeamFactory.build(id=1)
 
         agent = FilterAgent(input=FilterInput(query="active sessions", filter_slug="session", team_id=1))
         result = agent.run()
@@ -205,7 +237,7 @@ class TestFilterAgentRun:
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
         mock_build.return_value = mock_agent
-        mock_team_cls.objects.get.return_value = mock.Mock(id=42)
+        mock_team_cls.objects.get.return_value = TeamFactory.build(id=42)
 
         agent = FilterAgent(input=FilterInput(query="test", filter_slug="session", team_id=42))
         agent.run()
@@ -228,7 +260,7 @@ class TestFilterAgentRun:
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
         mock_build.return_value = mock_agent
-        mock_team_cls.objects.get.return_value = mock.Mock(id=42)
+        mock_team_cls.objects.get.return_value = TeamFactory.build(id=42)
 
         agent = FilterAgent(input=FilterInput(query="active sessions", filter_slug="session", team_id=42))
         agent.run()

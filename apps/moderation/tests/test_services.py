@@ -6,7 +6,7 @@ from celery.exceptions import TimeoutError as CeleryTimeoutError
 from django.db import DatabaseError, connections
 
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
-from apps.chat.schemas import ModerationDetail
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
@@ -100,7 +100,7 @@ def _human_message(detail: ModerationDetail | None = None):
         pytest.param(
             _output({"harassment": True, "illicit": True}), None, ModerationStatus.FLAGGED, id="strike_flagged"
         ),
-        pytest.param(None, "timeout", ModerationStatus.SKIPPED, id="skipped"),
+        pytest.param(None, ModerationSkipReason.TIMEOUT, ModerationStatus.SKIPPED, id="skipped"),
     ],
 )
 def test_record_moderation_result(output, skip_reason, expected_status):
@@ -187,6 +187,10 @@ def test_start_moderation(moderation_enabled, has_provider, text, started):
         pytest.param(
             {"return_value": {"status": "skipped", "reason": "rate_limited"}}, (None, "rate_limited"), id="skipped"
         ),
+        pytest.param(
+            {"return_value": {"status": "skipped", "reason": "quota_exceeded"}}, (None, "error"), id="unknown_reason"
+        ),
+        pytest.param({"return_value": {"status": "skipped"}}, (None, "error"), id="missing_reason"),
         pytest.param({"side_effect": CeleryTimeoutError()}, (None, "timeout"), id="timeout"),
         pytest.param({"side_effect": RuntimeError("boom")}, (None, "error"), id="task_raised"),
         pytest.param(

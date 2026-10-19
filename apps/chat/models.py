@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import classproperty
+from django.utils.translation import gettext_lazy as _
 from django_pydantic_field import SchemaField
 from langchain_core.messages import BaseMessage, messages_from_dict
 
@@ -145,6 +146,13 @@ class ModerationStatus(models.TextChoices):
     SKIPPED = "skipped", "Skipped"
 
 
+MODERATION_STATUS_LABELS = {
+    ModerationStatus.PASSED: _("Passed"),
+    ModerationStatus.FLAGGED: _("Flagged"),
+    ModerationStatus.SKIPPED: _("Not moderated"),
+}
+
+
 class ChatMessageMetadataKeys(StrEnum):
     # OpenAI Assistant (internal)
     OPENAI_RUN_ID = "openai_run_id"
@@ -221,7 +229,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
             models.Index(
-                fields=["moderation_status"],
+                fields=["moderation_status", "created_at"],
                 name="chatmessage_moderation_idx",
                 condition=Q(moderation_status__isnull=False),
             ),
