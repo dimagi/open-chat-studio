@@ -103,6 +103,11 @@ version section when a release is cut.
 <!-- Changes to the shape of a deployment: process types, Celery queues,
      backing-service versions, resource requirements, new external
      dependencies. -->
+- Abuse detection (`flag_abuse_detection`) runs a `moderate_message` task on the
+  `background` Celery queue while the chat task that started it waits up to 10
+  seconds for the result. The `background` queue must be served by a worker other
+  than the one running chat tasks; with one single-process worker serving both,
+  every moderated message is recorded as not moderated (`timeout`). (#4704)
 - Container images are now published to
   `ghcr.io/dimagi/open-chat-studio` on each release tag, so an upgrade is a
   pull rather than a local build. Images are `linux/amd64` only; arm64
