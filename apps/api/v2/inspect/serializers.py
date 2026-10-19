@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from apps.custom_actions.schema_utils import APIOperationDetails
 
 
-# Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3).
 @extend_schema_serializer(component_name="InspectFile")
 class FileSerializer(serializers.ModelSerializer):
     """A file's identifying fields only.
