@@ -207,6 +207,13 @@ export function CodeNodeEditor(
       boost: 1,
       section: "Session Control",
     }),
+    block_participant: snip("block_participant(\"${reason}\")", {
+      label: "block_participant",
+      type: "function",
+      detail: "Blocks the current participant from their next message on; call abort_with_message too to stop the current reply. Reason must be a string (max 500 characters saved). Needs an active session. Does nothing for team members, in evaluation runs, or when abuse detection is off, and saves nothing in the test chat.",
+      boost: 1,
+      section: "Session Control",
+    }),
   }
 
   function pythonCompletions(context: CompletionContext) {

@@ -1,11 +1,19 @@
 import pytest
 from waffle.testutils import override_flag
 
+from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
-from apps.moderation.enforcement import block_participant, is_exempt, is_participant_blocked, unblock_participant
+from apps.moderation.const import MAX_BLOCK_REASON_LENGTH
+from apps.moderation.enforcement import (
+    block_participant,
+    block_participant_from_code_node,
+    is_exempt,
+    is_participant_blocked,
+    unblock_participant,
+)
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
-from apps.utils.factories.experiment import ParticipantFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
@@ -119,3 +127,68 @@ class TestIsExempt:
         participant = ParticipantFactory.create()
 
         assert is_exempt(participant=participant, team=participant.team) is False
+
+
+@pytest.mark.django_db()
+class TestBlockParticipantFromCodeNode:
+    @pytest.fixture()
+    def session(self, team_flag):
+        session = ExperimentSessionFactory.create()
+        team_flag(FLAG, session.team)
+        return session
+
+    def test_blocks_the_participant_without_strikes(self, session):
+        created = block_participant_from_code_node(session=session, reason="Repeated threats")
+
+        assert created is True
+        denial = DeniedParticipant.objects.get()
+        assert denial.team_id == session.team_id
+        assert denial.participant_id == session.participant_id
+        assert denial.source == DeniedParticipantSource.CODE_NODE
+        assert denial.reason == "Repeated threats"
+        assert denial.experiment_id == session.experiment_id
+        assert denial.chat_message_id is None
+        assert denial.created_by_id is None
+        assert Participant.objects.get(id=session.participant_id).strikes == 0
+
+    def test_truncates_a_long_reason(self, session):
+        block_participant_from_code_node(session=session, reason="x" * (MAX_BLOCK_REASON_LENGTH + 1))
+
+        assert DeniedParticipant.objects.get().reason == "x" * MAX_BLOCK_REASON_LENGTH
+
+    def test_second_call_keeps_the_first_block(self, session):
+        block_participant_from_code_node(session=session, reason="First")
+
+        created = block_participant_from_code_node(session=session, reason="Second")
+
+        assert created is False
+        assert DeniedParticipant.objects.get().reason == "First"
+
+    @override_flag(FLAG, active=False)
+    def test_does_nothing_when_the_flag_is_off(self):
+        session = ExperimentSessionFactory.create()
+
+        assert block_participant_from_code_node(session=session, reason="Spam") is False
+        assert not DeniedParticipant.objects.exists()
+
+    @pytest.mark.parametrize(
+        ("is_member", "blocked"),
+        [
+            pytest.param(True, False, id="team_member_is_exempt"),
+            pytest.param(False, True, id="user_from_another_team_is_not_exempt"),
+        ],
+    )
+    def test_exempt_participant_is_not_blocked(self, session, is_member, blocked):
+        membership = MembershipFactory.create(team=session.team if is_member else TeamFactory.create())
+        session.participant.user = membership.user
+        session.participant.save()
+
+        assert block_participant_from_code_node(session=session, reason="Spam") is blocked
+        assert DeniedParticipant.objects.exists() is blocked
+
+    def test_does_nothing_in_an_evaluation_run(self, session):
+        session.platform = ChannelPlatform.EVALUATIONS
+        session.save()
+
+        assert block_participant_from_code_node(session=session, reason="Spam") is False
+        assert not DeniedParticipant.objects.exists()

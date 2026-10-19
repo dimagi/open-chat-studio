@@ -1,6 +1,7 @@
 from django.db import transaction
 from field_audit.models import AuditAction
 
+from apps.moderation.const import MAX_BLOCK_REASON_LENGTH
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
 from apps.teams.models import Membership
@@ -74,3 +75,26 @@ def is_exempt(participant, team) -> bool:
     return (
         participant.user_id is not None and Membership.objects.filter(team=team, user_id=participant.user_id).exists()
     )
+
+
+def block_participant_from_code_node(*, session, reason: str) -> bool:
+    """Block the session's participant without strikes. Skips evaluation runs, exempt participants, flag-off teams."""
+    from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models → experiments.models → moderation.enforcement
+        ChannelPlatform,
+    )
+
+    participant = session.participant
+    team = session.team
+    if (
+        session.platform == ChannelPlatform.EVALUATIONS
+        or not abuse_detection_enabled(team)
+        or is_exempt(participant=participant, team=team)
+    ):
+        return False
+    _denial, created = block_participant(
+        participant=participant,
+        source=DeniedParticipantSource.CODE_NODE,
+        reason=reason[:MAX_BLOCK_REASON_LENGTH],
+        experiment=session.experiment,
+    )
+    return created

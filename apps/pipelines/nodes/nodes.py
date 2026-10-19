@@ -1044,6 +1044,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             "add_session_tag": output_state.add_session_tag,
             "get_node_output": pipeline_accessor.get_node_output,
             "end_session": self._end_session(output_state),
+            "block_participant": self._block_participant(context),
             # control flow
             "abort_with_message": self._abort_pipeline(),
             "require_node_outputs": self._require_node_outputs(context),
@@ -1161,6 +1162,17 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             state["temp_state"][key_name] = value
 
         return set_temp_state_key
+
+    def _block_participant(self, context):
+        def block_participant(reason: str) -> bool:
+            """Block the current participant from their next message on. Returns whether this call blocked them."""
+            if not isinstance(reason, str):
+                raise CodeNodeRunError("'reason' must be a string")
+            if not context.session:
+                raise CodeNodeRunError("Cannot block a participant without an active session")
+            return self.repo.block_participant(session=context.session, reason=reason)
+
+        return block_participant
 
     def _end_session(self, state: PipelineState):
         def end_session():
