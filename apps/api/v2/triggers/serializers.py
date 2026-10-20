@@ -57,10 +57,9 @@ class TriggerActionSerializer(serializers.ModelSerializer):
 
 
 class BaseTriggerSerializer(serializers.ModelSerializer):
-    """A trigger and its action, validated by the web app's event forms.
+    """A chatbot trigger and the action it runs."""
 
-    Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
-    """
+    # Expects ``chatbot`` in the serializer context: the working chatbot the trigger belongs to.
 
     trigger_form_class: ClassVar[type[BaseTriggerForm]]
 
