@@ -15,7 +15,8 @@ SERVER_SET_PARAMS = ("experiment_id",)
 NOTES = {
     ("send_message_to_bot", "message_to_bot"): "Left out or empty, a default prompt is used.",
     ("pipeline_start", "pipeline_id"): (
-        "A pipeline in this team that is not a chatbot's own pipeline. Any other id is refused with `400`."
+        "One of the `trigger_pipeline` entries the `chatbot_options` endpoint lists: a pipeline in this "
+        "team that is not a chatbot's own pipeline. Any other id is refused with `400`."
     ),
 }
 

@@ -3,7 +3,7 @@ from django.urls import resolve, reverse
 from rest_framework.test import APIClient
 
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
-from apps.api.v2.serializers import ChatbotSerializer
+from apps.api.v2.serializers import ChatbotRetrieveSerializer, ChatbotSerializer
 from apps.api.v2.views import ChatbotViewSet
 from apps.api.v2.write.serializers import ChatbotCreateSerializer, ChatbotWriteSerializer
 from apps.utils.factories.experiment import ExperimentFactory
@@ -33,7 +33,7 @@ def test_v2_chatbot_detail_resolves():
     ("action", "expected"),
     [
         pytest.param("list", ChatbotSerializer, id="list"),
-        pytest.param("retrieve", ChatbotSerializer, id="retrieve"),
+        pytest.param("retrieve", ChatbotRetrieveSerializer, id="retrieve"),
         pytest.param("create", ChatbotCreateSerializer, id="create"),
         pytest.param("partial_update", ChatbotWriteSerializer, id="partial-update"),
         pytest.param("inspect", ChatbotInspectSerializer, id="inspect"),
@@ -114,3 +114,27 @@ def test_chatbot_other_team_404(experiment):
 def test_chatbot_anonymous_401():
     response = APIClient().get("/api/v2/chatbots/")
     assert response.status_code == 401
+
+
+@pytest.mark.django_db()
+def test_retrieve_names_the_published_version_as_inspect_does(experiment):
+    experiment.create_new_version(make_default=True)
+    client = ApiTestClient(experiment.team.members.first(), experiment.team)
+
+    response = client.get(reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id}))
+
+    assert response.json()["versions"] == [
+        {"name": experiment.name, "version_number": 1, "is_published_version": True, "version_description": ""}
+    ]
+
+
+@pytest.mark.django_db()
+def test_retrieve_returns_the_settings_a_patch_returns(experiment):
+    client = ApiTestClient(experiment.team.members.first(), experiment.team)
+    url = reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id})
+
+    patched = client.patch(url, {"seed_message": "Hello"}, format="json").json()
+    retrieved = client.get(url).json()
+
+    assert retrieved["seed_message"] == "Hello"
+    assert {key: retrieved[key] for key in patched} == patched

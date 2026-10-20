@@ -39,9 +39,7 @@ def chatbot(db):
 def test_a_404_names_the_resource_as_the_api_does(chatbot, path, detail):
     client = ApiTestClient(chatbot.team.members.first(), chatbot.team)
 
-    # The trigger routes offer no GET; a DELETE of a missing trigger answers the same 404.
-    method = client.delete if "-triggers/" in path else client.get
-    response = method(path.format(chatbot=chatbot.public_id))
+    response = client.get(path.format(chatbot=chatbot.public_id))
 
     assert response.status_code == 404
     assert response.json() == {"detail": detail}

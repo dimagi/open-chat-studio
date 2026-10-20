@@ -117,3 +117,19 @@ def test_unsupported_message_type(experiment):
             "type": "error",
         }
     }
+
+
+@pytest.mark.django_db()
+def test_a_chatbot_that_asks_for_consent_in_the_conversation_is_refused(experiment):
+    experiment.conversational_consent_enabled = True
+    experiment.save()
+    client = ApiTestClient(experiment.team.members.first(), experiment.team)
+    url = reverse("api:openai-chat-completions", kwargs={"experiment_id": experiment.public_id})
+
+    response = client.post(
+        url, json.dumps({"messages": [{"role": "user", "content": "Hi"}]}), content_type="application/json"
+    )
+
+    assert response.status_code == 409
+    assert "conversational consent" in response.json()["error"]["message"]
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()

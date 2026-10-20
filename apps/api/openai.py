@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from apps.api.serializers import ExperimentSessionCreateSerializer, MessageSerializer
 from apps.channels.tasks import handle_api_message
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import enforce_application_chatbot_access
 
@@ -112,6 +113,7 @@ def chat_completions_schema(versioned: bool):
         responses={
             200: create_chat_completion_response,
             403: {"description": "The OAuth application is not authorized for this chatbot"},
+            409: {"description": "The chatbot asks for conversational consent, which this endpoint cannot conduct"},
             404: {"description": "No chatbot with the given ID exists in the team"},
         },
         parameters=parameters,
@@ -139,6 +141,17 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
     # `serializer.save()` would create a session and only then reject it.
     experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     enforce_application_chatbot_access(request, experiment)
+    experiment_version = (
+        experiment.get_version(version) if version is not None else resolve_published_or_working(experiment)
+    )
+    if experiment_version.conversational_consent_enabled and experiment_version.consent_form_id:
+        # Each call starts a new session, so the participant could never answer the consent prompt.
+        return _make_error_response(
+            409,
+            "This chatbot asks for conversational consent, which needs the participant to reply within "
+            "one session. Each chat completions call starts a new session, so it cannot. Use the chat "
+            "API, or turn off conversational consent.",
+        )
 
     try:
         messages = [_convert_message(message) for message in request.data.get("messages", [])]
@@ -166,7 +179,6 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
         return _make_error_response(400, str(e))
 
     session = serializer.save()
-    experiment_version = session.experiment.get_version(version) if version is not None else session.experiment_version
     # Machine (client-credentials) tokens have no user; pass None rather than the AnonymousUser so
     # the messaging layer treats participant_user as absent instead of assigning a non-user.
     acting_user = request.user if request.user.is_authenticated else None

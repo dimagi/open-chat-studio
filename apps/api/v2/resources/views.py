@@ -22,28 +22,37 @@ from apps.api.v2.resources.serializers import (
 )
 from apps.api.v2.write.base import DescribesPatch
 from apps.api.v2.write.serializers import ResourceArchivedSerializer
-from apps.experiments.models import ConsentForm, SourceMaterial
+from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.oauth.permissions import TokenHasOAuthResourceScope
-from apps.pipelines.models import Node
+from apps.pipelines.models import Node, Pipeline
 
 
 def _source_material_references(material: SourceMaterial) -> dict:
-    """The chatbot versions and other pipelines whose nodes use ``material`` or one of its versions."""
-    chatbots = list(material.get_related_experiments_queryset().select_related("working_version").order_by("id"))
-    material_ids = [*material.versions.values_list("id", flat=True), material.id]
-    pipeline_ids = [chatbot.pipeline_id for chatbot in chatbots]
+    """The nodes that stop ``material`` from being archived, grouped by the chatbot version holding them.
+
+    Mirrors ``has_related_pipeline_references``: a live node using the material itself blocks
+    wherever it is, and a node using one of its snapshots blocks only in a published or working
+    chatbot.
+    """
+    snapshot_ids = list(material.versions.values_list("id", flat=True))
+    current_chatbot_pipelines = material.get_related_experiments_queryset().values("pipeline_id")
+    nodes = Node.objects.filter(
+        models.Q(source_material_id=material.id)
+        | models.Q(source_material_id__in=snapshot_ids, pipeline_id__in=current_chatbot_pipelines)
+    )
     node_ids_by_pipeline = defaultdict(list)
-    for pipeline_id, flow_id in (
-        Node.objects.filter(pipeline_id__in=pipeline_ids, source_material_id__in=material_ids)
-        .order_by("id")
-        .values_list("pipeline_id", "flow_id")
-    ):
+    for pipeline_id, flow_id in nodes.order_by("id").values_list("pipeline_id", "flow_id"):
         node_ids_by_pipeline[pipeline_id].append(flow_id)
+    chatbots = list(
+        Experiment.objects.filter(team=material.team, pipeline_id__in=node_ids_by_pipeline)
+        .select_related("working_version")
+        .order_by("version_number")
+    )
+    listed_pipeline_ids = {chatbot.pipeline_id for chatbot in chatbots}
     other_pipeline_names = (
-        material.get_related_nodes_queryset()
-        .exclude(pipeline_id__in=node_ids_by_pipeline)
-        .order_by("pipeline__name")
-        .values_list("pipeline__name", flat=True)
+        Pipeline.objects.filter(id__in=set(node_ids_by_pipeline) - listed_pipeline_ids)
+        .order_by("name")
+        .values_list("name", flat=True)
         .distinct()
     )
     return {
@@ -51,7 +60,8 @@ def _source_material_references(material: SourceMaterial) -> dict:
             {
                 "chatbot_id": (chatbot.working_version or chatbot).public_id,
                 "version_number": chatbot.version_number,
-                "published": not chatbot.is_working_version,
+                "published": chatbot.is_default_version,
+                "is_working_version": chatbot.is_working_version,
                 "node_ids": node_ids_by_pipeline[chatbot.pipeline_id],
             }
             for chatbot in chatbots

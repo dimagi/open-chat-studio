@@ -59,6 +59,12 @@ class ChatbotCompositionPermission(RequiresTeamPermission):
     required_permissions = ["experiments.change_experiment"]
 
 
+class ChatbotReadPermission(RequiresTeamPermission):
+    """Reading a sub-resource under ``/chatbots/{id}/`` needs only the right to view the chatbot."""
+
+    required_permissions = ["experiments.view_experiment"]
+
+
 class RejectsUnwritableKeys:
     """Refuse a request body carrying keys this serializer does not declare, or declares read-only.
 

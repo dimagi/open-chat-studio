@@ -15,6 +15,8 @@ paths:
         Only the settings drawn from a fixed set of values appear. A free-text setting (`name`, `seed_message`) or a boolean one (`file_uploads_enabled`) constrains nothing and so has no entry here.
 
         `voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that one provider. Only the voices a listed provider can speak are offered, so a team that has configured no voice provider is offered no voice either.
+
+        `trigger_pipeline` is not a setting: it lists the pipelines a trigger's `pipeline_start` action may run, for its `params.pipeline_id`.
       summary: List Chatbot Setting Options
       tags:
       - Chatbots
@@ -51,6 +53,9 @@ paths:
                     consent_form:
                     - value: 7
                       label: Returns consent
+                    trigger_pipeline:
+                    - value: 12
+                      label: Escalation
                   summary: Every key the endpoint serves, for a team that has one
                     of each resource.
           description: ''
@@ -117,7 +122,9 @@ paths:
   /api/v2/chatbots/{id}/:
     get:
       operationId: chatbot_retrieve
-      description: Retrieve a single chatbot by its ID.
+      description: 'Retrieve a single chatbot by its ID: its settings, in the shape
+        the `chatbot_update` endpoint accepts and returns, and its versions. The `chatbot_inspect`
+        endpoint returns the full configuration, including the pipeline and triggers.'
       summary: Retrieve Chatbot
       parameters:
       - in: path
@@ -139,7 +146,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Chatbot'
+                $ref: '#/components/schemas/ChatbotRetrieve'
           description: ''
     patch:
       operationId: chatbot_update
@@ -760,6 +767,47 @@ paths:
           description: The node is part of the pipeline's structure and cannot be
             deleted.
   /api/v2/chatbots/{id}/scheduled-triggers/:
+    get:
+      operationId: chatbot_scheduled_trigger_list
+      description: The working (draft) chatbot's scheduled triggers, oldest first.
+        Archived ones are left out.
+      summary: List Scheduled triggers
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedScheduledTriggerWriteList'
+          description: ''
+        '404':
+          description: No such working chatbot in this team.
     post:
       operationId: chatbot_scheduled_trigger_create
       description: |-
@@ -810,6 +858,43 @@ paths:
         '404':
           description: No such working chatbot in this team.
   /api/v2/chatbots/{id}/scheduled-triggers/{trigger_id}/:
+    get:
+      operationId: chatbot_scheduled_trigger_retrieve
+      description: One scheduled trigger on the working (draft) chatbot, in the shape
+        the update endpoint accepts.
+      summary: Retrieve a Scheduled trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or a list.
+        required: true
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTriggerWrite'
+          description: ''
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
     patch:
       operationId: chatbot_scheduled_trigger_update
       description: |-
@@ -829,8 +914,7 @@ paths:
         name: trigger_id
         schema:
           type: integer
-        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
-          endpoint.
+        description: The trigger's id, as returned by a create or a list.
         required: true
       tags:
       - Chatbot Triggers
@@ -884,8 +968,7 @@ paths:
         name: trigger_id
         schema:
           type: integer
-        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
-          endpoint.
+        description: The trigger's id, as returned by a create or a list.
         required: true
       tags:
       - Chatbot Triggers
@@ -911,6 +994,47 @@ paths:
             its working version. A published version's triggers and archived triggers
             are not reachable.
   /api/v2/chatbots/{id}/static-triggers/:
+    get:
+      operationId: chatbot_static_trigger_list
+      description: The working (draft) chatbot's static triggers, oldest first. Archived
+        ones are left out.
+      summary: List Static triggers
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStaticTriggerWriteList'
+          description: ''
+        '404':
+          description: No such working chatbot in this team.
     post:
       operationId: chatbot_static_trigger_create
       description: |-
@@ -961,6 +1085,43 @@ paths:
         '404':
           description: No such working chatbot in this team.
   /api/v2/chatbots/{id}/static-triggers/{trigger_id}/:
+    get:
+      operationId: chatbot_static_trigger_retrieve
+      description: One static trigger on the working (draft) chatbot, in the shape
+        the update endpoint accepts.
+      summary: Retrieve a Static trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or a list.
+        required: true
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticTriggerWrite'
+          description: ''
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
     patch:
       operationId: chatbot_static_trigger_update
       description: |-
@@ -980,8 +1141,7 @@ paths:
         name: trigger_id
         schema:
           type: integer
-        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
-          endpoint.
+        description: The trigger's id, as returned by a create or a list.
         required: true
       tags:
       - Chatbot Triggers
@@ -1035,8 +1195,7 @@ paths:
         name: trigger_id
         schema:
           type: integer
-        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
-          endpoint.
+        description: The trigger's id, as returned by a create or a list.
         required: true
       tags:
       - Chatbot Triggers
@@ -1062,6 +1221,47 @@ paths:
             its working version. A published version's triggers and archived triggers
             are not reachable.
   /api/v2/chatbots/{id}/timeout-triggers/:
+    get:
+      operationId: chatbot_timeout_trigger_list
+      description: The working (draft) chatbot's timeout triggers, oldest first. Archived
+        ones are left out.
+      summary: List Timeout triggers
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTimeoutTriggerWriteList'
+          description: ''
+        '404':
+          description: No such working chatbot in this team.
     post:
       operationId: chatbot_timeout_trigger_create
       description: |-
@@ -1112,6 +1312,43 @@ paths:
         '404':
           description: No such working chatbot in this team.
   /api/v2/chatbots/{id}/timeout-triggers/{trigger_id}/:
+    get:
+      operationId: chatbot_timeout_trigger_retrieve
+      description: One timeout trigger on the working (draft) chatbot, in the shape
+        the update endpoint accepts.
+      summary: Retrieve a Timeout trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or a list.
+        required: true
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeoutTriggerWrite'
+          description: ''
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
     patch:
       operationId: chatbot_timeout_trigger_update
       description: |-
@@ -1131,8 +1368,7 @@ paths:
         name: trigger_id
         schema:
           type: integer
-        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
-          endpoint.
+        description: The trigger's id, as returned by a create or a list.
         required: true
       tags:
       - Chatbot Triggers
@@ -1186,8 +1422,7 @@ paths:
         name: trigger_id
         schema:
           type: integer
-        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
-          endpoint.
+        description: The trigger's id, as returned by a create or a list.
         required: true
       tags:
       - Chatbot Triggers
@@ -1966,9 +2201,10 @@ paths:
         rather than destroyed, and a person can restore it in the web app. A repeat
         of this call answers `404`, which makes it safe to retry. It is refused with
         `409` while a pipeline node or a live chatbot version still uses it. The response
-        lists each chatbot version and node that uses it. A client-credentials token
-        can write only when its application has access to all chatbots; otherwise
-        its writes answer `403`.'
+        lists each chatbot version and node that uses it, and its `detail` says how
+        to clear each kind of reference. A client-credentials token can write only
+        when its application has access to all chatbots; otherwise its writes answer
+        `403`.'
       summary: Archive Source Material
       parameters:
       - in: path
@@ -2532,8 +2768,10 @@ components:
           title: API URL
         version_number:
           type: integer
-          maximum: 2147483647
-          minimum: 0
+          readOnly: true
+          description: 'The working (draft) version''s number, which the next version
+            created will take. The published version is the one in `versions` with
+            `is_published_version: true`.'
         versions:
           type: array
           items:
@@ -2542,6 +2780,7 @@ components:
       - id
       - name
       - url
+      - version_number
       - versions
     ChatbotCreate:
       type: object
@@ -2574,6 +2813,9 @@ components:
         version_number:
           type: integer
           readOnly: true
+          description: 'The working (draft) version''s number, which the next version
+            created will take. The published version is the one in `versions` with
+            `is_published_version: true`.'
         name:
           type: string
           readOnly: true
@@ -2816,6 +3058,126 @@ components:
           items:
             $ref: '#/components/schemas/ResourceOption'
           description: The consent forms the team has written.
+        trigger_pipeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceOption'
+          description: 'The pipelines a `pipeline_start` trigger action may run: write
+            one into the action''s `params.pipeline_id`. A chatbot''s own pipeline
+            is not one of them.'
+    ChatbotRetrieve:
+      type: object
+      description: 'The retrieve response: the settings a PATCH returns, plus the
+        chatbot''s URL and versions.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          example: https://example.com/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/
+          readOnly: true
+          title: API URL
+        pipeline_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        version_number:
+          type: integer
+          readOnly: true
+          description: 'The working (draft) version''s number, which the next version
+            created will take. The published version is the one in `versions` with
+            `is_published_version: true`.'
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+          nullable: true
+          title: A longer description of the experiment.
+        voice_provider_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        synthetic_voice_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          readOnly: true
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          readOnly: true
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        trace_provider_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        trace_sample_rate:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+          description: Overrides the trace provider's sample rate for this chatbot.
+            Leave blank to use the provider's own setting.
+        debug_mode_enabled:
+          type: boolean
+          readOnly: true
+        conversational_consent_enabled:
+          type: boolean
+          readOnly: true
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        consent_form_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        seed_message:
+          type: string
+          readOnly: true
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        file_uploads_enabled:
+          type: boolean
+          readOnly: true
+          description: Enables file attachments in the web chat interface.
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotVersion'
+          readOnly: true
+      required:
+      - consent_form_id
+      - conversational_consent_enabled
+      - debug_mode_enabled
+      - description
+      - echo_transcript
+      - file_uploads_enabled
+      - id
+      - name
+      - pipeline_id
+      - seed_message
+      - synthetic_voice_id
+      - trace_provider_id
+      - trace_sample_rate
+      - url
+      - version_number
+      - versions
+      - voice_provider_id
+      - voice_response_behaviour
     ChatbotVersion:
       type: object
       properties:
@@ -2826,11 +3188,13 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-        is_default_version:
+        is_published_version:
           type: boolean
+          description: True for the version currently served to participants.
         version_description:
           type: string
       required:
+      - is_published_version
       - name
     ChoiceOption:
       type: object
@@ -4081,6 +4445,30 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    PaginatedScheduledTriggerWriteList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledTriggerWrite'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     PaginatedSourceMaterialResourceList:
       type: object
       required:
@@ -4100,6 +4488,54 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SourceMaterialResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
+    PaginatedStaticTriggerWriteList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticTriggerWrite'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
+    PaginatedTimeoutTriggerWriteList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeoutTriggerWrite'
         count:
           type: integer
           description: Total number of items matching the query. Only present on the
@@ -4639,8 +5075,11 @@ components:
           type: integer
         published:
           type: boolean
-          description: True for the published version, whose nodes cannot be edited;
-            false for the draft.
+          description: True for the version participants are served.
+        is_working_version:
+          type: boolean
+          description: True for the working (draft) version, whose nodes can be edited.
+            Every other version is a snapshot that nothing edits.
         node_ids:
           type: array
           items:
@@ -4649,6 +5088,7 @@ components:
             them.
       required:
       - chatbot_id
+      - is_working_version
       - node_ids
       - published
       - version_number
@@ -5099,7 +5539,7 @@ components:
             | `send_message_to_bot` | `message_to_bot` (string, optional) Left out or empty, a default prompt is used. |
             | `end_conversation` | `{}` |
             | `schedule_trigger` | `name` (string, required) Descriptive name for this schedule.<br>`prompt_text` (string, required) Instructions for the bot to formulate a response.<br>`frequency` (integer, required, at least 1)<br>`time_period` (one of `minutes` / `hours` / `days` / `weeks` / `months`, required)<br>`repetitions` (integer, required, at least 0) Indicates how many times this should go on for. Specify '0' for a one time event. |
-            | `pipeline_start` | `pipeline_id` (integer id, required) A pipeline in this team that is not a chatbot's own pipeline. Any other id is refused with `400`.<br>`input_type` (one of `full_history` / `history_last_summary` / `last_message`, required) |
+            | `pipeline_start` | `pipeline_id` (integer id, required) One of the `trigger_pipeline` entries the `chatbot_options` endpoint lists: a pipeline in this team that is not a chatbot's own pipeline. Any other id is refused with `400`.<br>`input_type` (one of `full_history` / `history_last_summary` / `last_message`, required) |
     TriggerActionTypeEnum:
       enum:
       - log
