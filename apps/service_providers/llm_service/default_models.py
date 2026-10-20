@@ -155,8 +155,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "minimax": [
         Model("MiniMax-M3", k(1000), is_default=True),
-        Model("MiniMax-M2.7", 204800),
-        Model("MiniMax-M2.5", 204800),
+        # MiniMax retires the M2.7 and M2.5 families on 2026-11-18.
+        Model("MiniMax-M2.7", 204800, deprecated=True, replacement="MiniMax-M3"),
+        Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2", 200000),
     ],
     "google": [
