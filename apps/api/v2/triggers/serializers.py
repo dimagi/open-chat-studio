@@ -116,7 +116,10 @@ class BaseTriggerSerializer(serializers.ModelSerializer):
         """The action type and params to validate: those sent, or the stored ones when ``action`` is left out."""
         stored_action = self.instance.action if self.instance else None
         if "action" not in data and stored_action:
-            return stored_action.action_type, stored_action.params
+            # A copied chatbot's action still holds the source chatbot's ``experiment_id``, which its
+            # form would refuse; left out, the form sets it to this chatbot.
+            params = {key: value for key, value in stored_action.params.items() if key not in SERVER_SET_PARAMS}
+            return stored_action.action_type, params
         action = data.get("action")
         if not isinstance(action, dict):
             message = "This field is required." if action is None else "Expected a JSON object."

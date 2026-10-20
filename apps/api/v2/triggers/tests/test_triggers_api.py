@@ -250,6 +250,21 @@ def test_patch_without_an_action_keeps_the_actions_params(client, chatbot, sched
 
 
 @pytest.mark.django_db()
+def test_patch_without_an_action_on_a_copied_chatbot_points_the_action_at_the_copy(client, chatbot):
+    source = ChatbotFactory.create(team=chatbot.team)
+    action = EventActionFactory.create(
+        action_type=EventActionType.SCHEDULETRIGGER, params={**SCHEDULE_PARAMS, "experiment_id": str(source.id)}
+    )
+    trigger = TIMEOUT.factory.create(experiment=chatbot, action=action)
+
+    response = client.patch(TIMEOUT.detail_url(chatbot, trigger.id), {"delay": 120}, format="json")
+
+    assert response.status_code == 200, response.content
+    action.refresh_from_db()
+    assert action.params["experiment_id"] == str(chatbot.id)
+
+
+@pytest.mark.django_db()
 def test_patch_replaces_the_params_rather_than_merging_them(client, chatbot, scheduling_timeout):
     response = client.patch(
         TIMEOUT.detail_url(chatbot, scheduling_timeout.id), {"action": {"params": {"frequency": 2}}}, format="json"
