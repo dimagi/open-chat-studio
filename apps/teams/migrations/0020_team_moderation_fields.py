@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0094_moderationprovider'),
+        ('service_providers', '0095_moderationprovider'),
         ('teams', '0019_team_exportable_experiments'),
     ]
 
