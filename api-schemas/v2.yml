@@ -4258,10 +4258,7 @@ components:
       additionalProperties: false
     PatchedScheduledTriggerWrite:
       type: object
-      description: |-
-        A trigger and its action, validated by the web app's event forms.
-
-        Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
+      description: A chatbot trigger and the action it runs.
       properties:
         id:
           type: integer
@@ -4324,10 +4321,7 @@ components:
       additionalProperties: false
     PatchedStaticTriggerWrite:
       type: object
-      description: |-
-        A trigger and its action, validated by the web app's event forms.
-
-        Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
+      description: A chatbot trigger and the action it runs.
       properties:
         id:
           type: integer
@@ -4358,10 +4352,7 @@ components:
           $ref: '#/components/schemas/TriggerAction'
     PatchedTimeoutTriggerWrite:
       type: object
-      description: |-
-        A trigger and its action, validated by the web app's event forms.
-
-        Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
+      description: A chatbot trigger and the action it runs.
       properties:
         id:
           type: integer
@@ -4748,10 +4739,7 @@ components:
           description: Prompt steering the LLM router's choice.
     ScheduledTriggerWrite:
       type: object
-      description: |-
-        A trigger and its action, validated by the web app's event forms.
-
-        Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
+      description: A chatbot trigger and the action it runs.
       properties:
         id:
           type: integer
@@ -4929,10 +4917,7 @@ components:
         * `participant_joined` - A new participant joined the experiment
     StaticTriggerWrite:
       type: object
-      description: |-
-        A trigger and its action, validated by the web app's event forms.
-
-        Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
+      description: A chatbot trigger and the action it runs.
       properties:
         id:
           type: integer
@@ -5007,10 +4992,7 @@ components:
       - slug
     TimeoutTriggerWrite:
       type: object
-      description: |-
-        A trigger and its action, validated by the web app's event forms.
-
-        Expects ``chatbot`` in its context: the working chatbot the trigger belongs to.
+      description: A chatbot trigger and the action it runs.
       properties:
         id:
           type: integer
