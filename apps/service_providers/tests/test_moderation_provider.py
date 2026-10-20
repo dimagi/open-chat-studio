@@ -3,6 +3,7 @@ from unittest import mock
 import openai
 import pytest
 from django.urls import reverse
+from field_audit.models import AuditAction
 from waffle.testutils import override_flag
 
 from apps.service_providers.forms import OpenAIModerationConfigForm
@@ -227,3 +228,28 @@ def test_delete_view_deletes_a_provider_not_in_use(selected, team_with_users, ad
     assert response.status_code == 200
     assert "Cannot delete" not in response.content.decode()
     assert not ModerationProvider.objects.filter(id=provider.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "delete",
+    [
+        pytest.param(lambda provider: provider.delete(), id="instance"),
+        pytest.param(
+            lambda provider: ModerationProvider.objects.filter(id=provider.id).delete(audit_action=AuditAction.AUDIT),
+            id="queryset",
+        ),
+    ],
+)
+def test_deleting_the_selected_provider_turns_moderation_off(delete):
+    provider = ModerationProviderFactory.create()
+    team = provider.team
+    team.moderation_enabled = True
+    team.moderation_provider = provider
+    team.save()
+
+    delete(provider)
+
+    team.refresh_from_db()
+    assert team.moderation_provider is None
+    assert team.moderation_enabled is False
