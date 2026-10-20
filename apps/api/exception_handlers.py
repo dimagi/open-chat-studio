@@ -29,7 +29,8 @@ def api_exception_handler(exc, context):
             status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )
 
-    if isinstance(exc, Http404) and getattr(context.get("request"), "version", None) == "v2":
+    # A bare Http404 is left alone so DRF answers its default "Not found."
+    if isinstance(exc, Http404) and str(exc) and getattr(context.get("request"), "version", None) == "v2":
         exc = Http404(_v2_not_found_message(str(exc)))
 
     response = drf_exception_handler(exc, context)

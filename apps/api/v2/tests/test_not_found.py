@@ -45,3 +45,21 @@ def test_a_404_names_the_resource_as_the_api_does(chatbot, path, detail):
 
     assert response.status_code == 404
     assert response.json() == {"detail": detail}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/api/v2/chatbots/not-a-uuid/", id="chatbot"),
+        pytest.param("/api/v2/source-material/abc/", id="source-material"),
+        pytest.param("/api/v2/consent-forms/abc/", id="consent-form"),
+    ],
+)
+def test_a_malformed_id_answers_drfs_default_404(chatbot, path):
+    client = ApiTestClient(chatbot.team.members.first(), chatbot.team)
+
+    response = client.get(path)
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not found."}
