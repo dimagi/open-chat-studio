@@ -12,12 +12,13 @@ from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.lookups import get_working_chatbot
-from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
+from apps.api.v2.write.base import DescribesPatch
 from apps.api.v2.write.serializers import ResourceArchivedSerializer
 from apps.events.models import ScheduledTrigger, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 
+from .permissions import TriggerModelPermission
 from .schema import scheduled_trigger_schema, static_trigger_schema, timeout_trigger_schema
 from .serializers import (
     BaseTriggerSerializer,
@@ -33,7 +34,7 @@ class TriggerView(GenericAPIView):
     Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, TriggerModelPermission, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
     metadata_class = DescribesPatch
     serializer_class: type[BaseTriggerSerializer]

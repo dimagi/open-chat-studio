@@ -5,7 +5,13 @@ import datetime
 import pytest
 
 from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
-from apps.teams.backends import CHAT_VIEWER_GROUP, add_user_to_team, create_default_groups
+from apps.teams.backends import (
+    CHAT_VIEWER_GROUP,
+    CHATBOT_ADMIN_GROUP,
+    EVENT_ADMIN_GROUP,
+    add_user_to_team,
+    create_default_groups,
+)
 from apps.utils.factories.events import EventActionFactory
 from apps.utils.factories.experiment import ChatbotFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -395,14 +401,29 @@ def test_a_read_only_key_cannot_write(chatbot):
 
 
 @pytest.mark.django_db()
-def test_a_role_without_change_experiment_cannot_write(chatbot):
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("method", ["post", "patch", "delete"])
+@pytest.mark.parametrize(
+    ("group", "allowed"),
+    [
+        pytest.param(EVENT_ADMIN_GROUP, True, id="event_admin"),
+        pytest.param(CHATBOT_ADMIN_GROUP, False, id="chatbot_admin"),
+        pytest.param(CHAT_VIEWER_GROUP, False, id="chat_viewer"),
+    ],
+)
+def test_writes_require_the_events_permissions_the_web_views_require(chatbot, kind, method, group, allowed):
     create_default_groups()
     user = UserFactory.create()
-    add_user_to_team(chatbot.team, user, [CHAT_VIEWER_GROUP])
+    add_user_to_team(chatbot.team, user, [group])
+    client = ApiTestClient(user, chatbot.team)
+    trigger = kind.factory.create(experiment=chatbot)
 
-    response = ApiTestClient(user, chatbot.team).post(TIMEOUT.list_url(chatbot), TIMEOUT.body(), format="json")
+    if method == "post":
+        response = client.post(kind.list_url(chatbot), kind.body(), format="json")
+    else:
+        response = getattr(client, method)(kind.detail_url(chatbot, trigger.id), {}, format="json")
 
-    assert response.status_code == 403
+    assert (response.status_code != 403) is allowed, response.content
 
 
 @pytest.mark.django_db()
