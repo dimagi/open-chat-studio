@@ -813,7 +813,7 @@ paths:
     patch:
       operationId: chatbot_scheduled_trigger_update
       description: |-
-        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. Read-only fields in the body are ignored, so a response can be sent back as it is.
+        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. A read-only field may be sent only with its current value, so a response can be sent back as it is.
 
         The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
       summary: Update a Scheduled trigger
@@ -964,7 +964,7 @@ paths:
     patch:
       operationId: chatbot_static_trigger_update
       description: |-
-        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. Read-only fields in the body are ignored, so a response can be sent back as it is.
+        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. A read-only field may be sent only with its current value, so a response can be sent back as it is.
 
         The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
       summary: Update a Static trigger
@@ -1115,7 +1115,7 @@ paths:
     patch:
       operationId: chatbot_timeout_trigger_update
       description: |-
-        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. Read-only fields in the body are ignored, so a response can be sent back as it is.
+        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. A read-only field may be sent only with its current value, so a response can be sent back as it is.
 
         The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
       summary: Update a Timeout trigger
