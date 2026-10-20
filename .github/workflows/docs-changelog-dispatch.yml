@@ -10,12 +10,9 @@
 # Triggered on: a PR to `main` being closed, if it changed files under
 # components/, config/, assets/, apps/ or templates/.
 #
-# Conditions, checked in order:
-# 1. Job `if:` - the PR was merged and its description contains `[x]`. This
-#    SKIPS most PRs without starting a runner.
-# 2. First step - a grep CONFIRMS the ticked box is the docs/changelog one, not
-#    another checkbox such as the operator-impact one. Later steps run only if
-#    it matches.
+# Condition: the job `if:` checks that the PR was merged and its description
+# contains `[x] This PR requires docs/changelog update` (case-insensitive), the
+# checkbox text from the PR template. Other PRs skip without starting a runner.
 #
 # Requirements: OCS_DOCS_PAT secret, a token allowed to send repository_dispatch
 # events to the docs repo.
@@ -51,8 +48,8 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch Docs and Changelog Update
-    # Only run if the PR was merged (not just closed) and has any ticked checkbox
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.body, '[x]')
+    # Only run if the PR was merged (not just closed) and the docs/changelog box is ticked
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.body, '[x] This PR requires docs/changelog update')
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -64,24 +61,8 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Check if docs/changelog update is needed
-        id: check_docs_needed
-        run: |
-          # Check for specific checked checkbox indicating docs/changelog update needed
-          # Looks for: - [x] This PR requires docs/changelog update
-          if printf '%s\n' "$PR_BODY" | grep -qiE -- '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
-            echo "needs_docs_update=true" >> "$GITHUB_OUTPUT"
-            echo "PR indicates docs/changelog update is needed"
-          else
-            echo "needs_docs_update=false" >> "$GITHUB_OUTPUT"
-            echo "No docs/changelog update needed (checkbox not checked)"
-          fi
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-
       - name: Check if widget files changed
         id: check_widget
-        if: steps.check_docs_needed.outputs.needs_docs_update == 'true'
         run: |
           # Get list of changed files in this PR
           gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json files --jq '.files[].path' > /tmp/changed_files.txt
@@ -99,7 +80,6 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
       - name: Repository Dispatch
-        if: steps.check_docs_needed.outputs.needs_docs_update == 'true'
         uses: peter-evans/repository-dispatch@v4.0.1
         with:
           token: ${{ secrets.OCS_DOCS_PAT }}
