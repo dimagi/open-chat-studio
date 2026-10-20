@@ -73,6 +73,7 @@ class BaseTriggerSerializer(serializers.ModelSerializer):
         if not isinstance(data, dict):
             raise serializers.ValidationError({api_settings.NON_FIELD_ERRORS_KEY: ["Expected a JSON object."]})
         reject_unknown_keys(data, self.fields)
+        self._reject_changed_read_only_keys(data)
         trigger_forms = TriggerForms.bind(
             self.trigger_form_class,
             data=self._form_data(data),
@@ -89,6 +90,20 @@ class BaseTriggerSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data: dict):
         return self.create(validated_data)
+
+    def _reject_changed_read_only_keys(self, data: dict) -> None:
+        """Refuse a read-only key whose value differs from the stored one, so a response can still be sent back."""
+        current = self.to_representation(self.instance) if self.instance else {}
+        changed = sorted(
+            name
+            for name, field in self.fields.items()
+            if field.read_only and name in data and (name not in current or data[name] != current[name])
+        )
+        if changed:
+            accepted = ", ".join(sorted(name for name, field in self.fields.items() if not field.read_only))
+            raise serializers.ValidationError(
+                {name: [f"Read-only field. Accepted here: {accepted}."] for name in changed}
+            )
 
     def _form_data(self, data: dict) -> dict:
         """The body as the one flat mapping the event page posts, with what is not sent kept as stored."""

@@ -294,15 +294,33 @@ def test_patch_checks_a_new_static_type_against_the_existing_action(client, chat
 
 
 @pytest.mark.django_db()
-def test_is_active_cannot_be_written(client, chatbot):
-    trigger = TIMEOUT.factory.create(experiment=chatbot)
+@pytest.mark.parametrize(
+    ("kind", "body"),
+    [
+        pytest.param(TIMEOUT, {"is_active": False}, id="is-active"),
+        pytest.param(TIMEOUT, {"id": 0}, id="id"),
+        pytest.param(SCHEDULED, {"fired_at": "2020-01-01T00:00:00Z"}, id="fired-at"),
+    ],
+)
+def test_patch_refuses_a_change_to_a_read_only_field(client, chatbot, kind, body):
+    trigger = kind.factory.create(experiment=chatbot)
 
-    response = client.patch(TIMEOUT.detail_url(chatbot, trigger.id), {"is_active": False}, format="json")
+    response = client.patch(kind.detail_url(chatbot, trigger.id), body, format="json")
 
-    assert response.status_code == 200, response.content
-    assert response.json()["is_active"] is True
+    assert response.status_code == 400, response.content
+    (key,) = body
+    assert "Read-only field" in str(_error(response, key))
     trigger.refresh_from_db()
     assert trigger.is_active is True
+
+
+@pytest.mark.django_db()
+def test_create_refuses_a_read_only_field(client, chatbot):
+    response = client.post(TIMEOUT.list_url(chatbot), TIMEOUT.body(is_active=True), format="json")
+
+    assert response.status_code == 400, response.content
+    assert "Read-only field" in str(_error(response, "is_active"))
+    assert not TimeoutTrigger.objects.filter(experiment=chatbot).exists()
 
 
 @pytest.mark.django_db()

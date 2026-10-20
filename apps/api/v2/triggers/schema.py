@@ -74,8 +74,8 @@ def trigger_schema(*, kind: str, serializer: type[BaseTriggerSerializer], descri
             description=(
                 "Only the fields you send change. If you send `action`, its `params` replace the stored "
                 "params, so send every param the action needs; leave `action_type` out to keep the "
-                "current one. Read-only fields in the body are ignored, so a response can be sent back "
-                f"as it is.\n\n{PUBLISH_NOTE}"
+                "current one. A read-only field may be sent only with its current value, so a response "
+                f"can be sent back as it is.\n\n{PUBLISH_NOTE}"
             ),
             parameters=[CHATBOT_ID, TRIGGER_ID],
             responses={200: serializer, 400: BAD_REQUEST, 403: FORBIDDEN, 404: TRIGGER_NOT_FOUND},
