@@ -116,10 +116,7 @@ def publish_version(version: Experiment) -> None:
 
 
 def last_activity_subquery() -> Subquery:
-    """The latest ``last_activity_at`` across a working experiment's non-evaluation sessions.
-
-    For annotating an ``Experiment`` queryset; ``None`` when no session has recorded activity.
-    """
+    """Annotation for an ``Experiment`` queryset: the latest ``last_activity_at`` of its non-evaluation sessions."""
     return Subquery(
         ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
         .exclude(platform=ChannelPlatform.EVALUATIONS)
