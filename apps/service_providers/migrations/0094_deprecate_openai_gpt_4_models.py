@@ -6,7 +6,7 @@ from apps.service_providers.migration_utils import llm_model_migration
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("service_providers", "0092_auto_model_sync_20261014"),
+        ("service_providers", "0093_deprecate_google_gemini_3_5_flash"),
     ]
 
     operations = [
