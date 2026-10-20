@@ -48,6 +48,14 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
+    SUNSET_LEGACY_WEB_CHAT_ENFORCE = (
+        "flag_sunset_legacy_web_chat_enforce",
+        "Return 410 Gone from the legacy web chat entry points once its sunset date has passed",
+        "",
+        [],
+        False,
+    )
+
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",
         "Testing endpoints for custom actions (internal use only)",

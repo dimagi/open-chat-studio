@@ -7,6 +7,7 @@ from django.utils.text import slugify
 
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.decorators import silence_exceptions
+from apps.utils.sunset import HttpSunset
 
 from .models import LevelChoices
 from .utils import create_notification
@@ -394,5 +395,22 @@ def deleted_model_notification(
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
         links=affected.links(),
+        once_per_event_type=True,
+    )
+
+
+@silence_exceptions(logger, log_message="Failed to create HTTP sunset notification")
+def http_sunset_notification(spec: HttpSunset, team, experiments: list, milestone: str) -> None:
+    """Tell a team's channel admins that a surface their chatbots still use is being retired."""
+    create_notification(
+        title=spec.notification_title,
+        message=spec.build_message(experiments, milestone),
+        level=LevelChoices.WARNING,
+        team=team,
+        slug=spec.notification_slug,
+        # Keyed on the milestone so each one opens its own thread.
+        event_data={"sunset": spec.key, "milestone": milestone},
+        permissions=list(spec.audience_permissions),
+        links={**{e.name: e.get_absolute_url() for e in experiments}, "Migration guide": spec.successor_url},
         once_per_event_type=True,
     )
