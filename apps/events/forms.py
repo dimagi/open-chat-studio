@@ -228,7 +228,11 @@ class ScheduledTriggerForm(BaseTriggerForm):
             return
         if self._schedule_unchanged(trigger_date, trigger_time, timezone_name):
             return
-        scheduled_at = scheduled_datetime_for(trigger_date, trigger_time, timezone_name)
+        try:
+            scheduled_at = scheduled_datetime_for(trigger_date, trigger_time, timezone_name)
+        except OverflowError:
+            self.add_error("trigger_date", "The scheduled time is out of range.")
+            return
         if scheduled_at <= timezone.now():
             self.add_error("trigger_date", "The scheduled time must be in the future.")
 

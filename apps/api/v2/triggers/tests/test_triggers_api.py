@@ -207,6 +207,25 @@ def test_scheduled_trigger_refuses_a_time_in_the_past(client, chatbot):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("trigger_date", "trigger_time", "timezone"),
+    [
+        pytest.param("9999-12-31", "23:30:00", "America/Los_Angeles", id="past-year-9999"),
+        pytest.param("0001-01-01", "00:30:00", "Asia/Tokyo", id="before-year-1"),
+    ],
+)
+def test_scheduled_trigger_refuses_a_time_that_cannot_be_converted_to_utc(
+    client, chatbot, trigger_date, trigger_time, timezone
+):
+    body = SCHEDULED.body(trigger_date=trigger_date, trigger_time=trigger_time, timezone=timezone)
+
+    response = client.post(SCHEDULED.list_url(chatbot), body, format="json")
+
+    assert response.status_code == 400, response.content
+    assert "trigger_date" in response.json()
+
+
+@pytest.mark.django_db()
 def test_scheduled_trigger_reports_when_it_fires(client, chatbot):
     response = client.post(SCHEDULED.list_url(chatbot), SCHEDULED.body(timezone="UTC"), format="json")
 
