@@ -12,5 +12,4 @@ class Migration(migrations.Migration):
 
     operations = [
         RunDataMigration("remove_deprecated_models", command_options={"force": True}),
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]
