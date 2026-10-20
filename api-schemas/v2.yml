@@ -2085,8 +2085,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChatbotVersion'
+        last_activity_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When a participant last sent a message in any of this chatbot's
+            sessions. Evaluation runs are not counted. Null if the chatbot has no
+            participant activity.
       required:
       - id
+      - last_activity_at
       - name
       - url
       - versions
