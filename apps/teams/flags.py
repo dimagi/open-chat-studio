@@ -48,8 +48,6 @@ class Flags(FlagInfo, Enum):
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
 
-    PUBLIC_CHANNEL = ("flag_public_channel", "Public link channel served by the chat widget", "", [], False)
-
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",
         "Testing endpoints for custom actions (internal use only)",
@@ -58,8 +56,6 @@ class Flags(FlagInfo, Enum):
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
     EMAIL_CHANNEL = ("flag_email_channel", "Email messaging channel for chatbots", "", [], True)
-
-    SLACK_NOTIFICATIONS = ("flag_slack_notifications", "Slack notifications channel", "", [], True)
 
     JSON_COLLECTION_LOADER = (
         "flag_json_collection_loader",
@@ -96,6 +92,11 @@ class Flags(FlagInfo, Enum):
     IGNORE_RATE_LIMITING = (
         "flag_ignore_rate_limiting",
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
+    )
+
+    ABUSE_DETECTION = (
+        "flag_abuse_detection",
+        "Abuse detection - message moderation, strikes and participant blocking (issue #4269)",
     )
 
     @property
