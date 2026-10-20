@@ -123,6 +123,7 @@ def test_provider_builds_openai_service():
     assert service.openai_api_key.get_secret_value() == "sk-1"
     assert service.openai_api_base is None
     assert service.openai_organization == "org-1"
+    assert service.timeout is not None
 
 
 def _urls(team, provider=None):
