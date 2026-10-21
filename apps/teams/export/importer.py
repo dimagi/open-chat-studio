@@ -214,6 +214,15 @@ def _match_existing_tagged_item(model, row: dict, store: FKTranslationStore, tar
     return model._base_manager.filter(content_type=content_type, object_id=target_object, tag_id=target_tag).first()
 
 
+def _match_existing_event_type(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """Map onto the target's event type with the same identifier rather than violating the per-team
+    unique constraint. The identifier is a hash of the notification's content, so the same notification
+    raised on both servers (e.g. by a migration that ran on each) produces the same identifier."""
+    if not row["identifier"] or target_team is None:
+        return None
+    return model._base_manager.filter(team=target_team, identifier=row["identifier"]).first()
+
+
 def _adopt_participant(
     model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
 ) -> models.Model | None:
@@ -255,6 +264,7 @@ _MATCH_EXISTING = {
     "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
     "assessments.score": _match_existing_score,
     "annotations.customtaggeditem": _match_existing_tagged_item,
+    "ocs_notifications.eventtype": _match_existing_event_type,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator

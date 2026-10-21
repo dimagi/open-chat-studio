@@ -17,6 +17,7 @@ from apps.events.models import EventAction
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
+from apps.ocs_notifications.models import EventType
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
@@ -777,6 +778,25 @@ def test_retagged_item_maps_onto_the_existing_tagged_item(store):
     assert store.get_target("annotations.customtaggeditem", 700) == tagged_item.pk
     assert store.get_target("annotations.customtaggeditem", 701) == tagged_item.pk
     assert tagged_item.user_id == second_user.id
+
+
+def test_event_type_maps_onto_the_target_row_with_the_same_identifier(store):
+    """Regression for the sync_team UniqueViolation on ``unique_event_type_per_team_and_identifier``.
+
+    The identifier is a hash of the notification's content, so a migration that raises the same
+    notification on both servers creates an identical event type on each. The source's row maps onto
+    the target's instead of inserting a duplicate."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    target_event_type = EventTypeFactory(team=target_team, identifier="d56ddb99f84ae06fe91fd3db51bbe51119d48b58")
+    source_event_type = EventTypeFactory(identifier="d56ddb99f84ae06fe91fd3db51bbe51119d48b58")
+    event_type_row = dict(build_resource_serializer(EventType)(source_event_type).data)
+
+    importer.import_rows("ocs_notifications.eventtype", [event_type_row])
+
+    assert EventType.objects.filter(team=target_team).count() == 1
+    assert store.get_target("ocs_notifications.eventtype", source_event_type.id) == target_event_type.pk
 
 
 def _annotation_queue_row(source_id, assignees, name="Queue"):
