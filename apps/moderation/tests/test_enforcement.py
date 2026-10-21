@@ -67,23 +67,25 @@ class TestBlockParticipant:
 
 @pytest.mark.django_db()
 class TestIsExempt:
-    def test_team_member_user_is_exempt(self):
+    @pytest.mark.parametrize(
+        ("remove_membership", "expected"),
+        [
+            pytest.param(False, True, id="current_member_is_exempt"),
+            pytest.param(True, False, id="former_member_is_not_exempt"),
+        ],
+    )
+    def test_team_member_user(self, remove_membership, expected):
         membership = MembershipFactory.create()
         participant = ParticipantFactory.create(team=membership.team, user=membership.user)
+        if remove_membership:
+            membership.delete()
 
-        assert is_exempt(participant=participant, team=membership.team) is True
+        assert is_exempt(participant=participant, team=membership.team) is expected
 
     def test_user_who_is_not_a_member_is_not_exempt(self):
         participant = ParticipantFactory.create(user=UserFactory.create())
 
         assert is_exempt(participant=participant, team=participant.team) is False
-
-    def test_former_member_is_not_exempt(self):
-        membership = MembershipFactory.create()
-        participant = ParticipantFactory.create(team=membership.team, user=membership.user)
-        membership.delete()
-
-        assert is_exempt(participant=participant, team=membership.team) is False
 
     def test_participant_without_user_is_not_exempt(self):
         participant = ParticipantFactory.create()

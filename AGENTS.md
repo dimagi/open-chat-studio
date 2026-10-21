@@ -77,11 +77,22 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * When a change adds or alters a core user workflow, ask the user whether it should become a story in `docs/core_user_stories.md` with a covering Playwright test (see `docs/developer_guides/testing/playwright_tests.md`). Do not add one without their confirmation
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use `.github/pull_request_template.md` as the template for pull request descriptions
+* Write commit messages as semantic commits: `<type>: <summary>`, with the summary in present tense (`feat: add CSV export for sessions`). An optional scope names the affected area: `fix(pipelines): handle empty router output`. The types are:
+  * `feat`: a new feature for the user
+  * `fix`: a bug fix for the user
+  * `docs`: documentation only
+  * `style`: formatting with no change in behaviour (whitespace, ruff format)
+  * `refactor`: a code change that neither fixes a bug nor adds a feature
+  * `test`: adding or changing tests only
+  * `chore`: build, tooling, dependency or config changes that do not touch app code
+
+  When the summary line cannot explain the change on its own, add a body after a blank line that says why the change was made and anything a reviewer would not see from the diff. Do not mix change types in one commit; split them into separate commits instead
 * Keep a comment when it carries context the file cannot show — when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 * In API packages, define exception classes in an `exceptions.py` and permission classes in a `permissions.py` next to the views that use them, not in the views module
 * Build any user-triggered export whose size grows with team data as an async Celery task that saves a `FilePurpose.DATA_EXPORT` `File` and returns its id for a polled download link. Follow `docs/agents/data_exports.md`
+* Use the shared UI components in `docs/agents/ui_components.md`. For example, confirm actions with `confirmThenTrigger`, never the browser's `confirm()` or `hx-confirm`
 * Put an operation that more than one entry point uses (web view, API view, Celery task, channel) in the owning app's `services` module and call it from each entry point; views and serializers only parse input and format output. Before writing a helper, search for an existing one; to reuse it, move it rather than importing it from where it is. See "Where code goes within an app" in `docs/architecture/package-map.md` for the full rules, including when to split `services.py` into a package
 * The same applies to test code. Put a fixture used by more than one app in `apps/utils/tests/fixtures.py` and import it in `apps/conftest.py` to register it (`apps/conftest.py` is not the rootdir conftest, so it cannot use `pytest_plugins`). Put a fixture used within one app in the nearest `conftest.py` that covers every test using it. Put a plain helper that takes arguments in a `utils.py` or `<topic>_helpers.py` module next to the tests. Never import a helper from another `test_*.py` module, and do not start test module names with an underscore
 * A `DeprecationWarning` reported against `apps.*` fails the test that raises it (`filterwarnings` in `pyproject.toml`). Fix the call site. Add an `ignore` line only when the deprecated thing is inside a dependency and we cannot move off it, scoped to the message so the same library raising something new still surfaces
@@ -112,6 +123,7 @@ Consult these guides when working in the relevant area:
 * `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
 * `docs/agents/pipeline_node_types.md` — when writing code that branches on a pipeline node's type
 * `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
+* `docs/agents/ui_components.md` — when adding UI to templates (confirmation dialogs, notifications)
 * `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
 * `docs/developer_guides/testing/help_agent_evals.md` — when adding or modifying help agents or their eval tests

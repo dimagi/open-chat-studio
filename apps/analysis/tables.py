@@ -2,6 +2,8 @@ from django.conf import settings
 from django.utils.html import format_html
 from django_tables2 import columns, tables
 
+from apps.generics.tables import TemplateColumn
+
 from .models import TranscriptAnalysis
 
 
@@ -10,7 +12,7 @@ class TranscriptAnalysisTable(tables.Table):
     experiment = columns.Column(verbose_name="Experiment Name", accessor="experiment__name")
     status = columns.Column()
     created_at = columns.DateTimeColumn(verbose_name="Created")
-    actions = columns.TemplateColumn(
+    actions = TemplateColumn(
         template_name="analysis/components/actions_column.html", verbose_name="Actions", orderable=False
     )
 

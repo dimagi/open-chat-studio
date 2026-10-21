@@ -41,7 +41,7 @@ from django_tables2 import SingleTableView
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import CustomTaggedItem, Tag, UserComment
 from apps.channels.datamodels import Attachment
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -550,6 +550,15 @@ def _get_languages_for_chat(session):
     return available_languages, translatable_languages
 
 
+def _attach_session_chat(messages, session):
+    """Reuse the already-loaded session chat so per-message access to `message.chat`
+    (e.g. in `get_attached_files`) doesn't trigger a query for each message.
+    """
+    for message in messages:
+        if message.chat_id == session.chat_id:
+            message.chat = session.chat
+
+
 def _add_time_gap_info(messages, gap_threshold_hours=4):
     """
     Add time gap information to messages for display in the template.
@@ -624,6 +633,31 @@ def _mark_tag_context(messages, selected_tags, matched_ids):
         message.is_tag_context = message.id not in matched_ids
 
 
+def _session_messages_queryset(chat) -> QuerySet:
+    """A chat's messages in display order, with everything the message list template reads
+    per message (tags, participant data diffs, comments) prefetched to avoid N+1 queries.
+    """
+    return (
+        ChatMessage.objects.filter(chat=chat)
+        .order_by("created_at", "id")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            ),
+            Prefetch(
+                "output_message_trace",
+                queryset=Trace.objects.exclude(
+                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
+                ).only("id", "participant_data_diff", "output_message_id"),
+                to_attr="prefetched_output_traces_with_diff",
+            ),
+            Prefetch("comments", queryset=UserComment.objects.select_related("user")),
+        )
+    )
+
+
 def _build_session_messages_context(request, session, experiment) -> tuple[dict, QuerySet]:
     """Context for a session's message list, at either the full page or the scroll-fragment
     endpoint, plus the underlying (tag-filtered, language-annotated) queryset. The full page
@@ -641,24 +675,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
 
     default_message = "(message generated after last translation)"
 
-    messages_queryset = (
-        ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at", "id")
-        .prefetch_related(
-            Prefetch(
-                "tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            ),
-            Prefetch(
-                "output_message_trace",
-                queryset=Trace.objects.exclude(
-                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
-                ).only("id", "participant_data_diff", "output_message_id"),
-                to_attr="prefetched_output_traces_with_diff",
-            ),
-        )
-    )
+    messages_queryset = _session_messages_queryset(session.chat)
     messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
 
     if language:
@@ -689,6 +706,8 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()
+
+    _attach_session_chat(current_page_messages, session)
 
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
@@ -964,6 +983,7 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
     publish_version(experiment)
+    messages.success(request, f"{experiment.version_display} is now the published version")
     url = (
         reverse(
             "chatbots:single_chatbot_home",
@@ -992,8 +1012,10 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
         + "#versions"
     )
     if experiment.is_default_version:
+        messages.error(request, "The published version cannot be archived")
         return redirect(url)
     experiment.archive()
+    messages.success(request, f"{experiment.version_display} archived")
     return redirect(url)
 
 
@@ -1042,7 +1064,17 @@ def update_version_description(request, team_slug: str, experiment_id: int, vers
 
 @login_and_team_required
 def get_release_status_badge(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment = get_object_or_404(
+        Experiment.objects.select_related(
+            "consent_form",
+            "synthetic_voice",
+            "voice_provider",
+            "trace_provider",
+            "pipeline",
+        ).prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers"),
+        id=experiment_id,
+        team=request.team,
+    )
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)
 
