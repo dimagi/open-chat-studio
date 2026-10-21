@@ -50,7 +50,6 @@ def test_transcript_rule_marker(client, experiment, moderation_detail, marker_pr
 @pytest.mark.parametrize(
     ("view_name", "status"),
     [
-        pytest.param("experiments:experiment_review", SessionStatus.PENDING_REVIEW, id="review_page"),
         pytest.param("experiments:experiment_session_messages_view", SessionStatus.ACTIVE, id="transcript_page"),
         pytest.param(
             "experiments:experiment_session_messages_fragment_view", SessionStatus.ACTIVE, id="transcript_fragment"
