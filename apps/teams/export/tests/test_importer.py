@@ -17,7 +17,8 @@ from apps.events.models import EventAction
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
-from apps.ocs_notifications.models import EventType
+from apps.ocs_notifications.models import EventType, EventUser, LevelChoices
+from apps.ocs_notifications.utils import create_notification
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
@@ -94,7 +95,7 @@ from apps.utils.factories.service_provider_factories import (
     TraceProviderFactory,
     VoiceProviderFactory,
 )
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.utils.factories.user import UserFactory
 
@@ -780,23 +781,51 @@ def test_retagged_item_maps_onto_the_existing_tagged_item(store):
     assert tagged_item.user_id == second_user.id
 
 
-def test_event_type_maps_onto_the_target_row_with_the_same_identifier(store):
-    """Regression for the sync_team UniqueViolation on ``unique_event_type_per_team_and_identifier``.
-
-    The identifier is a hash of the notification's content, so a migration that raises the same
-    notification on both servers creates an identical event type on each. The source's row maps onto
-    the target's instead of inserting a duplicate."""
+def test_notification_raised_on_both_servers_maps_onto_the_target_rows(store):
+    """The same notification raised on both servers (e.g. by a migration that ran on each) maps the
+    source's event type and event users onto the target's, and the target keeps its read state."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
-    target_event_type = EventTypeFactory(team=target_team, identifier="d56ddb99f84ae06fe91fd3db51bbe51119d48b58")
-    source_event_type = EventTypeFactory(identifier="d56ddb99f84ae06fe91fd3db51bbe51119d48b58")
-    event_type_row = dict(build_resource_serializer(EventType)(source_event_type).data)
+    source_team = TeamFactory()
+    reader, non_reader = UserFactory(), UserFactory()
+    for user in (reader, non_reader):
+        MembershipFactory(team=source_team, user=user)
+        MembershipFactory(team=target_team, user=user)
+        store.record("users.customuser", user.id, user.id)
+    for team in (source_team, target_team):
+        _raise_model_removal_notification(team)
+    EventUser.objects.filter(team=target_team, user=reader).update(read=True)
+    source_event_type = EventType.objects.get(team=source_team)
+    source_event_users = EventUser.objects.filter(team=source_team)
 
-    importer.import_rows("ocs_notifications.eventtype", [event_type_row])
+    importer.import_rows("ocs_notifications.eventtype", [_serialize(source_event_type)])
+    importer.import_rows("ocs_notifications.eventuser", [_serialize(row) for row in source_event_users])
 
-    assert EventType.objects.filter(team=target_team).count() == 1
+    target_event_type = EventType.objects.get(team=target_team)
+    target_event_users = {eu.user_id: eu for eu in EventUser.objects.filter(team=target_team)}
     assert store.get_target("ocs_notifications.eventtype", source_event_type.id) == target_event_type.pk
+    assert set(target_event_users) == {reader.id, non_reader.id}
+    for source_event_user in source_event_users:
+        target_pk = store.get_target("ocs_notifications.eventuser", source_event_user.id)
+        assert target_pk == target_event_users[source_event_user.user_id].pk
+    assert target_event_users[reader.id].read is True
+    assert target_event_users[non_reader.id].read is False
+
+
+def _raise_model_removal_notification(team):
+    create_notification(
+        title="Model removed",
+        message="GPT-4.1 has been removed.",
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="llm-model-removed",
+        event_data={"model": "gpt-4.1"},
+    )
+
+
+def _serialize(instance):
+    return dict(build_resource_serializer(type(instance))(instance).data)
 
 
 def _annotation_queue_row(source_id, assignees, name="Queue"):
