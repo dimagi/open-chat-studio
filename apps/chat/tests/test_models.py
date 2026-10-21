@@ -1,8 +1,11 @@
 import pytest
+from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
-from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
+from apps.chat.schemas import ModerationDetail
 from apps.pipelines.models import PipelineChatHistoryModes
+from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
@@ -165,3 +168,56 @@ class TestHistoryExcludesFilteredHumanMessages:
         messages = session.chat.get_langchain_messages()
 
         assert [m.content for m in messages] == ["fine", "ok", "reply"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("status", "detail"),
+    [
+        pytest.param(
+            ModerationStatus.FLAGGED,
+            ModerationDetail(
+                output=ModerationOutput.model_validate(
+                    {
+                        "illicit/violent": {"flagged": True, "score": 0.84},
+                        "hate": {"flagged": False, "score": 0.02},
+                    }
+                ),
+                rules=["markup"],
+            ),
+            id="output_and_rules",
+        ),
+        pytest.param(ModerationStatus.SKIPPED, ModerationDetail(skip_reason="rate_limited"), id="skip_reason"),
+        pytest.param(None, None, id="unmoderated"),
+    ],
+)
+def test_moderation_columns_round_trip(status, detail):
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        content="Hi",
+        moderation_status=status,
+        moderation_detail=detail,
+    )
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_status == status
+    assert message.moderation_detail == detail
+
+
+@pytest.mark.django_db()
+def test_moderation_columns_default_to_null():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_status is None
+    assert message.moderation_detail is None
+
+
+def test_moderation_detail_rejects_unknown_skip_reason():
+    with pytest.raises(ValidationError):
+        ModerationDetail.model_validate({"skip_reason": "unknown"})
