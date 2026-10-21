@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.generics import GenericAPIView, get_object_or_404
 from rest_framework.response import Response
 
-from apps.api.permissions import BASE_PERMISSION_CLASSES
+from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.v2.lookups import get_working_chatbot
 from apps.api.v2.write.base import DescribesPatch
 from apps.api.v2.write.serializers import ResourceArchivedSerializer
@@ -18,7 +18,6 @@ from apps.events.models import ScheduledTrigger, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 
-from .permissions import TriggerModelPermission
 from .schema import scheduled_trigger_schema, static_trigger_schema, timeout_trigger_schema
 from .serializers import (
     BaseTriggerSerializer,
@@ -34,13 +33,11 @@ class TriggerView(GenericAPIView):
     Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, TriggerModelPermission, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
     metadata_class = DescribesPatch
     serializer_class: type[BaseTriggerSerializer]
     model: type[models.Model]
-    # Only here so the generic view has a queryset; permissions are not derived from it.
-    queryset = Experiment.objects.none()
 
     chatbot: Experiment | None = None
 
@@ -86,15 +83,21 @@ class TriggerView(GenericAPIView):
 class StaticTriggerView(TriggerView):
     serializer_class = StaticTriggerWriteSerializer
     model = StaticTrigger
+    # DjangoModelPermissionsWithView derives the required permission from this queryset's model.
+    queryset = StaticTrigger.objects.none()
 
 
 @timeout_trigger_schema
 class TimeoutTriggerView(TriggerView):
     serializer_class = TimeoutTriggerWriteSerializer
     model = TimeoutTrigger
+    # DjangoModelPermissionsWithView derives the required permission from this queryset's model.
+    queryset = TimeoutTrigger.objects.none()
 
 
 @scheduled_trigger_schema
 class ScheduledTriggerView(TriggerView):
     serializer_class = ScheduledTriggerWriteSerializer
     model = ScheduledTrigger
+    # DjangoModelPermissionsWithView derives the required permission from this queryset's model.
+    queryset = ScheduledTrigger.objects.none()
