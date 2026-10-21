@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
+from django.db.models import Case, Count, F, IntegerField, OuterRef, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -50,6 +50,7 @@ from apps.experiments.filters import (
 from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.experiments.services import last_activity_subquery
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
@@ -243,19 +244,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
             .values("count")
         )
 
-        last_activity_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .order_by(F("last_activity_at").desc(nulls_last=True))
-            .values("last_activity_at")[:1]
-        )
-
         # Add expensive annotations only to paginated data
         return queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
             interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
-            last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
+            last_activity=last_activity_subquery(),
         ).order_by(F("last_activity").desc(nulls_last=True))
 
 
