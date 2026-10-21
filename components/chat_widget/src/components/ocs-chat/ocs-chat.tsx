@@ -523,7 +523,15 @@ export class OcsChat {
   private mergeServerMessages(incoming: ChatMessage[]): ChatMessage[] {
     const merged = [...this.messages];
     for (const message of incoming) {
-      const index = message.role === 'user' ? merged.findLastIndex(m => m.local && m.role === 'user' && m.content === message.content.trim()) : -1;
+      let index = -1;
+      if (message.role === 'user') {
+        for (let i = merged.length - 1; i >= 0; i--) {
+          if (merged[i].local && merged[i].role === 'user' && merged[i].content === message.content.trim()) {
+            index = i;
+            break;
+          }
+        }
+      }
       if (index === -1) {
         merged.push(message);
       } else {
