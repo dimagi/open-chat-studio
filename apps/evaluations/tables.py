@@ -3,7 +3,7 @@ from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
-from django_tables2 import TemplateColumn, columns, tables
+from django_tables2 import columns, tables
 
 from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.cost_tracking.templatetags.cost_tracking import cost_display
@@ -20,7 +20,7 @@ from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import ArrayColumn, TemplateColumnWithCustomHeader
+from apps.generics.tables import ArrayColumn, TemplateColumn, TemplateColumnWithCustomHeader
 from apps.teams.utils import get_slug_for_team
 
 
@@ -368,7 +368,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
-    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
+    tags = TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
     last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
     versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)
