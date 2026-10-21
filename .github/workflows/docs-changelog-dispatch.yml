@@ -1,3 +1,33 @@
+# Docs and Changelog Dispatch Workflow
+#
+# When a PR with the "This PR requires docs/changelog update" checkbox ticked is
+# merged, sends an `ocs_changelog_update` repository_dispatch event to
+# dimagi/open-chat-studio-docs. That repo's update-changelog.yml drafts the
+# changelog entry and docs update. The payload (see `client-payload` below)
+# carries the PR's details and `is_widget_change` (true if the PR changed files
+# under components/).
+#
+# Triggered on: a PR to `main` being closed, if it changed files under
+# components/, config/, assets/, apps/ or templates/.
+#
+# Condition: the job `if:` checks that the PR was merged and its description
+# contains `[x] This PR requires docs/changelog update` (case-insensitive), the
+# checkbox text from the PR template. Other PRs skip without starting a runner.
+#
+# Requirements: OCS_DOCS_PAT secret, a token allowed to send repository_dispatch
+# events to the docs repo.
+#
+# Notes:
+# - The "Self-hosted operators must know about or act on this change" checkbox
+#   does not send a dispatch. Operator entries are added to CHANGELOG.md by hand.
+# - A PR that changes no files under the paths above (for example, one that
+#   only edits docs/) does not run this workflow, even with the box ticked. To
+#   draft its changelog entry, run update-changelog.yml manually from the docs
+#   repo (workflow_dispatch).
+#
+# See https://developers.openchatstudio.com/developer_guides/user_docs/changelog_automation/
+# for the full pipeline.
+
 name: Docs and Changelog Dispatch
 
 on:
@@ -18,9 +48,10 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch Docs and Changelog Update
-    # Only run if PR was merged (not just closed)
-    if: github.event.pull_request.merged == true
+    # Only run if the PR was merged (not just closed) and the docs/changelog box is ticked
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.body, '[x] This PR requires docs/changelog update')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       # Audit only: records egress without blocking. Flip to `block` plus an
@@ -29,16 +60,12 @@ jobs:
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Check if widget files changed
         id: check_widget
         run: |
           # Get list of changed files in this PR
-          gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' > /tmp/changed_files.txt
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json files --jq '.files[].path' > /tmp/changed_files.txt
 
           # Check if any files in components/ folder were changed
           if grep -q "^components/" /tmp/changed_files.txt; then
@@ -50,27 +77,9 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check if docs/changelog update is needed
-        id: check_docs_needed
-        run: |
-          # Get PR body
-          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body --jq '.body')
-
-          # Check for checked checkbox indicating docs/changelog update needed
-          # Looks for: - [x] This PR requires docs/changelog update
-          if printf '%s\n' "$PR_BODY" | grep -qiE -- '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
-            echo "needs_docs_update=true" >> "$GITHUB_OUTPUT"
-            echo "PR indicates docs/changelog update is needed"
-          else
-            echo "needs_docs_update=false" >> "$GITHUB_OUTPUT"
-            echo "No docs/changelog update needed (checkbox not checked)"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
       - name: Repository Dispatch
-        if: steps.check_docs_needed.outputs.needs_docs_update == 'true'
         uses: peter-evans/repository-dispatch@v4.0.1
         with:
           token: ${{ secrets.OCS_DOCS_PAT }}
