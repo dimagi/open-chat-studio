@@ -146,6 +146,20 @@ describe('ocs-chat attachment download', () => {
     expect(component.messages.at(-1)).toEqual(server);
   });
 
+  it('replaces the latest optimistic bubble when an earlier one has the same text', async () => {
+    const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3 });
+    const component = page.rootInstance as OcsChat;
+    const first = { created_at: '2026-01-01T00:00:00.000Z', role: 'user' as const, content: 'hello', attachments: [], local: true };
+    const reply = { created_at: '2026-01-01T00:00:01.000Z', role: 'assistant' as const, content: 'hi', attachments: [], local: true };
+    const second = { ...first, created_at: '2026-01-01T00:00:02.000Z' };
+    const server = { created_at: '2026-01-01T00:00:03.000Z', role: 'user' as const, content: 'hello', attachments: [] };
+    component.messages = [first, reply, second];
+
+    component['messages'] = component['mergeServerMessages']([server]);
+
+    expect(component.messages).toEqual([first, reply, server]);
+  });
+
   it('does not report a failed download in a session started after it', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
     const component = page.rootInstance as OcsChat;
