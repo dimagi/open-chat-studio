@@ -1,10 +1,15 @@
+import json
+from unittest import mock
+
 import pytest
+from django.urls import reverse
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.pipelines.views import get_widget_page_context
 from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.mark.django_db()
@@ -102,3 +107,35 @@ class TestGetWidgetPageContext:
         result = get_widget_page_context(pipeline, experiment=experiment)
         assert result["event_triggers"]["static_triggers"] == []
         assert result["event_triggers"]["timeout_triggers"] == []
+
+
+@pytest.mark.django_db()
+class TestSimplePipelineMessage:
+    @pytest.fixture()
+    def member_client(self, client, team_with_users):
+        client.force_login(team_with_users.members.first())
+        return client
+
+    def _post(self, client, team, pipeline):
+        url = reverse("pipelines:pipeline_message", kwargs={"team_slug": team.slug, "pipeline_pk": pipeline.id})
+        return client.post(url, data=json.dumps({"message": "hi"}), content_type="application/json")
+
+    @mock.patch("apps.pipelines.views.get_response_for_pipeline_test_message")
+    def test_runs_a_pipeline_of_the_current_team(self, task, member_client, team_with_users):
+        task.delay.return_value.task_id = "task-1"
+        pipeline = PipelineFactory(team=team_with_users)
+
+        response = self._post(member_client, team_with_users, pipeline)
+
+        assert response.status_code == 200
+        assert response.json() == {"task_id": "task-1"}
+        task.delay.assert_called_once()
+
+    @mock.patch("apps.pipelines.views.get_response_for_pipeline_test_message")
+    def test_another_teams_pipeline_is_not_found(self, task, member_client, team_with_users):
+        other_pipeline = PipelineFactory(team=TeamWithUsersFactory.create())
+
+        response = self._post(member_client, team_with_users, other_pipeline)
+
+        assert response.status_code == 404
+        task.delay.assert_not_called()
