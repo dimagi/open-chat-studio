@@ -1,4 +1,5 @@
 import pytest
+from waffle.testutils import override_flag
 
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -29,6 +30,7 @@ def test_columns_handles_a_mix_of_overridden_and_default_prepare(team):
     """ExperimentSessionFilter.filters mixes filters that override prepare() (VersionsFilter,
     ChannelsFilter, ...) with ones that rely on the base no-op. columns() must not crash on
     either kind. See #4363."""
-    columns = ExperimentSessionFilter.columns(team)
+    with override_flag("flag_human_annotations", active=True):
+        columns = ExperimentSessionFilter.columns(team)
 
     assert set(columns) == {f.query_param for f in ExperimentSessionFilter.filters}

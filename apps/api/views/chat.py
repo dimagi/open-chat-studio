@@ -1,12 +1,18 @@
-import logging
 import pathlib
 
 from django.conf import settings
 from django.core.cache import cache
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    PolymorphicProxySerializer,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import (
@@ -28,18 +34,22 @@ from apps.api.authentication import (
     oauth_resolved_channel,
 )
 from apps.api.chat_consent import consent_refusal, session_consent_block
-from apps.api.exceptions import ChatApiAccessDenied
+from apps.api.exceptions import ChatApiAccessDenied, ParticipantBlocked
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
+from apps.api.progress_messages import get_progress_message
 from apps.api.serializers import (
     ChatConsentRequest,
     ChatConsentSerializer,
+    ChatMessageSerializer,
     ChatPollResponse,
     ChatSendMessageRequest,
     ChatSendMessageResponse,
     ChatSessionTokenResponse,
     ChatStartSessionRequest,
     ChatStartSessionResponse,
+    ErrorDetailSerializer,
     MessageSerializer,
+    ParticipantBlockedResponse,
 )
 from apps.api.session_tokens import issue_session_token_with_expiry
 from apps.api.throttling import ChatAPIRateThrottle
@@ -59,9 +69,10 @@ from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionR
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.files.content_type import detect_content_type_from_file
+from apps.files.content_type import detect_content_type_from_file, read_sample
 from apps.files.models import File, FilePurpose
-from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
+from apps.moderation.enforcement import is_participant_blocked
+from apps.service_providers.file_limits import blocked_file_reason
 from apps.service_providers.llm_service.image_types import (
     ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES,
     DENIED_IMAGE_EXTENSIONS,
@@ -99,8 +110,6 @@ CHAT_ACCESS_DENIED_RESPONSE = inline_serializer(
     },
 )
 
-logger = logging.getLogger("ocs.api_chat")
-
 
 def validate_file_upload(file):
     """
@@ -119,6 +128,10 @@ def validate_file_upload(file):
             f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
         )
     mime_type = file.content_type or ""
+    # No content_type_mismatch check: browsers report some types inconsistently
+    # (Windows reports .csv as application/vnd.ms-excel).
+    if reason := blocked_file_reason(filename=file.name, claimed_type=mime_type, content=read_sample(file)):
+        return False, f"File '{file.name}' was rejected: {reason}"
     content_type = mime_type.split("/")[0]
     # All text files are allowed
     if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
@@ -133,6 +146,38 @@ def validate_file_upload(file):
             f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
         )
     return True, None
+
+
+def _validate_uploaded_files(files):
+    """Return a 400 Response if the upload is empty, has an invalid file, or is too large; else None."""
+    if not files:
+        return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    for file in files:
+        is_valid, error_msg = validate_file_upload(file)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+    total_size_mb = sum(f.size for f in files) / (1024 * 1024)
+    if total_size_mb > MAX_TOTAL_SIZE_MB:
+        return Response(
+            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    return None
+
+
+def _resolve_uploader(request, session, participant_remote_id):
+    """Identify the uploader: participant, authenticated user's email, remote id, then "unknown"."""
+    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
+
+    if not uploaded_by and request.user.is_authenticated:
+        uploaded_by = request.user.email
+
+    # Default to the remote_id if we still don't have an identifier
+    if not uploaded_by:
+        uploaded_by = participant_remote_id or "unknown"
+
+    return uploaded_by
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
@@ -184,7 +229,7 @@ def validate_file_upload(file):
 def chat_upload_file(request, session_id):
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
@@ -196,32 +241,15 @@ def chat_upload_file(request, session_id):
     if refusal := consent_refusal(request, session):
         return refusal
     files = request.FILES.getlist("files")
-    if not files:
-        return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
+    if refusal := _validate_uploaded_files(files):
+        return refusal
 
-    for file in files:
-        is_valid, error_msg = validate_file_upload(file)
-        if not is_valid:
-            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
-
-    total_size_mb = sum(f.size for f in files) / (1024 * 1024)
-    if total_size_mb > MAX_TOTAL_SIZE_MB:
-        return Response(
-            {"error": f"Total file size exceeds maximum of {MAX_TOTAL_SIZE_MB}MB"}, status=status.HTTP_400_BAD_REQUEST
-        )
     expiry_date = timezone.now() + timezone.timedelta(hours=24)
     uploaded_files = []
 
     participant_remote_id = request.POST.get("participant_remote_id", "")
     participant_name = request.POST.get("participant_name", "")
-    uploaded_by = session.participant.identifier if session.participant else participant_remote_id
-
-    if not uploaded_by and request.user.is_authenticated:
-        uploaded_by = request.user.email
-
-    # Default to the remote_id if we still don't have an identifier
-    if not uploaded_by:
-        uploaded_by = participant_remote_id or "unknown"
+    uploaded_by = _resolve_uploader(request, session, participant_remote_id)
 
     for file in files:
         file_obj = File.objects.create(
@@ -545,6 +573,11 @@ def _apply_session_data(session, user, session_data) -> None:
         # Session-authenticated callers keep their 403 (ADR-0053); a 401 at an authenticated
         # caller would read as a broken session.
         401: CHAT_ACCESS_DENIED_RESPONSE,
+        403: PolymorphicProxySerializer(
+            component_name="ChatStartSessionForbidden",
+            serializers=[CHAT_ACCESS_DENIED_RESPONSE, ParticipantBlockedResponse],
+            resource_type_field_name=None,
+        ),
         # Public-channel admission: the chatbot has no published version yet.
         409: inline_serializer(
             "ChatStartSessionRefused",
@@ -669,6 +702,8 @@ def chat_start_session(request):
     participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
     if refusal:
         return refusal
+    if is_participant_blocked(team=team, participant_id=participant.id):
+        raise ParticipantBlocked()
 
     if name or participant_timezone:
         _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
@@ -743,7 +778,14 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     summary="Send a message to a chat session",
     tags=["Chat"],
     request=ChatSendMessageRequestWithAttachments,
-    responses={202: ChatSendMessageResponse, 403: CONSENT_REQUIRED_RESPONSE},
+    responses={
+        202: ChatSendMessageResponse,
+        403: PolymorphicProxySerializer(
+            component_name="ChatSendMessageForbidden",
+            serializers=[CONSENT_REQUIRED_RESPONSE, ParticipantBlockedResponse],
+            resource_type_field_name=None,
+        ),
+    },
     parameters=[
         OpenApiParameter(
             name="session_id",
@@ -785,7 +827,7 @@ def chat_send_message(request, session_id):
 
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     # Verify session is active
     if session.is_complete:
@@ -797,6 +839,9 @@ def chat_send_message(request, session_id):
 
     if refusal := consent_refusal(request, session):
         return refusal
+
+    if is_participant_blocked(team=session.team, participant_id=session.participant_id):
+        raise ParticipantBlocked()
 
     attachment_data = []
     if attachment_ids:
@@ -858,16 +903,11 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
         200: inline_serializer(
             "ChatTaskPoll",
             {
-                "message": MessageSerializer(required=False),
+                "message": ChatMessageSerializer(required=False),
                 "status": serializers.ChoiceField(required=False, choices=("processing", "complete")),
             },
         ),
-        404: inline_serializer(
-            "ChatTaskPollNotFound",
-            {
-                "detail": serializers.CharField(),
-            },
-        ),
+        404: ErrorDetailSerializer,
         500: inline_serializer(
             "ChatTaskPollError",
             {
@@ -922,7 +962,7 @@ def chat_poll_task_response(request, session_id, task_id):
 
     if message := task_details["message"]:
         data = {
-            "message": MessageSerializer(message, context={"request": request}).data,
+            "message": ChatMessageSerializer(message, context={"request": request, "session_id": session_id}).data,
             "status": "complete",
         }
         return Response(data, status=status.HTTP_200_OK)
@@ -968,7 +1008,7 @@ def chat_poll_response(request, session_id):
     """
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
 
     since_param = request.query_params.get("since")
     limit = int(request.query_params.get("limit", 50))
@@ -996,7 +1036,50 @@ def chat_poll_response(request, session_id):
         "session_status": session_status,
         "consent": session_consent_block(session),
     }
-    return Response(ChatPollResponse(response_data, context={"request": request}).data, status=status.HTTP_200_OK)
+    serializer = ChatPollResponse(response_data, context={"request": request, "session_id": session_id})
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    operation_id="chat_file_content",
+    summary="Download a file attached to a message in a chat session",
+    tags=["Chat"],
+    responses={(200, "application/octet-stream"): OpenApiTypes.BINARY},
+    parameters=[
+        OpenApiParameter(
+            name="session_id",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.PATH,
+            description="Session ID",
+        ),
+        OpenApiParameter(
+            name="file_id",
+            type=OpenApiTypes.INT,
+            location=OpenApiParameter.PATH,
+            description="File ID",
+        ),
+    ],
+)
+@api_view(["GET"])
+@throttle_classes([ChatAPIRateThrottle])
+@authentication_classes(AUTH_CLASSES)
+@permission_classes(SESSION_PERMISSION_CLASSES)
+def chat_file_content(request, session_id, file_id):
+    session = get_experiment_session_cached(session_id)
+    if not session:
+        raise NotFound()
+
+    # A file outside this session's chat is a 404, not a 403, so file IDs cannot be probed.
+    files = File.objects.filter(team_id=session.team_id, chatattachment__chat_id=session.chat_id).distinct()
+    file = get_object_or_404(files, id=file_id)
+    if not file.file:
+        raise NotFound()
+    try:
+        return FileResponse(
+            file.file.open(), as_attachment=True, filename=file.name, content_type=file.content_type or None
+        )
+    except (FileNotFoundError, ValueError):
+        raise NotFound() from None
 
 
 @extend_schema(
@@ -1069,46 +1152,3 @@ def chat_record_consent(request, session_id):
     if not participant_data.has_consented_to(form_version_id):
         participant_data.record_consent(form_version_id)
     return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-def get_progress_message(session_id, chatbot_name, chatbot_description, throttle_key=None) -> str | None:
-    """Get the next progress message. This will generate new messages if there are no more messages.
-
-    If throttle_key is provided, a new message is only returned once every 5 seconds.
-    Within the 5-second window the same message is returned.
-    """
-    last_key = f"progress_last:{throttle_key}" if throttle_key else None
-    if last_key:
-        last = cache.get(last_key)
-        if last:
-            return last
-
-    key = f"progress_messages:{session_id}"
-    messages = cache.get(key)
-    if not messages:
-        messages = get_progress_messages(chatbot_name, chatbot_description)
-
-    if not messages:
-        return None
-
-    message, *remainder = messages
-    if remainder:
-        cache.set(key, remainder, 24 * 3600)
-    else:
-        cache.delete(key)
-
-    if last_key:
-        cache.set(last_key, message, 5)
-
-    return message
-
-
-def get_progress_messages(chatbot_name, chatbot_description) -> list[str]:
-    try:
-        agent = ProgressMessagesAgent(
-            input=ProgressMessagesInput(chatbot_name=chatbot_name, chatbot_description=chatbot_description)
-        )
-        return agent.run().messages
-    except Exception:
-        logger.exception("Failed to generate progress messages for chatbot '%s'", chatbot_name)
-        return []

@@ -1,13 +1,15 @@
 import pytest
-from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.tools import Tool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
+from apps.utils.openapi import OpenAPISpec
+
+from .openapi_helpers import make_openapi_schema
 
 
 def test_openapi_spec_to_openai_function():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -42,7 +44,7 @@ def test_openapi_spec_to_openai_function():
 
 def test_openai_function_with_optional_params():
     """Optional params in the OpenAPI schema become required in the OpenAI function."""
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -71,7 +73,7 @@ def test_openai_function_with_optional_params():
 
 
 def test_openai_function_with_enum_params():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -106,7 +108,7 @@ def test_openai_function_with_enum_params():
 
 
 def test_openai_function_with_path_params():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -136,7 +138,7 @@ def test_openai_function_with_path_params():
 
 
 def test_openai_function_with_multiple_methods():
-    spec = _make_openapi_schema({"parameters": []})
+    spec = make_openapi_schema({"parameters": []})
     spec["paths"]["/test"]["post"] = {"summary": "Test POST endpoint"}
     get_function_spec = _get_openai_function_from_openapi_spec(spec, "/test", "get")
     post_function_spec = _get_openai_function_from_openapi_spec(spec, "/test", "post")
@@ -146,7 +148,7 @@ def test_openai_function_with_multiple_methods():
 
 
 def test_openai_function_with_request_body():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "requestBody": {
                 "content": {
@@ -172,7 +174,7 @@ def test_openai_function_with_request_body():
 
 
 def test_openai_function_with_refs():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "requestBody": {
                 "content": {
@@ -222,7 +224,7 @@ def test_openai_function_with_refs():
 
 
 def test_openapi_spec_with_multiple_query_params():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -262,7 +264,7 @@ def test_openapi_spec_with_multiple_query_params():
 
 
 def test_openapi_spec_with_header_params():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -291,19 +293,19 @@ def test_openapi_spec_with_header_params():
 
 
 def test_missing_path():
-    spec = _make_openapi_schema({"parameters": []})
+    spec = make_openapi_schema({"parameters": []})
     with pytest.raises(ValueError, match="No path found for /missing"):
         _get_openai_function_from_openapi_spec(spec, "/missing", "get")
 
 
 def test_missing_method():
-    spec = _make_openapi_schema({"parameters": []})
+    spec = make_openapi_schema({"parameters": []})
     with pytest.raises(ValueError, match="No delete method found for /test"):
         _get_openai_function_from_openapi_spec(spec, "/test", "delete")
 
 
 def test_openapi_spec_with_unsupported_request_body():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "requestBody": {
                 "content": {
@@ -318,7 +320,7 @@ def test_openapi_spec_with_unsupported_request_body():
 
 
 def test_openapi_spec_with_duplicate_parameter_names():
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -381,8 +383,8 @@ def _get_openai_function_from_openapi_spec(spec: dict, path: str, method: str):
     """This does a round trip from OpenAPI spec to OpenAI function definition because it's hard
     to validate the pydantic model that's produced by `openapi_spec_op_to_function_def`.
     """
-    spec = OpenAPISpec.from_spec_dict(spec)  # ty: ignore[invalid-assignment]
-    function_def = openapi_spec_op_to_function_def(spec, path, method)
+    openapi_spec = OpenAPISpec.from_spec_dict(spec)
+    function_def = openapi_spec_op_to_function_def(openapi_spec, path, method)
     tool = Tool(
         name=function_def.name,
         description=function_def.description,
@@ -392,17 +394,62 @@ def _get_openai_function_from_openapi_spec(spec: dict, path: str, method: str):
     return convert_to_openai_function(tool, strict=True)
 
 
-def _make_openapi_schema(properties, name="Test API", path="/test", method="get", openapi_version="3.0.0"):
-    return {
-        "openapi": openapi_version,
-        "info": {"title": name, "version": "1.0.0"},
-        "servers": [{"url": "https://example.com"}],
-        "paths": {
-            path: {
-                method: {
-                    "summary": f"{method.upper()} {path} endpoint",
-                    **properties,
+def _single_op_spec(parameters, **operation):
+    return OpenAPISpec.from_spec_dict(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "version": "1"},
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {"/things": {"get": {"operationId": "list-things", "parameters": parameters, **operation}}},
+        }
+    )
+
+
+def test_object_query_parameter_is_supported():
+    spec = _single_op_spec([{"name": "filter", "in": "query", "schema": {"type": "object"}}])
+    function_def = openapi_spec_op_to_function_def(spec, "/things", "get")
+    assert function_def.args_schema(params={"filter": {"a": 1}}).params.filter == {"a": 1}
+
+
+def test_cookie_parameter_is_passed_as_cookies():
+    spec = _single_op_spec([{"name": "session", "in": "cookie", "required": True, "schema": {"type": "string"}}])
+    function_def = openapi_spec_op_to_function_def(spec, "/things", "get")
+    assert function_def.args_schema(cookies={"session": "abc"}).cookies.session == "abc"
+
+
+def test_function_def_name_url_and_description():
+    spec = _single_op_spec([], summary="List things")
+    function_def = openapi_spec_op_to_function_def(spec, "/things", "get")
+    assert function_def.name == "list_things"
+    assert function_def.url == "https://api.example.com/things"
+    assert function_def.description == "List things"
+
+
+def test_parameter_without_schema_raises_value_error():
+    spec = _single_op_spec([{"name": "x", "in": "query", "type": "string"}])
+    with pytest.raises(ValueError, match="Parameter x has no schema"):
+        openapi_spec_op_to_function_def(spec, "/things", "get")
+
+
+def test_recursive_request_body_schema_raises_value_error():
+    node = {"type": "object", "properties": {"child": {"$ref": "#/components/schemas/Node"}}}
+    spec = OpenAPISpec.from_spec_dict(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "version": "1"},
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {
+                "/things": {
+                    "post": {
+                        "operationId": "create-thing",
+                        "requestBody": {
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Node"}}}
+                        },
+                    }
                 }
-            }
-        },
-    }
+            },
+            "components": {"schemas": {"Node": node}},
+        }
+    )
+    with pytest.raises(ValueError, match="Cyclic reference: #/components/schemas/Node"):
+        openapi_spec_op_to_function_def(spec, "/things", "post")

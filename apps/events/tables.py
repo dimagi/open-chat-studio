@@ -8,6 +8,7 @@ from django.utils.translation import gettext as _
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.events.utils import truncate_dict_items
+from apps.generics.tables import TemplateColumn
 from apps.utils.time import seconds_to_human
 
 
@@ -123,7 +124,7 @@ class SchedulesTable(tables.Table):
     next_trigger_date = tables.Column(verbose_name="Next run", empty_values=())
     cadence = tables.Column(verbose_name="Cadence", empty_values=())
     status = tables.Column(verbose_name="Status", empty_values=())
-    manage = tables.TemplateColumn(
+    manage = TemplateColumn(
         verbose_name="Manage",
         template_name="events/components/schedule_manage_button.html",
     )

@@ -11,7 +11,7 @@ from apps.events.models import (
 )
 from apps.experiments.models import ExperimentSession
 from apps.teams.export_service import frozen_experiment_q
-from apps.utils.celery import Queues
+from apps.utils.celery import Queues, delay_in_new_trace
 
 logger = get_task_logger("ocs.events")
 
@@ -59,7 +59,7 @@ def enqueue_timed_out_events():
                 )
                 continue
             else:
-                fire_trigger.delay(trigger.id, session.id)
+                delay_in_new_trace(fire_trigger, trigger.id, session.id)
 
 
 @shared_task(ignore_result=True, queue=Queues.CHAT)
@@ -77,7 +77,7 @@ def poll_due_scheduled_triggers():
         .exclude(frozen_experiment_q())
     )
     for trigger in due_triggers:
-        fire_scheduled_trigger.delay(trigger.id)
+        delay_in_new_trace(fire_scheduled_trigger, trigger.id)
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)

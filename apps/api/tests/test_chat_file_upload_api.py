@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.files.models import File, FilePurpose
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -133,6 +133,45 @@ class TestChatFileUploadAPI:
         assert file_obj.metadata["participant_name"] == "John Doe"
         assert file_obj.metadata["session_id"] == str(session.external_id)
 
+    def test_upload_without_files_is_rejected(self, api_client, session):
+        """A request with no files is refused with a 400 and an explanatory error."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        response = api_client.post(url, {}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json() == {"error": "No files provided"}
+
+    @pytest.mark.parametrize(
+        ("participant_identifier", "authenticated", "remote_id", "expected"),
+        [
+            pytest.param("participant-1", False, "", "participant-1", id="participant-identifier"),
+            pytest.param("", True, "", "member@example.com", id="authenticated-user-email"),
+            pytest.param("", False, "remote-1", "remote-1", id="remote-id"),
+            pytest.param("", False, "", "unknown", id="unknown"),
+        ],
+    )
+    def test_uploaded_by_precedence(
+        self, api_client, experiment, participant_identifier, authenticated, remote_id, expected
+    ):
+        """The uploader is the participant, else the signed-in user's email, else the remote id, else "unknown"."""
+        participant = ParticipantFactory.create(team=experiment.team, identifier=participant_identifier)
+        session = ExperimentSessionFactory.create(
+            experiment=experiment, participant=participant, session_token_required=False
+        )
+        if authenticated:
+            member = experiment.team.members.first()
+            member.email = "member@example.com"
+            member.save()
+            api_client.force_authenticate(member)
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        data = {"files": create_test_file("a.txt", "hello"), "participant_remote_id": remote_id}
+
+        response = api_client.post(url, data, format="multipart")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        file_obj = File.objects.get(id=response.json()["files"][0]["id"])
+        assert file_obj.metadata["uploaded_by"] == expected
+
 
 @pytest.mark.django_db()
 class TestFileValidationAPI:
@@ -231,6 +270,35 @@ class TestFileValidationAPI:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.json()["files"][0]["name"] == "workbook.xlsm"
+
+    ELF_BYTES = b"\x7fELF\x02\x01\x01\x00" + bytes(8) + b"\x02\x00\x3e\x00\x01\x00\x00\x00" + bytes(40)
+
+    @pytest.mark.parametrize(
+        ("filename", "content", "content_type"),
+        [
+            pytest.param("payload.exe", b"MZ\x90\x00", "text/plain", id="blocked-extension-with-text-claim"),
+            pytest.param("notes.txt", b"hello", "application/x-msdownload", id="blocked-claimed-type"),
+            pytest.param("notes.txt", ELF_BYTES, "text/plain", id="blocked-detected-type"),
+        ],
+    )
+    def test_blocked_file_rejected(self, api_client, session, filename, content, content_type):
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file(filename, content, content_type=content_type)
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert f"File '{filename}' was rejected" in response.json()["error"]
+        assert File.objects.count() == 0
+
+    def test_csv_with_windows_excel_content_type_accepted(self, api_client, session):
+        """A claimed type that disagrees with the sniffed one is not grounds for rejection on upload."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file("data.csv", b"name,age\nbob,3\n", content_type="application/vnd.ms-excel")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_201_CREATED
 
     def test_second_bad_file_rejects_whole_upload(self, api_client, session):
         """Validation covers every file; no File rows are created on rejection."""

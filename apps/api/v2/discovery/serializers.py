@@ -7,6 +7,8 @@ reaches the client. Each field's ``help_text`` is what a client reads about that
 
 from rest_framework import serializers
 
+from apps.api.serializers import ErrorDetailSerializer
+
 
 class NodeOutputsSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(
@@ -44,10 +46,9 @@ class NodeTypeSerializer(serializers.Serializer):
     )
 
 
-class NodeTypeNotFoundSerializer(serializers.Serializer):
+class NodeTypeNotFoundSerializer(ErrorDetailSerializer):
     """The body DRF renders for the `NotFound` raised on a node type name nothing answers to."""
 
-    detail = serializers.CharField()
     valid_types = serializers.ListField(
         child=serializers.CharField(), help_text="Every type this endpoint serves, so a failed call can be corrected."
     )

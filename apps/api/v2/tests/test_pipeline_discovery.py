@@ -17,16 +17,10 @@ from apps.api.v2.discovery.node_types import (
 from apps.api.v2.discovery.options import _clean_options
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
 from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE
-from apps.utils.factories.custom_actions import CustomActionFactory
-from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
-from apps.utils.factories.service_provider_factories import (
-    LlmProviderFactory,
-    LlmProviderModelFactory,
-    VoiceProviderFactory,
-)
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
+
+from .discovery_helpers import add_remaining_resources
 
 
 @pytest.fixture()
@@ -35,43 +29,9 @@ def team(db):
 
 
 @pytest.fixture()
-def team_with_resources(db):
-    return make_team_with_resources()
-
-
-@pytest.fixture()
 def team_with_every_resource(team_with_resources):
     """One entry in every option list, so a shape assertion has something to look at in each."""
     return add_remaining_resources(team_with_resources)
-
-
-def make_team_with_resources():
-    team = TeamWithUsersFactory.create()
-    LlmProviderFactory.create(team=team, type="openai", name="Prod OpenAI")
-    LlmProviderModelFactory.create(team=team, type="openai")
-    VoiceProviderFactory.create(team=team, name="Prod Polly")
-    SourceMaterialFactory.create(team=team, topic="Returns policy")
-    # Pinned to None so CollectionFactory's SubFactories don't add an LlmProvider to this team.
-    CollectionFactory.create(
-        team=team, name="Policy docs", is_index=False, llm_provider=None, embedding_provider_model=None
-    )
-    return team
-
-
-def add_remaining_resources(team):
-    CollectionFactory.create(
-        team=team,
-        name="Support KB",
-        is_index=True,
-        is_remote_index=True,
-        llm_provider=None,
-        embedding_provider_model=None,
-    )
-    CustomActionFactory.create(team=team, name="Orders API")
-    # One voice tied to the team's provider and one of the shared AWS voices, which carry no provider.
-    SyntheticVoiceFactory.create(name="Joanna", service="AWS", voice_provider=team.voiceprovider_set.first())
-    SyntheticVoiceFactory.create(name="Matthew", service="AWS")
-    return team
 
 
 @pytest.mark.django_db()

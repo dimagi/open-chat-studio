@@ -914,6 +914,41 @@ class TestExperimentModel:
         experiment.refresh_from_db()
         assert experiment.compare_with_latest() is False
 
+    def test_latest_version_eagerly_loads_related_fields(self, django_assert_num_queries):
+        """Regression test: Experiment.latest_version must not cause N+1 queries when version_details is accessed."""
+        experiment = self._setup_original_experiment()
+        experiment.create_new_version(make_default=True)
+
+        # Fetch working version with the same eager loading used by get_release_status_badge
+        experiment = (
+            Experiment.objects.select_related(
+                "consent_form",
+                "synthetic_voice",
+                "voice_provider",
+                "trace_provider",
+                "pipeline",
+            )
+            .prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers")
+            .get(id=experiment.id)
+        )
+
+        # latest_version should fetch the snapshot in a fixed number of queries regardless
+        # of how many FK/M2M relations are defined on the experiment.
+        version = experiment.latest_version
+        assert version is not None
+        # All FK fields must be pre-loaded (present in the instance cache, no extra queries needed)
+        with django_assert_num_queries(0):
+            _ = version.consent_form
+            _ = version.synthetic_voice
+            _ = version.voice_provider
+            _ = version.trace_provider
+            _ = version.pipeline
+        # All reverse-FK querysets must be pre-loaded (present in the prefetch cache, no extra queries needed)
+        with django_assert_num_queries(0):
+            list(version.static_triggers.all())
+            list(version.timeout_triggers.all())
+            list(version.scheduled_triggers.all())
+
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline
         assert new_version.pipeline.version_number == 1
@@ -1028,7 +1063,7 @@ class TestExperimentModel:
 
         first_version = experiment.create_new_version()
         second_version = experiment.create_new_version()
-        experiment.archive()
+        assert experiment.archive() is True
         experiment.refresh_from_db()
         first_version.refresh_from_db()
         second_version.refresh_from_db()
@@ -1045,7 +1080,7 @@ class TestExperimentModel:
 
         # Archiving a version archives that version's pipeline...
         new_version = experiment.create_new_version()
-        new_version.archive()
+        assert new_version.archive() is True
         self._assert_archived(new_version.pipeline, True)
 
         # ...but archiving the working experiment leaves the working pipeline alone.

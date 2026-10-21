@@ -3,9 +3,7 @@
 
 {% block page_head %}
   {{ block.super }}
-  {% if celery_job_id %}
-    <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-  {% endif %}
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
 {% endblock page_head %}
 
 {% block app %}
@@ -36,11 +34,8 @@
                   Run evaluation ({{ evaluation_run.config.dataset.messages.count }} messages)
                 </a>
               {% endif %}
-              <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
-                 class="btn btn-primary">
-                <i class="fa-solid fa-download"></i>
-                Download results
-              </a>
+              {% url 'evaluations:evaluation_run_download_start' request.team.slug evaluation_run.config_id evaluation_run.id as run_export_url %}
+              {% include "evaluations/partials/export_button.html" with export_id=evaluation_run.id start_url=run_export_url label="Download results" button_class="btn-primary" disabled=evaluation_run.is_running only %}
               <a href="{% url 'evaluations:evaluation_run_update' request.team.slug evaluation_run.config_id evaluation_run.id %}"
                  class="btn btn-outline">
                 <i class="fa-solid fa-upload"></i>

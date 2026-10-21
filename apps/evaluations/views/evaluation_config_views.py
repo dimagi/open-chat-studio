@@ -41,7 +41,6 @@ from apps.evaluations.export import (
     categorical_columns_for_evaluators,
     evaluator_output_columns,
     is_error_header,
-    write_evaluation_csv,
 )
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import (
@@ -59,12 +58,14 @@ from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tagging import remove_applied_tags_for_runs
 from apps.evaluations.tasks import (
     export_evaluation_bulk_results_task,
+    export_evaluation_run_results_task,
     upload_evaluation_run_results_task,
 )
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
 from apps.generics.actions import chip_action
+from apps.generics.tables import TemplateColumn
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
@@ -97,7 +98,12 @@ class EvaluationTableView(PermissionRequiredMixin, SingleTableView):  # ty: igno
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        return EvaluationConfig.objects.filter(team=self.request.team).order_by("-created_at")
+        return (
+            EvaluationConfig.objects.filter(team=self.request.team)
+            .order_by("-created_at")
+            .prefetch_related("evaluators")
+            .select_related("dataset")
+        )
 
 
 class CreateEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
@@ -720,7 +726,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
     def get_column(self, key):
         if key in self.categorical_column_keys:
             column = next(c for c in self.categorical_columns if c.column_key == key)
-            return columns.TemplateColumn(
+            return TemplateColumn(
                 template_name="evaluations/components/category_badge_column.html",
                 verbose_name=column.field_label,
                 orderable=False,
@@ -732,7 +738,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
             # A free-text evaluator field (e.g. reasoning) can run just as long as the
             # dataset input/generated response below, so it gets the same clamp. Sortable,
             # same as the plain Column this replaces - only the rendering changes.
-            return columns.TemplateColumn(
+            return TemplateColumn(
                 template_name="evaluations/components/truncated_text_column.html",
                 verbose_name=dynamic_labels[key],
             )
@@ -741,7 +747,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
             case "#":
                 # Data is stored 0-based (see build_evaluation_table_data); shown 1-based so
                 # a row's table number matches the "#N" heading in its detail panel.
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_code=(
                         '<span class="inline-flex items-center gap-1.5">{{ value|add:1 }}'
                         "{% if record.has_error %}"
@@ -786,7 +792,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     attrs={"td": {"onclick": "event.stopPropagation()"}},
                 )
             case "Session Preview":
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_name="evaluations/components/truncated_text_column.html",
                     verbose_name="Preview",
                 )
@@ -794,12 +800,12 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                 # Clamped to 2 lines - these are free-text dataset/model output and can run
                 # arbitrarily long, which would otherwise blow out every row's height. The
                 # full text is still one click away in the detail panel.
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_name="evaluations/components/truncated_text_column.html",
                     verbose_name=key,
                 )
             case "Cost":
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_code=(
                         "{% load cost_tracking %}"
                         "{% if value is not None %}${{ value|cost_display }}{% else %}—{% endif %}"
@@ -943,17 +949,6 @@ def create_evaluation_preview(request, team_slug, evaluation_pk):
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
-@permission_required("evaluations.view_evaluationrun")
-def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
-    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
-    filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
-    table_data = list(evaluation_run.get_table_data(include_ids=True))
-    response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = f"attachment; filename={filename}"
-    write_evaluation_csv(csv.writer(response), table_data)
-    return response
-
-
 @login_and_team_required
 @require_http_methods(["GET"])
 def load_experiment_versions(request, team_slug: str):
@@ -1089,8 +1084,14 @@ def start_bulk_download(request, team_slug: str, evaluation_pk: int):
     """Start an async bulk export of the most recent results per dataset item."""
     config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
     task = export_evaluation_bulk_results_task.delay(config.id, request.team.id)
-    return TemplateResponse(
-        request,
-        "evaluations/partials/bulk_download.html",
-        {"config": config, "task_id": task.id},
-    )
+    return TemplateResponse(request, "evaluations/partials/export_progress.html", {"task_id": task.id})
+
+
+@login_and_team_required
+@permission_required("evaluations.view_evaluationrun")
+@require_POST
+def start_run_download(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
+    """Start an async export of one evaluation run's results."""
+    run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
+    task = export_evaluation_run_results_task.delay(run.id, request.team.id)
+    return TemplateResponse(request, "evaluations/partials/export_progress.html", {"task_id": task.id})

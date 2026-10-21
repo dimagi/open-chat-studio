@@ -19,21 +19,21 @@ from oauth2_provider.models import (
 
 from apps.generics.chips import Chip
 from apps.teams.models import Team
-from apps.teams.utils import get_slug_for_team
+from apps.teams.utils import get_slug_for_team, section_url
 
 
 def manage_applications_url(team_slug: str) -> str:
-    """The team admin page, anchored on the OAuth applications section it is managed from.
+    """The team settings Developer section, anchored on the OAuth applications list.
 
     The anchor is the slugified section title rendered by `generic/object_home_content.html`.
     Lives here rather than in `views` so anything that needs to point an admin at the list --
     including the channel form, on the other side of the two-person setup -- can import it
     without importing the views.
     """
-    return f"{reverse('single_team:manage_team', args=[team_slug])}#oauth-applications"
+    return section_url(team_slug=team_slug, section_key="developer", fragment="oauth-applications")
 
 
-@audit_fields("allowed_chatbots")
+@audit_fields("allowed_chatbots", "all_data")
 class OAuth2Application(AbstractApplication):
     # The team is pinned here at registration and every token the application issues is scoped to it.
     # Null means the application is *global*: only superusers may register those (from the site admin
@@ -51,6 +51,13 @@ class OAuth2Application(AbstractApplication):
         blank=True,
         related_name="oauth_applications",
         help_text="Chatbots this application may start chat sessions with. Empty means none.",
+    )
+    # Overrides `allowed_chatbots`: a client-credentials application with this set reaches every chatbot
+    # in its team, and may also write the resources those chatbots share (ADR-0070).
+    all_data = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Reach every chatbot in the team and the resources they share, instead of only the allowed chatbots.",
     )
 
     objects = ApplicationManager()

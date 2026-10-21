@@ -14,6 +14,14 @@ from apps.experiments.models import Experiment, ExperimentSession
 ALL_DOMAINS = "*"
 WIDGET_SESSION_CACHE_TTL = 300
 WIDGET_EMBED_KEY_CACHE_TTL = 300
+MAX_EMAIL_REFERENCES = 50
+
+
+def trim_email_references(references: list[str]) -> list[str]:
+    """Keep the first Message-ID (the thread root) and the most recent ones, so long threads stay bounded."""
+    if len(references) <= MAX_EMAIL_REFERENCES:
+        return references
+    return [references[0], *references[-(MAX_EMAIL_REFERENCES - 1) :]]
 
 
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:

@@ -1,7 +1,9 @@
 import httpx
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from django.core.cache import cache
 
+from apps.api.progress_messages import PROGRESS_MESSAGES_TTL, get_progress_messages, progress_messages_key
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.tracing import TraceInfo
@@ -116,3 +118,11 @@ def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, 
             use_experiment=target_experiment,
             message_text=message_text,
         )
+
+
+@shared_task(ignore_result=True, queue=Queues.CHAT)
+def generate_progress_messages_task(session_id: str, chatbot_name: str, chatbot_description: str | None):
+    """Generate the progress messages shown while a session waits for a reply, and cache them."""
+    messages = get_progress_messages(chatbot_name=chatbot_name, chatbot_description=chatbot_description)
+    if messages:
+        cache.set(progress_messages_key(session_id), messages, PROGRESS_MESSAGES_TTL)

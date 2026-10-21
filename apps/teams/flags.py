@@ -39,11 +39,14 @@ class Flags(FlagInfo, Enum):
 
     COMMCARE_CONNECT = ("flag_commcare_connect", "Enables integration with CommCare Connect platform", "")
 
+    COMMCARE_CONNECT_CREATE_MESSAGE = (
+        "flag_commcare_connect_create_message",
+        "Sends CommCare Connect messages through PersonalID create_message, with files as attachments",
+    )
+
     EVALS = ("flag_evaluations", "Chatbot Evaluations (beta)", "evals", [], True)
 
     MCP = ("flag_mcp", "MCP tool support for chatbots (alpha)")
-
-    PUBLIC_CHANNEL = ("flag_public_channel", "Public link channel served by the chat widget", "", [], False)
 
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",
@@ -53,8 +56,6 @@ class Flags(FlagInfo, Enum):
     HUMAN_ANNOTATIONS = ("flag_human_annotations", "Human annotation queues for labeling and review", "", [], True)
 
     EMAIL_CHANNEL = ("flag_email_channel", "Email messaging channel for chatbots", "", [], True)
-
-    SLACK_NOTIFICATIONS = ("flag_slack_notifications", "Slack notifications channel", "", [], True)
 
     JSON_COLLECTION_LOADER = (
         "flag_json_collection_loader",
@@ -91,6 +92,11 @@ class Flags(FlagInfo, Enum):
     IGNORE_RATE_LIMITING = (
         "flag_ignore_rate_limiting",
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
+    )
+
+    ABUSE_DETECTION = (
+        "flag_abuse_detection",
+        "Abuse detection - message moderation, strikes and participant blocking (issue #4269)",
     )
 
     @property

@@ -6,9 +6,11 @@ from django.urls import reverse, reverse_lazy
 from pytest_django.asserts import assertRedirects
 from time_machine import travel
 
+from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 from apps.web.elevation import MAX_CONCURRENT_ELEVATIONS, STASH_MAX_AGE, TOO_MANY_ELEVATIONS_MESSAGE
+from apps.web.models import SuperuserElevation
 
 REAUTH_URL = str(reverse_lazy("account_reauthenticate"))
 
@@ -103,6 +105,17 @@ def test_escalation_does_not_render_when_for_non_superuser(superuser, authed_cli
 
 
 @pytest.mark.django_db()
+def test_elevation_without_proof_is_recorded(superuser, authed_client, settings):
+    settings.ELEVATION_WITHOUT_PROOF = True
+    other_team = TeamFactory.create()
+
+    response = authed_client.get(reverse("web_team:home", args=[other_team.slug]))
+
+    assert response.status_code == 302
+    assert SuperuserElevation.objects.get().grant == f"team:{other_team.slug}"
+
+
+@pytest.mark.django_db()
 def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
     response = authed_client.get(reverse("web:elevate_django_admin"))
     assertRedirects(response, REAUTH_URL)
@@ -110,13 +123,14 @@ def test_acquire_hands_off_to_reauthentication(superuser, authed_client):
 
 
 @pytest.mark.django_db()
-def test_the_prompt_names_the_grant_being_requested(team, superuser, authed_client):
+def test_the_prompt_names_the_grant_being_requested(superuser, authed_client):
     """The prompt has to name the grant, so the user can see what they are confirming."""
+    team = TeamFactory.create(name="Acme Health", slug="acme")
     authed_client.get(reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(REAUTH_URL).content.decode()
 
-    assert f"Team &quot;{team.slug}&quot;" in content
+    assert "Team &quot;Acme Health&quot; (acme)" in content
 
 
 @pytest.mark.django_db()
@@ -198,6 +212,7 @@ def test_acquire_with_invalid_password_does_not_elevate(superuser, authed_client
 
     assert response.status_code == 200
     assert authed_client.get(admin_url).status_code == 302
+    assert not SuperuserElevation.objects.exists()
 
 
 @pytest.mark.django_db()
@@ -225,6 +240,7 @@ def test_a_stale_stash_is_not_completed(superuser, authed_client):
 
     assertRedirects(response, "/", target_status_code=302)
     assert authed_client.get(admin_url).status_code == 302
+    assert not SuperuserElevation.objects.exists()
 
 
 @pytest.mark.django_db()
@@ -259,6 +275,61 @@ def test_release_of_an_unknown_grant_is_a_404(superuser, authed_client):
 
 
 @pytest.mark.django_db()
+def test_elevation_is_recorded(superuser, authed_client):
+    authed_client.defaults["HTTP_USER_AGENT"] = "test-agent"
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+
+    record = SuperuserElevation.objects.get()
+    assert record.user == superuser
+    assert record.grant == "django_admin"
+    assert abs(record.expires_at - record.granted_at - datetime.timedelta(minutes=30)) < datetime.timedelta(seconds=1)
+    assert record.released_at is None
+    assert record.ip == "127.0.0.1"
+    assert record.user_agent == "test-agent"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("forwarded_for", "expected"),
+    [
+        pytest.param("198.51.100.7, 10.0.0.1", "10.0.0.1", id="client-behind-one-proxy"),
+        pytest.param("not-an-ip", None, id="garbage-header"),
+    ],
+)
+def test_elevation_records_the_ip_behind_the_proxy(superuser, authed_client, settings, forwarded_for, expected):
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 1
+    authed_client.defaults["HTTP_X_FORWARDED_FOR"] = forwarded_for
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+
+    assert SuperuserElevation.objects.get().ip == expected
+
+
+@pytest.mark.django_db()
+def test_elevation_records_are_listed_in_the_admin(superuser, authed_client):
+    elevate(authed_client, reverse("web:elevate_django_admin"))
+
+    response = authed_client.get(reverse("admin:web_superuserelevation_changelist"))
+
+    assert response.status_code == 200
+    assert "django_admin" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_release_stamps_only_the_current_record(superuser, authed_client):
+    acquire_url = reverse("web:elevate_django_admin")
+    with travel(datetime.datetime.now(), tick=False) as freezer:
+        elevate(authed_client, acquire_url)
+        freezer.shift(datetime.timedelta(minutes=31))
+        elevate(authed_client, acquire_url)
+
+        authed_client.get(reverse("web:release_elevation", args=["django_admin"]))
+
+    expired, released = SuperuserElevation.objects.order_by("granted_at")
+    assert expired.released_at is None
+    assert released.released_at is not None
+
+
+@pytest.mark.django_db()
 def test_elevation_expires_after_30_minutes(superuser, authed_client):
     with travel(datetime.datetime.now(), tick=False) as freezer:
         admin_url = reverse("admin:index")
@@ -289,13 +360,14 @@ def test_acquire_beyond_the_concurrency_cap_reports_an_error(superuser, authed_c
 
 
 @pytest.mark.django_db()
-def test_banner_shows_the_grant_label_and_a_release_link(team, superuser, authed_client):
+def test_banner_names_the_team_and_links_to_release(superuser, authed_client):
+    team = TeamFactory.create(name="Acme Health", slug="acme")
     team_home = reverse("web_team:home", args=[team.slug])
     elevate(authed_client, reverse("web:elevate_team", args=[team.slug]))
 
     content = authed_client.get(team_home, follow=True).content.decode()
 
-    assert f"Team &quot;{team.slug}&quot;" in content
+    assert "Team &quot;Acme Health&quot; (acme)" in content
     assert reverse("web:release_elevation", args=[f"team:{team.slug}"]) in content
 
 
@@ -308,3 +380,35 @@ def test_admin_site_shows_a_release_link(superuser, authed_client):
 
     assert "Release Admin Access" in content
     assert reverse("web:release_elevation", args=["django_admin"]) in content
+
+
+@pytest.mark.django_db()
+def test_global_search_sends_a_non_member_superuser_to_elevate(superuser, authed_client):
+    session = ExperimentSessionFactory.create()
+    search_url = f"{reverse('web:global_search')}?q={session.external_id}"
+
+    response = authed_client.get(search_url)
+
+    acquire_url = reverse("web:elevate_team", args=[session.team.slug])
+    assertRedirects(response, f"{acquire_url}?next={quote(search_url, safe='')}", fetch_redirect_response=False)
+
+
+@pytest.mark.django_db()
+def test_global_search_resumes_after_elevation(superuser, authed_client):
+    session = ExperimentSessionFactory.create()
+    search_url = f"{reverse('web:global_search')}?q={session.external_id}"
+
+    response = elevate(authed_client, reverse("web:elevate_team", args=[session.team.slug]), search_url)
+    assert response.url == search_url
+
+    assertRedirects(authed_client.get(search_url), session.get_absolute_url(), fetch_redirect_response=False)
+
+
+@pytest.mark.django_db()
+def test_global_search_is_a_404_for_a_non_member_without_superuser(client):
+    session = ExperimentSessionFactory.create()
+    client.force_login(UserFactory.create(is_staff=True))
+
+    response = client.get(reverse("web:global_search"), {"q": session.external_id})
+
+    assert response.status_code == 404

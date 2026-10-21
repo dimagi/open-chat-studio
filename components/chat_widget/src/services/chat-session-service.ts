@@ -162,11 +162,20 @@ export interface MessagePollingHandle {
   stop: () => void;
 }
 
+/** The 403 code for a participant who has not accepted the current consent form. */
+export const CONSENT_REQUIRED_CODE = 'consent_required';
+
 /** Refusal codes that carry a consent block and leave the session usable. */
-const CONSENT_REFUSAL_CODES = ['consent_required', 'consent_stale'];
+const CONSENT_REFUSAL_CODES = [CONSENT_REQUIRED_CODE, 'consent_stale'];
 
 /** The 403 code for a session token that has aged out; the only refusal renewal can answer. */
 const SESSION_EXPIRED_CODE = 'session_expired';
+
+/** The 403 code for a participant on the team's denylist. The widget reports a generic failure and keeps the session. */
+export const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
+
+/** Shown in place of the server's wording when the refusal must not reveal its reason. */
+export const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
 
 interface ErrorBody {
   message: string;
@@ -571,6 +580,9 @@ export class ChatSessionService {
     // Before the generic 403: a consent refusal keeps the session, a token refusal discards it.
     if (consent && CONSENT_REFUSAL_CODES.includes(code)) {
       return new ConsentRequiredError(consent, message);
+    }
+    if (code === PARTICIPANT_BLOCKED_CODE) {
+      return new Error(GENERIC_FAILURE_MESSAGE);
     }
     if (status === 403) {
       return new SessionAccessError(status, code, message);

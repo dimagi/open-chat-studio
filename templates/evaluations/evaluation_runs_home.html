@@ -24,7 +24,8 @@
           <i class="fa-solid fa-eye"></i>
           Preview
         </a>
-        {% include "evaluations/partials/bulk_download.html" with config=config %}
+        {% url 'evaluations:evaluation_bulk_download_start' request.team.slug config.id as bulk_export_url %}
+        {% include "evaluations/partials/export_button.html" with export_id="bulk" start_url=bulk_export_url label="Download Latest Results" only %}
         <a href="{% url 'evaluations:create_evaluation_run' request.team.slug config.id %}"
            class="btn btn-primary">
           <i class="fa-solid fa-play"></i>

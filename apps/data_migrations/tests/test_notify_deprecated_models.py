@@ -4,8 +4,10 @@ from unittest.mock import patch
 import pytest
 from django.core.management import call_command
 
+from apps.data_migrations.management.commands.base import get_affected_teams_data
 from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent
 from apps.ocs_notifications.utils import toggle_notification_read
+from apps.pipelines.models import Pipeline as PipelineModel
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import Model
 from apps.teams.backends import get_team_owner_groups
@@ -166,6 +168,51 @@ class TestNotifyDeprecatedModelsCommand:
             call_command("notify_deprecated_models", force=True)
 
         mock_notify.assert_not_called()
+
+
+@pytest.mark.django_db()
+class TestGetAffectedTeamsData:
+    """Shared by notify_deprecated_models and remove_deprecated_models, so both notices are covered."""
+
+    @staticmethod
+    def _deprecated_model():
+        return LlmProviderModelFactory(team=None, type="openai", name="test-deprecated-model", deprecated=True)
+
+    def test_a_published_chatbot_version_is_reported_as_the_chatbot(self):
+        model = self._deprecated_model()
+        experiment = ExperimentFactory(pipeline=_make_pipeline_referencing(model))
+        experiment.create_new_version()  # version 1 becomes the published (default) version
+
+        data = get_affected_teams_data(model)[experiment.team_id]
+
+        assert experiment.name in data["chatbots"]
+        assert data["pipelines"] == {}
+
+    def test_unpublished_chatbot_versions_are_not_reported_as_pipelines(self):
+        model = self._deprecated_model()
+        experiment = ExperimentFactory(pipeline=_make_pipeline_referencing(model))
+        experiment.create_new_version()  # published
+        experiment.create_new_version()  # a later version that is not the published one
+
+        data = get_affected_teams_data(model)[experiment.team_id]
+
+        assert data["pipelines"] == {}, "Pipeline versions of unpublished chatbot versions must not be listed"
+
+    def test_a_working_pipeline_without_a_chatbot_is_still_reported(self):
+        model = self._deprecated_model()
+        pipeline = _make_pipeline_referencing(model)
+
+        data = get_affected_teams_data(model)[pipeline.team_id]
+
+        assert pipeline.name in data["pipelines"]
+        assert data["chatbots"] == {}
+
+    def test_an_archived_pipeline_is_not_reported(self):
+        model = self._deprecated_model()
+        pipeline = _make_pipeline_referencing(model)
+        PipelineModel.objects.filter(id=pipeline.id).update(is_archived=True)
+
+        assert get_affected_teams_data(model) == {}
 
 
 def _make_pipeline_referencing(llm_provider_model):

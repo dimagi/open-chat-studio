@@ -1,7 +1,7 @@
 import csv
 import io
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.db import connection
@@ -242,13 +242,13 @@ def test_count_bulk_export_rows_counts_messages_not_results():
 def test_report_row_progress_yields_every_row_but_reports_in_steps():
     """Reporting once per row would be one backend write per row on a large export."""
     rows = [{"#": index} for index in range(250)]
-    reported = []
+    recorder = Mock()
 
-    yielded = list(_report_row_progress(rows, len(rows), lambda current, total: reported.append((current, total))))
+    yielded = list(_report_row_progress(rows, len(rows), recorder))
 
     assert yielded == rows
-    assert reported[-1] == (250, 250)
-    assert len(reported) <= 101
+    assert recorder.set_progress.call_args.args == (250, 250)
+    assert recorder.set_progress.call_count <= 101
 
 
 @pytest.mark.django_db()

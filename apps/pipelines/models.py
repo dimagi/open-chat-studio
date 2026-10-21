@@ -217,10 +217,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         for truthiness — the report is always fully populated, so an error-free one is still a dict
         with three empty values.
         """
+        from apps.pipelines.repository import prefetch_llm_provider_models  # noqa: PLC0415 - circular
+
+        nodes = self.node_set.all()
+        llm_model_ids = [model_id for node in nodes if (model_id := node.params.get("llm_provider_model_id"))]
+        with prefetch_llm_provider_models(llm_model_ids):
+            return self._validate(nodes, full)
+
+    def _validate(self, nodes, full: bool) -> ErrorReport:
         from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415 - circular: graph.py imports models
 
         errors = defaultdict(dict)
-        nodes = self.node_set.all()
         for node in nodes:
             if node_errors := self._node_validation_errors(node):
                 errors[node.flow_id].update(node_errors)
@@ -746,7 +753,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
-    def archive(self):
+    def archive(self) -> bool:
         """
         Archiving a node also archives the versioned resources its params reference. The node's
         versions will be archived when the pipeline they belong to is archived.
@@ -754,9 +761,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         super().archive()
         if not self.is_a_version:
             # We don't want to archive related objects for working versions, since they can be used in other pipelines
-            return
+            return True
 
         self._archive_related_params()
+        return True
 
     def _get_version_details(self) -> VersionDetails:
         node_name = self.display_name

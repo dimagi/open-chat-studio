@@ -43,6 +43,7 @@ from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
+from apps.moderation.enforcement import is_participant_blocked
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
 from apps.teams.models import BaseTeamModel, Team
@@ -172,7 +173,8 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     Some Source Material on a particular topic.
     """
 
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # Null when created by a client-credentials (machine) API token, which has no user.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     topic = models.CharField(max_length=50)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the source material.")  # noqa DJ001
     material = models.TextField()
@@ -202,7 +204,7 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
         return get_related_experiment_versions_queryset(self, "source_material")
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """Mirrors Collection.archive()'s in-use guard."""
         if has_related_pipeline_references(self, "source_material"):
             return False
@@ -271,10 +273,14 @@ class ConsentForm(BaseTeamModel, VersionsMixin):
         return reverse("experiments:consent_edit", args=[get_slug_for_team(self.team_id), self.id])
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
+        """Archive the form and move its chatbots onto the team's default. The default itself is refused."""
+        if self.is_default:
+            return False
         super().archive()
-        consent_form_id = ConsentForm.objects.filter(team=self.team, is_default=True).values("id")[:1]
+        consent_form_id = ConsentForm.objects.filter(team_id=self.team_id, is_default=True).values("id")[:1]
         self.experiments.update(consent_form_id=Subquery(consent_form_id), audit_action=AuditAction.AUDIT)
+        return True
 
     def create_new_version(self, save=True):  # ty: ignore[invalid-method-override]
         new_version = super().create_new_version(save=False)
@@ -976,7 +982,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
 
     @transaction.atomic()
-    def archive(self):
+    def archive(self) -> bool:
         """
         Archive the experiment and all versions in the case where this is the working version. The
         linked pipeline for the working version should not be archived.
@@ -992,6 +998,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             if self.pipeline:
                 self.pipeline.archive()
+        return True
 
     @transaction.atomic()
     def unarchive(self):
@@ -1074,6 +1081,21 @@ class Experiment(BaseTeamModel, VersionsMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
+
+    @property
+    def latest_version(self):
+        return (
+            self.versions.select_related(
+                "consent_form",
+                "synthetic_voice",
+                "voice_provider",
+                "trace_provider",
+                "pipeline",
+            )
+            .prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers")
+            .order_by("-created_at")
+            .first()
+        )
 
     def _get_version_details(self) -> VersionDetails:
         """
@@ -1616,7 +1638,7 @@ class ExperimentSession(BaseTeamModel):
         if not hasattr(self, "chat"):
             self.chat = Chat.objects.create(team=self.team, name=self.experiment.name)
         if not self.external_id:
-            self.external_id = str(uuid.uuid4())  # ty: ignore[invalid-assignment]
+            self.external_id = str(uuid.uuid4())
 
         super().save(*args, **kwargs)
 
@@ -1768,6 +1790,10 @@ class ExperimentSession(BaseTeamModel):
                 self.id,
                 self.experiment_channel_id,
             )
+            return {}
+
+        if is_participant_blocked(team=self.team, participant_id=self.participant_id):
+            log.info("Not sending bot message to session %s: participant is blocked", self.id)
             return {}
 
         trace_service = None

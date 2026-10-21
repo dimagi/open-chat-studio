@@ -14,4 +14,4 @@ class WebConfig(AppConfig):
 
 
 class OcsAdminConfig(AdminConfig):
-    default_site = "apps.web.admin.OcsAdminSite"
+    default_site = "apps.web.admin_site.OcsAdminSite"

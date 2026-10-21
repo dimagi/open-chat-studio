@@ -3,7 +3,6 @@ import io
 import pytest
 import requests
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management.base import CommandError
@@ -12,8 +11,9 @@ from apps.api.export.serializers import build_resource_serializer
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
-from apps.teams.export.manifest import build_manifest, schema_checksum
+from apps.teams.export.manifest import build_manifest
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
+from apps.teams.export.tests.sync_fakes import PAST, FakeClient, make_manifest, select_chatbots, team_row
 from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
@@ -29,49 +29,6 @@ from apps.users.models import CustomUser
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
-
-PAST = "2020-01-02T03:04:05+00:00"
-
-
-@pytest.fixture()
-def keypair():
-    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_pem = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return seal_mod.load_public_key(public_pem), private
-
-
-class FakeClient:
-    def __init__(self, manifest, rows_by_resource):
-        self.manifest = manifest
-        self.rows_by_resource = rows_by_resource
-        self.iter_calls = []
-        self.selections = []
-        self.get_team_calls = 0
-
-    def get_manifest(self):
-        return self.manifest
-
-    def get_team(self):
-        # The team is fetched on its own from the dedicated ``team/`` endpoint, not the manifest loop.
-        self.get_team_calls += 1
-        return self.rows_by_resource["teams"][0]
-
-    def iter_pages(self, resource, start_cursor=None, limit=100, selection=None):
-        self.iter_calls.append((resource, start_cursor))
-        if selection not in self.selections:
-            self.selections.append(selection)
-        rows = list(self.rows_by_resource.get(resource, []))
-        return iter([rows]) if rows else iter([])
-
-    def get_file_content(self, file_id):
-        return b""
-
-
-def _manifest(entries, checksum=None):
-    return {"schema_checksum": checksum if checksum is not None else schema_checksum(), "entries": entries}
 
 
 def _scenario(public_key, reread_under_selection=False):
@@ -90,18 +47,7 @@ def _scenario(public_key, reread_under_selection=False):
         },
     ]
     rows = {
-        "teams": [
-            {
-                "id": 9001,
-                "name": "Imported",
-                "slug": "imported-team-z",
-                "feature_flags": [],
-                "is_migrating": True,
-                "has_public_key": True,
-                "created_at": PAST,
-                "updated_at": PAST,
-            }
-        ],
+        "teams": [team_row()],
         "llm_provider": [
             {
                 "id": 5,
@@ -114,7 +60,7 @@ def _scenario(public_key, reread_under_selection=False):
             }
         ],
     }
-    return _manifest(entries), rows
+    return make_manifest(entries), rows
 
 
 def _private_pem(private):
@@ -247,18 +193,7 @@ def _new_user_scenario():
         },
     ]
     rows = {
-        "teams": [
-            {
-                "id": 9001,
-                "name": "T",
-                "slug": "imported-team-z",
-                "feature_flags": [],
-                "is_migrating": True,
-                "has_public_key": True,
-                "created_at": PAST,
-                "updated_at": PAST,
-            }
-        ],
+        "teams": [{**team_row(), "name": "T"}],
         "user": [
             {
                 "id": 50,
@@ -282,7 +217,7 @@ def test_new_users_receive_a_password_reset_email(make_store, tmp_path, keypair)
     store = make_store(tmp_path / "t.sqlite")
     mail.outbox.clear()
 
-    run_sync(FakeClient(_manifest(entries), rows), store, keypair[1])
+    run_sync(FakeClient(make_manifest(entries), rows), store, keypair[1])
 
     assert any("added@example.com" in message.to for message in mail.outbox)
 
@@ -299,7 +234,7 @@ def test_a_rejected_password_reset_email_is_reported_instead_of_aborting_the_syn
     report names them so the reset can be sent by hand."""
     entries, rows = _new_user_scenario()
     settings.EMAIL_BACKEND = f"{__name__}._RejectingEmailBackend"
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(_manifest(entries), rows))
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(make_manifest(entries), rows))
     monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
     report = io.StringIO()
 
@@ -543,6 +478,8 @@ def _sync_options(tmp_path, **overrides):
         "limit": 100,
         "skip_schema_check": False,
         "force_delete": False,
+        "follow": False,
+        "interval": 10,
     }
     options.update(overrides)
     return options
@@ -555,7 +492,7 @@ def _force_delete_options(tmp_path, **overrides):
 def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
     """An interactive --force-delete that isn't confirmed must abort before deleting anything."""
     Team.objects.create(name="Keep", slug="imported-team-z")
-    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": []}]})
+    client = FakeClient(make_manifest([]), {"teams": [{"exportable_chatbots": []}]})
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
     monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
@@ -579,7 +516,7 @@ def test_force_delete_warns_about_files_only_for_whole_team_sync(
 ):
     """A partial sync backfills files from the source, so the warning only asks for a manual re-import
     when the whole team is synced."""
-    client = FakeClient(_manifest([]), {"teams": [{"exportable_chatbots": exportable_chatbots}]})
+    client = FakeClient(make_manifest([]), {"teams": [{"exportable_chatbots": exportable_chatbots}]})
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: client)
     monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
     out = io.StringIO()
@@ -630,17 +567,12 @@ def test_run_sync_records_a_cursor_after_each_page(make_store, tmp_path, keypair
     assert store.get_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider") == "5"
 
 
-def _selecting(rows, *public_ids):
-    rows["teams"][0]["exportable_chatbots"] = [{"public_id": pid, "name": pid.upper()} for pid in public_ids]
-    return rows
-
-
 def test_every_manifest_resource_is_requested_under_a_selection(make_store, tmp_path, keypair):
     """The source decides which rows a selection covers, and serves an excluded resource empty, so the
     client requests every resource in the real manifest once, in manifest order, under the selection's
     key."""
     manifest = build_manifest()
-    rows = _selecting({"teams": _scenario(keypair[0])[1]["teams"]}, "a")
+    rows = select_chatbots({"teams": _scenario(keypair[0])[1]["teams"]}, "a")
     client = FakeClient(manifest, rows)
 
     run_sync(client, make_store(tmp_path / "team.sqlite"), keypair[1], on_user_created=None)
@@ -662,7 +594,7 @@ def test_each_resource_starts_where_its_reread_flag_says(make_store, tmp_path, k
     and that row keeps its old pk, which can sit below the stored cursor.
     """
     manifest = build_manifest()
-    rows = _selecting({"teams": _scenario(keypair[0])[1]["teams"]}, *public_ids)
+    rows = select_chatbots({"teams": _scenario(keypair[0])[1]["teams"]}, *public_ids)
     store = make_store(tmp_path / "team.sqlite")
     key = selection_key(public_ids)
     for entry in manifest["entries"]:
@@ -688,9 +620,9 @@ def test_a_narrowed_selection_keeps_its_cursors(make_store, tmp_path, keypair):
     manifest, rows = _scenario(public_key, reread_under_selection=False)
     store = make_store(tmp_path / "team.sqlite")
 
-    run_sync(FakeClient(manifest, _selecting(rows, "a", "b")), store, private, on_user_created=None)
+    run_sync(FakeClient(manifest, select_chatbots(rows, "a", "b")), store, private, on_user_created=None)
 
-    client = FakeClient(manifest, _selecting(rows, "a"))
+    client = FakeClient(manifest, select_chatbots(rows, "a"))
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", "5") in client.iter_calls
@@ -703,7 +635,7 @@ def test_a_selection_after_a_full_team_sync_keeps_its_cursors(make_store, tmp_pa
     store = make_store(tmp_path / "team.sqlite")
     store.set_cursor(ALL_CHATBOTS_KEY, "service_providers.llmprovider", "5")
 
-    client = FakeClient(manifest, _selecting(rows, "a"))
+    client = FakeClient(manifest, select_chatbots(rows, "a"))
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", "5") in client.iter_calls
@@ -715,10 +647,10 @@ def test_a_widened_selection_starts_from_the_beginning(make_store, tmp_path, key
     manifest, rows = _scenario(public_key, reread_under_selection=False)
     store = make_store(tmp_path / "team.sqlite")
 
-    run_sync(FakeClient(manifest, _selecting(rows, "a")), store, private, on_user_created=None)
+    run_sync(FakeClient(manifest, select_chatbots(rows, "a")), store, private, on_user_created=None)
     assert store.get_cursor(selection_key(["a"]), "service_providers.llmprovider") == "5"
 
-    client = FakeClient(manifest, _selecting(rows, "a", "b"))
+    client = FakeClient(manifest, select_chatbots(rows, "a", "b"))
     run_sync(client, store, private, on_user_created=None)
 
     assert ("llm_provider", None) in client.iter_calls

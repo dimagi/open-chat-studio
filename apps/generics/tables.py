@@ -1,4 +1,5 @@
 import django_tables2 as tables
+from django.template import Context
 from django.template.loader import get_template
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
@@ -27,11 +28,35 @@ class ColumnWithCustomHeader(tables.Column):
         return get_template(self.template_path).render(context)
 
 
-class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, tables.TemplateColumn):
+class TemplateColumn(tables.TemplateColumn):
+    """A TemplateColumn that renders `template_name` without re-running context processors per cell.
+
+    django-tables2 passes `request=` to `Template.render`, which runs every context processor for each cell.
+    This reuses the table's already-rendered context instead."""
+
+    def render(self, record, table, value, bound_column, **kwargs):
+        if not self.template_name:
+            return super().render(record=record, table=table, value=value, bound_column=bound_column, **kwargs)
+        context = getattr(table, "context", Context())
+        additional_context = {
+            "default": bound_column.default,
+            "column": bound_column,
+            "record": record,
+            "value": value,
+            "row_counter": kwargs["bound_row"].row_counter,
+            **self.extra_context,
+        }
+        with context.update(additional_context):
+            flat = context.flatten()
+        flat["request"] = getattr(table, "request", None)
+        return get_template(self.template_name).render(flat)
+
+
+class TemplateColumnWithCustomHeader(ColumnWithCustomHeader, TemplateColumn):
     """A Template column that allows custom templates for the column header."""
 
 
-class TemplateColumnWithHelp(ColumnWithHelp, tables.TemplateColumn):
+class TemplateColumnWithHelp(ColumnWithHelp, TemplateColumn):
     """A TemplateColumn that supports help text in the header."""
 
 

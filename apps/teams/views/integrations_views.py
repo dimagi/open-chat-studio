@@ -6,6 +6,7 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.mcp_integrations.models import McpServer
+from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import ServiceProvider, get_available_subtypes
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.tables import IntegrationsTable
@@ -22,6 +23,11 @@ _CATEGORY_ICONS = {
     "Tracing": "fa-magnifying-glass-location",
     MCP_CATEGORY: "fa-server",
 }
+
+
+def _verifiable(provider) -> LlmProvider | None:
+    """The provider if it is an LLM provider whose credentials can be checked, otherwise None."""
+    return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
 
 
 def get_integration_rows(request, team) -> list[dict]:
@@ -43,7 +49,7 @@ def get_integration_rows(request, team) -> list[dict]:
                 "category": provider.category,
                 "icon_class": _CATEGORY_ICONS[provider.category],
                 "provider": obj.type_enum.label,
-                "status": "Connected",
+                "verifiable_provider": _verifiable(obj),
                 "edit_perm": provider.get_permission("change"),
                 "delete_perm": provider.get_permission("delete"),
             }
@@ -59,7 +65,7 @@ def get_integration_rows(request, team) -> list[dict]:
                 "category": MCP_CATEGORY,
                 "icon_class": _CATEGORY_ICONS[MCP_CATEGORY],
                 "provider": "MCP Server",
-                "status": "Connected",
+                "verifiable_provider": None,
                 "edit_perm": "mcp_integrations.change_mcpserver",
                 "delete_perm": "mcp_integrations.delete_mcpserver",
             }

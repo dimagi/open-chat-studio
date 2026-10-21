@@ -2,18 +2,28 @@ import textwrap
 from zoneinfo import available_timezones
 
 from django.db import transaction
-from drf_spectacular.utils import extend_schema_field
+from django.urls import reverse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, PolymorphicProxySerializer, extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from taggit.serializers import TaggitSerializer, TagListSerializerField
 
+from apps.api.exceptions import ParticipantBlocked
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.cost_tracking.services.reporting import session_usage
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
+from apps.moderation.enforcement import is_participant_blocked
 from apps.teams.models import Team
 from apps.trace.models import participant_data_from_trace
+
+
+class ErrorDetailSerializer(serializers.Serializer):
+    """An error response with a single human-readable message."""
+
+    detail = serializers.CharField()
 
 
 class ApiUrlField(serializers.HyperlinkedIdentityField):
@@ -136,9 +146,12 @@ class FileSerializer(serializers.ModelSerializer):
         fields = ("name", "content_type", "size", "content_url")
 
 
+MESSAGE_ROLES = ["system", "user", "assistant"]
+
+
 class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True, required=False)
-    role = serializers.ChoiceField(choices=["system", "user", "assistant"], source="message_type")
+    role = serializers.ChoiceField(choices=MESSAGE_ROLES, source="message_type")
     content = serializers.CharField()
     metadata = serializers.JSONField(
         required=False,
@@ -171,6 +184,24 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
         data = super().to_internal_value(data)
         data["message_type"] = ChatMessageType.from_role(data["message_type"])
         return data
+
+
+class ChatFileSerializer(FileSerializer):
+    download_url = serializers.SerializerMethodField(
+        help_text="URL to download the file, authenticated the same way as the other chat requests."
+    )
+
+    class Meta(FileSerializer.Meta):
+        fields = (*FileSerializer.Meta.fields, "download_url")
+
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_download_url(self, obj) -> str:
+        url = reverse("api:chat:file-content", kwargs={"session_id": self.context["session_id"], "file_id": obj.id})
+        return self.context["request"].build_absolute_uri(url)
+
+
+class ChatMessageSerializer(MessageSerializer):
+    attachments = serializers.ListField(source="get_attached_files", child=ChatFileSerializer(), read_only=True)
 
 
 class SessionModelUsageSerializer(serializers.Serializer):
@@ -308,6 +339,8 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
             platform=ChannelPlatform.API,
             defaults={"user": acting_user},
         )
+        if is_participant_blocked(team=request.team, participant_id=participant.id):
+            raise ParticipantBlocked()
         validated_data["participant"] = participant
         channel = ExperimentChannel.objects.get_team_api_channel(request.team)
         validated_data["experiment_channel"] = channel
@@ -465,12 +498,36 @@ class ChatSendMessageResponse(serializers.Serializer):
 
 
 class ChatPollResponse(serializers.Serializer):
-    messages = MessageSerializer(many=True, label="New messages since last poll")
+    messages = ChatMessageSerializer(many=True, label="New messages since last poll")
     has_more = serializers.BooleanField(label="Whether there are more messages to fetch")
     session_status = serializers.ChoiceField(
         choices=[("active", "Active"), ("ended", "Ended")], label="Current session status"
     )
     consent = ChatConsentSerializer(read_only=True)
+
+
+class ParticipantBlockedResponse(serializers.Serializer):
+    code = serializers.CharField(help_text="Always `participant_blocked`.")
+    detail = serializers.CharField(help_text="A message that can be shown to the participant.")
+
+
+class PermissionDeniedResponse(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE = PolymorphicProxySerializer(
+    component_name="ForbiddenOrParticipantBlocked",
+    serializers=[PermissionDeniedResponse, ParticipantBlockedResponse],
+    resource_type_field_name=None,
+)
+
+OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE = OpenApiResponse(
+    response=FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
+    description=(
+        "The OAuth application is not authorized for this chatbot, or the participant is blocked"
+        " (`code` is `participant_blocked`)"
+    ),
+)
 
 
 class TriggerBotMessageRequest(serializers.Serializer):

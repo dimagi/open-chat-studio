@@ -8,9 +8,11 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import classproperty
+from django_pydantic_field import SchemaField
 from langchain_core.messages import BaseMessage, messages_from_dict
 
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
+from apps.chat.schemas import ModerationDetail
 from apps.chat.utils import safe_link_url
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
@@ -137,6 +139,12 @@ class ChatMessageType(models.TextChoices):
         }[self]
 
 
+class ModerationStatus(models.TextChoices):
+    PASSED = "passed", "Passed"
+    FLAGGED = "flagged", "Flagged"
+    SKIPPED = "skipped", "Skipped"
+
+
 class ChatMessageMetadataKeys(StrEnum):
     # OpenAI Assistant (internal)
     OPENAI_RUN_ID = "openai_run_id"
@@ -196,6 +204,10 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         null=True,
         help_text="Provider message IDs this message was built from, namespaced by platform.",
     )
+    moderation_status = models.CharField(  # noqa: DJ001
+        max_length=16, null=True, blank=True, choices=ModerationStatus.choices
+    )
+    moderation_detail = SchemaField(schema=ModerationDetail | None, null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]
@@ -208,6 +220,11 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             GinIndex(fields=["external_ids"], name="chatmessage_external_ids_idx"),
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
+            models.Index(
+                fields=["moderation_status"],
+                name="chatmessage_moderation_idx",
+                condition=Q(moderation_status__isnull=False),
+            ),
         ]
 
     @classmethod

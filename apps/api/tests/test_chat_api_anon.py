@@ -156,10 +156,19 @@ def test_send_message_rejects_attachment_not_uploaded_for_session(api_client, se
 @pytest.mark.django_db()
 def test_task_poll(api_client, session):
     url = reverse("api:chat:task-poll-response", kwargs={"session_id": session.external_id, "task_id": "123"})
-    with mock.patch("apps.api.views.chat.get_progress_message", return_value=None):
+    with (
+        mock.patch("apps.api.progress_messages.ProgressMessagesAgent") as agent,
+        mock.patch("apps.api.tasks.generate_progress_messages_task") as task,
+    ):
         response = api_client.get(url)
     response_json = response.json()
     assert response_json == {"message": None, "status": "processing"}
+    agent.assert_not_called()
+    task.delay.assert_called_once_with(
+        session_id=str(session.external_id),
+        chatbot_name=session.experiment.name,
+        chatbot_description=session.experiment.description,
+    )
 
 
 @pytest.mark.django_db()

@@ -44,9 +44,9 @@
     {% endif %}
 
     <!-- Sentry SDK. See https://docs.sentry.io/platforms/javascript/ -->
-    {% if not debug %}
+    {% if SENTRY_BROWSER_LOADER_KEY and not debug %}
       <script
-        src="https://js.sentry-cdn.com/40eeb2bc0ecd41b2a7b9df3c5ca182e8.min.js"
+        src="https://js.sentry-cdn.com/{{ SENTRY_BROWSER_LOADER_KEY }}.min.js"
         crossorigin="anonymous"
       ></script>
     {% endif %}

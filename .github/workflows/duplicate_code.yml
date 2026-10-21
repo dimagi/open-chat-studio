@@ -1,0 +1,81 @@
+name: Duplicate code
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.13'
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    # Fork PRs get a read-only token and cannot comment.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # The script diffs against the merge base with origin/$GITHUB_BASE_REF.
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv sync --locked --dev --group code-analysis
+      - name: Find duplicates in changed lines
+        id: report
+        run: |
+          set +e
+          uv run python -m scripts.duplicates.find_touched_duplicates --fail > report.md
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+      - name: Update the PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXIT_CODE: ${{ steps.report.outputs.exit_code }}
+        run: |
+          marker='<!-- duplicate-code-report -->'
+          comment_id=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)
+          case "$EXIT_CODE" in
+            1)
+              { echo "$marker"; cat report.md; } > body.md
+              if [ -n "$comment_id" ]; then
+                gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F body=@body.md > /dev/null
+              else
+                gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@body.md > /dev/null
+              fi
+              ;;
+            0)
+              if [ -n "$comment_id" ]; then
+                gh api --method DELETE "repos/$REPO/issues/comments/$comment_id"
+              fi
+              ;;
+            *)
+              echo "::warning::Duplicate code check failed to run (exit code $EXIT_CODE)"
+              ;;
+          esac

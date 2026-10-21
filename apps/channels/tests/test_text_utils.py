@@ -1,6 +1,8 @@
 import re
 
-from apps.channels.text_utils import URL_REGEX, strip_urls_and_emojis
+import pytest
+
+from apps.channels.text_utils import URL_REGEX, append_skipped_attachment_notes, strip_urls_and_emojis
 
 
 def test_strip_urls_and_emojis():
@@ -74,3 +76,18 @@ def test_url_regex():
 
     for url in no_matches:
         assert url not in matches
+
+
+@pytest.mark.parametrize(
+    ("skipped", "expected"),
+    [
+        pytest.param([], "Hi ", id="nothing-skipped"),
+        pytest.param(
+            [{"name": "setup.exe", "reason": "file extension '.exe' not allowed", "size": 2048}],
+            "Hi\n\n[Attachment 'setup.exe' (2.0 KB) skipped — file extension '.exe' not allowed]",
+            id="one-skipped",
+        ),
+    ],
+)
+def test_append_skipped_attachment_notes(skipped, expected):
+    assert append_skipped_attachment_notes(message_text="Hi ", skipped=skipped) == expected

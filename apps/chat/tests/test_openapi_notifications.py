@@ -1,12 +1,12 @@
 from unittest.mock import patch
 
 import pytest
-from langchain_community.utilities.openapi import OpenAPISpec
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
-from apps.chat.tests.test_openapi_tool import _make_openapi_schema
+from apps.chat.tests.openapi_helpers import make_openapi_schema
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.utils.factories.custom_actions import CustomActionFactory
+from apps.utils.openapi import OpenAPISpec
 
 
 def _test_tool_call_with_custom_action(spec_dict, call_args: dict, custom_action, path=None):
@@ -26,7 +26,7 @@ def test_openapi_tool_creates_error_notification_on_failure(mock_create_notifica
     get_slug_for_team.return_value = "test-team-slug"
     custom_action = CustomActionFactory.build(id=1)
 
-    spec = _make_openapi_schema({})
+    spec = make_openapi_schema({})
     # Mock a 500 error from the API
     httpx_mock.add_response(url="https://example.com/test", status_code=500, text="Internal Server Error")
 
@@ -46,7 +46,7 @@ def test_openapi_tool_creates_unexpected_error_notification(mock_create_notifica
     get_slug_for_team.return_value = "test-team-slug"
     custom_action = CustomActionFactory.build(id=1)
 
-    spec = _make_openapi_schema({})
+    spec = make_openapi_schema({})
 
     # Mock the original call_api to raise an unexpected exception
     with patch("apps.chat.agent.openapi_tool.OpenAPIOperationExecutor.call_api") as mock_call_api:

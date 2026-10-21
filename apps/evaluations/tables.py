@@ -3,7 +3,7 @@ from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
-from django_tables2 import TemplateColumn, columns, tables
+from django_tables2 import columns, tables
 
 from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.cost_tracking.templatetags.cost_tracking import cost_display
@@ -20,7 +20,7 @@ from apps.evaluations.utils import get_evaluator_type_display
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import ArrayColumn, TemplateColumnWithCustomHeader
+from apps.generics.tables import ArrayColumn, TemplateColumn, TemplateColumnWithCustomHeader
 from apps.teams.utils import get_slug_for_team
 
 
@@ -68,11 +68,13 @@ class EvaluationConfigTable(tables.Table):
 
     def render_evaluators(self, value, record):
         """Render the evaluators column with icons and labels in an unordered list."""
-        if not value.exists():
+        # Use list() so the prefetch cache is consumed rather than issuing a new EXISTS query.
+        evaluators = list(value.all())
+        if not evaluators:
             return "—"
 
         rows = []
-        for evaluator in value.all():
+        for evaluator in evaluators:
             type_info = get_evaluator_type_display(evaluator.type)
             icon_class = type_info.get("icon") or ""
             label = type_info.get("label") or ""
@@ -94,6 +96,10 @@ class EvaluationConfigTable(tables.Table):
             ),
         )
         return format_html('<ul class="list-disc list-inside">{}</ul>', items)
+
+    def render_dataset(self, record):
+        """Render just the dataset name to avoid EvaluationDataset.__str__ calling messages.count()."""
+        return record.dataset.name
 
     def render_generation_chatbot(self, record):
         if not record.base_experiment:
@@ -158,18 +164,15 @@ class EvaluationRunTable(tables.Table):
 
     cost = columns.Column(verbose_name="Cost", orderable=False, empty_values=())
 
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.Action(
-                url_name="evaluations:evaluation_run_download",
-                url_factory=lambda url_name, request, record, _: reverse(
-                    url_name, args=[request.team.slug, record.config_id, record.id]
-                ),
-                icon_class="fa-solid fa-download",
-                title="Download CSV",
-                enabled_condition=lambda _, record: record.status == "completed",
-            ),
-        ]
+    actions = TemplateColumn(
+        template_code=(
+            '{% url "evaluations:evaluation_run_download_start" request.team.slug record.config_id record.id'
+            " as run_export_url %}"
+            '{% include "evaluations/partials/export_button.html" with export_id=record.id'
+            ' start_url=run_export_url button_class="btn-sm" disabled=record.is_running only %}'
+        ),
+        verbose_name="",
+        orderable=False,
     )
 
     def render_cost(self, record):
@@ -214,6 +217,13 @@ class EvaluatorTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(url_name="evaluations:evaluator_edit"),
+            actions.AjaxAction(
+                "evaluations:evaluator_copy",
+                title="Copy",
+                icon_class="fa-solid fa-copy",
+                hx_method="post",
+                required_permissions=["evaluations.add_evaluator", "evaluations.change_evaluator"],
+            ),
             actions.AjaxAction(
                 "evaluations:evaluator_delete",
                 title="Delete",
@@ -358,7 +368,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")
     participant = columns.Column(accessor="participant", verbose_name="Participant", order_by="participant__identifier")
-    tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
+    tags = TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html", orderable=False)
     last_message = columns.Column(accessor="last_activity_at", verbose_name="Last Message", orderable=True)
     versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions", orderable=False)
     message_count = columns.Column(accessor="message_count", verbose_name="Messages", orderable=False)

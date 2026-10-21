@@ -38,11 +38,10 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import SingleTableView
-from field_audit.models import AuditAction
 
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
-from apps.annotations.models import CustomTaggedItem, Tag
+from apps.annotations.models import CustomTaggedItem, Tag, UserComment
 from apps.channels.datamodels import Attachment
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -74,6 +73,7 @@ from apps.experiments.models import (
     SessionStatus,
 )
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.experiments.services import publish_version
 from apps.experiments.tables import (
     ExperimentVersionsTable,
 )
@@ -82,7 +82,9 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
+from apps.files.content_type import read_sample
 from apps.files.models import File, FilePurpose
+from apps.service_providers.file_limits import blocked_file_reason
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
@@ -101,7 +103,8 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
     def get_queryset(self):
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
-        return (experiment_row | other_versions).order_by("-version_number")
+        # select_related avoids a per-row query when the version cell renders `api_url`
+        return (experiment_row | other_versions).select_related("working_version").order_by("-version_number")
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
@@ -111,6 +114,19 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
     return _experiment_session_message(request, version_number)
+
+
+def _blocked_upload_error(request) -> str | None:
+    """Returns an error naming the first uploaded file with a blocked extension or content type."""
+    for _key, uploaded_files in request.FILES.lists():
+        for uploaded_file in uploaded_files:
+            if reason := blocked_file_reason(
+                filename=uploaded_file.name,
+                claimed_type=uploaded_file.content_type,
+                content=read_sample(uploaded_file),
+            ):
+                return f"File '{uploaded_file.name}' was rejected: {reason}"
+    return None
 
 
 def _process_uploaded_files(request, session):
@@ -153,12 +169,13 @@ def _experiment_session_message(request, version_number: int):
         raise Http404() from None
 
     message_text = request.POST.get("message", "")
+    if error := _blocked_upload_error(request):
+        return HttpResponseBadRequest(error)
     attachments, created_files = _process_uploaded_files(request, session)
 
-    if not message_text and not attachments:
-        return HttpResponseBadRequest("A message or attachment is required.")
-
-    if attachments and not message_text:
+    if not message_text:
+        if not attachments:
+            return HttpResponseBadRequest("A message or attachment is required.")
         message_text = "Please look at the attachments and respond appropriately"
 
     result = get_response_for_webchat_task.delay(
@@ -533,6 +550,15 @@ def _get_languages_for_chat(session):
     return available_languages, translatable_languages
 
 
+def _attach_session_chat(messages, session):
+    """Reuse the already-loaded session chat so per-message access to `message.chat`
+    (e.g. in `get_attached_files`) doesn't trigger a query for each message.
+    """
+    for message in messages:
+        if message.chat_id == session.chat_id:
+            message.chat = session.chat
+
+
 def _add_time_gap_info(messages, gap_threshold_hours=4):
     """
     Add time gap information to messages for display in the template.
@@ -607,6 +633,31 @@ def _mark_tag_context(messages, selected_tags, matched_ids):
         message.is_tag_context = message.id not in matched_ids
 
 
+def _session_messages_queryset(chat) -> QuerySet:
+    """A chat's messages in display order, with everything the message list template reads
+    per message (tags, participant data diffs, comments) prefetched to avoid N+1 queries.
+    """
+    return (
+        ChatMessage.objects.filter(chat=chat)
+        .order_by("created_at", "id")
+        .prefetch_related(
+            Prefetch(
+                "tagged_items",
+                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+                to_attr="prefetched_tagged_items",
+            ),
+            Prefetch(
+                "output_message_trace",
+                queryset=Trace.objects.exclude(
+                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
+                ).only("id", "participant_data_diff", "output_message_id"),
+                to_attr="prefetched_output_traces_with_diff",
+            ),
+            Prefetch("comments", queryset=UserComment.objects.select_related("user")),
+        )
+    )
+
+
 def _build_session_messages_context(request, session, experiment) -> tuple[dict, QuerySet]:
     """Context for a session's message list, at either the full page or the scroll-fragment
     endpoint, plus the underlying (tag-filtered, language-annotated) queryset. The full page
@@ -624,24 +675,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
 
     default_message = "(message generated after last translation)"
 
-    messages_queryset = (
-        ChatMessage.objects.filter(chat=session.chat)
-        .order_by("created_at", "id")
-        .prefetch_related(
-            Prefetch(
-                "tagged_items",
-                queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-                to_attr="prefetched_tagged_items",
-            ),
-            Prefetch(
-                "output_message_trace",
-                queryset=Trace.objects.exclude(
-                    Q(participant_data_diff__isnull=True) | Q(participant_data_diff=[])
-                ).only("id", "participant_data_diff", "output_message_id"),
-                to_attr="prefetched_output_traces_with_diff",
-            ),
-        )
-    )
+    messages_queryset = _session_messages_queryset(session.chat)
     messages_queryset, matched_ids, context_ids = _apply_tag_filter(messages_queryset, session.chat, selected_tags)
 
     if language:
@@ -672,6 +706,8 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         current_page_messages = list(current_page.object_list)
         total_pages = paginator.num_pages
         page_start_index = current_page.start_index()
+
+    _attach_session_chat(current_page_messages, session)
 
     # Add time gap information to messages
     current_page_messages = _add_time_gap_info(current_page_messages)
@@ -941,17 +977,13 @@ def get_image_html(request, team_slug: str, session_id: int, pk: int):
 
 
 @require_POST
-@transaction.atomic
 @login_and_team_required
 def set_default_experiment(request, team_slug: str, experiment_id: int, version_number: int):
     experiment = get_object_or_404(
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
-    Experiment.objects.exclude(version_number=version_number).filter(
-        team=request.team, working_version_id=experiment_id
-    ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
-    experiment.is_default_version = True
-    experiment.save()
+    publish_version(experiment)
+    messages.success(request, f"{experiment.version_display} is now the published version")
     url = (
         reverse(
             "chatbots:single_chatbot_home",
@@ -980,8 +1012,10 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
         + "#versions"
     )
     if experiment.is_default_version:
+        messages.error(request, "The published version cannot be archived")
         return redirect(url)
     experiment.archive()
+    messages.success(request, f"{experiment.version_display} archived")
     return redirect(url)
 
 
@@ -1030,7 +1064,17 @@ def update_version_description(request, team_slug: str, experiment_id: int, vers
 
 @login_and_team_required
 def get_release_status_badge(request, team_slug: str, experiment_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    experiment = get_object_or_404(
+        Experiment.objects.select_related(
+            "consent_form",
+            "synthetic_voice",
+            "voice_provider",
+            "trace_provider",
+            "pipeline",
+        ).prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers"),
+        id=experiment_id,
+        team=request.team,
+    )
     context = {"has_changes": experiment.compare_with_latest(), "experiment": experiment}
     return render(request, "experiments/components/unreleased_badge.html", context)
 

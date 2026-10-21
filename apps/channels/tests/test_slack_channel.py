@@ -1,4 +1,3 @@
-from io import BytesIO
 from unittest import mock
 from unittest.mock import Mock
 
@@ -8,38 +7,11 @@ from mock.mock import patch
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.slack_channel import SlackChannel
+from apps.channels.tests.file_helpers import make_mock_file
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.files.models import File
-from apps.service_providers.messaging_service import SlackService
 from apps.service_providers.tracing import TraceInfo
 from apps.slack.utils import make_session_external_id
 from apps.utils.factories.channels import ExperimentChannelFactory
-
-
-@pytest.fixture()
-def slack_service():
-    service = SlackService(slack_team_id="123", slack_installation_id=1)
-    mock_client = Mock(
-        conversations_list=Mock(
-            return_value=[
-                {"channels": [{"id": "123", "name": "channel1"}]},
-                {"channels": [{"id": "345", "name": "channel2"}]},
-            ]
-        )
-    )
-    service.client = mock_client
-    return service
-
-
-def make_mock_file(name, content_type, size, file_data=b"filedata"):
-    file = Mock(spec=File)
-    file.name = name
-    file.content_type = content_type
-    file.content_size = size
-    file.file = BytesIO(file_data)
-    file.read_bytes.return_value = file_data
-    file.download_link.return_value = f"http://example.com/{name}"
-    return file
 
 
 @pytest.mark.django_db()

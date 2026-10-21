@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.urls import reverse
-from django_tables2 import Column, Table, TemplateColumn
+from django_tables2 import Column, Table
 
 from apps.generics import actions
+from apps.generics.tables import TemplateColumn
 
 
 def _integration_edit_url(url_name, request, record, value):
@@ -21,6 +22,9 @@ class IntegrationsTable(Table):
     name = TemplateColumn(template_name="teams/components/integration_row_name.html", verbose_name="Name")
     category = Column(verbose_name="Category")
     provider = Column(verbose_name="Provider")
+    verification = TemplateColumn(
+        template_name="teams/components/integration_verification.html", verbose_name="Verification"
+    )
     actions = actions.ActionsColumn(
         actions=[
             actions.edit_action(

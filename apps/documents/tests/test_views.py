@@ -929,6 +929,43 @@ class TestCollectionUploadedFileCount:
 
 
 @pytest.mark.django_db()
+class TestCollectionTableView:
+    def test_file_count_and_size_exclude_archived_files(self, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(team=team)
+        other = CollectionFactory.create(team=team, embedding_provider_model=collection.embedding_provider_model)
+        sizes = [
+            (collection, 1_500_000, False),
+            (collection, 1_500_000, False),
+            (collection, 7_000_000, True),
+            (other, 2_000_000, False),
+        ]
+        for target, size, is_archived in sizes:
+            file = CollectionFileFactory.create(collection=target).file
+            # `File.save` derives `content_size` from the stored file, so set it directly
+            File.objects.filter(id=file.id).update(content_size=size, is_archived=is_archived)
+        client.force_login(team.members.first())
+
+        response = client.get(reverse("documents:collection_table", args=[team.slug]))
+
+        rows = {row.record.id: row for row in response.context["table"].rows}
+        assert rows[collection.id].get_cell_value("file_count") == 2
+        assert rows[collection.id].get_cell_value("size") == f"{collection.size} MB" == "3.0 MB"
+        assert rows[other.id].get_cell_value("size") == "2.0 MB"
+
+    def test_size_of_empty_collection(self, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(team=team)
+        client.force_login(team.members.first())
+
+        response = client.get(reverse("documents:collection_table", args=[team.slug]))
+
+        row = next(row for row in response.context["table"].rows if row.record.id == collection.id)
+        assert row.get_cell_value("file_count") == 0
+        assert row.get_cell_value("size") == "0.0 MB"
+
+
+@pytest.mark.django_db()
 class TestQueryCollectionView:
     """The query preview end to end: the real view, the real retrieval service, the real Voyage
     adapter and the real template, with only the embedding call and the network faked.
