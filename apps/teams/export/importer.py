@@ -239,12 +239,24 @@ def _adopt_participant_data(
     return model._base_manager.filter(participant_id=participant, experiment_id=experiment).first()
 
 
-# Rows the target can create on its own once a channel is switched to it, while the source still
-# holds the same participant from before the switch. A source row that matches one by its unique
-# key is mapped onto it and the target's row is kept as it is, since it is the newer of the two.
+def _adopt_event_user(
+    model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
+) -> models.Model | None:
+    event_type = store.get_target("ocs_notifications.eventtype", row["event_type"])
+    user = store.get_target("users.customuser", row["user"])
+    if event_type is None or user is None:
+        return None
+    return model._base_manager.filter(event_type_id=event_type, user_id=user).first()
+
+
+# Rows the target can create on its own while the source holds the same row: a participant once a
+# channel is switched to the target, or a notification's recipient when both servers raise the same
+# notification. A source row that matches one by its unique key is mapped onto it and the target's
+# row is kept as it is, since it is the newer of the two.
 _ADOPT_EXISTING = {
     "experiments.participant": _adopt_participant,
     "experiments.participantdata": _adopt_participant_data,
+    "ocs_notifications.eventuser": _adopt_event_user,
 }
 
 # Rows the target edits itself once a channel is switched to it. While the source still finishes work
