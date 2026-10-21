@@ -813,6 +813,34 @@ def test_notification_raised_on_both_servers_maps_onto_the_target_rows(store):
     assert target_event_users[non_reader.id].read is False
 
 
+def test_later_source_revision_of_an_adopted_event_user_keeps_the_target_row(store):
+    """A source event user mapped onto the target's own row is not overwritten when it changes on the
+    source after the first sync."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    source_team = TeamFactory()
+    user = UserFactory()
+    for team in (source_team, target_team):
+        MembershipFactory(team=team, user=user)
+        _raise_model_removal_notification(team)
+    store.record("users.customuser", user.id, user.id)
+    target_event_user = EventUser.objects.get(team=target_team)
+    target_event_user.read = True
+    target_event_user.save()
+    importer.import_rows("ocs_notifications.eventtype", [_serialize(EventType.objects.get(team=source_team))])
+    source_row = _serialize(EventUser.objects.get(team=source_team))
+    importer.import_rows("ocs_notifications.eventuser", [source_row])
+
+    revised_row = {**source_row, "muted_until": PAST, "updated_at": PAST}
+    importer.import_rows("ocs_notifications.eventuser", [revised_row])
+
+    target_event_user.refresh_from_db()
+    assert target_event_user.read is True
+    assert target_event_user.muted_until is None
+    assert importer.kept_target_edits["ocs_notifications.eventuser"] == {source_row["id"]}
+
+
 def _raise_model_removal_notification(team):
     create_notification(
         title="Model removed",

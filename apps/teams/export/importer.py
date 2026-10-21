@@ -259,14 +259,16 @@ _ADOPT_EXISTING = {
     "ocs_notifications.eventuser": _adopt_event_user,
 }
 
-# Rows the target edits itself once a channel is switched to it. While the source still finishes work
-# it had queued for that conversation, a later source revision would overwrite the target's newer
-# edit, so a row edited on the target since the sync wrote it is kept as it is.
+# Rows the target edits itself once a channel is switched to it, or adopted (see ``_ADOPT_EXISTING``).
+# While the source still finishes work it had queued for that conversation, a later source revision
+# would overwrite the target's newer edit, so a row edited on the target since the sync wrote it is
+# kept as it is.
 _KEEP_TARGET_EDITS = {
     "experiments.participant",
     "experiments.participantdata",
     "experiments.experimentsession",
     "chat.chat",
+    "ocs_notifications.eventuser",
 }
 
 # Rows matched to a pre-existing target row by natural key instead of created.
