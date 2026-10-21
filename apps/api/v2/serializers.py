@@ -30,10 +30,18 @@ class ChatbotSerializer(serializers.ModelSerializer):
     )
     id = serializers.UUIDField(source="public_id")
     versions = ChatbotVersionSerializer(many=True)
+    last_activity_at = serializers.DateTimeField(
+        read_only=True,
+        allow_null=True,
+        help_text=(
+            "When a participant last sent a message in any of this chatbot's sessions. Evaluation "
+            "runs are not counted. Null if the chatbot has no participant activity."
+        ),
+    )
 
     class Meta:
         model = Experiment
-        fields = ["id", "name", "url", "version_number", "versions"]
+        fields = ["id", "name", "url", "version_number", "versions", "last_activity_at"]
 
 
 class MeSerializer(serializers.ModelSerializer):
