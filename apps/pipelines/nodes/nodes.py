@@ -702,6 +702,28 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         description=HISTORY_TYPE_DESCRIPTION,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
+    route_descriptions: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` "
+            "variable. Keys are uppercased on save, and entries for keywords not in `keywords` are dropped."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
+    )
+
+    @field_validator("route_descriptions", mode="before")
+    @classmethod
+    def ensure_route_description_keys_are_uppercase(cls, value):
+        if isinstance(value, dict):
+            return {str(key).upper(): description for key, description in value.items()}
+        return {}
+
+    @model_validator(mode="after")
+    def drop_descriptions_without_keyword(self) -> Self:
+        self.route_descriptions = {
+            keyword: self.route_descriptions[keyword] for keyword in self.keywords if keyword in self.route_descriptions
+        }
+        return self
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -725,6 +747,8 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         extra_prompt_context = {
             "temp_state": context.state.temp,
             "session_state": context.state.session_state,
+            "routes": self._format_routes(),
+            "routes_list": ", ".join(self.keywords),
         }
         participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(
@@ -770,6 +794,14 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         if session:
             self.save_history(node_input, keyword)
         return keyword, is_default_keyword
+
+    def _format_routes(self) -> str:
+        """One `- KEYWORD: description` line per route; a route with no description is the bare keyword."""
+        lines = []
+        for keyword in self.keywords:
+            description = self.route_descriptions.get(keyword, "").strip()
+            lines.append(f"- {keyword}: {description}" if description else f"- {keyword}")
+        return "\n".join(lines)
 
     def _route_from_agent_result(self, result: dict) -> str | None:
         """Return the route the model chose in upper case, or None when it chose none."""

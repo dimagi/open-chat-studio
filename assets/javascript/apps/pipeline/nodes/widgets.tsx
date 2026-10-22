@@ -751,10 +751,31 @@ function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: nu
   });
 }
 
+/**
+ * Moves a route's description to the keyword's new name. The old entry is kept while another
+ * route still has that name.
+ */
+function renameRouteDescription(
+  descriptions: Record<string, string>, keywords: string[], index: number, newName: string
+): Record<string, string> {
+  const oldName = keywords[index];
+  const next = {...descriptions};
+  if (oldName && oldName in next) {
+    if (newName) {
+      next[newName] = next[oldName];
+    }
+    if (!keywords.some((keyword, i) => i !== index && keyword === oldName)) {
+      delete next[oldName];
+    }
+  }
+  return next;
+}
+
 export function KeywordsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
+  const hasDescriptions = !!props.nodeSchema.properties.route_descriptions;
 
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
@@ -768,10 +789,23 @@ export function KeywordsWidget(props: WidgetParams) {
     value = value.toUpperCase();
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
+        const descriptions = old.data.params["route_descriptions"];
         updatedList[index] = value;
-        return getKeywordsNodeData(old, updatedList);
+        return produce(getKeywordsNodeData(old, updatedList), next => {
+          if (hasDescriptions && descriptions) {
+            next.data.params["route_descriptions"] = renameRouteDescription(
+              descriptions, old.data.params["keywords"] || [], index, value
+            );
+          }
+        });
       }
     );
+  };
+
+  const updateDescription = (keyword: string, value: string) => {
+    setNode(props.nodeId, (old) => produce(old, next => {
+      next.data.params["route_descriptions"] = {...(old.data.params["route_descriptions"] || {}), [keyword]: value};
+    }));
   };
 
   const deleteKeyword = (index: number) => {
@@ -787,7 +821,14 @@ export function KeywordsWidget(props: WidgetParams) {
         newDefaultIndex = defaultIndex - 1;
       }
 
-      return getKeywordsNodeData(old, updatedList, newDefaultIndex);
+      const descriptions = old.data.params["route_descriptions"];
+      return produce(getKeywordsNodeData(old, updatedList, newDefaultIndex), next => {
+        if (hasDescriptions && descriptions) {
+          next.data.params["route_descriptions"] = renameRouteDescription(
+            descriptions, old.data.params["keywords"] || [], index, ""
+          );
+        }
+      });
     });
     updateNodeInternals(props.nodeId);
 
@@ -823,6 +864,7 @@ export function KeywordsWidget(props: WidgetParams) {
   const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : [];
   const defaultIndex = props.nodeParams.default_keyword_index;
+  const descriptions = (props.nodeParams.route_descriptions || {}) as Record<string, string>;
   const canDelete = length > 1;
 
   return (
@@ -863,7 +905,7 @@ export function KeywordsWidget(props: WidgetParams) {
                   </div>
                 </label>
                 {!props.readOnly && <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
-                  <button type="button" className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
+                  <button type="button" className="btn btn-xs btn-ghost" aria-label={`Delete Keyword ${index + 1}`} onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
                   </button>
                 </div>}
@@ -875,6 +917,19 @@ export function KeywordsWidget(props: WidgetParams) {
                 value={value}
                 readOnly={props.readOnly}
               ></input>
+              {hasDescriptions && (
+                <textarea
+                  className="textarea textarea-sm w-full mt-1 normal-case nodrag"
+                  name="route_descriptions"
+                  aria-label={`Description for ${label}`}
+                  placeholder={value ? "When should this route be chosen?" : "Enter a keyword first"}
+                  rows={2}
+                  onChange={(event) => updateDescription(value, event.target.value)}
+                  value={value ? descriptions[value] || "" : ""}
+                  readOnly={props.readOnly}
+                  disabled={!value}
+                ></textarea>
+              )}
             </div>
           );
         })}
@@ -1358,6 +1413,10 @@ export function TextEditorWidget(props: WidgetParams) {
     const defaultRoute = String(keywords[Number(default_keyword_index ?? 0)] ?? "");
     return {routes: keywords.filter(Boolean).map(String), defaultRoute};
   }, [isRouter, keywords, default_keyword_index]);
+  const promptText = concatenate(props.paramValue);
+  const routesWarning = isRouter && !promptText.includes("{routes}") && !promptText.includes("{routes_list}")
+    ? "Add {routes} to the prompt to give the router each route and its description."
+    : undefined;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1395,6 +1454,7 @@ export function TextEditorWidget(props: WidgetParams) {
         label={label}
         help_text={props.helpText}
         inputError={props.inputError}
+        inputWarning={routesWarning}
       >
         <div className="relative w-full">
           <textarea className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"

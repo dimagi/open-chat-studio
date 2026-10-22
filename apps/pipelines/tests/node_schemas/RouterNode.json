@@ -127,6 +127,15 @@
       "type": "string",
       "ui:optionsSource": "router_prompt_variables",
       "ui:widget": "text_editor_widget"
+    },
+    "route_descriptions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` variable. Keys are uppercased on save, and entries for keywords not in `keywords` are dropped.",
+      "title": "Route Descriptions",
+      "type": "object",
+      "ui:widget": "none"
     }
   },
   "required": [

@@ -4,6 +4,7 @@ import {getWidget as getWidgetUntyped, InputField, GenerateCodeSection, CHECK_FO
 import type {WidgetParams} from './widgets';
 import type {ComponentType} from 'react';
 import type {PropertySchema} from '../types/nodeParams';
+import {ReactFlowProvider} from 'reactflow';
 import usePipelineStore from '../stores/pipelineStore';
 import {apiClient} from '../api/api';
 
@@ -256,6 +257,82 @@ describe('KeyValuePairsWidget', () => {
     const {getByText} = render(<Harness inputError="Duplicate metadata filter key: district" />);
 
     expect(getByText('Duplicate metadata filter key: district')).toBeInTheDocument();
+  });
+});
+
+describe('KeywordsWidget route descriptions', () => {
+  const routerSchema = {title: 'RouterNode', properties: {keywords: {}, route_descriptions: {}}} as never;
+  const staticRouterSchema = {title: 'StaticRouterNode', properties: {keywords: {}}} as never;
+
+  const seedNode = (keywords: string[], routeDescriptions: Record<string, string> = {}) =>
+    usePipelineStore.setState({
+      nodes: [{
+        id: 'node-1', type: 'test', position: {x: 0, y: 0},
+        data: {type: 'test', label: '', params: {name: 'x', keywords, route_descriptions: routeDescriptions}},
+      }] as never,
+      edges: [],
+    });
+
+  const storedParams = () => usePipelineStore.getState().nodes[0].data.params;
+
+  function Harness({nodeSchema = routerSchema}: {nodeSchema?: never}) {
+    const params = usePipelineStore((state) => state.nodes[0].data.params);
+    const Widget = getWidget('keywords', {type: 'array'} as PropertySchema);
+    return (
+      <ReactFlowProvider>
+        <Widget
+          {...baseProps}
+          name="keywords"
+          label="Keywords"
+          schema={{type: 'array'} as PropertySchema}
+          nodeSchema={nodeSchema}
+          nodeParams={params}
+          paramValue={[]}
+        />
+      </ReactFlowProvider>
+    );
+  }
+
+  it('writes a description under its keyword', () => {
+    seedNode(['BILLING']);
+    const {getByLabelText} = render(<Harness />);
+
+    fireEvent.change(getByLabelText('Description for Output Keyword 1'), {target: {value: 'Payments'}});
+
+    expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments'});
+  });
+
+  it('moves the description when the keyword is renamed', () => {
+    seedNode(['BILLING'], {BILLING: 'Payments'});
+    const {container} = render(<Harness />);
+
+    fireEvent.change(container.querySelector('input[name="keywords"]')!, {target: {value: 'payments'}});
+
+    expect(storedParams().route_descriptions).toEqual({PAYMENTS: 'Payments'});
+  });
+
+  it('drops the description when the keyword is deleted', () => {
+    seedNode(['BILLING', 'SUPPORT'], {BILLING: 'Payments', SUPPORT: 'Help'});
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Delete Keyword 1'}));
+
+    expect(storedParams().keywords).toEqual(['SUPPORT']);
+    expect(storedParams().route_descriptions).toEqual({SUPPORT: 'Help'});
+  });
+
+  it('disables the description until the keyword has a name', () => {
+    seedNode(['']);
+    const {getByLabelText} = render(<Harness />);
+
+    expect(getByLabelText('Description for Output Keyword 1')).toBeDisabled();
+  });
+
+  it('shows no descriptions on a node without route_descriptions', () => {
+    seedNode(['BILLING']);
+    const {queryByLabelText} = render(<Harness nodeSchema={staticRouterSchema} />);
+
+    expect(queryByLabelText('Description for Output Keyword 1')).not.toBeInTheDocument();
   });
 });
 

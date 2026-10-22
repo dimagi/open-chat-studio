@@ -205,8 +205,9 @@ class TestExtractParticipantData(FullPayload):
 @pytest.mark.django_db()
 class TestRouterNode(FullPayload):
     """`keywords` come back upper-cased -- the model does that on the way in, so the handles and the
-    edges keyed off them are too. A router's prompt sees a narrower set of template variables than an
-    LLM node's: `participant_data`, `temp_state`, `session_state`, and nothing resource-backed.
+    edges keyed off them are too, as are the keys of `route_descriptions`. A router's prompt sees a
+    narrower set of template variables than an LLM node's: `participant_data`, `temp_state`,
+    `session_state`, `routes`, `routes_list`, and nothing resource-backed.
     """
 
     node_type = "RouterNode"
@@ -220,8 +221,9 @@ class TestRouterNode(FullPayload):
             "llm_provider_id": provider.id,
             "llm_provider_model_id": model.id,
             "llm_model_parameters": {"temperature": 0.0},
-            "prompt": "Route on what {participant_data} is asking for.",
+            "prompt": "Route on what {participant_data} is asking for.\n\nRoutes:\n{routes}",
             "keywords": ["schedule", "reschedule", "cancel"],
+            "route_descriptions": {"schedule": "Booking a new appointment", "cancel": "Cancelling an appointment"},
             "default_keyword_index": 2,
             "tag_output_message": True,
             "history_type": "named",
@@ -232,7 +234,11 @@ class TestRouterNode(FullPayload):
         }
 
     def expected(self, params):
-        return {**params, "keywords": ["SCHEDULE", "RESCHEDULE", "CANCEL"]}
+        return {
+            **params,
+            "keywords": ["SCHEDULE", "RESCHEDULE", "CANCEL"],
+            "route_descriptions": {"SCHEDULE": "Booking a new appointment", "CANCEL": "Cancelling an appointment"},
+        }
 
     def assert_extras(self, body):
         assert body["node"]["output_handles"] == [
