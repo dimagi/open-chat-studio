@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -499,8 +500,6 @@ def all_participant_identifiers(request, team_slug: str):
 def _get_identifiers_response(queryset, request):
     search = request.GET.get("q", "").strip()
     limit = PARTICIPANT_IDENTIFIER_LIMIT
-
-    from django.db.models import Q
 
     if search:
         queryset = queryset.filter(Q(identifier__icontains=search) | Q(remote_id__icontains=search))

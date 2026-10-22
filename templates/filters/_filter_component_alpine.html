@@ -162,9 +162,10 @@
       fetchParticipantOptions(filterIndex, query) {
         const filter = this.filterData.filters[filterIndex];
         if (!filter) return;
+        const requestedQuery = (query || '').trim();
         const url = new URL(this._participantIdentifierUrl, window.location.origin);
-        if (query) {
-          url.searchParams.set('q', query);
+        if (requestedQuery) {
+          url.searchParams.set('q', requestedQuery);
         }
         const App = SiteJS.app;
         fetch(url.toString(), {
@@ -177,6 +178,8 @@
         })
           .then(res => res.json())
           .then(data => {
+            // Discard stale responses: a newer request may have already resolved
+            if ((filter.searchQuery || '').trim() !== requestedQuery) return;
             const col = filter.column;
             if (col === 'participant') {
               filter.filteredOptions = data.identifiers || [];
