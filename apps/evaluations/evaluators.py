@@ -100,9 +100,16 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
     @classmethod
     def prompt_must_contain_variable(cls, v: str) -> str:
         # Roots only: an unknown sub-key still surfaces as an error result at run time.
-        if not prompt_variable_roots(v) & ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS:
+        roots = prompt_variable_roots(v)
+        if not roots & ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS:
             raise ValueError(
                 "The prompt must include at least one variable so the evaluator has context to work with. "
+                f"Available variables: {', '.join(evaluator_prompt_variable_hints('message'))}"
+            )
+        # An unknown root would raise a KeyError from ``str.format`` when the evaluator runs.
+        if unknown := sorted(roots - ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS):
+            raise ValueError(
+                f"Unknown prompt variable(s): {', '.join(f'{{{name}}}' for name in unknown)}. "
                 f"Available variables: {', '.join(evaluator_prompt_variable_hints('message'))}"
             )
         return v
