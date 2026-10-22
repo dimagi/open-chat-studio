@@ -34,6 +34,8 @@
 
 
         const App = SiteJS.app;
+        this._participantIdentifierUrl = "{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}";
+        this._participantFetchTimer = null;
         this.loadFiltersFromQueryString(window.location.search);
 
         // Load starred filters on initialization
@@ -52,8 +54,6 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
-        this._participantIdentifierUrl = "{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}";
-        this._participantFetchTimer = null;
         Object.entries(this.filterData.columns).forEach(([key, column]) => {
           if (column.type === 'string' && !column.options) {
             column.operators = column.operators.filter(item => item !== 'any of');
@@ -745,6 +745,12 @@
             return;
           }
           this.filterData.filters = newFilters;
+          // Seed participant/remote_id filteredOptions via server since column.options is no longer pre-loaded
+          newFilters.forEach((filter, idx) => {
+            if (filter.column === 'participant' || filter.column === 'remote_id') {
+              this.fetchParticipantOptions(idx, '');
+            }
+          });
           this.triggerFilterChange();
         } catch {
           this.nlError = "Couldn't understand that query. Try rephrasing it.";

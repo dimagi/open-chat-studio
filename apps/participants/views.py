@@ -500,27 +500,19 @@ def _get_identifiers_response(queryset, request):
     search = request.GET.get("q", "").strip()
     limit = PARTICIPANT_IDENTIFIER_LIMIT
 
-    if search:
-        from django.db.models import Q
+    from django.db.models import Q
 
+    if search:
         queryset = queryset.filter(Q(identifier__icontains=search) | Q(remote_id__icontains=search))
 
-    identifiers, remote_ids = set(), set()
-    truncated = False
-    count = 0
-    for ident, remote_id in queryset:
-        if count >= limit:
-            truncated = True
-            break
-        added = False
-        if ident:
-            identifiers.add(ident)
-            added = True
-        if remote_id:
-            remote_ids.add(remote_id)
-            added = True
-        if added:
-            count += 1
+    # Exclude rows where both values are empty, then slice so the DB applies LIMIT
+    queryset = queryset.exclude(Q(identifier="") | Q(identifier=None), Q(remote_id="") | Q(remote_id=None))
+    rows = list(queryset[: limit + 1])
+    truncated = len(rows) > limit
+    rows = rows[:limit]
+
+    identifiers = {ident for ident, _ in rows if ident}
+    remote_ids = {remote_id for _, remote_id in rows if remote_id}
 
     return JsonResponse(
         {
