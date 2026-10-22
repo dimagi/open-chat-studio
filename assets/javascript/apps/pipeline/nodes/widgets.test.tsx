@@ -311,6 +311,32 @@ describe('KeywordsWidget route descriptions', () => {
     expect(storedParams().route_descriptions).toEqual({PAYMENTS: 'Payments'});
   });
 
+  it('keeps the other route\'s description when a keyword is renamed to match it', () => {
+    seedNode(['BILLING', 'SUPPORT'], {BILLING: 'Payments', SUPPORT: 'Help'});
+    const {container} = render(<Harness />);
+
+    fireEvent.change(container.querySelectorAll('input[name="keywords"]')[1], {target: {value: 'billing'}});
+
+    expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments'});
+  });
+
+  it('leaves the other route\'s description behind when renaming away from a duplicate', () => {
+    seedNode(['BILLING', 'BILLING'], {BILLING: 'Payments'});
+    const {container} = render(<Harness />);
+
+    fireEvent.change(container.querySelectorAll('input[name="keywords"]')[1], {target: {value: 'billingx'}});
+
+    expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments'});
+  });
+
+  it('disables the descriptions of keywords that are duplicated', () => {
+    seedNode(['BILLING', 'BILLING'], {BILLING: 'Payments'});
+    const {getByLabelText} = render(<Harness />);
+
+    expect(getByLabelText('Description for Output Keyword 1')).toBeDisabled();
+    expect(getByLabelText('Description for Output Keyword 2')).toBeDisabled();
+  });
+
   it('drops the description when the keyword is deleted', () => {
     seedNode(['BILLING', 'SUPPORT'], {BILLING: 'Payments', SUPPORT: 'Help'});
     const {getByRole} = render(<Harness />);

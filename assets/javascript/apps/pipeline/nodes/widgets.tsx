@@ -752,22 +752,22 @@ function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: nu
 }
 
 /**
- * Moves a route's description to the keyword's new name. The old entry is kept while another
- * route still has that name.
+ * Moves a route's description to the keyword's new name. Descriptions are keyed by name, so a
+ * name shared with another route belongs to that route: it is neither moved away nor overwritten.
  */
 function renameRouteDescription(
   descriptions: Record<string, string>, keywords: string[], index: number, newName: string
 ): Record<string, string> {
+  const usedByOtherRoute = (name: string) => keywords.some((keyword, i) => i !== index && keyword === name);
   const oldName = keywords[index];
   const next = {...descriptions};
-  if (oldName && oldName in next) {
-    if (newName) {
-      next[newName] = next[oldName];
-    }
-    if (!keywords.some((keyword, i) => i !== index && keyword === oldName)) {
-      delete next[oldName];
-    }
+  if (!oldName || !(oldName in next) || usedByOtherRoute(oldName)) {
+    return next;
   }
+  if (newName && !usedByOtherRoute(newName)) {
+    next[newName] = next[oldName];
+  }
+  delete next[oldName];
   return next;
 }
 
@@ -883,6 +883,7 @@ export function KeywordsWidget(props: WidgetParams) {
       <div className="ml-2">
         {Array.from({length: length}, (_, index) => {
           const value = keywords ? keywords[index] || "" : "";
+          const isDuplicate = !!value && keywords.some((keyword: string, i: number) => i !== index && keyword === value);
           const label = `Output Keyword ${index + 1}`;
           const isDefault = index === defaultIndex;
 
@@ -922,12 +923,16 @@ export function KeywordsWidget(props: WidgetParams) {
                   className="textarea textarea-sm w-full mt-1 normal-case nodrag"
                   name="route_descriptions"
                   aria-label={`Description for ${label}`}
-                  placeholder={value ? "When should this route be chosen?" : "Enter a keyword first"}
+                  placeholder={
+                    !value ? "Enter a keyword first"
+                      : isDuplicate ? "Keywords must be unique"
+                      : "When should this route be chosen?"
+                  }
                   rows={2}
                   onChange={(event) => updateDescription(value, event.target.value)}
-                  value={value ? descriptions[value] || "" : ""}
+                  value={value && !isDuplicate ? descriptions[value] || "" : ""}
                   readOnly={props.readOnly}
-                  disabled={!value}
+                  disabled={!value || isDuplicate}
                 ></textarea>
               )}
             </div>
