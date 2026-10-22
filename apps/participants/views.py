@@ -475,6 +475,9 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
     return render(request, "table/table_row.html", {"row": table.rows[0]})
 
 
+PARTICIPANT_IDENTIFIER_LIMIT = 200
+
+
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
@@ -483,27 +486,47 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
         .values_list("identifier", "remote_id")
         .distinct()
     )
-    return _get_identifiers_response(query)
+    return _get_identifiers_response(query, request)
 
 
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
     query = Participant.objects.filter(team=request.team).values_list("identifier", "remote_id").distinct()
-    return _get_identifiers_response(query)
+    return _get_identifiers_response(query, request)
 
 
-def _get_identifiers_response(queryset):
+def _get_identifiers_response(queryset, request):
+    search = request.GET.get("q", "").strip()
+    limit = PARTICIPANT_IDENTIFIER_LIMIT
+
+    if search:
+        from django.db.models import Q
+
+        queryset = queryset.filter(Q(identifier__icontains=search) | Q(remote_id__icontains=search))
+
     identifiers, remote_ids = set(), set()
+    truncated = False
+    count = 0
     for ident, remote_id in queryset:
+        if count >= limit:
+            truncated = True
+            break
+        added = False
         if ident:
             identifiers.add(ident)
+            added = True
         if remote_id:
             remote_ids.add(remote_id)
+            added = True
+        if added:
+            count += 1
+
     return JsonResponse(
         {
             "identifiers": list(identifiers),
             "remote_ids": list(remote_ids),
+            "truncated": truncated,
         },
         safe=False,
     )
