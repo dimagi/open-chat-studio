@@ -1,3 +1,4 @@
+import re
 from copy import copy
 
 import markdown
@@ -14,9 +15,13 @@ from markdown.inlinepatterns import (
     ShortImageReferenceInlineProcessor,
     ShortReferenceInlineProcessor,
 )
+from markdown.preprocessors import Preprocessor
 
 # Prefix used by the OpenAI assistants file downloads that this codebase no longer serves.
 LEGACY_ASSISTANT_FILE_PREFIX = "assistant_file"
+
+LIST_MARKER_RE = re.compile(r"^( *)([*+-]|\d+\.)([ ]+.*)$")
+FENCE_RE = re.compile(r"^ *(```|~~~)")
 
 
 class LinkProcessorMixin:
@@ -109,3 +114,36 @@ class FileExtension(markdown.Extension):
             OcsShortImageReferenceInlineProcessor(IMAGE_REFERENCE_RE, md), "short_image_ref", 125
         )
         md.inlinePatterns.register(OcsShortReferenceInlineProcessor(REFERENCE_RE, md), "short_reference", 130)
+
+
+class ListIndentPreprocessor(Preprocessor):
+    """Re-indent list marker lines to four spaces per nesting level so 2- and 3-space sub-lists nest."""
+
+    def run(self, lines: list[str]) -> list[str]:
+        result = []
+        in_fence = False
+        indents: list[int] = []
+        previous_blank = False
+        for line in lines:
+            if FENCE_RE.match(line):
+                in_fence = not in_fence
+                result.append(line)
+            elif in_fence:
+                result.append(line)
+            elif (match := LIST_MARKER_RE.match(line)) and (indents or len(match.group(1)) < 4):
+                indent = len(match.group(1))
+                indents = [existing for existing in indents if existing <= indent]
+                if not indents or indent > indents[-1]:
+                    indents.append(indent)
+                result.append(" " * (4 * (len(indents) - 1)) + match.group(2) + match.group(3))
+            else:
+                if previous_blank and line.strip() and not line.startswith(" "):
+                    indents = []
+                result.append(line)
+            previous_blank = not line.strip()
+        return result
+
+
+class ListIndentExtension(markdown.Extension):
+    def extendMarkdown(self, md, *args, **kwargs):
+        md.preprocessors.register(ListIndentPreprocessor(md), "ocs_list_indent", 22)

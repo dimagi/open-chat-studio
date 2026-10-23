@@ -208,3 +208,51 @@ def test_render_markdown_sanitizes_unsafe_html():
 )
 def test_render_markdown_preserves_existing_rendering(markdown_text, expected_result):
     assert render_markdown(markdown_text) == expected_result
+
+
+@pytest.mark.parametrize(
+    ("markdown_text", "expected_result"),
+    [
+        pytest.param(
+            "Intro:\n\n1. **North Charles**\n   - Address: 54 Washburn\n   - Phone: 617\n2. **Bridge Clinic**\n"
+            "   - Offers walk-in\n3. **Metro Boston**\n   - Peer Support\n\nI hope this helps!",
+            "<p>Intro:</p><ol><li><strong>North Charles</strong>"
+            "<ul><li>Address: 54 Washburn</li><li>Phone: 617</li></ul></li>"
+            "<li><strong>Bridge Clinic</strong><ul><li>Offers walk-in</li></ul></li>"
+            "<li><strong>Metro Boston</strong><ul><li>Peer Support</li></ul></li></ol>"
+            "<p>I hope this helps!</p>",
+            id="three_space_bullets_under_numbered_items",
+        ),
+        pytest.param(
+            "1. **North Charles**\n  - Address: 54 Washburn\n  - Phone: 617\n2. **Bridge Clinic**\n  - Offers walk-in",
+            "<ol><li><strong>North Charles</strong><ul><li>Address: 54 Washburn</li><li>Phone: 617</li></ul></li>"
+            "<li><strong>Bridge Clinic</strong><ul><li>Offers walk-in</li></ul></li></ol>",
+            id="two_space_bullets_under_numbered_items",
+        ),
+        pytest.param(
+            "1. **North Charles**\n\n   - Address: 54 Washburn\n   - Phone: 617\n\n"
+            "2. **Bridge Clinic**\n\n   - Offers walk-in",
+            "<ol><li><p><strong>North Charles</strong></p>"
+            "<ul><li>Address: 54 Washburn</li><li>Phone: 617</li></ul></li>"
+            "<li><p><strong>Bridge Clinic</strong></p><ul><li>Offers walk-in</li></ul></li></ol>",
+            id="three_space_bullets_with_blank_lines",
+        ),
+        pytest.param(
+            "- a\n  - b\n- c",
+            "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>",
+            id="two_space_nested_bullet_list",
+        ),
+        pytest.param(
+            "- a\n  - b\n    - c\n- d",
+            "<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li><li>d</li></ul>",
+            id="three_levels_two_space_nesting",
+        ),
+        pytest.param(
+            "- a\n  1. b\n- c",
+            "<ul><li>a<ol><li>b</li></ol></li><li>c</li></ul>",
+            id="numbered_list_inside_bullet",
+        ),
+    ],
+)
+def test_render_markdown_nests_lists_indented_less_than_four_spaces(markdown_text, expected_result):
+    assert render_markdown(markdown_text) == expected_result
