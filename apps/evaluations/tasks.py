@@ -52,7 +52,7 @@ from apps.evaluations.session_selection import resolve_dataset_available_session
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
 from apps.evaluations.utils import (
-    iter_message_evaluation_messages_for_sessions,
+    iter_message_evaluation_chunks,
     iter_session_evaluation_messages_for_sessions,
     parse_csv_value_as_json,
     parse_history_text,
@@ -1373,7 +1373,7 @@ def create_dataset_from_session_messages_task(
     dataset.status = DatasetCreationStatus.PROCESSING
     dataset.save(update_fields=["status"])
 
-    progress = {"sessions_done": 0}
+    sessions_done = 0
     total_sessions = 0
 
     try:
@@ -1383,28 +1383,24 @@ def create_dataset_from_session_messages_task(
         ids = session_ids or filtered_session_ids
         message_filter = None if session_ids and session_filter_query is None else filter_params
 
-        def note_chunk(count: int) -> None:
-            progress["sessions_done"] += count
-
         with current_team(team):
             session_qs = _sessions_for_clone(dataset, ids, session_filter_query, timezone)
             total_sessions = session_qs.count()
-            evaluation_messages = iter_message_evaluation_messages_for_sessions(
-                session_qs, filter_params=message_filter, timezone=timezone, on_chunk=note_chunk
-            )
-
-            def report(created: int, skipped: int) -> None:
-                done = progress["sessions_done"]
-                percent = min(100, int(done / total_sessions * 100)) if total_sessions else 100
+            created_ids: list[int] = []
+            duplicates_skipped = 0
+            for session_count, chunk in iter_message_evaluation_chunks(
+                session_qs, filter_params=message_filter, timezone=timezone
+            ):
+                # Committing whole sessions keeps a failed run from leaving a session half-cloned, which the
+                # stored-filter re-run would then exclude as already present.
+                chunk_created, chunk_skipped = dataset.add_messages_stream(chunk, batch_boundary=_message_session_id)
+                created_ids.extend(chunk_created)
+                duplicates_skipped += chunk_skipped
+                sessions_done += session_count
+                percent = min(100, int(sessions_done / total_sessions * 100)) if total_sessions else 100
                 progress_recorder.set_progress(
-                    percent, 100, f"Cloned messages from {done} of {total_sessions} sessions"
+                    percent, 100, f"Cloned messages from {sessions_done} of {total_sessions} sessions"
                 )
-
-            # Committing whole sessions keeps a failed run from leaving a session half-cloned, which the
-            # stored-filter re-run would then exclude as already present.
-            created_ids, duplicates_skipped = dataset.add_messages_stream(
-                evaluation_messages, progress_callback=report, batch_boundary=_message_session_id
-            )
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -1423,7 +1419,7 @@ def create_dataset_from_session_messages_task(
     except BaseException as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
         message = (
-            f"Failed after cloning messages from {progress['sessions_done']} of {total_sessions} session(s): {e}. "
+            f"Failed after cloning messages from {sessions_done} of {total_sessions} session(s): {e}. "
             "Re-running will resume from where it stopped."
         )
         _save_dataset_error(dataset, message)

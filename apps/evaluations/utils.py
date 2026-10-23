@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from collections import Counter, defaultdict
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from typing import TYPE_CHECKING, Any, cast
 
 import dictdiffer
@@ -351,9 +351,22 @@ def iter_message_evaluation_messages_for_sessions(
     filter_params: FilterParams | None = None,
     timezone: str | None = None,
     chunk_size: int | None = None,
-    on_chunk: Callable[[int], None] | None = None,
 ) -> Generator["EvaluationMessage"]:
     """Yield one EvaluationMessage per human-AI pair, one chunk of sessions at a time (memory bounded by the chunk)."""
+    chunks = iter_message_evaluation_chunks(
+        session_qs, filter_params=filter_params, timezone=timezone, chunk_size=chunk_size
+    )
+    yield from itertools.chain.from_iterable(messages for _, messages in chunks)
+
+
+def iter_message_evaluation_chunks(
+    session_qs,
+    *,
+    filter_params: FilterParams | None = None,
+    timezone: str | None = None,
+    chunk_size: int | None = None,
+) -> Generator[tuple[int, list["EvaluationMessage"]]]:
+    """Yield (session_count, pair messages) for each chunk of sessions in *session_qs*."""
     # Read at call time so tests can patch SESSION_CHUNK_SIZE.
     chunk_size = chunk_size or SESSION_CHUNK_SIZE
 
@@ -373,9 +386,7 @@ def iter_message_evaluation_messages_for_sessions(
         for external_id, message_id in message_rows:
             message_ids_per_session[str(external_id)].append(message_id)
 
-        yield from make_evaluation_messages_from_sessions(message_ids_per_session)
-        if on_chunk is not None:
-            on_chunk(len(pk_chunk))
+        yield len(pk_chunk), make_evaluation_messages_from_sessions(message_ids_per_session)
 
 
 def iter_message_evaluation_messages(
@@ -386,7 +397,6 @@ def iter_message_evaluation_messages(
     timezone=None,
     *,
     chunk_size=None,
-    on_chunk=None,
 ) -> Generator["EvaluationMessage"]:
     """Yield pair messages for the selected sessions, applying *filter_params* only to *filtered_session_ids*."""
     regular_ids = list(external_session_ids or [])
@@ -394,7 +404,6 @@ def iter_message_evaluation_messages(
         yield from iter_message_evaluation_messages_for_sessions(
             ExperimentSession.objects.filter(team=team, external_id__in=regular_ids),
             chunk_size=chunk_size,
-            on_chunk=on_chunk,
         )
 
     if not filtered_session_ids or filter_params is None:
@@ -409,7 +418,6 @@ def iter_message_evaluation_messages(
             filter_params=filter_params,
             timezone=timezone,
             chunk_size=chunk_size,
-            on_chunk=on_chunk,
         )
 
 

@@ -11,6 +11,7 @@ from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, Ev
 from apps.evaluations.tasks import create_dataset_from_session_messages_task
 from apps.evaluations.tests.clone_helpers import make_sessions
 from apps.evaluations.utils import (
+    iter_message_evaluation_chunks,
     iter_message_evaluation_messages,
     iter_message_evaluation_messages_for_sessions,
     make_evaluation_messages_from_sessions,
@@ -105,22 +106,20 @@ def test_message_filter_applies_within_each_chunk(experiment_and_channel):
 
 
 @pytest.mark.django_db()
-def test_on_chunk_reports_sessions_per_chunk(experiment_and_channel):
-    """The callback receives each chunk's session count, after that chunk's messages have been yielded."""
+def test_chunks_carry_their_session_counts(experiment_and_channel):
+    """Each chunk reports how many sessions it walked and holds only those sessions' pairs."""
     experiment, channel = experiment_and_channel
-    make_sessions(5, experiment, channel)
-    yielded = 0
-    reported = []
+    sessions = make_sessions(5, experiment, channel)
 
-    stream = iter_message_evaluation_messages_for_sessions(
-        ExperimentSession.objects.filter(experiment=experiment),
-        chunk_size=2,
-        on_chunk=lambda count: reported.append((count, yielded)),
-    )
-    for _ in stream:
-        yielded += 1
+    chunks = list(iter_message_evaluation_chunks(ExperimentSession.objects.filter(experiment=experiment), chunk_size=2))
 
-    assert reported == [(2, 2), (2, 4), (1, 5)]
+    assert [session_count for session_count, _ in chunks] == [2, 2, 1]
+    session_ids_per_chunk = [{message.session_id for message in messages} for _, messages in chunks]
+    assert session_ids_per_chunk == [
+        {sessions[0].id, sessions[1].id},
+        {sessions[2].id, sessions[3].id},
+        {sessions[4].id},
+    ]
 
 
 @pytest.mark.django_db()
@@ -162,7 +161,7 @@ def test_id_entry_point_ignores_sessions_from_other_teams(experiment_and_channel
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_task_streams_and_reports_session_progress(experiment_and_channel):
-    """Progress counts sessions, trailing the walk by at most one chunk."""
+    """Progress counts the sessions of each committed chunk."""
     experiment, channel = experiment_and_channel
     sessions = make_sessions(3, experiment, channel)
     external_ids = [session.external_id for session in sessions]
@@ -170,17 +169,8 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
         team=experiment.team, name="progress", evaluation_mode=EvaluationMode.MESSAGE
     )
 
-    real_add = EvaluationDataset.add_messages_stream
-
-    def one_message_per_batch(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
-        """Commit one message per batch so every batch reports progress."""
-        return real_add(
-            self, messages, batch_size=1, progress_callback=progress_callback, batch_boundary=batch_boundary
-        )
-
     with (
         patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
-        patch.object(EvaluationDataset, "add_messages_stream", one_message_per_batch),
         patch("apps.evaluations.tasks.ProgressRecorder") as recorder,
     ):
         create_dataset_from_session_messages_task.delay(
@@ -198,33 +188,33 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
     assert dataset.messages.count() == 3
 
 
+def commit_first_chunk_then_die():
+    """Build an add_messages_stream stand-in that commits the whole first chunk, then raises on the next one."""
+    real_add = EvaluationDataset.add_messages_stream
+    calls = itertools.count()
+
+    def add_messages_stream(self, messages, **kwargs):
+        if next(calls):
+            raise RuntimeError("worker died")
+        return real_add(self, messages, **kwargs)
+
+    return add_messages_stream
+
+
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_task_resumes_after_partial_failure(experiment_and_channel):
-    """The failure copy counts sessions whose chunk finished before the crash, and the re-run skips committed pairs."""
+    """The failure copy counts sessions whose chunk committed before the crash, and the re-run skips committed pairs."""
     experiment, channel = experiment_and_channel
-    sessions = make_sessions(4, experiment, channel)
+    sessions = make_sessions(4, experiment, channel, messages_per_session=4)
     external_ids = [session.external_id for session in sessions]
     dataset = EvaluationDataset.objects.create(
         team=experiment.team, name="partial", evaluation_mode=EvaluationMode.MESSAGE
     )
 
-    real_add = EvaluationDataset.add_messages_stream
-
-    def die_halfway(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
-        """Commit the first two pairs, then blow up as an OOM-killed worker would."""
-        real_add(
-            self,
-            itertools.islice(messages, 2),
-            batch_size=2,
-            progress_callback=progress_callback,
-            batch_boundary=batch_boundary,
-        )
-        raise RuntimeError("worker died")
-
     with (
         patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
-        patch.object(EvaluationDataset, "add_messages_stream", die_halfway),
+        patch.object(EvaluationDataset, "add_messages_stream", commit_first_chunk_then_die()),
     ):
         create_dataset_from_session_messages_task.delay(
             dataset.id, experiment.team.id, external_ids, [], None, None
@@ -245,7 +235,7 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
 
     dataset.refresh_from_db()
     assert dataset.status == DatasetCreationStatus.COMPLETED
-    assert (result["created_count"], result["duplicates_skipped"], dataset.messages.count()) == (2, 2, 4)
+    assert (result["created_count"], result["duplicates_skipped"], dataset.messages.count()) == (6, 2, 8)
 
 
 def stream_progress(dataset, sessions, batch_boundary=None):
@@ -302,19 +292,9 @@ def test_task_resume_after_failure_keeps_split_session_whole(experiment_and_chan
         team=experiment.team, name="split", evaluation_mode=EvaluationMode.MESSAGE
     )
 
-    real_add = EvaluationDataset.add_messages_stream
-
-    def commit_one_batch_then_die(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
-        """Commit the first batch two pairs at a time, then blow up as an OOM-killed worker would."""
-
-        def die(created, skipped):
-            raise RuntimeError("worker died")
-
-        return real_add(self, messages, batch_size=2, progress_callback=die, batch_boundary=batch_boundary)
-
     with (
         patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
-        patch.object(EvaluationDataset, "add_messages_stream", commit_one_batch_then_die),
+        patch.object(EvaluationDataset, "add_messages_stream", commit_first_chunk_then_die()),
     ):
         create_dataset_from_session_messages_task.delay(
             dataset.id, experiment.team.id, [], [], None, None, session_filter_query=""
@@ -335,4 +315,5 @@ def test_task_resume_after_failure_keeps_split_session_whole(experiment_and_chan
     dataset.refresh_from_db()
     assert dataset.status == DatasetCreationStatus.COMPLETED
     assert result["created_count"] == 1
+    assert result["duplicates_skipped"] == 0
     assert dataset.messages.count() == 4
