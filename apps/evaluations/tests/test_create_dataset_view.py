@@ -85,11 +85,11 @@ def test_post_all_matching_session_mode_passes_filter_not_ids(client_with_user, 
 
 
 @pytest.mark.django_db()
-def test_post_all_matching_message_mode_resolves_ids_server_side(client_with_user, team_with_users):
-    """Message-mode still needs ids, but resolves them server-side instead of via the browser."""
+def test_post_all_matching_message_mode_dispatches_filter_not_ids(client_with_user, team_with_users):
+    """Message mode ships the stored session filter and no ids, like session mode."""
     matching_exp = ExperimentFactory.create(team=team_with_users)
-    matching = ExperimentSessionFactory.create(team=team_with_users, experiment=matching_exp)
-    other = ExperimentSessionFactory.create(team=team_with_users)
+    ExperimentSessionFactory.create(team=team_with_users, experiment=matching_exp)
+    ExperimentSessionFactory.create(team=team_with_users)
 
     url = f"{_dataset_new_url(team_with_users)}?f_experiment={matching_exp.id}&op_experiment=any+of"
     with patch("apps.evaluations.forms.create_dataset_from_session_messages_task.delay") as mock_delay:
@@ -107,9 +107,8 @@ def test_post_all_matching_message_mode_resolves_ids_server_side(client_with_use
 
     assert response.status_code == 302
     mock_delay.assert_called_once()
-    session_ids = mock_delay.call_args.args[2]
-    assert session_ids == [str(matching.external_id)]
-    assert str(other.external_id) not in session_ids
+    assert mock_delay.call_args.args[2] == []
+    assert f"f_experiment={matching_exp.id}" in mock_delay.call_args.kwargs["session_filter_query"]
 
 
 @pytest.mark.django_db()
@@ -162,51 +161,6 @@ def test_post_selected_scope_with_nothing_selected_creates_empty_dataset(
 
 
 @pytest.mark.django_db()
-def test_post_all_matching_message_mode_over_limit_is_rejected(client_with_user, team_with_users):
-    """Message mode resolves 'all matching' to an explicit id list, so it is capped."""
-    matching_exp = ExperimentFactory.create(team=team_with_users)
-    ExperimentSessionFactory.create_batch(2, team=team_with_users, experiment=matching_exp)
-
-    url = f"{_dataset_new_url(team_with_users)}?f_experiment={matching_exp.id}&op_experiment=any+of"
-    with patch("apps.evaluations.dataset_clone.MESSAGE_MODE_ALL_MATCHING_LIMIT", 1):
-        response = client_with_user.post(
-            url,
-            {
-                "name": "Too many",
-                "evaluation_mode": "message",
-                "mode": "clone",
-                "session_ids": "",
-                "session_scope": "all_matching",
-            },
-        )
-
-    assert response.status_code == 200
-    assert any("limited to 1 session" in str(e) for e in response.context["form"].errors["__all__"])
-    assert not EvaluationDataset.objects.filter(team=team_with_users, name="Too many").exists()
-
-
-@pytest.mark.django_db()
-def test_post_all_matching_session_mode_is_not_capped(client_with_user, team_with_users):
-    """Session mode ships the filter rather than the ids, so the message-mode cap does not apply."""
-    matching_exp = ExperimentFactory.create(team=team_with_users)
-    ExperimentSessionFactory.create_batch(2, team=team_with_users, experiment=matching_exp)
-
-    url = f"{_dataset_new_url(team_with_users)}?f_experiment={matching_exp.id}&op_experiment=any+of"
-    with (
-        patch("apps.evaluations.dataset_clone.MESSAGE_MODE_ALL_MATCHING_LIMIT", 1),
-        patch("apps.evaluations.forms.create_dataset_from_sessions_task.delay") as mock_delay,
-    ):
-        mock_delay.return_value.id = "task-id"
-        response = client_with_user.post(
-            url,
-            {
-                "name": "Many sessions",
-                "evaluation_mode": "session",
-                "mode": "clone",
-                "session_ids": "",
-                "session_scope": "all_matching",
-            },
-        )
-
-    assert response.status_code == 302, response.context["form"].errors
-    mock_delay.assert_called_once()
+def test_create_page_context_has_no_message_mode_limit(client_with_user, team_with_users):
+    response = client_with_user.get(_dataset_new_url(team_with_users))
+    assert "message_mode_all_matching_limit" not in response.context
