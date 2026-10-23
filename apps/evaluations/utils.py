@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from collections import Counter, defaultdict
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any, cast
 
 import dictdiffer
@@ -14,10 +14,12 @@ from pydantic import BaseModel, Field
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.field_definitions import FieldDefinition
+from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.fields import sanitize_json_data as fields_sanitize_json_data
 from apps.utils.schema_utils import create_model_with_sanitized_names
+from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -341,6 +343,77 @@ def iter_session_evaluation_messages_for_sessions(
     for pk_chunk in itertools.batched(session_pks, chunk_size, strict=False):
         sessions = list(ExperimentSession.objects.filter(pk__in=pk_chunk).select_related("experiment").order_by("pk"))
         yield from _build_session_evaluation_messages(sessions)
+
+
+def iter_message_evaluation_messages_for_sessions(
+    session_qs,
+    *,
+    filter_params: FilterParams | None = None,
+    timezone: str | None = None,
+    chunk_size: int | None = None,
+    on_chunk: Callable[[int], None] | None = None,
+) -> Generator["EvaluationMessage"]:
+    """Yield one EvaluationMessage per human-AI pair in *session_qs*, a chunk of sessions at a time.
+
+    Memory is bounded by the chunk rather than the selection.
+    """
+    # Resolved here rather than as a default argument so the module constant stays patchable.
+    chunk_size = chunk_size or SESSION_CHUNK_SIZE
+
+    # Resolved to pks once for the same reasons as iter_session_evaluation_messages_for_sessions:
+    # re-running the source filter per chunk would cost a query each time and re-resolve
+    # relative date ranges against a moving now().
+    session_pks = list(session_qs.order_by("pk").values_list("pk", flat=True))
+
+    for pk_chunk in itertools.batched(session_pks, chunk_size, strict=False):
+        messages = ChatMessage.objects.filter(chat__experiment_session__pk__in=pk_chunk)
+        if filter_params is not None:
+            messages = ChatMessageFilter().apply(messages, filter_params, timezone)
+        message_rows = messages.order_by("chat__experiment_session__pk", "created_at").values_list(
+            "chat__experiment_session__external_id", "id"
+        )
+        message_ids_per_session = defaultdict(list)
+        for external_id, message_id in message_rows:
+            message_ids_per_session[str(external_id)].append(message_id)
+
+        yield from make_evaluation_messages_from_sessions(message_ids_per_session)
+        if on_chunk is not None:
+            on_chunk(len(pk_chunk))
+
+
+def iter_message_evaluation_messages(
+    team,
+    external_session_ids,
+    filtered_session_ids=None,
+    filter_params=None,
+    timezone=None,
+    *,
+    chunk_size=None,
+    on_chunk=None,
+) -> Generator["EvaluationMessage"]:
+    """Yield pair messages for the selected sessions, applying *filter_params* only to *filtered_session_ids*."""
+    regular_ids = list(external_session_ids or [])
+    if regular_ids:
+        yield from iter_message_evaluation_messages_for_sessions(
+            ExperimentSession.objects.filter(team=team, external_id__in=regular_ids),
+            chunk_size=chunk_size,
+            on_chunk=on_chunk,
+        )
+
+    if not filtered_session_ids or filter_params is None:
+        return
+
+    # A session already built unfiltered is skipped so it never produces duplicate pairs.
+    already_built = set(regular_ids)
+    filtered_only_ids = [session_id for session_id in filtered_session_ids if session_id not in already_built]
+    if filtered_only_ids:
+        yield from iter_message_evaluation_messages_for_sessions(
+            ExperimentSession.objects.filter(team=team, external_id__in=filtered_only_ids),
+            filter_params=filter_params,
+            timezone=timezone,
+            chunk_size=chunk_size,
+            on_chunk=on_chunk,
+        )
 
 
 def make_session_evaluation_messages(session_external_ids: list[str], team=None) -> list["EvaluationMessage"]:
