@@ -137,3 +137,74 @@ def test_render_markdown_sanitizes_unsafe_html():
     assert "alert(" not in sanitized_result
     assert "http://malicious.com" not in sanitized_result
     assert "This is a test" in sanitized_result
+
+
+@pytest.mark.parametrize(
+    ("markdown_text", "expected_result"),
+    [
+        pytest.param(
+            "1. First item\ncontinues here\n2. Second item\ncontinues here\n3. Third",
+            "<ol><li>First item<br>continues here</li><li>Second item<br>continues here</li><li>Third</li></ol>",
+            id="numbered_items_with_continuation_lines",
+        ),
+        pytest.param(
+            "1. First item\ncontinues here\n\n2. Second item\ncontinues here\n\n3. Third",
+            "<ol><li><p>First item<br>continues here</p></li><li><p>Second item<br>continues here</p></li>"
+            "<li><p>Third</p></li></ol>",
+            id="numbered_items_separated_by_blank_lines",
+        ),
+        pytest.param(
+            "1. **North Charles**\n    - Address: 54 Washburn\n    - Phone: 617\n"
+            "2. **Bridge Clinic**\n    - Offers walk-in",
+            "<ol><li><strong>North Charles</strong><ul><li>Address: 54 Washburn</li><li>Phone: 617</li></ul></li>"
+            "<li><strong>Bridge Clinic</strong><ul><li>Offers walk-in</li></ul></li></ol>",
+            id="four_space_nested_bullets",
+        ),
+        pytest.param(
+            "- a\n    - b\n- c",
+            "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>",
+            id="four_space_nested_bullet_list",
+        ),
+        pytest.param(
+            "1. a\n    1. b\n    2. c\n2. d",
+            "<ol><li>a<ol><li>b</li><li>c</li></ol></li><li>d</li></ol>",
+            id="four_space_nested_numbered_list",
+        ),
+        pytest.param(
+            "- a\n\n- b",
+            "<ul><li><p>a</p></li><li><p>b</p></li></ul>",
+            id="bullets_separated_by_blank_lines",
+        ),
+        pytest.param(
+            "- one\n* two\n+ three",
+            "<ul><li>one</li><li>two</li><li>three</li></ul>",
+            id="mixed_bullet_markers",
+        ),
+        pytest.param("Line one\nline two", "<p>Line one<br>line two</p>", id="paragraph_soft_line_break"),
+        pytest.param(
+            "It will be cold tonight:\n-5 degrees overnight",
+            "<p>It will be cold tonight:<br>-5 degrees overnight</p>",
+            id="paragraph_line_starting_with_hyphen",
+        ),
+        pytest.param(
+            "> - quoted item", "<blockquote><ul><li>quoted item</li></ul></blockquote>", id="bullet_in_block_quote"
+        ),
+        pytest.param(
+            "| a | b |\n|---|---|\n| 1 | 2 |",
+            "<table><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>",
+            id="table",
+        ),
+        pytest.param(
+            "```\n1. one\n  - two\n```",
+            "<pre><code>1. one<br>  - two<br></code></pre>",
+            id="fenced_code_with_list_lines",
+        ),
+        pytest.param(
+            "text\n\n    - not a list\n    1. code",
+            "<p>text</p><pre><code>- not a list<br>1. code<br></code></pre>",
+            id="indented_code_with_list_lines",
+        ),
+    ],
+)
+def test_render_markdown_preserves_existing_rendering(markdown_text, expected_result):
+    assert render_markdown(markdown_text) == expected_result
