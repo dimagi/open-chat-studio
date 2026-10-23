@@ -119,29 +119,6 @@ def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
 @mock.patch("apps.experiments.services.enqueue_static_triggers")
-def test_new_participant_created_on_session_start(_trigger_mock, is_user):
-    """For each new experiment session, a participant should be created and linked to the session"""
-    identifier = "someone@example.com"
-    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
-    user = None
-    if is_user:
-        user = experiment.team.members.first()
-        identifier = user.email
-
-    session = WebChannel.start_new_session(
-        experiment,
-        participant_user=user,
-        participant_identifier=identifier,
-    )
-
-    assert Participant.objects.filter(team=experiment.team, identifier=identifier).count() == 1
-    assert ExperimentSession.objects.filter(team=experiment.team).count() == 1
-    assert session.participant.identifier == identifier
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created

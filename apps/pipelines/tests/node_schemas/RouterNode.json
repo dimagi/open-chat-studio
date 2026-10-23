@@ -121,7 +121,7 @@
     },
     "prompt": {
       "default": "You are an extremely helpful router",
-      "description": "Instructions telling the LLM how to choose between `keywords`. The model is constrained to return one of them, so describe when each applies rather than asking for free text. A narrower set of template variables is available here than on an LLM node.",
+      "description": "Instructions telling the LLM how to choose between `keywords`. The model is constrained to return one of them, so describe when each applies rather than asking for free text. The only template variables available are `{participant_data}`, `{temp_state}` and `{session_state}`, in single braces.",
       "minLength": 1,
       "title": "Prompt",
       "type": "string",

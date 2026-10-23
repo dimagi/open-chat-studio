@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.relativedelta import relativedelta
 from django.contrib.contenttypes.fields import GenericRelation
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.db.models import Case, F, Func, OuterRef, Q, Subquery, When, functions
 from django.utils import timezone
@@ -183,6 +184,7 @@ class TimeoutTrigger(BaseModel, VersionsMixin):
     )
     total_num_triggers = models.IntegerField(
         default=1,
+        validators=[MinValueValidator(1)],
         help_text="The number of times to trigger the action",
     )
     event_logs = GenericRelation(EventLog)

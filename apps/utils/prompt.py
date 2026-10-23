@@ -163,7 +163,14 @@ def validate_prompt_variables(context, prompt_key: str, known_vars: set):
 
     unknown = prompt_variables - known_vars
     if unknown:
-        raise ValidationError({prompt_key: f"Prompt contains unknown variables: {', '.join(unknown)}"})
+        raise ValidationError(
+            {
+                prompt_key: (
+                    f"Prompt contains unknown variables: {', '.join(sorted(unknown))}. "
+                    f"Available here: {', '.join(sorted(known_vars))}."
+                )
+            }
+        )
 
     _ensure_component_variables_are_present(context, prompt_variables, prompt_key)
     _ensure_variable_components_are_present(context, prompt_variables, prompt_key)
