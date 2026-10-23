@@ -56,6 +56,7 @@ IGNORED_MODELS = frozenset(
         "oauth.oauth2grant",
         "oauth.oauth2idtoken",
         "oauth.oauth2refreshtoken",
+        "service_providers.moderationprovider",
         "site_admin.ocsconfiguration",
         "slack.slackbot",
         "slack.slackinstallation",

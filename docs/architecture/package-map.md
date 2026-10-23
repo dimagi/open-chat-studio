@@ -61,7 +61,7 @@ The chatbot model and the machinery that runs conversations.
 | `pipelines` | DAG workflow definition and runtime (LLM/router/custom-action nodes). |
 | `assistants` | Retired OpenAI Assistants integration (#4254). Historical migrations only — no models, admin, views, URLs or runtime. Kept installed so Django owns the migration graph. |
 | `custom_actions` | HTTP API wrappers (OpenAPI schema) callable from pipelines. |
-| `service_providers` | Credentials + `LlmService`/`MessagingService` abstractions for LLM, messaging, voice, tracing. |
+| `service_providers` | Credentials + `LlmService`/`MessagingService`/`ModerationService` abstractions for LLM, messaging, voice, tracing, moderation. |
 | `chat` | `Chat`/message models and history. |
 | `channels` | Platform integration + webhook routing (Telegram, WhatsApp, Slack, API, web, email, Connect). |
 | `participants` | Participant identity across channels. |
@@ -83,7 +83,7 @@ Features layered on top of the domain, plus supporting services.
 | `cost_tracking` | LLM usage and cost accounting. |
 | `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Definitions in ADR-0051. Models-free. |
 | `analysis` | Analysis pipelines over conversation data. |
-| `moderation` | Abuse detection: the participant denylist (`DeniedParticipant`) and its enforcement helpers. Called from `channels`, `api`, `experiments` and `participants`. |
+| `moderation` | Abuse detection: the participant denylist (`DeniedParticipant`), the abuse rules, and the enforcement helpers. Moderation providers live in `service_providers`. Called from `channels`, `api`, `experiments` and `participants`. |
 | `ocs_notifications` | In-app notifications. |
 | `banners` | Site banners. |
 | `help` | In-app help / help agents. |

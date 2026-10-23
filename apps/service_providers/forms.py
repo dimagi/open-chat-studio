@@ -10,9 +10,11 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.exceptions import provider_error_message
+from apps.service_providers.llm_service.error_classification import provider_error_types
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
-from apps.service_providers.models import LlmProviderModel, MessagingProvider
+from apps.service_providers.models import LlmProviderModel, MessagingProvider, ModerationProviderType
 from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
@@ -46,6 +48,18 @@ class ProviderTypeConfigForm(forms.Form):
     def save(self, instance):
         instance.config = self.cleaned_data
         return instance
+
+
+def normalize_config(config: dict) -> dict:
+    """Drops blank optional fields cleaned_data fills in even when the user never touched
+    them, so an untouched field doesn't look like a change against an older, sparser saved
+    config."""
+    return {k: v for k, v in config.items() if v}
+
+
+def has_config_changed(*, old_config: dict | None, new_config: dict) -> bool:
+    """Whether ``new_config`` differs from the normalized ``old_config``. Always True when there is no old config."""
+    return old_config is None or old_config != normalize_config(new_config)
 
 
 class ObfuscatingMixin:
@@ -98,6 +112,31 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             " one organization or want to use your default organization."
         ),
     )
+
+
+CREDENTIAL_CHECK_TIMEOUT_SECONDS = 5
+
+
+class OpenAIModerationConfigForm(OpenAIConfigForm):
+    def clean(self):
+        """Check new or changed credentials. Reject those the provider refuses; report other failures as a warning."""
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+        old_config = normalize_config(self.initial_raw) if self.initial_raw else None
+        if not has_config_changed(old_config=old_config, new_config=cleaned_data):
+            return cleaned_data
+        service = ModerationProviderType.openai.get_moderation_service(
+            config=cleaned_data, timeout=CREDENTIAL_CHECK_TIMEOUT_SECONDS, max_retries=0
+        )
+        try:
+            service.moderate("Hello")
+        except provider_error_types().authentication as e:
+            self.add_error("openai_api_key", f"The provider rejected these credentials: {provider_error_message(e)}")
+        except Exception as e:
+            logger.warning("Could not check moderation provider credentials: %s", e)
+            self.warnings.append("Provider saved, but the credentials could not be checked right now.")
+        return cleaned_data
 
 
 class OpenAIGenericConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
