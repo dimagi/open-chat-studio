@@ -752,23 +752,42 @@ function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: nu
 }
 
 /**
- * Moves a route's description to the keyword's new name. Descriptions are keyed by name, so a
- * name shared with another route belongs to that route: it is neither moved away nor overwritten.
+ * Builds the stored `{KEYWORD: description}` map from each row's description. A row whose keyword
+ * is empty, or already taken by an earlier row, is left out.
  */
-function renameRouteDescription(
-  descriptions: Record<string, string>, keywords: string[], index: number, newName: string
-): Record<string, string> {
-  const usedByOtherRoute = (name: string) => keywords.some((keyword, i) => i !== index && keyword === name);
-  const oldName = keywords[index];
-  const next = {...descriptions};
-  if (!oldName || !(oldName in next) || usedByOtherRoute(oldName)) {
-    return next;
+function routeDescriptionsByKeyword(keywords: string[], rows: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  keywords.forEach((keyword, index) => {
+    if (keyword && rows[index] && !(keyword in result)) {
+      result[keyword] = rows[index];
+    }
+  });
+  return result;
+}
+
+/**
+ * Each route's description tracked by row, so it stays with its route while the keyword is cleared,
+ * retyped or briefly matches another route. The rows are rebuilt from the stored map whenever the
+ * node's keywords or descriptions are changed by anything other than `write`, such as undo.
+ */
+function useRowDescriptions(keywords: unknown, stored: unknown) {
+  const tracked = useRef<{keywords: unknown; stored: unknown; rows: string[]} | null>(null);
+  if (!tracked.current || tracked.current.keywords !== keywords || tracked.current.stored !== stored) {
+    const keywordList: string[] = Array.isArray(keywords) ? keywords : [];
+    const storedMap = (stored || {}) as Record<string, string>;
+    const rows = keywordList.map((keyword, index) =>
+      keywordList.indexOf(keyword) === index ? storedMap[keyword] ?? "" : ""
+    );
+    tracked.current = {keywords, stored, rows};
   }
-  if (newName && !usedByOtherRoute(newName)) {
-    next[newName] = next[oldName];
-  }
-  delete next[oldName];
-  return next;
+
+  /** Records the rows and returns the map to store; `keywords` must be the array stored alongside it. */
+  const write = (keywords: string[], rows: string[]) => {
+    const stored = routeDescriptionsByKeyword(keywords, rows);
+    tracked.current = {keywords, stored, rows};
+    return stored;
+  };
+  return {rows: tracked.current.rows, write};
 }
 
 export function KeywordsWidget(props: WidgetParams) {
@@ -776,11 +795,25 @@ export function KeywordsWidget(props: WidgetParams) {
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
   const hasDescriptions = !!props.nodeSchema.properties.route_descriptions;
+  const {rows: rowDescriptions, write: writeDescriptions} = useRowDescriptions(
+    props.nodeParams.keywords, props.nodeParams.route_descriptions
+  );
+
+  /** Stores `keywords` and, on a node with route descriptions, the descriptions in `rows` beside them. */
+  const getRoutesNodeData = (old: Node, keywords: string[], rows: string[], newDefaultIndex?: number) => {
+    const updated = getKeywordsNodeData(old, keywords, newDefaultIndex);
+    if (!hasDescriptions) {
+      return updated;
+    }
+    return produce(updated, next => {
+      next.data.params["route_descriptions"] = writeDescriptions(keywords, rows);
+    });
+  };
 
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
-      return getKeywordsNodeData(old, updatedList);
+      return getRoutesNodeData(old, updatedList, [...rowDescriptions, ""]);
     });
     updateNodeInternals(props.nodeId);
   }
@@ -789,23 +822,18 @@ export function KeywordsWidget(props: WidgetParams) {
     value = value.toUpperCase();
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
-        const descriptions = old.data.params["route_descriptions"];
         updatedList[index] = value;
-        return produce(getKeywordsNodeData(old, updatedList), next => {
-          if (hasDescriptions && descriptions) {
-            next.data.params["route_descriptions"] = renameRouteDescription(
-              descriptions, old.data.params["keywords"] || [], index, value
-            );
-          }
-        });
+        return getRoutesNodeData(old, updatedList, rowDescriptions);
       }
     );
   };
 
-  const updateDescription = (keyword: string, value: string) => {
-    setNode(props.nodeId, (old) => produce(old, next => {
-      next.data.params["route_descriptions"] = {...(old.data.params["route_descriptions"] || {}), [keyword]: value};
-    }));
+  const updateDescription = (index: number, value: string) => {
+    setNode(props.nodeId, (old) => {
+      const rows = [...rowDescriptions];
+      rows[index] = value;
+      return getRoutesNodeData(old, old.data.params["keywords"] || [], rows);
+    });
   };
 
   const deleteKeyword = (index: number) => {
@@ -821,14 +849,9 @@ export function KeywordsWidget(props: WidgetParams) {
         newDefaultIndex = defaultIndex - 1;
       }
 
-      const descriptions = old.data.params["route_descriptions"];
-      return produce(getKeywordsNodeData(old, updatedList, newDefaultIndex), next => {
-        if (hasDescriptions && descriptions) {
-          next.data.params["route_descriptions"] = renameRouteDescription(
-            descriptions, old.data.params["keywords"] || [], index, ""
-          );
-        }
-      });
+      const rows = [...rowDescriptions];
+      rows.splice(index, 1);
+      return getRoutesNodeData(old, updatedList, rows, newDefaultIndex);
     });
     updateNodeInternals(props.nodeId);
 
@@ -864,7 +887,6 @@ export function KeywordsWidget(props: WidgetParams) {
   const length = (Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.length : 1);
   const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams["keywords"] : [];
   const defaultIndex = props.nodeParams.default_keyword_index;
-  const descriptions = (props.nodeParams.route_descriptions || {}) as Record<string, string>;
   const canDelete = length > 1;
 
   return (
@@ -929,8 +951,8 @@ export function KeywordsWidget(props: WidgetParams) {
                       : "When should this route be chosen?"
                   }
                   rows={2}
-                  onChange={(event) => updateDescription(value, event.target.value)}
-                  value={value && !isDuplicate ? descriptions[value] || "" : ""}
+                  onChange={(event) => updateDescription(index, event.target.value)}
+                  value={rowDescriptions[index] ?? ""}
                   readOnly={props.readOnly}
                   disabled={!value || isDuplicate}
                 ></textarea>

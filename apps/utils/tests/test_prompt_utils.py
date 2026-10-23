@@ -33,7 +33,8 @@ class TestValidatePromptVariables:
             validate_prompt_variables(context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
 
         assert exc_info.value.message_dict["prompt"] == [
-            "Prompt contains unknown variables: input. Available here: participant_data, session_state, temp_state."
+            "Prompt contains unknown variables: input. Available here: "
+            "participant_data, routes, routes_list, session_state, temp_state."
         ]
 
     def test_missing_variable(self):

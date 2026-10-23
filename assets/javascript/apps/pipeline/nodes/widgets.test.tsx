@@ -1,5 +1,5 @@
 import {beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
-import {render, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, fireEvent, waitFor} from '@testing-library/react';
 import {getWidget as getWidgetUntyped, InputField, GenerateCodeSection, CHECK_FOR_BUGS_PROMPT, TextEditorModal} from './widgets';
 import type {WidgetParams} from './widgets';
 import type {ComponentType} from 'react';
@@ -311,22 +311,47 @@ describe('KeywordsWidget route descriptions', () => {
     expect(storedParams().route_descriptions).toEqual({PAYMENTS: 'Payments'});
   });
 
-  it('keeps the other route\'s description when a keyword is renamed to match it', () => {
-    seedNode(['BILLING', 'SUPPORT'], {BILLING: 'Payments', SUPPORT: 'Help'});
-    const {container} = render(<Harness />);
+  it('restores the description when a cleared keyword is typed again', () => {
+    seedNode(['BILLING'], {BILLING: 'Payments'});
+    const {container, getByLabelText} = render(<Harness />);
+    const keyword = container.querySelector('input[name="keywords"]')!;
 
-    fireEvent.change(container.querySelectorAll('input[name="keywords"]')[1], {target: {value: 'billing'}});
+    fireEvent.change(keyword, {target: {value: ''}});
+    expect(storedParams().route_descriptions).toEqual({});
+    expect(getByLabelText('Description for Output Keyword 1')).toHaveValue('Payments');
 
-    expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments'});
+    fireEvent.change(keyword, {target: {value: 'invoices'}});
+    expect(storedParams().route_descriptions).toEqual({INVOICES: 'Payments'});
   });
 
-  it('leaves the other route\'s description behind when renaming away from a duplicate', () => {
+  it('keeps both descriptions when a keyword briefly matches another route', () => {
+    seedNode(['BILLING', 'SUPPORT'], {BILLING: 'Payments', SUPPORT: 'Help'});
+    const {container} = render(<Harness />);
+    const keyword = container.querySelectorAll('input[name="keywords"]')[1];
+
+    fireEvent.change(keyword, {target: {value: 'billing'}});
+    expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments'});
+
+    fireEvent.change(keyword, {target: {value: 'billingx'}});
+    expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments', BILLINGX: 'Help'});
+  });
+
+  it('gives a stored duplicate keyword\'s description to its first route only', () => {
     seedNode(['BILLING', 'BILLING'], {BILLING: 'Payments'});
     const {container} = render(<Harness />);
 
     fireEvent.change(container.querySelectorAll('input[name="keywords"]')[1], {target: {value: 'billingx'}});
 
     expect(storedParams().route_descriptions).toEqual({BILLING: 'Payments'});
+  });
+
+  it('reloads the descriptions when the node is changed elsewhere, as on undo', () => {
+    seedNode(['BILLING'], {BILLING: 'Payments'});
+    const {getByLabelText} = render(<Harness />);
+
+    act(() => seedNode(['SUPPORT'], {SUPPORT: 'Help'}));
+
+    expect(getByLabelText('Description for Output Keyword 1')).toHaveValue('Help');
   });
 
   it('disables the descriptions of keywords that are duplicated', () => {
