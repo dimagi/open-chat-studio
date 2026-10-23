@@ -274,3 +274,18 @@ class TestEdgesAnEditCanStrand:
 
         assert response.status_code == 200, response.content
         assert outgoing_handles(chatbot.pipeline, llm_node) == {edge: ("output", end_node)}
+
+
+@pytest.mark.django_db()
+def test_route_descriptions_sent_before_their_keywords_are_kept(client, chatbot, llm):
+    """A node is built up over several calls, so a description can arrive before its keyword does."""
+    router = add_router_node(client, chatbot, llm)
+
+    client.patch(node_url(chatbot, router), {"params": {"route_descriptions": {"cancel": "Cancelling"}}}, format="json")
+    response = client.patch(
+        node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    params = Node.objects.get(pipeline=chatbot.pipeline, flow_id=router).params
+    assert params["route_descriptions"] == {"CANCEL": "Cancelling"}

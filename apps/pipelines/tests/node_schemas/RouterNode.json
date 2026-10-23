@@ -132,7 +132,7 @@
       "additionalProperties": {
         "type": "string"
       },
-      "description": "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` variable. Keys are uppercased on save, and entries for keywords not in `keywords` are dropped.",
+      "description": "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` variable. Keys are uppercased on save. An entry for a keyword not in `keywords` is kept but not used.",
       "title": "Route Descriptions",
       "type": "object",
       "ui:widget": "none"

@@ -426,7 +426,7 @@ class TestRouterNode:
             name="test router",
             prompt=prompt,
             keywords=["billing", "support"],
-            route_descriptions={"billing": "Payments and invoices", "support": "  "},
+            route_descriptions={"billing": "Payments and invoices", "support": "  ", "gone": "Removed route"},
             llm_provider_id=provider.id,
             llm_provider_model_id=provider_model.id,
         )
@@ -440,7 +440,11 @@ class TestRouterNode:
         ("route_descriptions", "expected"),
         [
             pytest.param({"billing": "Payments"}, {"BILLING": "Payments"}, id="keys-uppercased"),
-            pytest.param({"BILLING": "Payments", "GONE": "Removed route"}, {"BILLING": "Payments"}, id="stale-dropped"),
+            pytest.param(
+                {"BILLING": "Payments", "gone": "Removed route"},
+                {"BILLING": "Payments", "GONE": "Removed route"},
+                id="unmatched-kept",
+            ),
             pytest.param(None, {}, id="none"),
         ],
     )

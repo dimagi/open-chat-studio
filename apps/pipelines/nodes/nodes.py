@@ -707,7 +707,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         default_factory=dict,
         description=(
             "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` "
-            "variable. Keys are uppercased on save, and entries for keywords not in `keywords` are dropped."
+            "variable. Keys are uppercased on save. An entry for a keyword not in `keywords` is kept but not used."
         ),
         json_schema_extra=UiSchema(widget=Widgets.none),
     )
@@ -718,13 +718,6 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         if isinstance(value, dict):
             return {str(key).upper(): description for key, description in value.items()}
         return {}
-
-    @model_validator(mode="after")
-    def drop_descriptions_without_keyword(self) -> Self:
-        self.route_descriptions = {
-            keyword: self.route_descriptions[keyword] for keyword in self.keywords if keyword in self.route_descriptions
-        }
-        return self
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
