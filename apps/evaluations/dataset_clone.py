@@ -85,6 +85,8 @@ def dispatch_clone_task(*, dataset, selection: SessionSelection, message_scope, 
         session_ids, filtered_session_ids = [], external_ids
     else:
         session_ids, filtered_session_ids = external_ids, []
+    # A worker from the previous release does not accept session_filter_query, so it is only sent when set.
+    extra_kwargs = {"session_filter_query": selection.filter_query} if selection.filter_query is not None else {}
     return create_dataset_from_session_messages_task.delay(
         dataset.id,
         dataset.team_id,
@@ -92,5 +94,5 @@ def dispatch_clone_task(*, dataset, selection: SessionSelection, message_scope, 
         filtered_session_ids,
         filter_query if message_scope == "filtered" else None,
         timezone,
-        session_filter_query=selection.filter_query,
+        **extra_kwargs,
     )

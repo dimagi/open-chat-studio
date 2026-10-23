@@ -113,6 +113,7 @@ def test_post_reads_filter_params_from_post_body(client_with_user, team_with_use
     assert filter_query, "filter_query should be populated from POST body, not empty"
     assert "f_tags=%2B1" in filter_query
     assert "op_tags=any" in filter_query
+    assert "session_filter_query" not in mock_delay.call_args.kwargs
 
 
 @pytest.mark.django_db()

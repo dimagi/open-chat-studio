@@ -732,6 +732,8 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
             self._complete_empty_clone(dataset)
             return
 
+        # A worker from the previous release does not accept session_filter_query, so it is only sent when set.
+        extra_kwargs = {"session_filter_query": selection.filter_query} if selection.filter_query is not None else {}
         task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
@@ -739,7 +741,7 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
             [],  # filtered_session_ids: the create form has no per-row filtered selection
             None,  # filter_query: the create form has no per-row filtered selection
             self.timezone,
-            session_filter_query=selection.filter_query,
+            **extra_kwargs,
         )
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
