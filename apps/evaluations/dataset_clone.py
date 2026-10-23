@@ -46,7 +46,7 @@ def resolve_add_sessions_external_ids(*, mode, post_data, base_qs, team):
     ]
 
 
-def resolve_sessions_to_clone(*, dataset, mode, post_data, base_qs, team, filter_query) -> SessionSelection:
+def resolve_sessions_to_clone(*, mode, post_data, base_qs, team, filter_query) -> SessionSelection:
     """Decide what the clone job should be given: a list of session ids, or the filter itself.
 
     Both modes re-resolve the filter inside the task, so "all matching" never materialises the

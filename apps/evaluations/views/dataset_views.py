@@ -900,7 +900,6 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         filter_query = filter_params.to_query()
         base_qs = _get_dataset_available_sessions(request, pk, filter_params=filter_params)
         selection = resolve_sessions_to_clone(
-            dataset=dataset,
             mode=request.POST.get("mode", "selected"),
             post_data=request.POST,
             base_qs=base_qs,

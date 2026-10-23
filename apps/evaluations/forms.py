@@ -673,16 +673,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
 
-    def _is_session_mode(self) -> bool:
-        """Whether the dataset being saved is session-mode.
-
-        Read from the form on create, and from the instance on edit, where `evaluation_mode` is
-        immutable and so removed from the form.
-        """
-        if "evaluation_mode" in self.fields:
-            return self.cleaned_data.get("evaluation_mode") == EvaluationMode.SESSION
-        return self.instance.evaluation_mode == EvaluationMode.SESSION
-
     def _clean_clone(self) -> SessionSelection:
         """Resolve what clone mode should pull in: hand-picked sessions, or a filter."""
         if self.cleaned_data.get("session_scope") == "all_matching":
