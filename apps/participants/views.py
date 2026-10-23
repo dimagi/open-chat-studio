@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -475,6 +476,9 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
     return render(request, "table/table_row.html", {"row": table.rows[0]})
 
 
+PARTICIPANT_IDENTIFIER_LIMIT = 200
+
+
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
@@ -483,27 +487,37 @@ def participant_identifiers_by_experiment(request, team_slug: str, experiment_id
         .values_list("identifier", "remote_id")
         .distinct()
     )
-    return _get_identifiers_response(query)
+    return _get_identifiers_response(query, request)
 
 
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
     query = Participant.objects.filter(team=request.team).values_list("identifier", "remote_id").distinct()
-    return _get_identifiers_response(query)
+    return _get_identifiers_response(query, request)
 
 
-def _get_identifiers_response(queryset):
-    identifiers, remote_ids = set(), set()
-    for ident, remote_id in queryset:
-        if ident:
-            identifiers.add(ident)
-        if remote_id:
-            remote_ids.add(remote_id)
+def _get_identifiers_response(queryset, request):
+    search = request.GET.get("q", "").strip()
+    limit = PARTICIPANT_IDENTIFIER_LIMIT
+
+    if search:
+        queryset = queryset.filter(Q(identifier__icontains=search) | Q(remote_id__icontains=search))
+
+    # Exclude rows where both values are empty, then slice so the DB applies LIMIT
+    queryset = queryset.exclude(Q(identifier="") | Q(identifier=None), Q(remote_id="") | Q(remote_id=None))
+    rows = list(queryset[: limit + 1])
+    truncated = len(rows) > limit
+    rows = rows[:limit]
+
+    identifiers = {ident for ident, _ in rows if ident}
+    remote_ids = {remote_id for _, remote_id in rows if remote_id}
+
     return JsonResponse(
         {
             "identifiers": list(identifiers),
             "remote_ids": list(remote_ids),
+            "truncated": truncated,
         },
         safe=False,
     )
