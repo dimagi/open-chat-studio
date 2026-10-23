@@ -204,6 +204,22 @@ def test_render_markdown_sanitizes_unsafe_html():
             "<p>text</p><pre><code>- not a list<br>1. code<br></code></pre>",
             id="indented_code_with_list_lines",
         ),
+        pytest.param(
+            "- a\n    - b\n        - c\n- d",
+            "<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li><li>d</li></ul>",
+            id="four_space_three_level_nesting",
+        ),
+        pytest.param(
+            "1. Run this:\n\n        - name: build\n          run: make\n\n2. Next",
+            "<ol><li><p>Run this:</p><pre><code>- name: build<br>  run: make<br></code></pre></li>"
+            "<li><p>Next</p></li></ol>",
+            id="code_sample_in_numbered_item",
+        ),
+        pytest.param(
+            "1. a\n   ```\n   - x\n   ```\n2. b",
+            "<ol><li>a<br>   ```</li><li>x<br>   ```</li><li>b</li></ol>",
+            id="indented_fence_in_numbered_item",
+        ),
     ],
 )
 def test_render_markdown_preserves_existing_rendering(markdown_text, expected_result):
@@ -251,6 +267,11 @@ def test_render_markdown_preserves_existing_rendering(markdown_text, expected_re
             "- a\n  1. b\n- c",
             "<ul><li>a<ol><li>b</li></ol></li><li>c</li></ul>",
             id="numbered_list_inside_bullet",
+        ),
+        pytest.param(
+            "- a\n  - b\n# H\n  - c",
+            "<ul><li>a<ul><li>b</li></ul></li></ul><h1>H</h1><ul><li>c</li></ul>",
+            id="list_after_heading_without_blank_line",
         ),
     ],
 )

@@ -116,6 +116,13 @@ class FileExtension(markdown.Extension):
         md.inlinePatterns.register(OcsShortReferenceInlineProcessor(REFERENCE_RE, md), "short_reference", 130)
 
 
+def _is_list_item(indent: int, indents: list[int]) -> bool:
+    """Whether a marker line at `indent` is a list item rather than indented code, given the open list indents."""
+    if not indents:
+        return indent < 4
+    return indent - indents[-1] < 8
+
+
 class ListIndentPreprocessor(Preprocessor):
     """Re-indent list marker lines to four spaces per nesting level so 2- and 3-space sub-lists nest."""
 
@@ -130,14 +137,14 @@ class ListIndentPreprocessor(Preprocessor):
                 result.append(line)
             elif in_fence:
                 result.append(line)
-            elif (match := LIST_MARKER_RE.match(line)) and (indents or len(match.group(1)) < 4):
+            elif (match := LIST_MARKER_RE.match(line)) and _is_list_item(len(match.group(1)), indents):
                 indent = len(match.group(1))
                 indents = [existing for existing in indents if existing <= indent]
                 if not indents or indent > indents[-1]:
                     indents.append(indent)
                 result.append(" " * (4 * (len(indents) - 1)) + match.group(2) + match.group(3))
             else:
-                if previous_blank and line.strip() and not line.startswith(" "):
+                if line.startswith("#") or (previous_blank and line.strip() and not line.startswith(" ")):
                     indents = []
                 result.append(line)
             previous_blank = not line.strip()
