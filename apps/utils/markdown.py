@@ -126,11 +126,7 @@ def _is_list_item(indent: int, indents: list[int]) -> bool:
 
 
 def _indents_after_text_line(line: str, previous_blank: bool, indents: list[int]) -> list[int]:
-    """The open list indents after a line that is not a list item.
-
-    A heading closes the list. A paragraph after a blank line closes it when indented under four spaces,
-    and otherwise joins list level `indent // 4`. A line straight after another line continues it.
-    """
+    """Open list indents after a non-item line; a heading, or a paragraph under 4 spaces after a blank, resets them."""
     if line.startswith("#"):
         return []
     if not (previous_blank and line.strip()):
