@@ -220,6 +220,16 @@ def test_render_markdown_sanitizes_unsafe_html():
             "<ol><li>a<br>   ```</li><li>x<br>   ```</li><li>b</li></ol>",
             id="indented_fence_in_numbered_item",
         ),
+        pytest.param(
+            "* * *\n\n  - c\n  - d",
+            "<hr><ul><li>c</li><li>d</li></ul>",
+            id="thematic_break_before_indented_list",
+        ),
+        pytest.param(
+            "<pre>\n  - x\n    - y\n</pre>",
+            "<pre>  - x<br>    - y<br></pre>",
+            id="raw_html_pre_block",
+        ),
     ],
 )
 def test_render_markdown_preserves_existing_rendering(markdown_text, expected_result):
@@ -272,6 +282,16 @@ def test_render_markdown_preserves_existing_rendering(markdown_text, expected_re
             "- a\n  - b\n# H\n  - c",
             "<ul><li>a<ul><li>b</li></ul></li></ul><h1>H</h1><ul><li>c</li></ul>",
             id="list_after_heading_without_blank_line",
+        ),
+        pytest.param(
+            "- a\n    - b\n  - c",
+            "<ul><li>a<ul><li>b</li><li>c</li></ul></li></ul>",
+            id="two_space_item_after_four_space_item",
+        ),
+        pytest.param(
+            "```x``` is inline code\n\n1. a\n   - b",
+            "<p><code>x</code> is inline code</p><ol><li>a<ul><li>b</li></ul></li></ol>",
+            id="inline_triple_backtick_line_before_list",
         ),
     ],
 )

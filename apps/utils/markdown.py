@@ -21,7 +21,8 @@ from markdown.preprocessors import Preprocessor
 LEGACY_ASSISTANT_FILE_PREFIX = "assistant_file"
 
 LIST_MARKER_RE = re.compile(r"^( *)([*+-]|\d+\.)([ ]+.*)$")
-FENCE_RE = re.compile(r"^ *(```|~~~)")
+FENCE_RE = re.compile(r"^ *(`{3,}|~{3,})[^`]*$")
+THEMATIC_BREAK_RE = re.compile(r"^ {0,3}([-*_])( *\1){2,} *$")
 
 
 class LinkProcessorMixin:
@@ -137,6 +138,9 @@ class ListIndentPreprocessor(Preprocessor):
                 result.append(line)
             elif in_fence:
                 result.append(line)
+            elif THEMATIC_BREAK_RE.match(line):
+                indents = []
+                result.append(line)
             elif (match := LIST_MARKER_RE.match(line)) and _is_list_item(len(match.group(1)), indents):
                 indent = len(match.group(1))
                 indents = [existing for existing in indents if existing <= indent]
@@ -153,4 +157,5 @@ class ListIndentPreprocessor(Preprocessor):
 
 class ListIndentExtension(markdown.Extension):
     def extendMarkdown(self, md, *args, **kwargs):
-        md.preprocessors.register(ListIndentPreprocessor(md), "ocs_list_indent", 22)
+        # Runs after the fenced_code (25) and html_block (20) preprocessors have stashed their blocks.
+        md.preprocessors.register(ListIndentPreprocessor(md), "ocs_list_indent", 19)
