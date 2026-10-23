@@ -354,6 +354,25 @@ describe('KeywordsWidget route descriptions', () => {
     expect(getByLabelText('Description for Output Keyword 1')).toHaveValue('Help');
   });
 
+  it.each([
+    ['is cleared', '', 'Not saved until this keyword has a name'],
+    ['repeats another route', 'billing', 'Not saved until this keyword is unique'],
+  ])('warns that a description is not saved while its keyword %s', (_case, keyword, warning) => {
+    seedNode(['BILLING', 'SUPPORT'], {SUPPORT: 'Help'});
+    const {container, getByText} = render(<Harness />);
+
+    fireEvent.change(container.querySelectorAll('input[name="keywords"]')[1], {target: {value: keyword}});
+
+    expect(getByText(warning)).toBeInTheDocument();
+  });
+
+  it('shows no unsaved warning on the first of two duplicate keywords, whose description is saved', () => {
+    seedNode(['BILLING', 'BILLING'], {BILLING: 'Payments'});
+    const {queryByText} = render(<Harness />);
+
+    expect(queryByText(/^Not saved until/)).not.toBeInTheDocument();
+  });
+
   it('disables the descriptions of keywords that are duplicated', () => {
     seedNode(['BILLING', 'BILLING'], {BILLING: 'Payments'});
     const {getByLabelText} = render(<Harness />);

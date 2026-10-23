@@ -753,41 +753,65 @@ function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: nu
 
 /**
  * Builds the stored `{KEYWORD: description}` map from each row's description. A row whose keyword
- * is empty, or already taken by an earlier row, is left out.
+ * is empty, or repeats an earlier row's keyword, is left out.
  */
 function routeDescriptionsByKeyword(keywords: string[], rows: string[]): Record<string, string> {
   const result: Record<string, string> = {};
   keywords.forEach((keyword, index) => {
-    if (keyword && rows[index] && !(keyword in result)) {
+    if (keyword && rows[index] && keywords.indexOf(keyword) === index) {
       result[keyword] = rows[index];
     }
   });
   return result;
 }
 
+/** Each row's description as stored: a row whose keyword is empty or repeats an earlier one has none. */
+function rowsFromStored(keywords: string[], stored: Record<string, string>): string[] {
+  return keywords.map((keyword, index) => (keywords.indexOf(keyword) === index ? stored[keyword] ?? "" : ""));
+}
+
+/**
+ * Whether `rows` agree with the stored map. Only rows with a keyword the map can hold are compared,
+ * so a description kept for an empty or repeated keyword, and a stored entry with no keyword, never count.
+ */
+function rowsMatchStored(keywords: string[], rows: string[], stored: Record<string, string>): boolean {
+  return rows.length === keywords.length && keywords.every((keyword, index) =>
+    !keyword || keywords.indexOf(keyword) !== index || (stored[keyword] ?? "") === rows[index]
+  );
+}
+
 /**
  * Each route's description tracked by row, so it stays with its route while the keyword is cleared,
- * retyped or briefly matches another route. The rows are rebuilt from the stored map whenever the
- * node's keywords or descriptions are changed by anything other than `write`, such as undo.
+ * retyped or briefly matches another route. The rows are reloaded from the stored map when they no
+ * longer agree with it, as after undo.
  */
 function useRowDescriptions(keywords: unknown, stored: unknown) {
-  const tracked = useRef<{keywords: unknown; stored: unknown; rows: string[]} | null>(null);
-  if (!tracked.current || tracked.current.keywords !== keywords || tracked.current.stored !== stored) {
-    const keywordList: string[] = Array.isArray(keywords) ? keywords : [];
-    const storedMap = (stored || {}) as Record<string, string>;
-    const rows = keywordList.map((keyword, index) =>
-      keywordList.indexOf(keyword) === index ? storedMap[keyword] ?? "" : ""
-    );
-    tracked.current = {keywords, stored, rows};
+  const keywordList: string[] = Array.isArray(keywords) ? keywords : [];
+  const storedMap = (stored || {}) as Record<string, string>;
+  const [rows, setRows] = useState(() => rowsFromStored(keywordList, storedMap));
+
+  let currentRows = rows;
+  if (!rowsMatchStored(keywordList, rows, storedMap)) {
+    currentRows = rowsFromStored(keywordList, storedMap);
+    setRows(currentRows);
   }
 
-  /** Records the rows and returns the map to store; `keywords` must be the array stored alongside it. */
+  /** Records the rows and returns the map to store beside `keywords`. */
   const write = (keywords: string[], rows: string[]) => {
-    const stored = routeDescriptionsByKeyword(keywords, rows);
-    tracked.current = {keywords, stored, rows};
-    return stored;
+    setRows(rows);
+    return routeDescriptionsByKeyword(keywords, rows);
   };
-  return {rows: tracked.current.rows, write};
+  return {rows: currentRows, write};
+}
+
+function routeDescriptionPlaceholder(keyword: string, isDuplicate: boolean): string {
+  if (!keyword) {
+    return "Enter a keyword first";
+  }
+  if (isDuplicate) {
+    return "Keywords must be unique";
+  }
+  return "When should this route be chosen?";
 }
 
 export function KeywordsWidget(props: WidgetParams) {
@@ -945,17 +969,18 @@ export function KeywordsWidget(props: WidgetParams) {
                   className="textarea textarea-sm w-full mt-1 normal-case nodrag"
                   name="route_descriptions"
                   aria-label={`Description for ${label}`}
-                  placeholder={
-                    !value ? "Enter a keyword first"
-                      : isDuplicate ? "Keywords must be unique"
-                      : "When should this route be chosen?"
-                  }
+                  placeholder={routeDescriptionPlaceholder(value, isDuplicate)}
                   rows={2}
                   onChange={(event) => updateDescription(index, event.target.value)}
                   value={rowDescriptions[index] ?? ""}
                   readOnly={props.readOnly}
                   disabled={!value || isDuplicate}
                 ></textarea>
+              )}
+              {hasDescriptions && rowDescriptions[index] && (!value || keywords.indexOf(value) !== index) && (
+                <small className="text-warning normal-case">
+                  {value ? "Not saved until this keyword is unique" : "Not saved until this keyword has a name"}
+                </small>
               )}
             </div>
           );

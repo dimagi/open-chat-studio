@@ -463,6 +463,20 @@ class TestRouterNode:
         assert node.route_descriptions == expected
 
     @pytest.mark.django_db()
+    def test_router_node_rejects_route_descriptions_that_differ_only_in_case(self, provider, provider_model):
+        with pytest.raises(PydanticValidationError, match="BILLING has more than one description"):
+            RouterNode(
+                node_id="test",
+                django_node=None,
+                name="test router",
+                prompt="{routes}",
+                keywords=["billing"],
+                route_descriptions={"billing": "Payments", "BILLING": "Invoices"},
+                llm_provider_id=provider.id,
+                llm_provider_model_id=provider_model.id,
+            )
+
+    @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_router_node(self, get_llm_service, provider, provider_model, pipeline, experiment_session):
         def _tool_call(route):

@@ -693,8 +693,9 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         description=(
             "Instructions telling the LLM how to choose between `keywords`. The model is constrained "
             "to return one of them, so describe when each applies rather than asking for free text. "
-            "The only template variables available are `{participant_data}`, `{temp_state}` and "
-            "`{session_state}`, in single braces."
+            "The only template variables available are `{participant_data}`, `{temp_state}`, "
+            "`{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each "
+            "keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone."
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.router_prompt_variables),
     )
@@ -715,9 +716,17 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     @field_validator("route_descriptions", mode="before")
     @classmethod
     def ensure_route_description_keys_are_uppercase(cls, value):
-        if isinstance(value, dict):
-            return {str(key).upper(): description for key, description in value.items()}
-        return {}
+        if not isinstance(value, dict):
+            return {}
+        descriptions = {}
+        for key, description in value.items():
+            keyword = str(key).upper()
+            if keyword in descriptions:
+                raise PydanticCustomError(
+                    "invalid_route_descriptions", "Route {keyword} has more than one description", {"keyword": keyword}
+                )
+            descriptions[keyword] = description
+        return descriptions
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
