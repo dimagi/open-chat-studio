@@ -211,7 +211,7 @@ def _session_chat_messages(session_id: str) -> list[ChatMessage]:
     )
 
 
-def _history_entry(message) -> dict:
+def _history_entry(message: ChatMessage) -> dict:
     """Return the history dict for one chat message."""
     return {
         "message_type": message.message_type,
@@ -220,7 +220,7 @@ def _history_entry(message) -> dict:
     }
 
 
-def _add_message_annotations(context: dict, message) -> None:
+def _add_message_annotations(context: dict, message: ChatMessage) -> None:
     """Append the message's comments and non-system tags to *context*."""
     if comments := list(message.comments.all()):
         context.setdefault("comments", []).extend([comment.comment for comment in comments])
@@ -230,7 +230,7 @@ def _add_message_annotations(context: dict, message) -> None:
         context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
 
 
-def _message_context(*messages) -> dict:
+def _message_context(*messages: ChatMessage) -> dict:
     """Build the evaluation context from the first message's timestamp and every message's annotations."""
     context = {"current_datetime": messages[0].created_at.isoformat()}
     for message in messages:
@@ -238,7 +238,7 @@ def _message_context(*messages) -> dict:
     return context
 
 
-def _is_target_pair(current, following, target_ids: set) -> bool:
+def _is_target_pair(current: ChatMessage, following: ChatMessage | None, target_ids: set[int]) -> bool:
     """Return whether *current* and *following* form a (HUMAN, AI) pair with at least one targeted message."""
     if following is None:
         return False
@@ -247,7 +247,9 @@ def _is_target_pair(current, following, target_ids: set) -> bool:
     return current.id in target_ids or following.id in target_ids
 
 
-def _shared_attrs(session, session_id, current, history: list) -> dict:
+def _shared_attrs(
+    session: ExperimentSession | None, session_id: str, current: ChatMessage, history: list[dict]
+) -> dict:
     """Return the EvaluationMessage fields common to pair and orphan messages."""
     return {
         "session": session,
@@ -261,7 +263,7 @@ def _shared_attrs(session, session_id, current, history: list) -> dict:
     }
 
 
-def _pair_message(current, following, shared: dict) -> EvaluationMessage:
+def _pair_message(current: ChatMessage, following: ChatMessage, shared: dict) -> EvaluationMessage:
     """Build an EvaluationMessage from a human message and the AI reply that follows it."""
     return EvaluationMessage(
         input_chat_message=current,
@@ -273,7 +275,7 @@ def _pair_message(current, following, shared: dict) -> EvaluationMessage:
     )
 
 
-def _orphan_message(message, shared: dict) -> EvaluationMessage:
+def _orphan_message(message: ChatMessage, shared: dict) -> EvaluationMessage:
     """Build an EvaluationMessage from a targeted message that is not part of a (HUMAN, AI) pair."""
     context = _message_context(message)
     if message.message_type == ChatMessageType.HUMAN:
@@ -297,11 +299,13 @@ def _orphan_message(message, shared: dict) -> EvaluationMessage:
     )
 
 
-def _session_evaluation_messages(session, session_id: str, target_ids: set) -> list[EvaluationMessage]:
+def _pair_messages_for_session(
+    session: ExperimentSession | None, session_id: str, target_ids: set[int]
+) -> list[EvaluationMessage]:
     """Build the evaluation messages for one session's targeted messages, in conversation order."""
     messages = _session_chat_messages(session_id)
     evaluation_messages = []
-    history = []
+    history: list[dict] = []
     i = 0
     while i < len(messages):
         current = messages[i]
@@ -327,5 +331,5 @@ def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, li
     new_messages = []
     for session_id, target_message_ids in message_ids_per_session.items():
         session = session_map.get(str(session_id))
-        new_messages.extend(_session_evaluation_messages(session, session_id, set(target_message_ids)))
+        new_messages.extend(_pair_messages_for_session(session, session_id, set(target_message_ids)))
     return new_messages
