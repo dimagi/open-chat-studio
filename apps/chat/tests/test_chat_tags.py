@@ -308,6 +308,16 @@ def test_render_markdown_preserves_existing_rendering(markdown_text, expected_re
             "<p><code>x</code> is inline code</p><ol><li>a<ul><li>b</li></ul></li></ol>",
             id="inline_triple_backtick_line_before_list",
         ),
+        pytest.param(
+            "1. a\n   - b\n\n   para\n\n   - c",
+            "<ol><li>a<ul><li>b</li></ul></li></ol><p>para</p><ul><li>c</li></ul>",
+            id="paragraph_after_blank_closes_list_before_sub_bullet",
+        ),
+        pytest.param(
+            "- a\n  - b\n\n    text\n\n  - c",
+            "<ul><li><p>a</p><ul><li>b</li></ul><p>text</p><ul><li>c</li></ul></li></ul>",
+            id="nesting_survives_indented_paragraph",
+        ),
     ],
 )
 def test_render_markdown_nests_lists_indented_less_than_four_spaces(markdown_text, expected_result):

@@ -125,11 +125,20 @@ def _is_list_item(indent: int, indents: list[int]) -> bool:
     return indent - indents[-1] < 8
 
 
-def _ends_list_context(line: str, previous_blank: bool) -> bool:
-    """Whether a heading, or a flush-left paragraph after a blank line, ends the open list."""
+def _indents_after_text_line(line: str, previous_blank: bool, indents: list[int]) -> list[int]:
+    """The open list indents after a line that is not a list item.
+
+    A heading closes the list. A paragraph after a blank line closes it when indented under four spaces,
+    and otherwise joins list level `indent // 4`. A line straight after another line continues it.
+    """
     if line.startswith("#"):
-        return True
-    return previous_blank and bool(line.strip()) and not line.startswith(" ")
+        return []
+    if not (previous_blank and line.strip()):
+        return indents
+    indent = len(line) - len(line.lstrip(" "))
+    if indent < 4:
+        return []
+    return indents[: indent // 4 + 1]
 
 
 def _nesting_indents(indent: int, indents: list[int]) -> list[int]:
@@ -177,8 +186,7 @@ class ListIndentPreprocessor(Preprocessor):
                 indents = _nesting_indents(len(match.group(1)), indents)
                 result.append(" " * (4 * (len(indents) - 1)) + match.group(2) + match.group(3))
             else:
-                if _ends_list_context(line, previous_blank):
-                    indents = []
+                indents = _indents_after_text_line(line, previous_blank, indents)
                 result.append(line)
             previous_blank = not line.strip()
         return result
