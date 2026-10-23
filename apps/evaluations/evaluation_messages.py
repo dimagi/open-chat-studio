@@ -49,7 +49,7 @@ def _latest_participant_data_by_session(session_ids: list[int]) -> dict[int, dic
                 # A diff that no longer applies to its snapshot must not abort the whole stream:
                 # the caller may be part-way through a multi-thousand-session clone, and every
                 # retry would fail on this same session. Fall back to the start-of-turn snapshot.
-                logger.warning("Ignoring unapplicable participant_data_diff on latest trace for session %s", session_id)
+                logger.warning("Ignoring inapplicable participant_data_diff on latest trace for session %s", session_id)
         participant_data_by_session[session_id] = participant_data
     return participant_data_by_session
 
