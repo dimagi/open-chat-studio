@@ -1,10 +1,14 @@
 """Message-mode generators hold one chunk of sessions at a time and keep pairs, filter and counts correct."""
 
+import itertools
 from unittest.mock import patch
 
 import pytest
+from django.test import override_settings
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
+from apps.evaluations.tasks import create_dataset_from_session_messages_task
 from apps.evaluations.tests.clone_helpers import make_sessions
 from apps.evaluations.utils import (
     iter_message_evaluation_messages,
@@ -153,3 +157,81 @@ def test_id_entry_point_ignores_sessions_from_other_teams(experiment_and_channel
     result = list(iter_message_evaluation_messages(experiment.team, [own.external_id, foreign.external_id]))
 
     assert [message.session_id for message in result] == [own.id]
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_task_streams_and_reports_session_progress(experiment_and_channel):
+    """Progress counts sessions, trailing the walk by at most one chunk."""
+    experiment, channel = experiment_and_channel
+    sessions = make_sessions(3, experiment, channel)
+    external_ids = [session.external_id for session in sessions]
+    dataset = EvaluationDataset.objects.create(
+        team=experiment.team, name="progress", evaluation_mode=EvaluationMode.MESSAGE
+    )
+
+    real_add = EvaluationDataset.add_messages_stream
+
+    def one_message_per_batch(self, messages, *, batch_size=None, progress_callback=None):
+        """Commit one message per batch so every batch reports progress."""
+        return real_add(self, messages, batch_size=1, progress_callback=progress_callback)
+
+    with (
+        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch.object(EvaluationDataset, "add_messages_stream", one_message_per_batch),
+        patch("apps.evaluations.tasks.ProgressRecorder") as recorder,
+    ):
+        create_dataset_from_session_messages_task.delay(
+            dataset.id, experiment.team.id, external_ids, [], None, None
+        ).get()
+
+    messages = [call.args[2] for call in recorder.return_value.set_progress.call_args_list]
+    assert messages == [
+        "Starting clone...",
+        "Cloned messages from 0 of 3 sessions",
+        "Cloned messages from 1 of 3 sessions",
+        "Cloned messages from 2 of 3 sessions",
+        "Clone complete",
+    ]
+    assert dataset.messages.count() == 3
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_task_resumes_after_partial_failure(experiment_and_channel):
+    """A run that dies mid-stream leaves a FAILED dataset that a re-run completes."""
+    experiment, channel = experiment_and_channel
+    sessions = make_sessions(4, experiment, channel)
+    external_ids = [session.external_id for session in sessions]
+    dataset = EvaluationDataset.objects.create(
+        team=experiment.team, name="partial", evaluation_mode=EvaluationMode.MESSAGE
+    )
+
+    real_add = EvaluationDataset.add_messages_stream
+
+    def die_halfway(self, messages, *, batch_size=None, progress_callback=None):
+        """Commit the first two pairs, then blow up as an OOM-killed worker would."""
+        real_add(self, itertools.islice(messages, 2), batch_size=2, progress_callback=progress_callback)
+        raise RuntimeError("worker died")
+
+    with (
+        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch.object(EvaluationDataset, "add_messages_stream", die_halfway),
+    ):
+        create_dataset_from_session_messages_task.delay(
+            dataset.id, experiment.team.id, external_ids, [], None, None
+        ).get()
+
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.FAILED
+    assert dataset.messages.count() == 2
+    assert "1 of 4 session(s)" in dataset.error_message
+
+    with patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1):
+        result = create_dataset_from_session_messages_task.delay(
+            dataset.id, experiment.team.id, external_ids, [], None, None
+        ).get()
+
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.COMPLETED
+    assert (result["created_count"], result["duplicates_skipped"], dataset.messages.count()) == (2, 2, 4)

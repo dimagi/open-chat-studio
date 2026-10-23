@@ -52,6 +52,8 @@ from apps.evaluations.session_selection import resolve_dataset_available_session
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
 from apps.evaluations.utils import (
+    iter_message_evaluation_messages,
+    iter_message_evaluation_messages_for_sessions,
     iter_session_evaluation_messages_for_sessions,
     parse_csv_value_as_json,
     parse_history_text,
@@ -1344,6 +1346,7 @@ def create_dataset_from_session_messages_task(
     filtered_session_ids: list[str],
     filter_query: str | None,
     timezone: str | None,
+    session_filter_query: str | None = None,
 ) -> dict:
     """
     Clone messages from sessions asynchronously.
@@ -1355,6 +1358,7 @@ def create_dataset_from_session_messages_task(
         filtered_session_ids: List of filtered session external IDs
         filter_query: Serialized filter parameters as query string (or None)
         timezone: Timezone for filtering
+        session_filter_query: Serialized session filter resolved server-side; takes precedence over both id lists
     """
 
     progress_recorder = ProgressRecorder(self)
@@ -1370,25 +1374,43 @@ def create_dataset_from_session_messages_task(
     dataset.status = DatasetCreationStatus.PROCESSING
     dataset.save(update_fields=["status"])
 
+    progress = {"sessions_done": 0}
+    total_sessions = 0
+
     try:
         progress_recorder.set_progress(0, 100, "Starting clone...")
 
         filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
 
         with current_team(team):
-            evaluation_messages = EvaluationMessage.create_from_sessions(
-                team=team,
-                external_session_ids=session_ids,
-                filtered_session_ids=filtered_session_ids,
-                filter_params=filter_params,
-                timezone=timezone,
-            )
 
-            progress_recorder.set_progress(
-                40, 100, f"Found {len(evaluation_messages)} messages, checking for duplicates..."
-            )
+            def note_chunk(count: int) -> None:
+                progress["sessions_done"] += count
 
-            created_messages, duplicates_skipped = dataset.add_messages(evaluation_messages)
+            if session_filter_query is not None:
+                session_qs = _sessions_for_clone(dataset, None, session_filter_query, timezone)
+                total_sessions = session_qs.count()
+                evaluation_messages = iter_message_evaluation_messages_for_sessions(
+                    session_qs, filter_params=filter_params, timezone=timezone, on_chunk=note_chunk
+                )
+            else:
+                # The generator walks filtered_session_ids only when there is a message filter to apply.
+                walked_ids = list(session_ids or [])
+                if filter_params is not None:
+                    walked_ids.extend(filtered_session_ids or [])
+                total_sessions = ExperimentSession.objects.filter(team=team, external_id__in=walked_ids).count()
+                evaluation_messages = iter_message_evaluation_messages(
+                    team, session_ids, filtered_session_ids, filter_params, timezone, on_chunk=note_chunk
+                )
+
+            def report(created: int, skipped: int) -> None:
+                done = progress["sessions_done"]
+                percent = min(100, int(done / total_sessions * 100)) if total_sessions else 100
+                progress_recorder.set_progress(
+                    percent, 100, f"Cloned messages from {done} of {total_sessions} sessions"
+                )
+
+            created_ids, duplicates_skipped = dataset.add_messages_stream(evaluation_messages, progress_callback=report)
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -1398,14 +1420,22 @@ def create_dataset_from_session_messages_task(
 
             return {
                 "success": True,
-                "created_count": len(created_messages),
+                "created_count": len(created_ids),
                 "duplicates_skipped": duplicates_skipped,
             }
 
-    except Exception as e:
+    # BaseException, not Exception: a gevent.Timeout (raised when a hard task time limit fires)
+    # derives from BaseException and would otherwise leave the dataset stuck in PROCESSING.
+    except BaseException as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
-        message = "An error occurred while cloning messages from sessions"
+        message = (
+            f"Failed after cloning messages from {progress['sessions_done']} of {total_sessions} session(s): {e}. "
+            "Re-running will resume from where it stopped."
+        )
         _save_dataset_error(dataset, message)
+        if not isinstance(e, Exception):
+            # Record the failure, but never swallow SystemExit/KeyboardInterrupt/gevent.Timeout.
+            raise
         return {"success": False, "error": message}
 
 
