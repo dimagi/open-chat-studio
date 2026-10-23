@@ -164,3 +164,9 @@ def test_post_selected_scope_with_nothing_selected_creates_empty_dataset(
 def test_create_page_context_has_no_message_mode_limit(client_with_user, team_with_users):
     response = client_with_user.get(_dataset_new_url(team_with_users))
     assert "message_mode_all_matching_limit" not in response.context
+
+
+def test_create_page_has_no_cap_warning(client_with_user, team_with_users):
+    response = client_with_user.get(_dataset_new_url(team_with_users))
+    assert b"overMessageModeLimit" not in response.content
+    assert b"messageModeLimit" not in response.content
