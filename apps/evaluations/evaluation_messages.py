@@ -197,124 +197,136 @@ def make_session_evaluation_messages(session_external_ids: list[str], team=None)
     return list(iter_session_evaluation_messages(session_external_ids, team=team))
 
 
+def _session_chat_messages(session_id: str) -> list[ChatMessage]:
+    """Return every message in the session, oldest first, annotated with trace and experiment data."""
+    return list(
+        ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
+        .annotate(
+            experiment_public_id=F("chat__experiment_session__experiment__public_id"),
+            participant_data=F("input_message_trace__participant_data"),
+            session_state=F("input_message_trace__session_state"),
+        )
+        .prefetch_related("comments", "tags", "input_message_trace")
+        .order_by("created_at")
+    )
+
+
+def _history_entry(message) -> dict:
+    """Return the history dict for one chat message."""
+    return {
+        "message_type": message.message_type,
+        "content": message.content,
+        "summary": getattr(message, "summary", None),
+    }
+
+
+def _add_message_annotations(context: dict, message) -> None:
+    """Append the message's comments and non-system tags to *context*."""
+    if comments := list(message.comments.all()):
+        context.setdefault("comments", []).extend([comment.comment for comment in comments])
+    if tags := list(message.tags.all()):
+        context_tags = context.get("tags", [])
+        context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
+        context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
+
+
+def _message_context(*messages) -> dict:
+    """Build the evaluation context from the first message's timestamp and every message's annotations."""
+    context = {"current_datetime": messages[0].created_at.isoformat()}
+    for message in messages:
+        _add_message_annotations(context, message)
+    return context
+
+
+def _is_target_pair(current, following, target_ids: set) -> bool:
+    """Return whether *current* and *following* form a (HUMAN, AI) pair with at least one targeted message."""
+    return (
+        following is not None
+        and current.message_type == ChatMessageType.HUMAN
+        and following.message_type == ChatMessageType.AI
+        and (current.id in target_ids or following.id in target_ids)
+    )
+
+
+def _shared_attrs(session, session_id, current, history: list) -> dict:
+    """Return the EvaluationMessage fields common to pair and orphan messages."""
+    return {
+        "session": session,
+        "history": [entry.copy() for entry in history],
+        "metadata": {
+            "session_id": session_id,
+            "experiment_id": str(current.experiment_public_id),
+        },
+        "participant_data": current.participant_data or {},
+        "session_state": current.session_state or {},
+    }
+
+
+def _pair_message(current, following, shared: dict) -> EvaluationMessage:
+    """Build an EvaluationMessage from a human message and the AI reply that follows it."""
+    return EvaluationMessage(
+        input_chat_message=current,
+        input=EvaluationMessageContent(content=current.content, role="human").model_dump(),
+        expected_output_chat_message=following,
+        output=EvaluationMessageContent(content=following.content, role="ai").model_dump(),
+        context=_message_context(current, following),
+        **shared,
+    )
+
+
+def _orphan_message(message, shared: dict) -> EvaluationMessage:
+    """Build an EvaluationMessage from a targeted message that is not part of a (HUMAN, AI) pair."""
+    context = _message_context(message)
+    if message.message_type == ChatMessageType.HUMAN:
+        # A human message with no AI reply, possibly because the AI message failed to generate
+        return EvaluationMessage(
+            input_chat_message=message,
+            input=EvaluationMessageContent(content=message.content, role="human").model_dump(),
+            expected_output_chat_message=None,
+            output={},
+            context=context,
+            **shared,
+        )
+    # An AI message with no human input, possibly because of a scheduled message, AI seed, etc.
+    return EvaluationMessage(
+        input_chat_message=None,
+        input={},
+        expected_output_chat_message=message,
+        output=EvaluationMessageContent(content=message.content, role="ai").model_dump(),
+        context=context,
+        **shared,
+    )
+
+
+def _session_evaluation_messages(session, session_id: str, target_ids: set) -> list[EvaluationMessage]:
+    """Build the evaluation messages for one session's targeted messages, in conversation order."""
+    messages = _session_chat_messages(session_id)
+    evaluation_messages = []
+    history = []
+    i = 0
+    while i < len(messages):
+        current = messages[i]
+        following = messages[i + 1] if i + 1 < len(messages) else None
+        shared = _shared_attrs(session, session_id, current, history)
+        if _is_target_pair(current, following, target_ids):
+            evaluation_messages.append(_pair_message(current, following, shared))
+            history.extend([_history_entry(current), _history_entry(following)])
+            i += 2
+            continue
+        if current.id in target_ids:
+            evaluation_messages.append(_orphan_message(current, shared))
+        history.append(_history_entry(current))
+        i += 1
+    return evaluation_messages
+
+
 def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:
+    """Build one EvaluationMessage per targeted human-AI pair or orphan message, session by session."""
     session_map = {
         str(s.external_id): s for s in ExperimentSession.objects.filter(external_id__in=message_ids_per_session.keys())
     }
-
-    def _add_additional_context(msg, existing_context):
-        if comments := list(msg.comments.all()):
-            existing_context.setdefault("comments", []).extend([comment.comment for comment in comments])
-        if tags := list(msg.tags.all()):
-            context_tags = existing_context.get("tags", [])
-            context_tags.extend([tag.name for tag in tags if not tag.is_system_tag])
-            existing_context["tags"] = list(dict.fromkeys(context_tags))  # dedupe preserving order
-
-    def _messages_to_history(messages_):
-        return [
-            {
-                "message_type": msg.message_type,
-                "content": msg.content,
-                "summary": getattr(msg, "summary", None),
-            }
-            for msg in messages_
-        ]
-
     new_messages = []
     for session_id, target_message_ids in message_ids_per_session.items():
-        target_ids_set = set(target_message_ids)
-
-        # We need to get all the messages in the session to properly compile the history
-        all_messages = list(
-            ChatMessage.objects.filter(chat__experiment_session__external_id=session_id)
-            .annotate(
-                experiment_public_id=F("chat__experiment_session__experiment__public_id"),
-                participant_data=F("input_message_trace__participant_data"),
-                session_state=F("input_message_trace__session_state"),
-            )
-            .prefetch_related("comments", "tags", "input_message_trace")
-            .order_by("created_at")
-        )
-
-        history = []
-        i = 0
-
-        while i < len(all_messages):
-            current_msg = all_messages[i]
-            next_msg = all_messages[i + 1] if i + 1 < len(all_messages) else None
-
-            # Check if this is a (HUMAN, AI) pair with at least one in the target
-            is_target_pair = (
-                next_msg is not None
-                and current_msg.message_type == ChatMessageType.HUMAN
-                and next_msg.message_type == ChatMessageType.AI
-                and (current_msg.id in target_ids_set or next_msg.id in target_ids_set)
-            )
-
-            shared_attrs = {
-                "session": session_map.get(str(session_id)),
-                "history": [msg.copy() for msg in history],
-                "metadata": {
-                    "session_id": session_id,
-                    "experiment_id": str(current_msg.experiment_public_id),
-                },
-                "participant_data": current_msg.participant_data or {},
-                "session_state": current_msg.session_state or {},
-            }
-
-            if is_target_pair:
-                # Create paired evaluation message
-                context = {"current_datetime": current_msg.created_at.isoformat()}
-                _add_additional_context(current_msg, context)
-                _add_additional_context(next_msg, context)
-
-                evaluation_message = EvaluationMessage(
-                    input_chat_message=current_msg,
-                    input=EvaluationMessageContent(content=current_msg.content, role="human").model_dump(),
-                    expected_output_chat_message=next_msg,
-                    output=EvaluationMessageContent(content=next_msg.content, role="ai").model_dump(),
-                    context=context,
-                    **shared_attrs,
-                )
-                new_messages.append(evaluation_message)
-
-                # Add both to history
-                history.extend(_messages_to_history([current_msg, next_msg]))
-                i += 2
-
-            elif current_msg.id in target_ids_set:
-                context = {"current_datetime": current_msg.created_at.isoformat()}
-                _add_additional_context(current_msg, context)
-
-                if current_msg.message_type == ChatMessageType.HUMAN:
-                    # There is an orphaned Human message, possibly because the AI message failed to generate
-                    evaluation_message = EvaluationMessage(
-                        input_chat_message=current_msg,
-                        input=EvaluationMessageContent(content=current_msg.content, role="human").model_dump(),
-                        expected_output_chat_message=None,
-                        output={},
-                        context=context,
-                        **shared_attrs,
-                    )
-                else:
-                    # There is an orphaned AI message, possibly because of a scheduled message, AI seed, etc.
-                    evaluation_message = EvaluationMessage(
-                        input_chat_message=None,
-                        input={},
-                        expected_output_chat_message=current_msg,
-                        output=EvaluationMessageContent(content=current_msg.content, role="ai").model_dump(),
-                        context=context,
-                        **shared_attrs,
-                    )
-                new_messages.append(evaluation_message)
-
-                # Add to history
-                history.extend(_messages_to_history([current_msg]))
-                i += 1
-
-            else:
-                # Not in target, just add to history
-                history.extend(_messages_to_history([current_msg]))
-                i += 1
-
+        session = session_map.get(str(session_id))
+        new_messages.extend(_session_evaluation_messages(session, session_id, set(target_message_ids)))
     return new_messages
