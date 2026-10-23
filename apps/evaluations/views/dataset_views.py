@@ -27,12 +27,12 @@ from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.chat.models import ChatMessage
 from apps.evaluations.breadcrumbs import datasets_crumbs
 from apps.evaluations.dataset_clone import (
-    MESSAGE_MODE_ALL_MATCHING_LIMIT,
     dispatch_clone_task,
     mark_dataset_pending,
     resolve_sessions_to_clone,
 )
-from apps.evaluations.exceptions import InFlightRunsError, SessionSelectionTooLargeError
+from apps.evaluations.evaluation_messages import make_evaluation_messages_from_sessions
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
     EvaluationDatasetForm,
@@ -58,7 +58,6 @@ from apps.evaluations.tasks import (
 )
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
-    make_evaluation_messages_from_sessions,
     normalize_json_quotes,
     parse_history_text,
 )
@@ -236,7 +235,6 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
         context["breadcrumbs"] = [*datasets_crumbs(self.request.team.slug), (_("Create"), None)]
-        context["message_mode_all_matching_limit"] = MESSAGE_MODE_ALL_MATCHING_LIMIT
         return context
 
     def get_success_url(self):
@@ -890,7 +888,6 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 "sessions_count_url": count_url,
                 "active_tab": "evaluation_datasets",
                 "breadcrumbs": [*datasets_crumbs(team_slug, dataset), (_("Add Sessions"), None)],
-                "message_mode_all_matching_limit": MESSAGE_MODE_ALL_MATCHING_LIMIT,
                 **filter_context,
             },
         )
@@ -902,18 +899,13 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         filter_params = FilterParams(request.POST)
         filter_query = filter_params.to_query()
         base_qs = _get_dataset_available_sessions(request, pk, filter_params=filter_params)
-        try:
-            selection = resolve_sessions_to_clone(
-                dataset=dataset,
-                mode=request.POST.get("mode", "selected"),
-                post_data=request.POST,
-                base_qs=base_qs,
-                team=request.team,
-                filter_query=filter_query,
-            )
-        except SessionSelectionTooLargeError as e:
-            messages.error(request, e.messages[0])
-            return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
+        selection = resolve_sessions_to_clone(
+            mode=request.POST.get("mode", "selected"),
+            post_data=request.POST,
+            base_qs=base_qs,
+            team=request.team,
+            filter_query=filter_query,
+        )
         if not selection.count:
             messages.error(request, "No sessions selected.")
             return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
