@@ -4,19 +4,15 @@ import pytest
 from django.test import override_settings
 
 from apps.chat.models import ChatMessageType
-from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
+from apps.evaluations.models import DatasetCreationStatus
 from apps.evaluations.tasks import create_dataset_from_session_messages_task
-from apps.evaluations.tests.clone_helpers import session_with_messages
+from apps.evaluations.tests.clone_helpers import message_dataset, session_with_messages
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 
 
 def experiment_filter(experiment) -> str:
     return f"f_experiment={experiment.id}&op_experiment=any+of"
-
-
-def message_dataset(team) -> EvaluationDataset:
-    return EvaluationDataset.objects.create(team=team, name="Message Dataset", evaluation_mode=EvaluationMode.MESSAGE)
 
 
 @pytest.mark.django_db()
@@ -40,7 +36,7 @@ def test_task_resolves_session_filter_instead_of_ids():
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_empty_session_filter_means_every_team_session():
-    """ "" is "no session filters applied", which must stay distinct from None ("use the id lists")."""
+    """An empty session filter means every team session, which must stay distinct from None (use the id list)."""
     session = session_with_messages()
     team = session.team
     dataset = message_dataset(team)

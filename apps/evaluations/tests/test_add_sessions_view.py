@@ -260,6 +260,7 @@ def test_add_sessions_table_tag_prefetch_is_bounded_to_current_page(client_with_
     assert len(rows) == per_page
 
 
+@pytest.mark.django_db()
 def test_add_sessions_page_has_no_cap_warning(client_with_user, team_with_users, message_dataset):
     response = client_with_user.get(_add_sessions_url(team_with_users, message_dataset))
     assert b"sessions for message-level datasets" not in response.content

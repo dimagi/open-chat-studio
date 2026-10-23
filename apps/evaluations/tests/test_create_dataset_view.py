@@ -166,6 +166,7 @@ def test_create_page_context_has_no_message_mode_limit(client_with_user, team_wi
     assert "message_mode_all_matching_limit" not in response.context
 
 
+@pytest.mark.django_db()
 def test_create_page_has_no_cap_warning(client_with_user, team_with_users):
     response = client_with_user.get(_dataset_new_url(team_with_users))
     assert b"overMessageModeLimit" not in response.content

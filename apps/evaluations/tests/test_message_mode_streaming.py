@@ -12,9 +12,9 @@ from apps.evaluations.evaluation_messages import (
     iter_message_evaluation_messages_for_sessions,
     make_evaluation_messages_from_sessions,
 )
-from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset
 from apps.evaluations.tasks import create_dataset_from_session_messages_task
-from apps.evaluations.tests.clone_helpers import make_sessions
+from apps.evaluations.tests.clone_helpers import make_sessions, message_dataset
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ChatMessageFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
@@ -129,9 +129,7 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
     experiment, channel = experiment_and_channel
     sessions = make_sessions(3, experiment, channel)
     external_ids = [session.external_id for session in sessions]
-    dataset = EvaluationDataset.objects.create(
-        team=experiment.team, name="progress", evaluation_mode=EvaluationMode.MESSAGE
-    )
+    dataset = message_dataset(experiment.team, name="progress")
 
     with (
         patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
@@ -172,9 +170,7 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
     experiment, channel = experiment_and_channel
     sessions = make_sessions(4, experiment, channel, messages_per_session=4)
     external_ids = [session.external_id for session in sessions]
-    dataset = EvaluationDataset.objects.create(
-        team=experiment.team, name="partial", evaluation_mode=EvaluationMode.MESSAGE
-    )
+    dataset = message_dataset(experiment.team, name="partial")
 
     with (
         patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
@@ -221,9 +217,7 @@ def test_add_messages_stream_batch_boundary_keeps_sessions_whole(experiment_and_
     """With a session boundary, a batch grows past batch_size rather than split a session's pairs."""
     experiment, channel = experiment_and_channel
     sessions = make_sessions(2, experiment, channel, messages_per_session=6)
-    dataset = EvaluationDataset.objects.create(
-        team=experiment.team, name="boundary", evaluation_mode=EvaluationMode.MESSAGE
-    )
+    dataset = message_dataset(experiment.team, name="boundary")
 
     calls = stream_progress(dataset, sessions, batch_boundary=lambda message: message.session_id)
 
@@ -236,9 +230,7 @@ def test_add_messages_stream_without_boundary_batches_by_size(experiment_and_cha
     """Without a boundary, batches close at batch_size even in the middle of a session."""
     experiment, channel = experiment_and_channel
     sessions = make_sessions(2, experiment, channel, messages_per_session=6)
-    dataset = EvaluationDataset.objects.create(
-        team=experiment.team, name="no boundary", evaluation_mode=EvaluationMode.MESSAGE
-    )
+    dataset = message_dataset(experiment.team, name="no boundary")
 
     assert stream_progress(dataset, sessions) == [(2, 0), (4, 0), (6, 0)]
 
@@ -252,9 +244,7 @@ def test_task_resume_after_failure_keeps_split_session_whole(experiment_and_chan
     for turn in range(3):
         add_rated_pair(session_a, f"a-{turn}", "+1")
     add_rated_pair(session_b, "b-0", "+1")
-    dataset = EvaluationDataset.objects.create(
-        team=experiment.team, name="split", evaluation_mode=EvaluationMode.MESSAGE
-    )
+    dataset = message_dataset(experiment.team, name="split")
 
     with (
         patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
@@ -292,9 +282,7 @@ def test_task_passes_session_boundary_to_add_messages_stream(experiment_and_chan
     for turn in range(3):
         add_rated_pair(session_a, f"a-{turn}", "+1")
     add_rated_pair(session_b, "b-0", "+1")
-    dataset = EvaluationDataset.objects.create(
-        team=experiment.team, name="boundary task", evaluation_mode=EvaluationMode.MESSAGE
-    )
+    dataset = message_dataset(experiment.team, name="boundary task")
 
     real_add = EvaluationDataset.add_messages_stream
 

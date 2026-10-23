@@ -2,7 +2,7 @@
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.evaluation_messages import iter_message_evaluation_messages_for_sessions
-from apps.evaluations.models import EvaluationMessage
+from apps.evaluations.models import EvaluationDataset, EvaluationMessage, EvaluationMode
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 
@@ -47,3 +47,8 @@ def pairs_for_sessions(team, external_ids, filter_params=None, timezone=None) ->
             timezone=timezone,
         )
     )
+
+
+def message_dataset(team, name="Message Dataset") -> EvaluationDataset:
+    """Create an empty message-mode dataset for `team`."""
+    return EvaluationDataset.objects.create(team=team, name=name, evaluation_mode=EvaluationMode.MESSAGE)
