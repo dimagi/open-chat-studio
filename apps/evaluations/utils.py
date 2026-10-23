@@ -5,7 +5,7 @@ import logging
 import re
 from collections import Counter, defaultdict
 from collections.abc import Generator
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import dictdiffer
 from django.db.models import F
@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.field_definitions import FieldDefinition
+from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent, Evaluator
 from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
 from apps.trace.models import Trace, TraceStatus
@@ -26,9 +27,6 @@ logger = logging.getLogger("ocs.evaluations")
 # Sessions loaded per chunk when building session-mode evaluation messages. Mirrors
 # EXPORT_CHUNK_SIZE in apps.experiments.export — the same bounded-memory pattern.
 SESSION_CHUNK_SIZE = 200
-
-if TYPE_CHECKING:
-    from apps.evaluations.models import EvaluationMessage
 
 
 def sanitize_json_data(data: Any) -> Any:
@@ -86,10 +84,6 @@ def get_evaluators_with_schema(team) -> list[dict]:
     Returns:
         List of dicts containing evaluator info with schema data
     """
-    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
-        Evaluator,
-    )
-
     evaluator_type_info = get_evaluator_type_info()
 
     evaluators_list = []
@@ -253,10 +247,6 @@ def _latest_participant_data_by_session(session_ids: list[int]) -> dict[int, dic
 
 def _build_session_evaluation_messages(sessions: list[ExperimentSession]) -> Generator["EvaluationMessage"]:
     """Build one EvaluationMessage per session in *sessions*, using two queries for the batch."""
-    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
-        EvaluationMessage,
-    )
-
     session_ids = [session.id for session in sessions]
     history_by_chat: dict[int, list[dict]] = defaultdict(list)
     # Grouped by chat_id (a forward field on ExperimentSession) so no join is needed, and
@@ -399,11 +389,6 @@ def make_session_evaluation_messages(session_external_ids: list[str], team=None)
 
 
 def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:
-    from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
-        EvaluationMessage,
-        EvaluationMessageContent,
-    )
-
     session_map = {
         str(s.external_id): s for s in ExperimentSession.objects.filter(external_id__in=message_ids_per_session.keys())
     }
