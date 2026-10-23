@@ -5,7 +5,7 @@ from django.test import override_settings
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
-from apps.evaluations.tasks import _sessions_for_session_mode_clone, create_dataset_from_sessions_task
+from apps.evaluations.tasks import _sessions_for_clone, create_dataset_from_sessions_task
 from apps.evaluations.tests.clone_helpers import session_with_messages
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
 
@@ -216,7 +216,7 @@ def test_pk_ceiling_snapshots_the_filter_result_set():
         team=team, name="Ceiling Session Dataset", evaluation_mode=EvaluationMode.SESSION
     )
 
-    queryset = _sessions_for_session_mode_clone(dataset, None, "", None)
+    queryset = _sessions_for_clone(dataset, None, "", None)
     late_session = session_with_messages(team=team)
 
     assert late_session.pk > session.pk

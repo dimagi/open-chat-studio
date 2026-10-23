@@ -1409,13 +1409,13 @@ def create_dataset_from_session_messages_task(
         return {"success": False, "error": message}
 
 
-def _sessions_for_session_mode_clone(
+def _sessions_for_clone(
     dataset: EvaluationDataset,
     session_ids: list[str] | None,
     filter_query: str | None,
     timezone: str | None,
 ) -> QuerySet[ExperimentSession]:
-    """Resolve which sessions a session-mode clone should walk.
+    """Resolve which sessions a clone task should walk.
 
     A stored filter is resolved here rather than by the request that dispatched the job, so an
     "everything matching these filters" selection never travels as tens of thousands of UUIDs.
@@ -1480,7 +1480,7 @@ def create_dataset_from_sessions_task(
         progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
 
         with current_team(dataset.team):
-            session_qs = _sessions_for_session_mode_clone(dataset, session_ids, filter_query, timezone)
+            session_qs = _sessions_for_clone(dataset, session_ids, filter_query, timezone)
 
             # Counted up front: the message source is a generator, so it has no len(), and the
             # count is needed as the progress denominator. Empty sessions are excluded because
