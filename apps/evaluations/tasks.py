@@ -1382,11 +1382,10 @@ def create_dataset_from_session_messages_task(
 
         filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
 
+        def note_chunk(count: int) -> None:
+            progress["sessions_done"] += count
+
         with current_team(team):
-
-            def note_chunk(count: int) -> None:
-                progress["sessions_done"] += count
-
             if session_filter_query is not None:
                 session_qs = _sessions_for_clone(dataset, None, session_filter_query, timezone)
                 total_sessions = session_qs.count()
@@ -1410,7 +1409,11 @@ def create_dataset_from_session_messages_task(
                     percent, 100, f"Cloned messages from {done} of {total_sessions} sessions"
                 )
 
-            created_ids, duplicates_skipped = dataset.add_messages_stream(evaluation_messages, progress_callback=report)
+            # Committing whole sessions keeps a failed run from leaving a session half-cloned, which the
+            # stored-filter re-run would then exclude as already present.
+            created_ids, duplicates_skipped = dataset.add_messages_stream(
+                evaluation_messages, progress_callback=report, batch_boundary=_message_session_id
+            )
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -1437,6 +1440,10 @@ def create_dataset_from_session_messages_task(
             # Record the failure, but never swallow SystemExit/KeyboardInterrupt/gevent.Timeout.
             raise
         return {"success": False, "error": message}
+
+
+def _message_session_id(message: EvaluationMessage) -> int | None:
+    return message.session_id
 
 
 def _sessions_for_clone(

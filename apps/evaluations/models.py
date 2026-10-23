@@ -36,7 +36,7 @@ from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Iterator
 
     from apps.evaluations.evaluators import EvaluatorResult
     from apps.evaluations.usage import EvaluatorUsageContext
@@ -44,6 +44,22 @@ if TYPE_CHECKING:
 # Messages written per transaction by EvaluationDataset.add_messages_stream. Bounds both the
 # INSERT size and how long the dataset row lock is held on any one batch.
 DATASET_ADD_BATCH_SIZE = 500
+
+
+def _boundary_aligned_batches(
+    messages: Iterable[EvaluationMessage],
+    batch_size: int,
+    batch_boundary: Callable[[EvaluationMessage], object],
+) -> Iterator[list[EvaluationMessage]]:
+    """Yield batches of at least batch_size messages that only close where the boundary value changes."""
+    batch: list[EvaluationMessage] = []
+    for message in messages:
+        if len(batch) >= batch_size and batch_boundary(message) != batch_boundary(batch[-1]):
+            yield batch
+            batch = []
+        batch.append(message)
+    if batch:
+        yield batch
 
 
 class EvaluationRunStatus(models.TextChoices):
@@ -454,6 +470,7 @@ class EvaluationDataset(BaseTeamModel):
         *,
         batch_size: int = DATASET_ADD_BATCH_SIZE,
         progress_callback: Callable[[int, int], None] | None = None,
+        batch_boundary: Callable[[EvaluationMessage], object] | None = None,
     ) -> tuple[list[int], int]:
         """Persist and link messages from an iterable, committing one batch at a time.
 
@@ -464,6 +481,9 @@ class EvaluationDataset(BaseTeamModel):
         stream. Two concurrent streams therefore interleave between batches without either
         inserting a duplicate.
 
+        A *batch_boundary* keeps every group of messages sharing a boundary value in one batch, at
+        the cost of one oversized batch when a group exceeds batch_size.
+
         Returns (created_ids, skipped_count) — ids rather than instances, since holding 10k
         EvaluationMessage objects is the memory problem this method exists to avoid.
 
@@ -472,8 +492,12 @@ class EvaluationDataset(BaseTeamModel):
         """
         created_ids: list[int] = []
         skipped = 0
-        # strict=False: the final batch is expected to be short.
-        for batch in itertools.batched(messages, batch_size, strict=False):
+        if batch_boundary is None:
+            # strict=False: the final batch is expected to be short.
+            batches = itertools.batched(messages, batch_size, strict=False)
+        else:
+            batches = _boundary_aligned_batches(messages, batch_size, batch_boundary)
+        for batch in batches:
             keyed_batch = [(message, self._dedup_key(message)) for message in batch]
             with transaction.atomic():
                 EvaluationDataset.objects.select_for_update().get(pk=self.pk)

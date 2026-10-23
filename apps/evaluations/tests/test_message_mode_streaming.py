@@ -1,4 +1,4 @@
-"""Message-mode generators hold one chunk of sessions at a time and keep pairs, filter and counts correct."""
+"""Message-mode generators stream pairs a chunk of sessions at a time; the clone task commits, reports and resumes."""
 
 import itertools
 from unittest.mock import patch
@@ -172,9 +172,11 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
 
     real_add = EvaluationDataset.add_messages_stream
 
-    def one_message_per_batch(self, messages, *, batch_size=None, progress_callback=None):
+    def one_message_per_batch(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
         """Commit one message per batch so every batch reports progress."""
-        return real_add(self, messages, batch_size=1, progress_callback=progress_callback)
+        return real_add(
+            self, messages, batch_size=1, progress_callback=progress_callback, batch_boundary=batch_boundary
+        )
 
     with (
         patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
@@ -188,9 +190,9 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
     messages = [call.args[2] for call in recorder.return_value.set_progress.call_args_list]
     assert messages == [
         "Starting clone...",
-        "Cloned messages from 0 of 3 sessions",
         "Cloned messages from 1 of 3 sessions",
         "Cloned messages from 2 of 3 sessions",
+        "Cloned messages from 3 of 3 sessions",
         "Clone complete",
     ]
     assert dataset.messages.count() == 3
@@ -199,7 +201,7 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_task_resumes_after_partial_failure(experiment_and_channel):
-    """A run that dies mid-stream leaves a FAILED dataset that a re-run completes."""
+    """The failure copy counts sessions whose chunk finished before the crash, and the re-run skips committed pairs."""
     experiment, channel = experiment_and_channel
     sessions = make_sessions(4, experiment, channel)
     external_ids = [session.external_id for session in sessions]
@@ -209,9 +211,15 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
 
     real_add = EvaluationDataset.add_messages_stream
 
-    def die_halfway(self, messages, *, batch_size=None, progress_callback=None):
+    def die_halfway(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
         """Commit the first two pairs, then blow up as an OOM-killed worker would."""
-        real_add(self, itertools.islice(messages, 2), batch_size=2, progress_callback=progress_callback)
+        real_add(
+            self,
+            itertools.islice(messages, 2),
+            batch_size=2,
+            progress_callback=progress_callback,
+            batch_boundary=batch_boundary,
+        )
         raise RuntimeError("worker died")
 
     with (
@@ -225,7 +233,10 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
     dataset.refresh_from_db()
     assert dataset.status == DatasetCreationStatus.FAILED
     assert dataset.messages.count() == 2
-    assert "1 of 4 session(s)" in dataset.error_message
+    assert dataset.error_message == (
+        "Failed after cloning messages from 1 of 4 session(s): worker died. "
+        "Re-running will resume from where it stopped."
+    )
 
     with patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1):
         result = create_dataset_from_session_messages_task.delay(
@@ -235,3 +246,93 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
     dataset.refresh_from_db()
     assert dataset.status == DatasetCreationStatus.COMPLETED
     assert (result["created_count"], result["duplicates_skipped"], dataset.messages.count()) == (2, 2, 4)
+
+
+def stream_progress(dataset, sessions, batch_boundary=None):
+    """Stream the sessions' pairs into the dataset two per batch and return the progress callback calls."""
+    calls = []
+    dataset.add_messages_stream(
+        iter_message_evaluation_messages_for_sessions(
+            ExperimentSession.objects.filter(pk__in=[s.pk for s in sessions])
+        ),
+        batch_size=2,
+        batch_boundary=batch_boundary,
+        progress_callback=lambda created, skipped: calls.append((created, skipped)),
+    )
+    return calls
+
+
+@pytest.mark.django_db()
+def test_add_messages_stream_batch_boundary_keeps_sessions_whole(experiment_and_channel):
+    """With a session boundary, a batch grows past batch_size rather than split a session's pairs."""
+    experiment, channel = experiment_and_channel
+    sessions = make_sessions(2, experiment, channel, messages_per_session=6)
+    dataset = EvaluationDataset.objects.create(
+        team=experiment.team, name="boundary", evaluation_mode=EvaluationMode.MESSAGE
+    )
+
+    calls = stream_progress(dataset, sessions, batch_boundary=lambda message: message.session_id)
+
+    assert calls == [(3, 0), (6, 0)]
+    assert dataset.messages.count() == 6
+
+
+@pytest.mark.django_db()
+def test_add_messages_stream_without_boundary_batches_by_size(experiment_and_channel):
+    """Without a boundary, batches close at batch_size even in the middle of a session."""
+    experiment, channel = experiment_and_channel
+    sessions = make_sessions(2, experiment, channel, messages_per_session=6)
+    dataset = EvaluationDataset.objects.create(
+        team=experiment.team, name="no boundary", evaluation_mode=EvaluationMode.MESSAGE
+    )
+
+    assert stream_progress(dataset, sessions) == [(2, 0), (4, 0), (6, 0)]
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_task_resume_after_failure_keeps_split_session_whole(experiment_and_channel):
+    """A crash after the first commit never leaves a session half-cloned, so the filter re-run picks up the rest."""
+    experiment, channel = experiment_and_channel
+    session_a, session_b = make_sessions(2, experiment, channel, messages_per_session=0)
+    for turn in range(3):
+        add_rated_pair(session_a, f"a-{turn}", "+1")
+    add_rated_pair(session_b, "b-0", "+1")
+    dataset = EvaluationDataset.objects.create(
+        team=experiment.team, name="split", evaluation_mode=EvaluationMode.MESSAGE
+    )
+
+    real_add = EvaluationDataset.add_messages_stream
+
+    def commit_one_batch_then_die(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
+        """Commit the first batch two pairs at a time, then blow up as an OOM-killed worker would."""
+
+        def die(created, skipped):
+            raise RuntimeError("worker died")
+
+        return real_add(self, messages, batch_size=2, progress_callback=die, batch_boundary=batch_boundary)
+
+    with (
+        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch.object(EvaluationDataset, "add_messages_stream", commit_one_batch_then_die),
+    ):
+        create_dataset_from_session_messages_task.delay(
+            dataset.id, experiment.team.id, [], [], None, None, session_filter_query=""
+        ).get()
+
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.FAILED
+    assert sorted(message.input["content"] for message in dataset.messages.all()) == ["a-0", "a-1", "a-2"]
+    assert dataset.error_message == (
+        "Failed after cloning messages from 1 of 2 session(s): worker died. "
+        "Re-running will resume from where it stopped."
+    )
+
+    result = create_dataset_from_session_messages_task.delay(
+        dataset.id, experiment.team.id, [], [], None, None, session_filter_query=""
+    ).get()
+
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.COMPLETED
+    assert result["created_count"] == 1
+    assert dataset.messages.count() == 4
