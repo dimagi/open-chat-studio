@@ -124,6 +124,13 @@ def _is_list_item(indent: int, indents: list[int]) -> bool:
     return indent - indents[-1] < 8
 
 
+def _ends_list_context(line: str, previous_blank: bool) -> bool:
+    """Whether a heading, or a flush-left paragraph after a blank line, ends the open list."""
+    if line.startswith("#"):
+        return True
+    return previous_blank and bool(line.strip()) and not line.startswith(" ")
+
+
 class ListIndentPreprocessor(Preprocessor):
     """Re-indent list marker lines to four spaces per nesting level so 2- and 3-space sub-lists nest."""
 
@@ -148,7 +155,7 @@ class ListIndentPreprocessor(Preprocessor):
                     indents.append(indent)
                 result.append(" " * (4 * (len(indents) - 1)) + match.group(2) + match.group(3))
             else:
-                if line.startswith("#") or (previous_blank and line.strip() and not line.startswith(" ")):
+                if _ends_list_context(line, previous_blank):
                     indents = []
                 result.append(line)
             previous_blank = not line.strip()
