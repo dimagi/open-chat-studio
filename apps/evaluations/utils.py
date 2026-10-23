@@ -353,11 +353,8 @@ def iter_message_evaluation_messages_for_sessions(
     chunk_size: int | None = None,
     on_chunk: Callable[[int], None] | None = None,
 ) -> Generator["EvaluationMessage"]:
-    """Yield one EvaluationMessage per human-AI pair in *session_qs*, a chunk of sessions at a time.
-
-    Memory is bounded by the chunk rather than the selection.
-    """
-    # Resolved here rather than as a default argument so the module constant stays patchable.
+    """Yield one EvaluationMessage per human-AI pair, one chunk of sessions at a time (memory bounded by the chunk)."""
+    # Read at call time so tests can patch SESSION_CHUNK_SIZE.
     chunk_size = chunk_size or SESSION_CHUNK_SIZE
 
     # Resolved to pks once for the same reasons as iter_session_evaluation_messages_for_sessions:

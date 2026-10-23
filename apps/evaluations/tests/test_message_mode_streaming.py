@@ -1,9 +1,4 @@
-"""Bounded-memory contract for message-mode dataset population (issue #3989).
-
-Like the session-mode tests, these shrink the chunk size rather than growing the data: a
-chunk holds at most `chunk_size` sessions' worth of message ids and built messages, and the
-message filter runs inside each chunk.
-"""
+"""Message-mode generators hold one chunk of sessions at a time and keep pairs, filter and counts correct."""
 
 from unittest.mock import patch
 
@@ -107,18 +102,21 @@ def test_message_filter_applies_within_each_chunk(experiment_and_channel):
 
 @pytest.mark.django_db()
 def test_on_chunk_reports_sessions_per_chunk(experiment_and_channel):
-    """The callback receives the number of sessions in each completed chunk."""
+    """The callback receives each chunk's session count, after that chunk's messages have been yielded."""
     experiment, channel = experiment_and_channel
     make_sessions(5, experiment, channel)
+    yielded = 0
     reported = []
 
-    list(
-        iter_message_evaluation_messages_for_sessions(
-            ExperimentSession.objects.filter(experiment=experiment), chunk_size=2, on_chunk=reported.append
-        )
+    stream = iter_message_evaluation_messages_for_sessions(
+        ExperimentSession.objects.filter(experiment=experiment),
+        chunk_size=2,
+        on_chunk=lambda count: reported.append((count, yielded)),
     )
+    for _ in stream:
+        yielded += 1
 
-    assert reported == [2, 2, 1]
+    assert reported == [(2, 2), (2, 4), (1, 5)]
 
 
 @pytest.mark.django_db()
@@ -126,7 +124,7 @@ def test_id_entry_point_combines_regular_and_filtered_sources(experiment_and_cha
     """Regular sessions keep every pair, filtered sessions only the matching ones, and none is built twice."""
     experiment, channel = experiment_and_channel
     regular, filtered = make_sessions(2, experiment, channel, messages_per_session=0)
-    add_rated_pair(regular, "regular one", "-1")
+    add_rated_pair(regular, "regular one", "+1")
     add_rated_pair(regular, "regular two", "-1")
     add_good_and_bad_pairs(filtered)
     team = experiment.team
