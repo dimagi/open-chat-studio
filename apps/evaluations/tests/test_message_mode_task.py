@@ -113,3 +113,42 @@ def test_session_filter_with_no_matches_completes():
     assert result == {"success": True, "created_count": 0, "duplicates_skipped": 0}
     dataset.refresh_from_db()
     assert dataset.status == DatasetCreationStatus.COMPLETED
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_task_ignores_session_ids_from_other_teams():
+    """A session id from another team is never read, even when it is passed in."""
+    foreign = session_with_messages()
+    team = ExperimentFactory.create().team
+    dataset = message_dataset(team)
+
+    result = create_dataset_from_session_messages_task.delay(
+        dataset.id, team.id, [foreign.external_id], [], None, None
+    ).get()
+
+    assert result["created_count"] == 0
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.COMPLETED
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_task_regular_ids_ignore_the_message_filter():
+    """Ids sent as regular sessions keep every pair, even when a message filter travels with them."""
+    session = ExperimentSessionFactory.create()
+    for content, rating in (("good", "+1"), ("bad", "-1")):
+        human = ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content=content, chat=session.chat)
+        human.add_rating(rating)
+        ChatMessageFactory.create(message_type=ChatMessageType.AI, content=f"{content} reply", chat=session.chat)
+    filter_query = FilterParams(
+        column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')]
+    ).to_query()
+    dataset = message_dataset(session.team)
+
+    result = create_dataset_from_session_messages_task.delay(
+        dataset.id, session.team.id, [session.external_id], [], filter_query, None
+    ).get()
+
+    assert result["created_count"] == 2
+    assert sorted(message.input["content"] for message in dataset.messages.all()) == ["bad", "good"]

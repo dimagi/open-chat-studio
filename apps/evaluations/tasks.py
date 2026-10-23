@@ -52,7 +52,6 @@ from apps.evaluations.session_selection import resolve_dataset_available_session
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
 from apps.evaluations.utils import (
-    iter_message_evaluation_messages,
     iter_message_evaluation_messages_for_sessions,
     iter_session_evaluation_messages_for_sessions,
     parse_csv_value_as_json,
@@ -1354,9 +1353,9 @@ def create_dataset_from_session_messages_task(
     Args:
         dataset_id: ID of the EvaluationDataset to populate
         team_id: ID of the team
-        session_ids: List of session external IDs to clone from
-        filtered_session_ids: List of filtered session external IDs
-        filter_query: Serialized filter parameters as query string (or None)
+        session_ids: Session external IDs cloned with every pair; when non-empty, the other id list is ignored
+        filtered_session_ids: Session external IDs cloned with filter_query applied, when session_ids is empty
+        filter_query: Serialized message filter (or None); ignored when session_ids picks the sessions
         timezone: Timezone for filtering
         session_filter_query: Serialized session filter resolved server-side; takes precedence over both id lists
     """
@@ -1381,26 +1380,18 @@ def create_dataset_from_session_messages_task(
         progress_recorder.set_progress(0, 100, "Starting clone...")
 
         filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
+        ids = session_ids or filtered_session_ids
+        message_filter = None if session_ids and session_filter_query is None else filter_params
 
         def note_chunk(count: int) -> None:
             progress["sessions_done"] += count
 
         with current_team(team):
-            if session_filter_query is not None:
-                session_qs = _sessions_for_clone(dataset, None, session_filter_query, timezone)
-                total_sessions = session_qs.count()
-                evaluation_messages = iter_message_evaluation_messages_for_sessions(
-                    session_qs, filter_params=filter_params, timezone=timezone, on_chunk=note_chunk
-                )
-            else:
-                # The generator walks filtered_session_ids only when there is a message filter to apply.
-                walked_ids = list(session_ids or [])
-                if filter_params is not None:
-                    walked_ids.extend(filtered_session_ids or [])
-                total_sessions = ExperimentSession.objects.filter(team=team, external_id__in=walked_ids).count()
-                evaluation_messages = iter_message_evaluation_messages(
-                    team, session_ids, filtered_session_ids, filter_params, timezone, on_chunk=note_chunk
-                )
+            session_qs = _sessions_for_clone(dataset, ids, session_filter_query, timezone)
+            total_sessions = session_qs.count()
+            evaluation_messages = iter_message_evaluation_messages_for_sessions(
+                session_qs, filter_params=message_filter, timezone=timezone, on_chunk=note_chunk
+            )
 
             def report(created: int, skipped: int) -> None:
                 done = progress["sessions_done"]
