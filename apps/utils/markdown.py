@@ -21,7 +21,8 @@ from markdown.preprocessors import Preprocessor
 LEGACY_ASSISTANT_FILE_PREFIX = "assistant_file"
 
 LIST_MARKER_RE = re.compile(r"^( *)([*+-]|\d+\.)([ ]+.*)$")
-FENCE_RE = re.compile(r"^ *(`{3,}|~{3,})[^`]*$")
+FENCE_OPENING_RE = re.compile(r"^ *(?:(`{3,})[^`]*|(~{3,}).*)$")
+FENCE_CLOSING_RE = re.compile(r"^ *(`{3,}|~{3,}) *$")
 THEMATIC_BREAK_RE = re.compile(r"^ {0,3}([-*_])( *\1){2,} *$")
 
 
@@ -131,28 +132,49 @@ def _ends_list_context(line: str, previous_blank: bool) -> bool:
     return previous_blank and bool(line.strip()) and not line.startswith(" ")
 
 
+def _nesting_indents(indent: int, indents: list[int]) -> list[int]:
+    """The open list indents after a list item at `indent`; one space deeper than the open level stays at that level."""
+    kept = [existing for existing in indents if existing <= indent]
+    if not kept or indent - kept[-1] >= 2:
+        return [*kept, indent]
+    return [*kept[:-1], indent]
+
+
+class _FenceTracker:
+    """Tracks whether lines are inside a fenced code block, closing it only on a fence matching its opener."""
+
+    def __init__(self) -> None:
+        self.marker = ""
+
+    def consumes(self, line: str) -> bool:
+        """Whether `line` opens, belongs to, or closes a fenced code block."""
+        if self.marker:
+            closing = FENCE_CLOSING_RE.match(line)
+            if closing and closing.group(1).startswith(self.marker):
+                self.marker = ""
+            return True
+        opening = FENCE_OPENING_RE.match(line)
+        if opening:
+            self.marker = opening.group(1) or opening.group(2)
+        return bool(opening)
+
+
 class ListIndentPreprocessor(Preprocessor):
     """Re-indent list marker lines to four spaces per nesting level so 2- and 3-space sub-lists nest."""
 
     def run(self, lines: list[str]) -> list[str]:
         result = []
-        in_fence = False
+        fence = _FenceTracker()
         indents: list[int] = []
         previous_blank = False
         for line in lines:
-            if FENCE_RE.match(line):
-                in_fence = not in_fence
-                result.append(line)
-            elif in_fence:
+            if fence.consumes(line):
                 result.append(line)
             elif THEMATIC_BREAK_RE.match(line):
                 indents = []
                 result.append(line)
             elif (match := LIST_MARKER_RE.match(line)) and _is_list_item(len(match.group(1)), indents):
-                indent = len(match.group(1))
-                indents = [existing for existing in indents if existing <= indent]
-                if not indents or indent > indents[-1]:
-                    indents.append(indent)
+                indents = _nesting_indents(len(match.group(1)), indents)
                 result.append(" " * (4 * (len(indents) - 1)) + match.group(2) + match.group(3))
             else:
                 if _ends_list_context(line, previous_blank):

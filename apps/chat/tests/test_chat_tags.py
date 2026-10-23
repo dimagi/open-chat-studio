@@ -230,6 +230,21 @@ def test_render_markdown_sanitizes_unsafe_html():
             "<pre>  - x<br>    - y<br></pre>",
             id="raw_html_pre_block",
         ),
+        pytest.param(
+            "- parent\n  ```\n  - first\n  ~~~\n  - second\n  ```",
+            "<ul><li>parent<br>  ```</li><li>first<br>  ~~~</li><li>second<br>  ```</li></ul>",
+            id="mixed_fence_markers_inside_indented_fence",
+        ),
+        pytest.param(
+            "- first\n - second",
+            "<ul><li>first</li><li>second</li></ul>",
+            id="one_space_indented_sibling_stays_sibling",
+        ),
+        pytest.param(
+            "- a\n - b\n  - c\n   - d",
+            "<ul><li>a</li><li>b</li><li>c</li><li>d</li></ul>",
+            id="one_space_steps_stay_siblings",
+        ),
     ],
 )
 def test_render_markdown_preserves_existing_rendering(markdown_text, expected_result):
