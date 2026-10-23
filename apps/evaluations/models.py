@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 import itertools
 import uuid
-from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -28,8 +27,7 @@ from apps.evaluations.rule_validation import (
     validate_field_in_schema,
     validate_tag_compatibility,
 )
-from apps.evaluations.utils import make_evaluation_messages_from_sessions
-from apps.experiments.filters import ChatMessageFilter
+from apps.evaluations.utils import iter_message_evaluation_messages
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import get_slug_for_team
@@ -269,36 +267,9 @@ class EvaluationMessage(BaseModel):
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
     ) -> list[EvaluationMessage]:
-        base_queryset = (
-            ChatMessage.objects.filter(
-                chat__experiment_session__team=team,
-            )
-            .select_related(
-                "chat__experiment_session",
-                "chat__experiment_session__participant",
-                "chat__experiment_session__experiment",
-            )
-            .prefetch_related("comments", "tags")
-            .order_by("chat__experiment_session__created_at", "created_at")
+        return list(
+            iter_message_evaluation_messages(team, external_session_ids, filtered_session_ids, filter_params, timezone)
         )
-
-        message_ids_per_session = defaultdict(list)
-        if external_session_ids:
-            regular_messages = base_queryset.filter(chat__experiment_session__external_id__in=external_session_ids)
-            for session_id, message_id in regular_messages.values_list("chat__experiment_session__external_id", "id"):
-                message_ids_per_session[session_id].append(message_id)
-
-        if filtered_session_ids and filter_params is not None:
-            filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
-            message_filter = ChatMessageFilter()
-            filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)
-            for session_id, message_id in filtered_messages.values_list("chat__experiment_session__external_id", "id"):
-                message_ids_per_session[session_id].append(message_id)
-
-        if not message_ids_per_session:
-            return []
-
-        return make_evaluation_messages_from_sessions(message_ids_per_session)
 
     def as_langchain_messages(self) -> list[BaseMessage]:
         """
