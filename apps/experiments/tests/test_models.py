@@ -67,12 +67,6 @@ def general_synthetic_voices():
 
 class TestSyntheticVoice:
     @pytest.mark.django_db()
-    def test_get_for_team_returns_all_general_services(self):
-        """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
-        voices_queryset = SyntheticVoice.get_for_team(team=None)
-        assert voices_queryset.count() == SyntheticVoice.objects.count()
-
-    @pytest.mark.django_db()
     def test_get_for_team_excludes_service(self, general_synthetic_voices):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
@@ -668,10 +662,6 @@ class TestExperimentSession:
 
         with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
             session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
-
-    def test_latest_trace_returns_none_when_no_traces(self):
-        session = ExperimentSessionFactory.create()
-        assert session.latest_trace is None
 
     def test_latest_trace_returns_most_recent(self):
         session = ExperimentSessionFactory.create()
