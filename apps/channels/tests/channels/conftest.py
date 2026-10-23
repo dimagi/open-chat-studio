@@ -119,6 +119,15 @@ def make_trace_service():
     return trace_service
 
 
+def messaging_channel(session):
+    """A stub messaging channel whose inbound messages resolve to the session's participant."""
+    session.participant.platform = session.experiment_channel.platform
+    session.participant.save()
+    channel = StubChannel(session.experiment, session.experiment_channel, session)
+    channel.trace_service = make_trace_service()
+    return channel
+
+
 def core_stages(channel_cls):
     """The core stages a channel class builds, without constructing the channel."""
     stub_self = MagicMock(attachment_hydration_stage_class=AttachmentHydrationStage)
