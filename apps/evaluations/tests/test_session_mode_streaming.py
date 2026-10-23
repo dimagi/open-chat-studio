@@ -10,6 +10,7 @@ ExperimentChannel per call, so asserting on 10k sessions directly is not viable.
 """
 
 import itertools
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -23,9 +24,11 @@ from apps.evaluations.evaluation_messages import (
 )
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
 from apps.evaluations.tasks import create_dataset_from_sessions_task
-from apps.evaluations.tests.clone_helpers import make_sessions
+from apps.evaluations.tests.clone_helpers import make_sessions, session_with_messages
 from apps.experiments.models import ExperimentSession
+from apps.trace.models import TraceStatus
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.traces import TraceFactory
 
 # Resolving the selected external ids to primary keys, done once up front.
 PK_RESOLUTION_QUERIES = 1
@@ -198,3 +201,58 @@ def test_queryset_entry_point_pages_in_chunks(experiment_and_channel):
     assert [message.session_id for message in result] == sorted(session.id for session in sessions)
     # 5 sessions in chunks of 2 is 3 chunks, on top of the single pk-resolution query.
     assert len(ctx.captured_queries) == PK_RESOLUTION_QUERIES + QUERIES_PER_CHUNK * 3
+
+
+def _session_with_trace(participant_data, participant_data_diff):
+    session = session_with_messages()
+    human, ai = session.chat.messages.order_by("id")
+    TraceFactory.create(
+        experiment=session.experiment,
+        session=session,
+        participant=session.participant,
+        team=session.team,
+        status=TraceStatus.SUCCESS,
+        input_message=human,
+        output_message=ai,
+        participant_data=participant_data,
+        participant_data_diff=participant_data_diff,
+    )
+    return session
+
+
+@pytest.mark.django_db()
+def test_session_message_applies_latest_participant_data_diff():
+    session = _session_with_trace({"name": "Alice", "age": 25}, [["change", "age", [25, 26]]])
+
+    (message,) = iter_session_evaluation_messages_for_sessions(ExperimentSession.objects.filter(pk=session.pk))
+
+    assert message.participant_data == {"name": "Alice", "age": 26}
+
+
+@pytest.mark.django_db()
+def test_session_message_keeps_snapshot_when_participant_data_diff_does_not_apply(caplog):
+    session = _session_with_trace({"name": "Alice"}, [["change", "address.city", ["Cape Town", "Durban"]]])
+
+    with caplog.at_level(logging.WARNING, logger="ocs.evaluations"):
+        (message,) = iter_session_evaluation_messages_for_sessions(ExperimentSession.objects.filter(pk=session.pk))
+
+    assert message.participant_data == {"name": "Alice"}
+    assert [r for r in caplog.records if "participant_data_diff" in r.getMessage()] != []
+
+
+@pytest.mark.django_db()
+def test_session_id_generator_yields_nothing_for_no_ids(django_assert_num_queries):
+    with django_assert_num_queries(0):
+        assert list(iter_session_evaluation_messages([])) == []
+
+
+@pytest.mark.django_db()
+def test_session_id_generator_filters_by_team():
+    first = session_with_messages()
+    second = session_with_messages()
+
+    result = list(
+        iter_session_evaluation_messages([first.external_id, second.external_id], team=first.team),
+    )
+
+    assert [message.session_id for message in result] == [first.id]
