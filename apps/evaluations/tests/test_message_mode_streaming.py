@@ -280,3 +280,44 @@ def test_task_resume_after_failure_keeps_split_session_whole(experiment_and_chan
     assert result["created_count"] == 1
     assert result["duplicates_skipped"] == 0
     assert dataset.messages.count() == 4
+
+
+@pytest.mark.django_db()
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_task_passes_session_boundary_to_add_messages_stream(experiment_and_channel):
+    """Within one chunk, a batch never splits a session, so a crash mid-chunk leaves no session half-cloned."""
+    experiment, channel = experiment_and_channel
+    session_a, session_b = make_sessions(2, experiment, channel, messages_per_session=0)
+    for turn in range(3):
+        add_rated_pair(session_a, f"a-{turn}", "+1")
+    add_rated_pair(session_b, "b-0", "+1")
+    dataset = EvaluationDataset.objects.create(
+        team=experiment.team, name="boundary task", evaluation_mode=EvaluationMode.MESSAGE
+    )
+
+    real_add = EvaluationDataset.add_messages_stream
+
+    def commit_one_batch_then_die(self, messages, *, batch_size=None, progress_callback=None, batch_boundary=None):
+        """Commit two pairs per batch with the caller's boundary, then raise after the first batch commits."""
+
+        def die(created, skipped):
+            raise RuntimeError("worker died")
+
+        return real_add(self, messages, batch_size=2, progress_callback=die, batch_boundary=batch_boundary)
+
+    with patch.object(EvaluationDataset, "add_messages_stream", commit_one_batch_then_die):
+        create_dataset_from_session_messages_task.delay(
+            dataset.id, experiment.team.id, [], [], None, None, session_filter_query=""
+        ).get()
+
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.FAILED
+    assert sorted(message.input["content"] for message in dataset.messages.all()) == ["a-0", "a-1", "a-2"]
+
+    result = create_dataset_from_session_messages_task.delay(
+        dataset.id, experiment.team.id, [], [], None, None, session_filter_query=""
+    ).get()
+
+    dataset.refresh_from_db()
+    assert dataset.status == DatasetCreationStatus.COMPLETED
+    assert (result["created_count"], result["duplicates_skipped"], dataset.messages.count()) == (1, 0, 4)
