@@ -27,6 +27,10 @@ from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
 from apps.evaluations.errors import evaluator_error_output, generation_error_fields, is_failed_output
+from apps.evaluations.evaluation_messages import (
+    iter_message_evaluation_chunks,
+    iter_session_evaluation_messages_for_sessions,
+)
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.export import (
     annotate_export_fields,
@@ -51,12 +55,7 @@ from apps.evaluations.notifications import evaluation_run_outcome_notification
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
-from apps.evaluations.utils import (
-    iter_message_evaluation_chunks,
-    iter_session_evaluation_messages_for_sessions,
-    parse_csv_value_as_json,
-    parse_history_text,
-)
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError

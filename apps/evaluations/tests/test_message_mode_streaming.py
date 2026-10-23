@@ -7,14 +7,14 @@ import pytest
 from django.test import override_settings
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
-from apps.evaluations.tasks import create_dataset_from_session_messages_task
-from apps.evaluations.tests.clone_helpers import make_sessions
-from apps.evaluations.utils import (
+from apps.evaluations.evaluation_messages import (
     iter_message_evaluation_chunks,
     iter_message_evaluation_messages_for_sessions,
     make_evaluation_messages_from_sessions,
 )
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
+from apps.evaluations.tasks import create_dataset_from_session_messages_task
+from apps.evaluations.tests.clone_helpers import make_sessions
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ChatMessageFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
@@ -58,7 +58,8 @@ def test_each_chunk_builds_at_most_chunk_size_sessions(experiment_and_channel):
     make_sessions(5, experiment, channel)
 
     with patch(
-        "apps.evaluations.utils.make_evaluation_messages_from_sessions", wraps=make_evaluation_messages_from_sessions
+        "apps.evaluations.evaluation_messages.make_evaluation_messages_from_sessions",
+        wraps=make_evaluation_messages_from_sessions,
     ) as spy:
         list(
             iter_message_evaluation_messages_for_sessions(
@@ -77,9 +78,9 @@ def test_default_chunk_size_is_patchable(experiment_and_channel):
     make_sessions(3, experiment, channel)
 
     with (
-        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
         patch(
-            "apps.evaluations.utils.make_evaluation_messages_from_sessions",
+            "apps.evaluations.evaluation_messages.make_evaluation_messages_from_sessions",
             wraps=make_evaluation_messages_from_sessions,
         ) as spy,
     ):
@@ -133,7 +134,7 @@ def test_task_streams_and_reports_session_progress(experiment_and_channel):
     )
 
     with (
-        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
         patch("apps.evaluations.tasks.ProgressRecorder") as recorder,
     ):
         create_dataset_from_session_messages_task.delay(
@@ -176,7 +177,7 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
     )
 
     with (
-        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
         patch.object(EvaluationDataset, "add_messages_stream", commit_first_chunk_then_die()),
     ):
         create_dataset_from_session_messages_task.delay(
@@ -191,7 +192,7 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
         "Re-running will resume from where it stopped."
     )
 
-    with patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1):
+    with patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1):
         result = create_dataset_from_session_messages_task.delay(
             dataset.id, experiment.team.id, external_ids, [], None, None
         ).get()
@@ -256,7 +257,7 @@ def test_task_resume_after_failure_keeps_split_session_whole(experiment_and_chan
     )
 
     with (
-        patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1),
+        patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1),
         patch.object(EvaluationDataset, "add_messages_stream", commit_first_chunk_then_die()),
     ):
         create_dataset_from_session_messages_task.delay(

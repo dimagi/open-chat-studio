@@ -31,6 +31,7 @@ from apps.evaluations.dataset_clone import (
     mark_dataset_pending,
     resolve_sessions_to_clone,
 )
+from apps.evaluations.evaluation_messages import make_evaluation_messages_from_sessions
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
@@ -57,7 +58,6 @@ from apps.evaluations.tasks import (
 )
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
-    make_evaluation_messages_from_sessions,
     normalize_json_quotes,
     parse_history_text,
 )

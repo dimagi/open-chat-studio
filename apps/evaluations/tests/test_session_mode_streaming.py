@@ -17,13 +17,13 @@ from django.db import connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
-from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
-from apps.evaluations.tasks import create_dataset_from_sessions_task
-from apps.evaluations.tests.clone_helpers import make_sessions
-from apps.evaluations.utils import (
+from apps.evaluations.evaluation_messages import (
     iter_session_evaluation_messages,
     iter_session_evaluation_messages_for_sessions,
 )
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
+from apps.evaluations.tasks import create_dataset_from_sessions_task
+from apps.evaluations.tests.clone_helpers import make_sessions
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -54,7 +54,7 @@ def test_default_chunk_size_is_patchable(experiment_and_channel):
     sessions = make_sessions(3, experiment, channel)
     external_ids = [session.external_id for session in sessions]
 
-    with patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1), CaptureQueriesContext(connection) as ctx:
+    with patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1), CaptureQueriesContext(connection) as ctx:
         result = list(iter_session_evaluation_messages(external_ids))
 
     assert len(result) == 3

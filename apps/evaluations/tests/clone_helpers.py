@@ -1,8 +1,8 @@
 """Build sessions with short conversations for the dataset-clone tests."""
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.evaluation_messages import iter_message_evaluation_messages_for_sessions
 from apps.evaluations.models import EvaluationMessage
-from apps.evaluations.utils import iter_message_evaluation_messages_for_sessions
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 
