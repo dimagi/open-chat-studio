@@ -87,13 +87,16 @@ class ScheduledMessageConfigForm(forms.Form):
         help_text="Indicates how many times this should go on for. Specify '0' for a one time event",
     )
     experiment_id = forms.ChoiceField(
-        label="Experiment", help_text="Select the experiment to process this scheduled message"
+        label="Experiment",
+        help_text="Select the experiment to process this scheduled message",
+        required=False,
     )
 
     def __init__(self, *args, **kwargs):
         experiment_id = kwargs.pop("experiment_id")
         non_required_fields = kwargs.pop("non_required_fields", [])
         super().__init__(*args, **kwargs)
+        self._experiment_id = experiment_id
 
         field = self.fields["experiment_id"]
         experiments = Experiment.objects.filter(id=experiment_id).values_list("id", "name")
@@ -104,6 +107,10 @@ class ScheduledMessageConfigForm(forms.Form):
 
         for field_name in non_required_fields:
             self.fields[field_name].required = False
+
+    def clean_experiment_id(self):
+        """The experiment posted, or the one the form was built for when none is posted."""
+        return self.cleaned_data["experiment_id"] or str(self._experiment_id)
 
 
 class EventActionForm(forms.ModelForm):
@@ -221,7 +228,11 @@ class ScheduledTriggerForm(BaseTriggerForm):
             return
         if self._schedule_unchanged(trigger_date, trigger_time, timezone_name):
             return
-        scheduled_at = scheduled_datetime_for(trigger_date, trigger_time, timezone_name)
+        try:
+            scheduled_at = scheduled_datetime_for(trigger_date, trigger_time, timezone_name)
+        except OverflowError:
+            self.add_error("trigger_date", "The scheduled time is out of range.")
+            return
         if scheduled_at <= timezone.now():
             self.add_error("trigger_date", "The scheduled time must be in the future.")
 
