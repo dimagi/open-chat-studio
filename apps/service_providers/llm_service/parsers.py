@@ -2,11 +2,20 @@ from langchain_core.messages import AIMessage
 
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.utils import get_cited_files_from_text
 
 
 def parse_output_for_anthropic(
     output: AIMessage | dict | str | list, session: ExperimentSession, include_citations: bool = True
 ) -> LlmChatResponse:
+    """Parse Anthropic's output, resolving `<CIT n />` markers in the assembled text to the team's cited files."""
+    response = _parse_content(output)
+    if include_citations and session is not None:
+        response.cited_files |= get_cited_files_from_text(response.text, session.team_id)
+    return response
+
+
+def _parse_content(output: AIMessage | dict | str | list) -> LlmChatResponse:
     """Parse Anthropic's output and append inline URL references to the text.
 
     Iterates through content blocks to find citations and append them to the corresponding text block while building
@@ -22,12 +31,12 @@ def parse_output_for_anthropic(
     if isinstance(output, list):
         chat_response = LlmChatResponse(text="")
         for item in output:
-            chat_response += parse_output_for_anthropic(item, session=session, include_citations=include_citations)
+            chat_response += _parse_content(item)
         return chat_response
 
     if isinstance(output, dict):
         if "output" in output:
-            return parse_output_for_anthropic(output["output"], session=session, include_citations=include_citations)
+            return _parse_content(output["output"])
         elif output.get("type") == "text":
             text = output.get("text", "")
             for citation in output.get("citations", []):
