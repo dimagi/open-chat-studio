@@ -240,12 +240,11 @@ def _message_context(*messages) -> dict:
 
 def _is_target_pair(current, following, target_ids: set) -> bool:
     """Return whether *current* and *following* form a (HUMAN, AI) pair with at least one targeted message."""
-    return (
-        following is not None
-        and current.message_type == ChatMessageType.HUMAN
-        and following.message_type == ChatMessageType.AI
-        and (current.id in target_ids or following.id in target_ids)
-    )
+    if following is None:
+        return False
+    if current.message_type != ChatMessageType.HUMAN or following.message_type != ChatMessageType.AI:
+        return False
+    return current.id in target_ids or following.id in target_ids
 
 
 def _shared_attrs(session, session_id, current, history: list) -> dict:
