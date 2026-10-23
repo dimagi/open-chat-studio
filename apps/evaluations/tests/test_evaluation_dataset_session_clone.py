@@ -488,3 +488,56 @@ def test_filtered_messages_complete_history_with_mixed_pairs():
 
     assert eval_messages[0].history[5]["content"] == "message4 ai unpaired"
     assert eval_messages[0].history[5]["message_type"] == ChatMessageType.AI
+
+
+@pytest.mark.parametrize(
+    ("annotations", "expected_annotations"),
+    [
+        pytest.param(
+            [{"type": ChatMessageType.HUMAN}, {"type": ChatMessageType.AI}],
+            {},
+            id="pair_without_annotations",
+        ),
+        pytest.param(
+            [
+                {"type": ChatMessageType.HUMAN, "ratings": ["+1"]},
+                {"type": ChatMessageType.AI, "ratings": ["+1", "+2"]},
+            ],
+            {"tags": ["+1", "+2"]},
+            id="pair_merges_tags_across_both_messages",
+        ),
+        pytest.param(
+            [
+                {"type": ChatMessageType.HUMAN, "version_tag": 2},
+                {"type": ChatMessageType.AI},
+            ],
+            {"tags": []},
+            id="system_tags_are_excluded",
+        ),
+        pytest.param(
+            [{"type": ChatMessageType.HUMAN, "comments": ["needs a source"]}],
+            {"comments": ["needs a source"]},
+            id="orphan_human_context",
+        ),
+    ],
+)
+@pytest.mark.django_db()
+def test_cloned_message_context(team_with_users, annotations, expected_annotations):
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    user = team_with_users.members.first()
+    messages = []
+    for annotation in annotations:
+        message = ChatMessageFactory.create(message_type=annotation["type"], chat=session.chat)
+        for text in annotation.get("comments", []):
+            UserComment.add_for_model(message, comment=text, added_by=user, team=team_with_users)
+        for rating in annotation.get("ratings", []):
+            message.add_rating(rating)
+        if "version_tag" in annotation:
+            message.add_version_tag(annotation["version_tag"], True)
+        messages.append(message)
+
+    eval_messages = pairs_for_sessions(team_with_users, [session.external_id])
+
+    assert [eval_message.context for eval_message in eval_messages] == [
+        {"current_datetime": messages[0].created_at.isoformat(), **expected_annotations}
+    ]
