@@ -12,12 +12,11 @@ from apps.evaluations.tasks import create_dataset_from_session_messages_task
 from apps.evaluations.tests.clone_helpers import make_sessions
 from apps.evaluations.utils import (
     iter_message_evaluation_chunks,
-    iter_message_evaluation_messages,
     iter_message_evaluation_messages_for_sessions,
     make_evaluation_messages_from_sessions,
 )
 from apps.experiments.models import ExperimentSession
-from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatMessageFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 
 POSITIVE_FILTER = FilterParams(column_filters=[ColumnFilterData(column="tags", operator="any_of", value='["+1"]')])
@@ -120,42 +119,6 @@ def test_chunks_carry_their_session_counts(experiment_and_channel):
         {sessions[2].id, sessions[3].id},
         {sessions[4].id},
     ]
-
-
-@pytest.mark.django_db()
-def test_id_entry_point_combines_regular_and_filtered_sources(experiment_and_channel):
-    """Regular sessions keep every pair, filtered sessions only the matching ones, and none is built twice."""
-    experiment, channel = experiment_and_channel
-    regular, filtered = make_sessions(2, experiment, channel, messages_per_session=0)
-    add_rated_pair(regular, "regular one", "+1")
-    add_rated_pair(regular, "regular two", "-1")
-    add_good_and_bad_pairs(filtered)
-    team = experiment.team
-
-    result = list(
-        iter_message_evaluation_messages(team, [regular.external_id], [filtered.external_id], POSITIVE_FILTER, None)
-    )
-
-    assert len(result) == 3
-    assert list(iter_message_evaluation_messages(team, [], [filtered.external_id], None, None)) == []
-    both = list(
-        iter_message_evaluation_messages(team, [regular.external_id], [regular.external_id], POSITIVE_FILTER, None)
-    )
-    assert len(both) == 2
-
-
-@pytest.mark.django_db()
-def test_id_entry_point_ignores_sessions_from_other_teams(experiment_and_channel):
-    """A session id from another team is never read, even when it is passed in."""
-    experiment, channel = experiment_and_channel
-    (own,) = make_sessions(1, experiment, channel)
-    foreign = ExperimentSessionFactory.create()
-    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="secret", chat=foreign.chat)
-    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="secret reply", chat=foreign.chat)
-
-    result = list(iter_message_evaluation_messages(experiment.team, [own.external_id, foreign.external_id]))
-
-    assert [message.session_id for message in result] == [own.id]
 
 
 @pytest.mark.django_db()

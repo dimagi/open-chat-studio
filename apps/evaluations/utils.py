@@ -389,38 +389,6 @@ def iter_message_evaluation_chunks(
         yield len(pk_chunk), make_evaluation_messages_from_sessions(message_ids_per_session)
 
 
-def iter_message_evaluation_messages(
-    team,
-    external_session_ids,
-    filtered_session_ids=None,
-    filter_params=None,
-    timezone=None,
-    *,
-    chunk_size=None,
-) -> Generator["EvaluationMessage"]:
-    """Yield pair messages for the selected sessions, applying *filter_params* only to *filtered_session_ids*."""
-    regular_ids = list(external_session_ids or [])
-    if regular_ids:
-        yield from iter_message_evaluation_messages_for_sessions(
-            ExperimentSession.objects.filter(team=team, external_id__in=regular_ids),
-            chunk_size=chunk_size,
-        )
-
-    if not filtered_session_ids or filter_params is None:
-        return
-
-    # A session already built unfiltered is skipped so it never produces duplicate pairs.
-    already_built = set(regular_ids)
-    filtered_only_ids = [session_id for session_id in filtered_session_ids if session_id not in already_built]
-    if filtered_only_ids:
-        yield from iter_message_evaluation_messages_for_sessions(
-            ExperimentSession.objects.filter(team=team, external_id__in=filtered_only_ids),
-            filter_params=filter_params,
-            timezone=timezone,
-            chunk_size=chunk_size,
-        )
-
-
 def make_session_evaluation_messages(session_external_ids: list[str], team=None) -> list["EvaluationMessage"]:
     """Eager wrapper around iter_session_evaluation_messages.
 

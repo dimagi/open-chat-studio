@@ -1,6 +1,8 @@
 """Build sessions with short conversations for the dataset-clone tests."""
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.evaluations.models import EvaluationMessage
+from apps.evaluations.utils import iter_message_evaluation_messages_for_sessions
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 
@@ -34,3 +36,14 @@ def session_with_messages(team=None, experiment=None) -> ExperimentSession:
     ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="Hello", chat=session.chat)
     ChatMessageFactory.create(message_type=ChatMessageType.AI, content="Hi!", chat=session.chat)
     return session
+
+
+def pairs_for_sessions(team, external_ids, filter_params=None, timezone=None) -> list[EvaluationMessage]:
+    """Build the team's pair messages for these sessions, in session pk order."""
+    return list(
+        iter_message_evaluation_messages_for_sessions(
+            ExperimentSession.objects.filter(team=team, external_id__in=external_ids),
+            filter_params=filter_params,
+            timezone=timezone,
+        )
+    )

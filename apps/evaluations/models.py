@@ -27,9 +27,8 @@ from apps.evaluations.rule_validation import (
     validate_field_in_schema,
     validate_tag_compatibility,
 )
-from apps.evaluations.utils import iter_message_evaluation_messages
 from apps.experiments.models import ExperimentSession
-from apps.teams.models import BaseTeamModel, Team
+from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.llm_messages import ensure_non_empty_text
@@ -278,14 +277,6 @@ class EvaluationMessage(BaseModel):
         )
         raise_if_runs_in_flight(related_runs, "message")
         return super().delete(*args, **kwargs)
-
-    @classmethod
-    def create_from_sessions(
-        cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
-    ) -> list[EvaluationMessage]:
-        return list(
-            iter_message_evaluation_messages(team, external_session_ids, filtered_session_ids, filter_params, timezone)
-        )
 
     def as_langchain_messages(self) -> list[BaseMessage]:
         """
