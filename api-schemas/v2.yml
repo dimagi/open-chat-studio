@@ -527,11 +527,19 @@ paths:
                     llm_provider_model_id: 12
                     llm_model_parameters:
                       temperature: 0.0
-                    prompt: Route on what {participant_data} is asking for.
+                    prompt: |-
+                      Route on what {participant_data} is asking for.
+
+                      Routes:
+                      {routes}
                     keywords:
                     - schedule
                     - reschedule
                     - cancel
+                    route_descriptions:
+                      SCHEDULE: Booking a new appointment
+                      RESCHEDULE: Moving an existing appointment
+                      CANCEL: Cancelling an appointment
                     default_keyword_index: 2
                     tag_output_message: true
                     history_type: named
@@ -540,7 +548,8 @@ paths:
                     user_max_token_limit: 4000
                     max_history_length: 25
                 summary: 'RouterNode: `keywords[i]` routes to handle `output_i`; keywords
-                  are uppercased on save.'
+                  are uppercased on save. `{routes}` renders each keyword with its
+                  `route_descriptions` entry.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -4746,6 +4755,12 @@ components:
         prompt:
           type: string
           description: Prompt steering the LLM router's choice.
+        route_descriptions:
+          type: object
+          additionalProperties:
+            type: string
+          description: What each route is for, keyed by keyword. The ``{routes}``
+            prompt variable renders each keyword with its description.
     ScheduledTriggerWrite:
       type: object
       description: A chatbot trigger and the action it runs.

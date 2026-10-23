@@ -27,7 +27,7 @@ class PromptVars(models.TextChoices):
     @staticmethod
     def router_node_vars() -> set[str]:
         """The variables a router node's prompt may use."""
-        return {PromptVars.PARTICIPANT_DATA.value} | PromptVars.pipeline_extra_known_vars()
+        return {PromptVars.PARTICIPANT_DATA.value, "routes", "routes_list"} | PromptVars.pipeline_extra_known_vars()
 
     @staticmethod
     def get_all_prompt_vars() -> list[dict]:
@@ -92,6 +92,11 @@ PROMPT_VAR_DESCRIPTIONS = {
         "time-relative, such as scheduling a reminder. Rendered to day precision inside the "
         "cacheable system prompt, with the precise time supplied on the latest message instead."
     ),
+    "routes": (
+        "One line per route, giving its keyword and the description set for it. Use it to tell the "
+        "router what each route is for without repeating the keywords in the prompt."
+    ),
+    "routes_list": "The route keywords, comma-separated.",
     "input": "The text passed into this node from the preceding one.",
     "node_inputs": (
         "The inputs to this node as a list, for when more than one node feeds it. Use it to combine several branches."

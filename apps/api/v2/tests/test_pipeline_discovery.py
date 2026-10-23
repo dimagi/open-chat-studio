@@ -601,7 +601,7 @@ def test_every_option_value_has_the_documented_type(team_with_every_resource, ke
         pytest.param(
             "RouterNode",
             "router_prompt_variables",
-            {"temp_state", "participant_data", "session_state"},
+            {"temp_state", "participant_data", "session_state", "routes", "routes_list"},
             id="router-node",
         ),
         pytest.param(

@@ -59,8 +59,13 @@ FULL_PARAMS: dict[str, dict] = {
         "llm_provider_id": 4,
         "llm_provider_model_id": 12,
         "llm_model_parameters": {"temperature": 0.0},
-        "prompt": "Route on what {participant_data} is asking for.",
+        "prompt": "Route on what {participant_data} is asking for.\n\nRoutes:\n{routes}",
         "keywords": ["schedule", "reschedule", "cancel"],
+        "route_descriptions": {
+            "SCHEDULE": "Booking a new appointment",
+            "RESCHEDULE": "Moving an existing appointment",
+            "CANCEL": "Cancelling an appointment",
+        },
         "default_keyword_index": 2,
         "tag_output_message": True,
         "history_type": "named",
@@ -117,7 +122,10 @@ NOTES: dict[str, str] = {
     "SendEmail": "`recipient_list` is comma-separated; subject/body are Jinja2 templates.",
     "ExtractStructuredData": "`data_schema` maps field name -> what to look for.",
     "ExtractParticipantData": "As ExtractStructuredData, plus `key_name` to nest the result under.",
-    "RouterNode": "`keywords[i]` routes to handle `output_i`; keywords are uppercased on save.",
+    "RouterNode": (
+        "`keywords[i]` routes to handle `output_i`; keywords are uppercased on save. "
+        "`{routes}` renders each keyword with its `route_descriptions` entry."
+    ),
     "StaticRouterNode": "Routes on stored data instead of an LLM; takes no LLM params.",
     "LLMResponseWithPrompt": "A normal LLM node, with every optional param set.",
 }
