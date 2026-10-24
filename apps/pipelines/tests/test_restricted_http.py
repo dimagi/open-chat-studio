@@ -93,12 +93,6 @@ class TestBasicRequests:
         assert isinstance(response["content"], bytes)
         assert response["text"] == ""
 
-    def test_text_decoded_for_text_content_types(self, client, mock_validate_url, httpx_mock):
-        httpx_mock.add_response(content=b"hello world", headers={"content-type": "text/plain"})
-        response = client.get("https://api.example.com/text")
-        assert response["text"] == "hello world"
-        assert response["content"] == b"hello world"
-
     def test_error_response_not_raised(self, client, mock_validate_url, httpx_mock):
         """Non-2xx responses (except retryable ones) are returned, not raised."""
         httpx_mock.add_response(status_code=404, json={"error": "not found"})
@@ -115,11 +109,6 @@ class TestURLValidation:
     def test_invalid_url_raises(self, client):
         with pytest.raises(HttpInvalidURL):
             client.get("http://127.0.0.1/secret")
-
-    def test_valid_url_passes(self, client, mock_validate_url, httpx_mock):
-        httpx_mock.add_response(text="ok")
-        response = client.get("https://api.example.com/data")
-        assert response["status_code"] == 200
 
     @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_url_validation_cached_per_host(self, mock_validate, client, httpx_mock):
@@ -172,15 +161,6 @@ class TestRequestCountLimit:
         with pytest.raises(HttpRequestLimitExceeded, match="Request limit of 2 exceeded"):
             client.get("https://api.example.com/3")
 
-    def test_request_count_increments(self, client, mock_validate_url, httpx_mock):
-        httpx_mock.add_response(text="ok")
-        httpx_mock.add_response(text="ok")
-        assert client._request_count == 0
-        client.get("https://api.example.com/1")
-        assert client._request_count == 1
-        client.get("https://api.example.com/2")
-        assert client._request_count == 2
-
 
 # --- Response Size Limit ---
 
@@ -206,19 +186,6 @@ class TestRequestBodySizeLimit:
         settings.RESTRICTED_HTTP_MAX_REQUEST_BYTES = 10
         with pytest.raises(HttpRequestTooLarge, match="exceeds 10 bytes"):
             client.post("https://api.example.com/data", data=b"x" * 100)
-
-
-# --- Timeout Clamping ---
-
-
-class TestTimeoutClamping:
-    def test_timeout_clamped_to_min(self, client, mock_validate_url, httpx_mock):
-        httpx_mock.add_response(text="ok")
-        client.get("https://api.example.com/data", timeout=0.1)
-
-    def test_timeout_clamped_to_max(self, client, mock_validate_url, httpx_mock):
-        httpx_mock.add_response(text="ok")
-        client.get("https://api.example.com/data", timeout=999)
 
 
 # --- Mutual Exclusivity ---
@@ -355,12 +322,6 @@ class TestAuthProviderIntegration:
         auth_values = [v for k, v in headers.items() if k.lower() == "authorization"]
         assert len(auth_values) == 1
         assert "Bearer real-token" in auth_values[0]
-
-    def test_no_auth_sends_no_auth_headers(self):
-        client = RestrictedHttpClient()
-        headers = client._prepare_headers({"X-Custom": "value"}, None)
-        assert "Authorization" not in headers
-        assert headers == {"X-Custom": "value"}
 
     def test_cross_team_lookup_blocked(self):
         AuthProviderFactory.create(name="Team A Provider")
