@@ -233,6 +233,29 @@ def test_python_evaluator_receives_the_selected_span():
 
 
 @pytest.mark.django_db()
+def test_an_errored_span_is_refused_before_the_code_runs():
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            return {"ran": True}
+        """)
+    evaluator = PythonEvaluator(code=code, span_type="tool", span_name="calculator", span_as_response=True)
+    record = GenerationRecord(
+        tool_calls=[
+            {
+                "node": "Agent",
+                "name": "calculator",
+                "input": {"expression": "1/0"},
+                "output": None,
+                "error": "division by zero",
+            }
+        ]
+    )
+
+    with pytest.raises(EvaluationRunException, match=r"calculator.*division by zero"):
+        evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
+
+
+@pytest.mark.django_db()
 def test_span_is_none_without_a_selector():
     code = textwrap.dedent("""
         def main(input, output, context, full_history, generated_response, **kwargs):

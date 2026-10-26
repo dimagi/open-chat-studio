@@ -804,3 +804,35 @@ def test_a_selector_with_no_match_is_an_error_before_the_judge_is_called(
         evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=_FILE_SEARCH_RECORD)
 
     assert service.llm.get_calls() == []
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_an_errored_span_is_refused_before_the_judge_is_called(get_llm_service, llm_provider, llm_provider_model):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Judge {generated_response}",
+        output_schema=_OUTPUT_SCHEMA,
+        span_type="tool",
+        span_name="calculator",
+        span_as_response=True,
+    )
+    record = GenerationRecord(
+        tool_calls=[
+            {
+                "node": "Agent",
+                "name": "calculator",
+                "input": {"expression": "1/0"},
+                "output": None,
+                "error": "division by zero",
+            }
+        ]
+    )
+
+    with pytest.raises(EvaluationRunException, match="calculator"):
+        evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
+
+    assert service.llm.get_calls() == []
