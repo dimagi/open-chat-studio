@@ -353,6 +353,62 @@ class TestEvaluatorLlmProviderSelection:
         assert "Value error," not in content
 
 
+@pytest.mark.django_db()
+class TestSpanSelectorForm:
+    @pytest.mark.parametrize("evaluator_class", ["LlmEvaluator", "PythonEvaluator"])
+    def test_the_selector_fields_are_offered_for_both_evaluators(self, client_with_user, team, evaluator_class):
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        schema = next(s for s in response.context_data["evaluator_schemas"] if s["title"] == evaluator_class)
+        properties = schema["properties"]
+        assert properties["span_type"]["enum"] == ["reply", "node", "tool", "llm"]
+        assert properties["span_type"]["default"] == "reply"
+        assert properties["span_name"]["type"] == "string"
+        assert properties["span_as_response"]["ui:widget"] == "toggle"
+
+    def test_the_page_renders_a_checkbox_for_a_toggle_field(self, client_with_user, team):
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        assert "getWidget(field) === 'toggle' || field.type === 'boolean'" in response.content.decode()
+
+    def test_session_mode_rejects_a_span_selector(self, client_with_user, team, evaluator):
+        params = _params({}) | {"span_type": "tool", "span_name": "file-search"}
+        data = _post_data(evaluator, {}, [], params=params, evaluation_mode="session")
+
+        response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        assert response.status_code == 200
+        assert "Selecting a span needs a generation, which session mode does not run" in response.content.decode()
+
+    def test_session_mode_accepts_the_default_selector(self, client_with_user, team, evaluator):
+        data = _post_data(evaluator, {}, [], params=_params({}), evaluation_mode="session")
+
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        assert response.status_code == 302, response.context_data["form"].errors
+
+    @pytest.mark.parametrize(
+        ("params", "expected"),
+        [
+            pytest.param({"code": 5}, "Code: Input should be a valid string", id="wrong-code-type"),
+            pytest.param({"code": "x", "span_type": "bogus"}, "Span Type: Input should be", id="bad-span-type"),
+        ],
+    )
+    def test_a_field_level_params_error_is_shown_with_its_field_label(
+        self, client_with_user, team, evaluator, params, expected
+    ):
+        data = _post_data(evaluator, {}, [], params=params)
+        data["type"] = "PythonEvaluator"
+        del data["llm_provider"]
+        del data["llm_provider_model"]
+
+        response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        assert response.status_code == 200
+        assert expected in response.content.decode()
+
+
 class TestPromptVariables:
     """The form's autocomplete and help text are derived from the evaluators' actual kwargs."""
 

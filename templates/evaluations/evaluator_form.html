@@ -470,6 +470,21 @@
               </div>
             </template>
 
+            <!-- Boolean fields -->
+            <template x-if="getWidget(field) === 'toggle' || field.type === 'boolean'">
+              <div class="form-control">
+                <label :for="'param_' + fieldName" class="label cursor-pointer justify-start gap-2">
+                  <input type="checkbox"
+                         :id="'param_' + fieldName"
+                         :name="'param_' + fieldName"
+                         x-model="params[fieldName]"
+                         class="checkbox checkbox-sm checkbox-primary">
+                  <span class="label-text font-bold" x-text="field.title || fieldName"></span>
+                </label>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
             <!-- Default object fields -->
             <template x-if="!getWidget(field) && field.type === 'object'">
               <div>

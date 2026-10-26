@@ -319,6 +319,11 @@ class EvaluatorForm(forms.ModelForm):
         params = _clean_params(self.cleaned_data.get("params"), evaluators_module.LLM_PROVIDER_FIELDS)
         cleaned_data["params"] = params
 
+        selects_span = params.get("span_type", "reply") != "reply"
+        if selects_span and self.cleaned_data.get("evaluation_mode") == EvaluationMode.SESSION:
+            self.add_error(None, "Selecting a span needs a generation, which session mode does not run")
+            return cleaned_data
+
         if issubclass(evaluator_class, evaluators_module.LLMResponseMixin):
             self._validate_llm_provider_selection()
             if self.errors:
