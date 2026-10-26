@@ -9,6 +9,7 @@ from apps.evaluations.const import (
     GENERATION_PROMPT_VARIABLE_NAMES,
     evaluator_prompt_variable_names,
     unknown_generation_variables,
+    unknown_span_variables,
 )
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
@@ -125,6 +126,34 @@ def test_llm_evaluator_prompt_unknown_generation_variable_raises(offending):
     assert "Unknown generation variable" in error_message
     assert offending in error_message
     assert "{generation.tool_calls}" in error_message
+
+
+_UNKNOWN_SPAN_FIELDS = ["{span.name}", "{span.output[0]}", "{span.output!r}", "{span}"]
+
+
+@pytest.mark.parametrize("offending", [pytest.param(field, id=field) for field in _UNKNOWN_SPAN_FIELDS])
+def test_llm_evaluator_prompt_unknown_span_variable_raises(offending):
+    with pytest.raises(ValidationError) as exc_info:
+        LlmEvaluator(
+            llm_provider_id=1,
+            llm_provider_model_id=1,
+            prompt=f"Input: {{input.content}} {offending}",
+            output_schema=_OUTPUT_SCHEMA,
+        )
+    error_message = str(exc_info.value)
+    assert "Unknown span variable" in error_message
+    assert offending in error_message
+    assert "{span.input}, {span.output}" in error_message
+
+
+def test_unknown_span_variables():
+    assert unknown_span_variables(" ".join(_UNKNOWN_SPAN_FIELDS)) == {
+        "span.name",
+        "span.output[0]",
+        "span.output!r",
+        "span",
+    }
+    assert unknown_span_variables("{span.input} {span.output}") == set()
 
 
 @pytest.fixture()

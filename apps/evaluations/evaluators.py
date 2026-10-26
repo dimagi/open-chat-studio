@@ -6,9 +6,11 @@ from pydantic_core import ValidationError
 from apps.evaluations.const import (
     ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS,
     GENERATION_PROMPT_VARIABLE_NAMES,
+    SPAN_PROMPT_VARIABLE_NAMES,
     evaluator_prompt_variable_hints,
     prompt_variable_roots,
     unknown_generation_variables,
+    unknown_span_variables,
 )
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
@@ -121,6 +123,11 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             raise ValueError(
                 f"Unknown generation variable(s): {', '.join(f'{{{name}}}' for name in unknown_generation)}. "
                 f"Available: {', '.join(f'{{{name}}}' for name in GENERATION_PROMPT_VARIABLE_NAMES)}"
+            )
+        if unknown_span := sorted(unknown_span_variables(v)):
+            raise ValueError(
+                f"Unknown span variable(s): {', '.join(f'{{{name}}}' for name in unknown_span)}. "
+                f"Available: {', '.join(f'{{{name}}}' for name in SPAN_PROMPT_VARIABLE_NAMES)}"
             )
         return v
 

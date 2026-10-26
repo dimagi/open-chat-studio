@@ -49,6 +49,9 @@ EVALUATOR_PROMPT_VARIABLES = {
         ("generation.participant_data_diff", False),
         ("generation.llm_calls", False),
         ("generation.tool_calls", False),
+        # Rendered values of the selected span; the validator accepts exactly these names.
+        ("span.input", False),
+        ("span.output", False),
     ],
     "session": [
         ("context", True),
@@ -68,6 +71,8 @@ ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS = {
 GENERATION_PROMPT_VARIABLE_NAMES = [
     name for name, _ in EVALUATOR_PROMPT_VARIABLES["message"] if name.split(".")[0] == "generation"
 ]
+
+SPAN_PROMPT_VARIABLE_NAMES = [name for name, _ in EVALUATOR_PROMPT_VARIABLES["message"] if name.split(".")[0] == "span"]
 
 
 def evaluator_prompt_variable_names(evaluation_mode: str) -> list[str]:
@@ -99,8 +104,8 @@ def _field_as_written(field: str, format_spec: str, conversion: str | None) -> s
     return field + (f"!{conversion}" if conversion else "") + (f":{format_spec}" if format_spec else "")
 
 
-def unknown_generation_variables(prompt: str) -> set[str]:
-    """Format fields rooted at ``generation`` that are not an advertised name or carry a conversion or format spec.
+def unknown_root_variables(prompt: str, root: str, allowed: list[str]) -> set[str]:
+    """Format fields rooted at `root` that are not in `allowed` or carry a conversion or format spec.
 
     Each is returned as written, e.g. ``generation.message_tags!r``. A malformed template yields
     nothing, as in `prompt_variable_roots`.
@@ -112,6 +117,15 @@ def unknown_generation_variables(prompt: str) -> set[str]:
     return {
         _field_as_written(field, spec or "", conversion)
         for field, spec, conversion in parsed
-        if re.split(r"[.\[]", field, maxsplit=1)[0] == "generation"
-        and (field not in GENERATION_PROMPT_VARIABLE_NAMES or spec or conversion)
+        if re.split(r"[.\[]", field, maxsplit=1)[0] == root and (field not in allowed or spec or conversion)
     }
+
+
+def unknown_generation_variables(prompt: str) -> set[str]:
+    """Unadvertised or formatted fields rooted at ``generation``."""
+    return unknown_root_variables(prompt, "generation", GENERATION_PROMPT_VARIABLE_NAMES)
+
+
+def unknown_span_variables(prompt: str) -> set[str]:
+    """Unadvertised or formatted fields rooted at ``span``."""
+    return unknown_root_variables(prompt, "span", SPAN_PROMPT_VARIABLE_NAMES)
