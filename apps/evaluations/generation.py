@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_MAX_LENGTH
+from apps.evaluations.exceptions import EvaluationRunException
 from apps.pipelines.nodes.base import PipelineState
 
 if TYPE_CHECKING:
     from apps.service_providers.tracing.capture_tracer import CapturedSpan
 
 TRUNCATION_SUFFIX = " [truncated]"
+
+SpanType = Literal["reply", "node", "tool", "llm"]
+SPAN_KEYS = ("type", "node", "name", "input", "output", "error")
 
 
 def _format_tags(tags: list[tuple[str, str]]) -> list[str]:
@@ -112,3 +116,85 @@ class GenerationRecord:
 
     def prompt_variables(self) -> dict[str, str]:
         return {name: _cap(json.dumps(value, ensure_ascii=False)) for name, value in self.as_dict().items()}
+
+    def select_spans(self, span_type: SpanType, span_name: str) -> list[dict]:
+        """Spans in run order: a tool by tool name, an LLM call by its node, a node by its name; none for a reply."""
+        if span_type == "reply":
+            return []
+        spans = self._spans_of_type(span_type)
+        matched_key = "node" if span_type == "llm" else "name"
+        matches = [span for span in spans if span[matched_key] == span_name]
+        if matches:
+            return matches
+        available = ", ".join(sorted({str(span[matched_key]) for span in spans})) or "none"
+        raise EvaluationRunException(
+            f"No {span_type} span named '{span_name}' in this generation. Available {span_type} spans: {available}"
+        )
+
+    def _spans_of_type(self, span_type: SpanType) -> list[dict]:
+        if span_type == "tool":
+            return [{"type": "tool", **call} for call in self.tool_calls]
+        if span_type == "llm":
+            return [{"type": "llm", **call} for call in self.llm_calls]
+        return self._node_spans()
+
+    def _node_spans(self) -> list[dict]:
+        runs: dict[str, int] = {}
+        last_output: dict[str, Any] = {}
+        spans = []
+        for previous, current, _targets in self.path:
+            if current is None or current not in self.node_outputs:
+                continue
+            output = self.node_outputs[current]
+            run = runs.get(current, 0)
+            runs[current] = run + 1
+            if isinstance(output, list):
+                if run >= len(output):
+                    continue
+                output = output[run]
+            elif run > 0:
+                continue
+            spans.append(
+                {
+                    "type": "node",
+                    "node": current,
+                    "name": current,
+                    "input": last_output.get(previous) if previous is not None else None,
+                    "output": output,
+                    "error": None,
+                }
+            )
+            last_output[current] = output
+        return spans
+
+
+def _render(value: Any) -> str:
+    return _cap(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
+
+
+def span_prompt_variables(spans: list[dict]) -> dict[str, str]:
+    """The `input` and `output` prompt variables for the selected spans."""
+    if not spans:
+        return {"input": "", "output": ""}
+    if len(spans) == 1:
+        return {"input": _render(spans[0]["input"]), "output": _render(spans[0]["output"])}
+    return {
+        "input": _cap(json.dumps([span["input"] for span in spans], ensure_ascii=False)),
+        "output": _cap(json.dumps([span["output"] for span in spans], ensure_ascii=False)),
+    }
+
+
+def span_kwarg(spans: list[dict]) -> dict | list[dict] | None:
+    """The selected spans as an evaluator kwarg: None, the one span, or the list."""
+    if not spans:
+        return None
+    if len(spans) == 1:
+        return spans[0]
+    return spans
+
+
+def judged_response(spans: list[dict], generated_response: str) -> str:
+    """The last selected span's output as text, or the generated response when nothing is selected."""
+    if not spans:
+        return generated_response
+    return _render(spans[-1]["output"])
