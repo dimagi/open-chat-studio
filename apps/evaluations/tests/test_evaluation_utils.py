@@ -1,12 +1,12 @@
 import pytest
 
 from apps.chat.models import ChatMessageType
+from apps.evaluations.evaluation_messages import make_evaluation_messages_from_sessions
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.forms import EvaluationConfigForm
 from apps.evaluations.models import EvaluationMode
 from apps.evaluations.utils import (
     get_evaluators_with_schema,
-    make_evaluation_messages_from_sessions,
     merge_binary_labels,
     parse_history_text,
 )

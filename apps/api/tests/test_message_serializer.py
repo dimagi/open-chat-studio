@@ -2,8 +2,9 @@ import pytest
 from django.utils import timezone
 from time_machine import travel
 
-from apps.api.serializers import MessageSerializer
+from apps.api.serializers import ChatMessageSerializer, MessageSerializer
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.schemas import ModerationDetail
 
 CASES = [(ChatMessageType.SYSTEM, "system"), (ChatMessageType.HUMAN, "user"), (ChatMessageType.AI, "assistant")]
 
@@ -28,3 +29,19 @@ def test_message_serializer_internal_to_api(type_, role):
         "tags": [],
         "attachments": [],
     }
+
+
+@pytest.mark.parametrize(
+    "serializer_class",
+    [pytest.param(MessageSerializer, id="message"), pytest.param(ChatMessageSerializer, id="chat_message")],
+)
+def test_message_serializer_omits_moderation_detail(serializer_class):
+    message = ChatMessage(
+        message_type=ChatMessageType.HUMAN,
+        content="<script>",
+        moderation_detail=ModerationDetail(rules=["markup"]),
+    )
+
+    data = serializer_class(instance=message).data
+
+    assert "moderation_detail" not in data

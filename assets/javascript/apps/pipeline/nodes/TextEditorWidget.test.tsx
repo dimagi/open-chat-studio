@@ -116,3 +116,28 @@ describe("TextEditorWidget prompt help", () => {
     expect(request).toMatchObject({node_type: "llm", routes: [], default_route: ""});
   });
 });
+
+describe("TextEditorWidget routes nudge", () => {
+  const nudge = /Add \{routes\} to the prompt/;
+
+  it.each([
+    ["{routes}", "Routes:\n{routes}"],
+    ["{routes_list}", "Pick one of {routes_list}"],
+  ])("is hidden when a router prompt uses %s", (_name, prompt) => {
+    render(<TextEditorWidget {...props({name: "n", prompt}, routerSchema)} />);
+
+    expect(screen.queryByText(nudge)).toBeNull();
+  });
+
+  it("is shown when a router prompt uses neither routes variable", () => {
+    render(<TextEditorWidget {...props({name: "n", prompt: "You are a router"}, routerSchema)} />);
+
+    expect(screen.getByText(nudge)).toBeTruthy();
+  });
+
+  it("is not shown on an LLM node", () => {
+    render(<TextEditorWidget {...props({name: "n", prompt: "Hi"})} />);
+
+    expect(screen.queryByText(nudge)).toBeNull();
+  });
+});

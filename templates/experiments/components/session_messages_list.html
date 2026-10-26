@@ -137,6 +137,11 @@
             {{ message.created_at|date:"DATETIME_FORMAT" }}
           </time>
         </span>
+        {% if show_rule_hits and message.moderation_detail.rules %}
+          <span class="badge badge-warning badge-sm" title="Abuse rules this message triggered">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>rule: {{ message.moderation_detail.rules|join:", " }}
+          </span>
+        {% endif %}
         {% if message.is_ai_message %}
           {% include "experiments/chat/components/participant_data_diff_popover.html" with message=message %}
         {% endif %}

@@ -693,7 +693,9 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         description=(
             "Instructions telling the LLM how to choose between `keywords`. The model is constrained "
             "to return one of them, so describe when each applies rather than asking for free text. "
-            "A narrower set of template variables is available here than on an LLM node."
+            "The only template variables available are `{participant_data}`, `{temp_state}`, "
+            "`{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each "
+            "keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone."
         ),
         json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.router_prompt_variables),
     )
@@ -702,6 +704,29 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         description=HISTORY_TYPE_DESCRIPTION,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
+    route_descriptions: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` "
+            "variable. Keys are uppercased on save. An entry for a keyword not in `keywords` is kept but not used."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
+    )
+
+    @field_validator("route_descriptions", mode="before")
+    @classmethod
+    def ensure_route_description_keys_are_uppercase(cls, value):
+        if not isinstance(value, dict):
+            return {}
+        descriptions = {}
+        for key, description in value.items():
+            keyword = str(key).upper()
+            if keyword in descriptions:
+                raise PydanticCustomError(
+                    "invalid_route_descriptions", "Route {keyword} has more than one description", {"keyword": keyword}
+                )
+            descriptions[keyword] = description
+        return descriptions
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
@@ -725,6 +750,8 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         extra_prompt_context = {
             "temp_state": context.state.temp,
             "session_state": context.state.session_state,
+            "routes": self._format_routes(),
+            "routes_list": ", ".join(self.keywords),
         }
         participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(
@@ -770,6 +797,14 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         if session:
             self.save_history(node_input, keyword)
         return keyword, is_default_keyword
+
+    def _format_routes(self) -> str:
+        """One `- KEYWORD: description` line per route; a route with no description is the bare keyword."""
+        lines = []
+        for keyword in self.keywords:
+            description = self.route_descriptions.get(keyword, "").strip()
+            lines.append(f"- {keyword}: {description}" if description else f"- {keyword}")
+        return "\n".join(lines)
 
     def _route_from_agent_result(self, result: dict) -> str | None:
         """Return the route the model chose in upper case, or None when it chose none."""

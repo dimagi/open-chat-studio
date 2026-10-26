@@ -398,6 +398,85 @@ class TestRouterNode:
         assert str(expected_pd) in system_prompt.content
 
     @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("prompt", "expected"),
+        [
+            pytest.param(
+                "Routes:\n{routes}",
+                "Routes:\n- BILLING: Payments and invoices\n- SUPPORT",
+                id="routes-with-and-without-description",
+            ),
+            pytest.param("Pick one of {routes_list}", "Pick one of BILLING, SUPPORT", id="routes-list"),
+        ],
+    )
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    @mock.patch("apps.pipelines.nodes.nodes.create_agent")
+    def test_router_node_renders_routes(
+        self, create_agent_mock, get_llm_service, prompt, expected, provider, provider_model, experiment_session
+    ):
+        get_llm_service.return_value = build_fake_llm_echo_service()
+        RouterOutput = create_model(
+            "RouterOutput", route=(Literal["BILLING"], Field(description="Selected routing destination"))
+        )
+        create_agent_mock.return_value.invoke.return_value = {"structured_response": RouterOutput(route="BILLING")}
+
+        node = RouterNode(
+            node_id="test",
+            django_node=None,
+            name="test router",
+            prompt=prompt,
+            keywords=["billing", "support"],
+            route_descriptions={"billing": "Payments and invoices", "support": "  ", "gone": "Removed route"},
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+        node._repo = ORMRepository(session=experiment_session)
+        state = PipelineState(messages=["a"], experiment_session=experiment_session, last_node_input="a")
+        node._process_conditional(NodeContext(state))
+
+        assert create_agent_mock.call_args[1]["system_prompt"].content.startswith(expected)
+
+    @pytest.mark.parametrize(
+        ("route_descriptions", "expected"),
+        [
+            pytest.param({"billing": "Payments"}, {"BILLING": "Payments"}, id="keys-uppercased"),
+            pytest.param(
+                {"BILLING": "Payments", "gone": "Removed route"},
+                {"BILLING": "Payments", "GONE": "Removed route"},
+                id="unmatched-kept",
+            ),
+            pytest.param(None, {}, id="none"),
+        ],
+    )
+    @pytest.mark.django_db()
+    def test_router_node_route_descriptions_normalized(self, route_descriptions, expected, provider, provider_model):
+        node = RouterNode(
+            node_id="test",
+            django_node=None,
+            name="test router",
+            prompt="{routes}",
+            keywords=["billing", "support"],
+            route_descriptions=route_descriptions,
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+        assert node.route_descriptions == expected
+
+    @pytest.mark.django_db()
+    def test_router_node_rejects_route_descriptions_that_differ_only_in_case(self, provider, provider_model):
+        with pytest.raises(PydanticValidationError, match="BILLING has more than one description"):
+            RouterNode(
+                node_id="test",
+                django_node=None,
+                name="test router",
+                prompt="{routes}",
+                keywords=["billing"],
+                route_descriptions={"billing": "Payments", "BILLING": "Invoices"},
+                llm_provider_id=provider.id,
+                llm_provider_model_id=provider_model.id,
+            )
+
+    @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_router_node(self, get_llm_service, provider, provider_model, pipeline, experiment_session):
         def _tool_call(route):

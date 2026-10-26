@@ -70,6 +70,28 @@ def test_llm_evaluator_prompt_no_variables_raises(prompt):
     assert "{input.content}" in error_message
 
 
+@pytest.mark.parametrize(
+    ("prompt", "unknown"),
+    [
+        pytest.param("Input: {input.content}\nResponse: {generated_reponse}", "{generated_reponse}", id="typo"),
+        pytest.param("Input: {input.content} {contextual.value}", "{contextual}", id="prefix-of-a-root"),
+        pytest.param("Input: {input.content} {0}", "{0}", id="positional"),
+    ],
+)
+def test_llm_evaluator_prompt_unknown_variable_raises(prompt, unknown):
+    with pytest.raises(ValidationError) as exc_info:
+        LlmEvaluator(
+            llm_provider_id=1,
+            llm_provider_model_id=1,
+            prompt=prompt,
+            output_schema=_OUTPUT_SCHEMA,
+        )
+    error_message = str(exc_info.value)
+    assert "Unknown prompt variable" in error_message
+    assert unknown in error_message
+    assert "{generated_response}" in error_message
+
+
 @pytest.fixture()
 def llm_provider():
     return LlmProviderFactory.create()
