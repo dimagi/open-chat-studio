@@ -3,7 +3,7 @@ import csv
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from io import StringIO
 
@@ -37,6 +37,7 @@ from apps.evaluations.export import (
     export_evaluation_csv_to_tempfile,
     iter_evaluation_table_rows,
 )
+from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import (
     NON_TERMINAL_RUN_STATUSES,
     DatasetCreationStatus,
@@ -149,6 +150,7 @@ class BotGeneration:
     session_id: int | None
     response: str = ""
     error: Exception | None = None
+    record: GenerationRecord = field(default_factory=GenerationRecord)
 
 
 def _run_evaluator_on_message(
@@ -167,7 +169,9 @@ def _run_evaluator_on_message(
     generation_fields = generation_error_fields(generation.error) if generation.error else {}
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
-        output = evaluator.run(message, generation.response, usage_context=usage_context).model_dump()
+        output = evaluator.run(
+            message, generation.response, usage_context=usage_context, generation=generation.record
+        ).model_dump()
     except Exception as e:
         if isinstance(e, NoStructuredOutputError):
             logger.warning(
@@ -742,7 +746,12 @@ def run_bot_generation(
         response_content = reply.message.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        return BotGeneration(session_id=session.id, response=response_content, error=reply.error)
+        return BotGeneration(
+            session_id=session.id,
+            response=response_content,
+            error=reply.error,
+            record=GenerationRecord.from_run(reply.pipeline_state, reply.participant_data_diff, reply.spans),
+        )
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")

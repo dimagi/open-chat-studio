@@ -1,5 +1,5 @@
 from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import anthropic
 import pytest
@@ -11,6 +11,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule
+from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
@@ -165,6 +166,7 @@ def test_evaluate_single_message_with_bot_generation(
             evaluator_id=evaluator.id,
             message_id=evaluation_message.id,
         ),
+        generation=ANY,
     )
 
     # Verify result was created
@@ -222,6 +224,7 @@ def test_evaluate_single_message_handles_bot_generation_error(
             evaluator_id=evaluator.id,
             message_id=evaluation_message.id,
         ),
+        generation=GenerationRecord(),
     )
     assert result.output == {
         **evaluator_output,
