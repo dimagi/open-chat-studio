@@ -11,7 +11,7 @@ import apps.utils.models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0094_deprecate_openai_gpt_4_models'),
+        ('service_providers', '0095_auto_model_sync_20261018'),
         ('teams', '0019_team_exportable_experiments'),
     ]
 
