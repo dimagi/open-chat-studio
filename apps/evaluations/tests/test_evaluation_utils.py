@@ -1,6 +1,7 @@
 import pytest
 
 from apps.chat.models import ChatMessageType
+from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.evaluation_messages import make_evaluation_messages_from_sessions
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.forms import EvaluationConfigForm
@@ -11,7 +12,7 @@ from apps.evaluations.utils import (
     parse_history_text,
 )
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
-from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
 
@@ -368,3 +369,57 @@ def test_switching_dataset_mode_rejects_a_ticked_archived_member_of_the_old_mode
 
     assert not form.is_valid()
     assert "Old scorer" in " ".join(form.errors["evaluators"])
+
+
+def _span_selector_evaluator(team, name):
+    return EvaluatorFactory.create(
+        team=team,
+        name=name,
+        type="PythonEvaluator",
+        params={"code": "x", "span_type": "tool", "span_name": "calculator"},
+        llm_provider=None,
+        llm_provider_model=None,
+    )
+
+
+@pytest.mark.django_db()
+def test_a_config_without_generation_refuses_span_selector_evaluators(team_with_users):
+    selectors = [_span_selector_evaluator(team_with_users, name) for name in ("Tool judge", "Calc judge")]
+    plain = EvaluatorFactory.create(team=team_with_users, name="Reply judge")
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+
+    form = EvaluationConfigForm(
+        team_with_users,
+        data={"name": "Config", "evaluators": [plain.id, *(e.id for e in selectors)], "dataset": dataset.id},
+    )
+
+    assert not form.is_valid()
+    assert form.errors["evaluators"] == [
+        "These evaluators select a span, which needs the generation step: Calc judge, Tool judge"
+    ]
+
+
+@pytest.mark.django_db()
+def test_a_config_with_generation_accepts_span_selector_evaluators(team_with_users):
+    evaluator = _span_selector_evaluator(team_with_users, "Tool judge")
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+    experiment = ExperimentFactory.create(team=team_with_users)
+
+    form = EvaluationConfigForm(
+        team_with_users,
+        data={
+            "name": "Config",
+            "evaluators": [evaluator.id],
+            "dataset": dataset.id,
+            "run_generation": True,
+            "experiment": experiment.id,
+            "experiment_version": VersionSelectionRule.LATEST_WORKING.value,
+        },
+    )
+
+    assert form.is_valid(), form.errors
+    config = form.save(commit=False)
+    config.team = team_with_users
+    config.save()
+    form.save_m2m()
+    assert list(config.evaluators.all()) == [evaluator]

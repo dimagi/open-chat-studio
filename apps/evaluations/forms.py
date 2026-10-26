@@ -222,6 +222,14 @@ class EvaluationConfigForm(forms.ModelForm):
             self.add_error("evaluators", "Generation is not supported for session-mode datasets.")
             cleaned_data["run_generation"] = False
 
+        if evaluators and not cleaned_data.get("run_generation"):
+            selecting = sorted(e.name for e in evaluators if (e.params or {}).get("span_type", "reply") != "reply")
+            if selecting:
+                self.add_error(
+                    "evaluators",
+                    f"These evaluators select a span, which needs the generation step: {', '.join(selecting)}",
+                )
+
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
