@@ -69,6 +69,39 @@ def test_a_python_evaluator_judges_a_tool_span(team_with_users, message):
     assert run.results.get().output["result"] == {"expression": "2+2", "answer": "4"}
 
 
+TAMPER_CODE = textwrap.dedent("""
+    def main(input, output, context, full_history, generated_response, **kwargs):
+        kwargs["span"]["input"]["expression"] = "tampered"
+        return {}
+    """)
+
+READ_EXPRESSION_CODE = textwrap.dedent("""
+    def main(input, output, context, full_history, generated_response, **kwargs):
+        return {
+            "expression": kwargs["span"]["input"]["expression"],
+            "record": kwargs["generation"]["tool_calls"][0]["input"]["expression"],
+        }
+    """)
+
+
+@pytest.mark.django_db()
+def test_an_evaluator_changing_its_span_does_not_change_what_the_next_one_sees(team_with_users, message):
+    experiment = _calculator_experiment(team_with_users)
+    tamperer = _python_evaluator(team_with_users, TAMPER_CODE, span_type="tool", span_name="calculator")
+    reader = _python_evaluator(team_with_users, READ_EXPRESSION_CODE, span_type="tool", span_name="calculator")
+
+    run = _run_with(
+        team_with_users,
+        message,
+        experiment,
+        tamperer,
+        reader,
+        responses=[AIMessage(content="", tool_calls=[CALCULATE]), AIMessage(content="Done")],
+    )
+
+    assert run.results.get(evaluator=reader).output["result"] == {"expression": "2+2", "record": "2+2"}
+
+
 @pytest.fixture()
 def two_code_node_experiment(team_with_users):
     experiment = ChatbotFactory.create(team=team_with_users)

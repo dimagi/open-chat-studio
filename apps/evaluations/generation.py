@@ -132,40 +132,43 @@ class GenerationRecord:
         )
 
     def _spans_of_type(self, span_type: SpanType) -> list[dict]:
+        """Spans built from `as_dict`, so an evaluator that changes one cannot change the record."""
+        data = self.as_dict()
         if span_type == "tool":
-            return [{"type": "tool", **call} for call in self.tool_calls]
+            return [{"type": "tool", **call} for call in data["tool_calls"]]
         if span_type == "llm":
-            return [{"type": "llm", **call} for call in self.llm_calls]
-        return self._node_spans()
+            return [{"type": "llm", **call} for call in data["llm_calls"]]
+        return _node_spans(data["node_outputs"], data["path"])
 
-    def _node_spans(self) -> list[dict]:
-        runs: dict[str, int] = {}
-        last_output: dict[str, Any] = {}
-        spans = []
-        for previous, current, _targets in self.path:
-            if current is None or current not in self.node_outputs:
+
+def _node_spans(node_outputs: dict[str, Any], path: list[list]) -> list[dict]:
+    runs: dict[str, int] = {}
+    last_output: dict[str, Any] = {}
+    spans = []
+    for previous, current, _targets in path:
+        if current is None or current not in node_outputs:
+            continue
+        output = node_outputs[current]
+        run = runs.get(current, 0)
+        runs[current] = run + 1
+        if isinstance(output, list):
+            if run >= len(output):
                 continue
-            output = self.node_outputs[current]
-            run = runs.get(current, 0)
-            runs[current] = run + 1
-            if isinstance(output, list):
-                if run >= len(output):
-                    continue
-                output = output[run]
-            elif run > 0:
-                continue
-            spans.append(
-                {
-                    "type": "node",
-                    "node": current,
-                    "name": current,
-                    "input": last_output.get(previous) if previous is not None else None,
-                    "output": output,
-                    "error": None,
-                }
-            )
-            last_output[current] = output
-        return spans
+            output = output[run]
+        elif run > 0:
+            continue
+        spans.append(
+            {
+                "type": "node",
+                "node": current,
+                "name": current,
+                "input": last_output.get(previous) if previous is not None else None,
+                "output": output,
+                "error": None,
+            }
+        )
+        last_output[current] = output
+    return spans
 
 
 def _render(value: Any) -> str:
