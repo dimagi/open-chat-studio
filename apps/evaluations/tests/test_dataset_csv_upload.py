@@ -871,6 +871,30 @@ class TestCSVUploadEdit:
         assert message.participant_data == {"preferences": nested_preferences}
         assert message.session_state == {"workflow": nested_workflow}
 
+    def test_downloaded_csv_uploads_back_without_the_formula_guard(self, dataset, client_with_user):
+        message = EvaluationMessage.objects.create(
+            input=EvaluationMessageContent(content="=SUM(A1:A2)", role="human").model_dump(),
+            output=EvaluationMessageContent(content="-negative answer", role="ai").model_dump(),
+            context={"offset": "-5", "tag": "@home", "range": [-1, 1]},
+            participant_data={"note": "+note"},
+            session_state={"step": "-step"},
+            history=[],
+        )
+        dataset.messages.add(message)
+        download = client_with_user.get(reverse("evaluations:dataset_download", args=[dataset.team.slug, dataset.id]))
+        reader = csv.DictReader(StringIO(download.content.decode("utf-8")))
+        rows = [row for row in reader if row["id"] == str(message.id)]
+
+        stats = process_csv_rows(dataset, rows, list(reader.fieldnames), MockProgressRecorder(), dataset.team)
+
+        message.refresh_from_db()
+        assert message.input["content"] == "=SUM(A1:A2)"
+        assert message.output["content"] == "-negative answer"
+        assert message.context == {"offset": "-5", "tag": "@home", "range": [-1, 1]}
+        assert message.participant_data == {"note": "+note"}
+        assert message.session_state == {"step": "-step"}
+        assert stats == {"updated_count": 0, "created_count": 0, "error_messages": []}
+
 
 @pytest.mark.django_db()
 def test_update_existing_message_clears_session_fk_when_content_changed():
