@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
+from django.db.models import Case, Count, F, IntegerField, OuterRef, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -48,7 +48,8 @@ from apps.experiments.filters import (
 from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
-from apps.experiments.sunsets import LEGACY_WEB_CHAT, LEGACY_WEB_CHAT_READ_ONLY_MESSAGE, last_activity_subquery, legacy_web_chat_gone
+from apps.experiments.services import last_activity_subquery
+from apps.experiments.sunsets import LEGACY_WEB_CHAT, LEGACY_WEB_CHAT_READ_ONLY_MESSAGE, legacy_web_chat_gone
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
