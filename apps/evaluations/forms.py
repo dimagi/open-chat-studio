@@ -396,10 +396,11 @@ def _validate_evaluator_params(evaluator_class, params: dict) -> None:
     except PydanticValidationError as err:
         error_messages = []
         for error in err.errors():
+            message = error["msg"].removeprefix("Value error, ")
             if not error["loc"]:
-                error_messages.append(error["msg"].removeprefix("Value error, "))
+                error_messages.append(message)
                 continue
-            error_messages.append(f"{str(error['loc'][0]).replace('_', ' ').title()}: {error['msg']}")
+            error_messages.append(f"{str(error['loc'][0]).replace('_', ' ').title()}: {message}")
         raise forms.ValidationError(", ".join(error_messages)) from err
 
 

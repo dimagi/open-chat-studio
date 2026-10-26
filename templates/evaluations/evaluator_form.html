@@ -461,7 +461,9 @@
                         x-model="params[fieldName]"
                         class="select select-bordered w-full"
                         :required="isRequired(fieldName)">
-                  <option value="">Select...</option>
+                  <template x-if="field.default === undefined">
+                    <option value="">Select...</option>
+                  </template>
                   <template x-for="option in field.enum" :key="option">
                     <option :value="option" x-text="option"></option>
                   </template>

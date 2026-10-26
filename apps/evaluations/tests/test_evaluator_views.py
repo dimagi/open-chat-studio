@@ -371,6 +371,13 @@ class TestSpanSelectorForm:
 
         assert "getWidget(field) === 'toggle' || field.type === 'boolean'" in response.content.decode()
 
+    def test_the_page_offers_the_select_placeholder_only_for_a_field_without_a_default(self, client_with_user, team):
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        content = response.content.decode()
+        assert '<template x-if="field.default === undefined">' in content
+        assert '<option value="">Select...</option>' in content
+
     def test_session_mode_rejects_a_span_selector(self, client_with_user, team, evaluator):
         params = _params({}) | {"span_type": "tool", "span_name": "file-search"}
         data = _post_data(evaluator, {}, [], params=params, evaluation_mode="session")
@@ -407,6 +414,22 @@ class TestSpanSelectorForm:
 
         assert response.status_code == 200
         assert expected in response.content.decode()
+
+    def test_a_field_level_value_error_is_shown_without_the_value_error_prefix(self, client_with_user, team, evaluator):
+        params = {
+            "prompt": "Judge {input.content} {span.name}",
+            "output_schema": {"verdict": {"type": "string", "description": "verdict"}},
+            "span_type": "tool",
+            "span_name": "calculator",
+        }
+        data = _post_data(evaluator, {}, [], params=params)
+
+        response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "Prompt: Unknown span variable(s): {span.name}" in content
+        assert "Value error," not in content
 
 
 class TestPromptVariables:
