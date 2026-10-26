@@ -1,6 +1,8 @@
 import json
 from datetime import datetime
 
+from pydantic import BaseModel
+
 from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_MAX_LENGTH
 from apps.evaluations.generation import GenerationRecord
 from apps.service_providers.tracing.capture_tracer import CapturedSpan
@@ -135,6 +137,25 @@ def test_prompt_variables_tolerate_non_json_values():
     assert "2026-10-26" in record.prompt_variables()["participant_data_diff"]
 
 
+class _Query(BaseModel):
+    text: str
+
+
+def _json_types_only(value) -> bool:
+    if isinstance(value, dict):
+        return all(isinstance(key, str) and _json_types_only(item) for key, item in value.items())
+    if isinstance(value, list):
+        return all(_json_types_only(item) for item in value)
+    return value is None or isinstance(value, str | int | float | bool)
+
+
 def test_as_dict_is_plain_data():
-    record = GenerationRecord.from_run(STATE, [], [])
-    assert json.loads(json.dumps(record.as_dict()))["message_tags"] == ["urgent", "safety_layer_response:blocked"]
+    spans = [CapturedSpan(type="tool", name="search", node_id="code-1", input={"query": _Query(text="q")}, output="")]
+    diff = [("add", "", [("seen_at", datetime(2026, 10, 26))])]
+    record = GenerationRecord.from_run(STATE, diff, spans)
+
+    data = record.as_dict()
+
+    assert json.loads(json.dumps(data)) == data
+    assert _json_types_only(data)
+    assert data["message_tags"] == ["urgent", "safety_layer_response:blocked"]

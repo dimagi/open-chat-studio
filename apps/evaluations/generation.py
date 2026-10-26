@@ -97,9 +97,8 @@ class GenerationRecord:
         )
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        """The record as JSON types only: tuples become lists and other values their string form."""
+        return json.loads(json.dumps(asdict(self), default=str))
 
     def prompt_variables(self) -> dict[str, str]:
-        return {
-            name: _cap(json.dumps(value, default=str, ensure_ascii=False)) for name, value in self.as_dict().items()
-        }
+        return {name: _cap(json.dumps(value, ensure_ascii=False)) for name, value in self.as_dict().items()}
