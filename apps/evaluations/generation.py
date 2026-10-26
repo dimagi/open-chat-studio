@@ -67,4 +67,6 @@ class GenerationRecord:
         return asdict(self)
 
     def prompt_variables(self) -> dict[str, str]:
-        return {name: _cap(json.dumps(value, default=str)) for name, value in self.as_dict().items()}
+        return {
+            name: _cap(json.dumps(value, default=str, ensure_ascii=False)) for name, value in self.as_dict().items()
+        }

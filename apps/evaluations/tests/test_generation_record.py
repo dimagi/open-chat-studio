@@ -85,6 +85,13 @@ def test_prompt_variables_are_capped():
     assert value.endswith(" [truncated]")
 
 
+def test_prompt_variables_keep_non_ascii_text():
+    record = GenerationRecord(node_outputs={"n": "नमस्ते 🙂"})
+    value = record.prompt_variables()["node_outputs"]
+    assert "नमस्ते 🙂" in value
+    assert "\\u" not in value
+
+
 def test_prompt_variables_tolerate_non_json_values():
     record = GenerationRecord(participant_data_diff=[("add", "", [("seen_at", datetime(2026, 10, 26))])])
     assert "2026-10-26" in record.prompt_variables()["participant_data_diff"]
