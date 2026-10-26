@@ -29,5 +29,6 @@ from .chatbot_views import (  # noqa: F401
     send_chatbot_invitation,
     single_chatbot_home,
     start_chatbot_session_public,
+    unarchive_chatbot,
 )
 from .public_link import public_link_page  # noqa: F401

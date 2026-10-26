@@ -133,6 +133,7 @@ class PipelineState(dict):
             copy["experiment_session"] = copy["experiment_session"].id
 
         if "attachments" in copy.get("temp_state", {}):
+            copy["temp_state"] = {**copy["temp_state"]}
             copy["temp_state"]["attachments"] = [att.model_dump() for att in copy["temp_state"]["attachments"]]
 
         if interrupt := copy.pop("__interrupt__", None):

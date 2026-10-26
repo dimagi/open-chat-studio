@@ -48,7 +48,7 @@ from apps.experiments.filters import (
 from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
-from apps.experiments.sunsets import LEGACY_WEB_CHAT, LEGACY_WEB_CHAT_READ_ONLY_MESSAGE, legacy_web_chat_gone
+from apps.experiments.sunsets import LEGACY_WEB_CHAT, LEGACY_WEB_CHAT_READ_ONLY_MESSAGE, last_activity_subquery, legacy_web_chat_gone
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
@@ -244,19 +244,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
             .values("count")
         )
 
-        last_activity_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .order_by(F("last_activity_at").desc(nulls_last=True))
-            .values("last_activity_at")[:1]
-        )
-
         # Add expensive annotations only to paginated data
         return queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
             interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
-            last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
+            last_activity=last_activity_subquery(),
         ).order_by(F("last_activity").desc(nulls_last=True))
 
 
@@ -441,6 +434,34 @@ def archive_chatbot(request, team_slug: str, pk: int):
     chatbot = get_object_or_404(Experiment, id=pk, team=request.team)
     chatbot.archive()
     return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def unarchive_chatbot(request, team_slug: str, pk: int):
+    """Restores an archived chatbot and its versions, and optionally its channels."""
+    chatbot = get_object_or_404(
+        Experiment.objects.get_all(),
+        id=pk,
+        team=request.team,
+        is_archived=True,
+        working_version__isnull=True,
+    )
+    chatbot.unarchive()
+    if request.POST.get("restore_channels"):
+        skipped = chatbot.restore_experiment_channels()
+        if skipped:
+            messages.warning(
+                request,
+                _("These channels have to be reconnected by hand: %(channels)s")
+                % {"channels": ", ".join(f"{channel.name} ({channel.platform_enum.label})" for channel in skipped)},
+            )
+    messages.success(request, _("Chatbot restored."))
+    return HttpResponseClientRedirect(
+        reverse("chatbots:single_chatbot_home", kwargs={"team_slug": team_slug, "experiment_id": pk})
+    )
 
 
 class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):

@@ -520,6 +520,8 @@ SPECTACULAR_SETTINGS = {
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
         "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
         "MessageRoleEnum": "apps.api.serializers.MESSAGE_ROLES",
+        "StaticTriggerTypeEnum": "apps.events.models.StaticTriggerType",
+        "TriggerActionTypeEnum": "apps.events.models.EventActionType",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
@@ -536,6 +538,13 @@ SPECTACULAR_SETTINGS = {
         {
             "name": "Chatbots",
             "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Chatbot Triggers",
+            "description": (
+                "Add, change and archive the triggers that run an action on a conversation event, "
+                "after inactivity, or at a set time."
+            ),
         },
         {
             "name": "Me",

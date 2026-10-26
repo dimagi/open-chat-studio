@@ -2329,20 +2329,6 @@ paths:
           description: Team has no registered public key; secret data cannot be sealed.
 components:
   schemas:
-    ActionTypeEnum:
-      enum:
-      - log
-      - end_conversation
-      - send_message_to_bot
-      - schedule_trigger
-      - pipeline_start
-      type: string
-      description: |-
-        * `log` - Log the last message
-        * `end_conversation` - End the conversation
-        * `send_message_to_bot` - Prompt the bot to message the user
-        * `schedule_trigger` - Trigger a schedule
-        * `pipeline_start` - Start a pipeline
     AnalysisQueryDetail:
       type: object
       properties:
@@ -2890,6 +2876,14 @@ components:
           nullable: true
           description: Provider message IDs this message was built from, namespaced
             by platform.
+        moderation_status:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ModerationStatusEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        moderation_detail:
+          nullable: true
         chat:
           type: integer
       required:
@@ -4222,7 +4216,7 @@ components:
           format: date-time
           readOnly: true
         action_type:
-          $ref: '#/components/schemas/ActionTypeEnum'
+          $ref: '#/components/schemas/TriggerActionTypeEnum'
         params: {}
       required:
       - action_type
@@ -5146,6 +5140,16 @@ components:
       - cursor
       - has_more
       - results
+    ModerationStatusEnum:
+      enum:
+      - passed
+      - flagged
+      - skipped
+      type: string
+      description: |-
+        * `passed` - Passed
+        * `flagged` - Flagged
+        * `skipped` - Skipped
     NodeDetail:
       type: object
       properties:
@@ -6091,7 +6095,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/StaticTriggerDetailTypeEnum'
+          $ref: '#/components/schemas/StaticTriggerTypeEnum'
         is_archived:
           type: boolean
         is_active:
@@ -6110,7 +6114,25 @@ components:
       - id
       - type
       - updated_at
-    StaticTriggerDetailTypeEnum:
+    StaticTriggerList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticTriggerDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    StaticTriggerTypeEnum:
       enum:
       - conversation_end
       - conversation_ended_by_user
@@ -6136,24 +6158,6 @@ components:
         * `new_human_message` - A new human message is received
         * `new_bot_message` - A new bot message is received
         * `participant_joined` - A new participant joined the experiment
-    StaticTriggerList:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/StaticTriggerDetail'
-      required:
-      - cursor
-      - has_more
-      - results
     SyntheticVoiceDetail:
       type: object
       properties:
@@ -6387,7 +6391,7 @@ components:
         total_num_triggers:
           type: integer
           maximum: 2147483647
-          minimum: -2147483648
+          minimum: 1
           description: The number of times to trigger the action
         is_archived:
           type: boolean
@@ -6679,6 +6683,20 @@ components:
       - cursor
       - has_more
       - results
+    TriggerActionTypeEnum:
+      enum:
+      - log
+      - end_conversation
+      - send_message_to_bot
+      - schedule_trigger
+      - pipeline_start
+      type: string
+      description: |-
+        * `log` - Log the last message
+        * `end_conversation` - End the conversation
+        * `send_message_to_bot` - Prompt the bot to message the user
+        * `schedule_trigger` - Trigger a schedule
+        * `pipeline_start` - Start a pipeline
     UsageRecordDetail:
       type: object
       properties:

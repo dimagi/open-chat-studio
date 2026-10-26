@@ -9,7 +9,7 @@ from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.footnotes import FootnoteExtension
 from markdown.extensions.tables import TableExtension
 
-from apps.utils.markdown import FileExtension
+from apps.utils.markdown import FileExtension, ListIndentExtension
 
 register = template.Library()
 
@@ -20,7 +20,14 @@ def render_markdown(text):
         return ""
 
     text = markdown.markdown(
-        text, extensions=[FootnoteExtension(BACKLINK_TEXT=""), FencedCodeExtension(), FileExtension(), TableExtension()]
+        text,
+        extensions=[
+            FootnoteExtension(BACKLINK_TEXT=""),
+            FencedCodeExtension(),
+            FileExtension(),
+            TableExtension(),
+            ListIndentExtension(),
+        ],
     )
     attributes = deepcopy(nh3.ALLOWED_ATTRIBUTES)
     attributes["code"] = {"class"}

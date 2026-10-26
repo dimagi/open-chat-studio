@@ -247,11 +247,11 @@ def test_acceptance_4_timeout_trigger(inspect_bot):
     assert _get(inspect_bot)["events"]["timeout_triggers"] == [
         {
             "id": inspect_bot.timeout.id,
-            "delay_seconds": 86400,
+            "delay": 86400,
             "total_num_triggers": 1,
             "trigger_from_first_message": False,
             "is_active": True,
-            "action": {"type": "send_message_to_bot", "params": {"message_to_bot": "Are you still there?"}},
+            "action": {"action_type": "send_message_to_bot", "params": {"message_to_bot": "Are you still there?"}},
         }
     ]
 
@@ -760,15 +760,13 @@ def _expected_events(bot):
                 "type": "conversation_start",
                 "is_active": True,
                 "action": {
-                    "type": "schedule_trigger",
+                    "action_type": "schedule_trigger",
                     "params": {
-                        "scheduled_message": {
-                            "name": "Daily nudge",
-                            "frequency": 1,
-                            "time_period": "days",
-                            "repetitions": 3,
-                            "prompt_text": "Hi",
-                        },
+                        "name": "Daily nudge",
+                        "frequency": 1,
+                        "time_period": "days",
+                        "repetitions": 3,
+                        "prompt_text": "Hi",
                     },
                 },
             }
@@ -776,13 +774,14 @@ def _expected_events(bot):
         "timeout_triggers": [
             {
                 "id": bot.timeout_trigger.id,
-                "delay_seconds": 86400,
+                "delay": 86400,
                 "total_num_triggers": 1,
                 "trigger_from_first_message": False,
                 "is_active": True,
-                "action": {"type": "send_message_to_bot", "params": {"message_to_bot": "Still there?"}},
+                "action": {"action_type": "send_message_to_bot", "params": {"message_to_bot": "Still there?"}},
             }
         ],
+        "scheduled_triggers": [],
     }
 
 
@@ -913,8 +912,10 @@ def test_pipeline_start_trigger_embeds_resource_bearing_pipeline(inspect_bot):
 
     payload = _get(inspect_bot)
 
-    action = next(t["action"] for t in payload["events"]["static_triggers"] if t["action"]["type"] == "pipeline_start")
-    assert "pipeline_id" not in action["params"]
+    action = next(
+        t["action"] for t in payload["events"]["static_triggers"] if t["action"]["action_type"] == "pipeline_start"
+    )
+    assert action["params"]["pipeline_id"] == str(embedded.id)
     embedded_node = next(n for n in action["pipeline"]["nodes"] if n["label"] == "Embedded")
     assert embedded_node["source_material"]["topic"] == "Embedded topic"
 
@@ -974,7 +975,7 @@ def _adversarial_bot():
 # fields run Pipeline.validate(), which fetches the provider models of every LLM-bearing node in one
 # query — the same cost the builder pays on save. ``deprecated_models`` adds one more: a single lookup
 # covering every model the graph references, whatever the node fan-out.
-EXPECTED_RENDER_QUERIES = 17
+EXPECTED_RENDER_QUERIES = 18
 
 
 @pytest.mark.django_db()

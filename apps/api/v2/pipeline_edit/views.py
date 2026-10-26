@@ -15,7 +15,7 @@ from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.discovery.node_types import served_node_type
-from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
+from apps.api.v2.write.base import CHATBOT_ID, ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.flow import FlowEdge
@@ -41,9 +41,6 @@ from .serializers import (
     WrittenNodeSerializer,
 )
 
-CHATBOT_ID = OpenApiParameter(
-    name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
-)
 NODE_ID = OpenApiParameter(
     name="node_id",
     type=OpenApiTypes.STR,
