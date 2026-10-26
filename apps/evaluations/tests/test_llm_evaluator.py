@@ -5,7 +5,11 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
-from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_NAMES, evaluator_prompt_variable_names
+from apps.evaluations.const import (
+    GENERATION_PROMPT_VARIABLE_NAMES,
+    evaluator_prompt_variable_names,
+    unknown_generation_variables,
+)
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
 from apps.evaluations.generation import GenerationRecord
@@ -598,6 +602,15 @@ def test_advertised_generation_variables_match_the_record():
         if name.startswith("generation.")
     }
     assert advertised == set(GenerationRecord().prompt_variables())
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [pytest.param("{generation.", id="unclosed-brace"), pytest.param("{generation.message_tags", id="unclosed-field")],
+)
+def test_unknown_generation_variables_ignores_a_malformed_template(prompt):
+    """A malformed template yields no generation findings; the root check reports it as a missing variable."""
+    assert unknown_generation_variables(prompt) == set()
 
 
 @pytest.mark.django_db()
