@@ -8,9 +8,17 @@ from waffle.testutils import override_flag
 
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import get_enabled_providers
 from apps.teams.backends import add_user_to_team, make_user_team_owner
-from apps.teams.views.integrations_views import build_integration_filter_pills, get_integration_rows
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, VoiceProviderFactory
+from apps.teams.views.integrations_views import (
+    build_integration_filter_pills,
+    get_integration_rows,
+    get_visible_categories,
+)
+from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
+    VoiceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -31,6 +39,14 @@ def request_for(team):
     return _make
 
 
+def _visible_categories(request):
+    return get_visible_categories(request=request, providers=get_enabled_providers(request))
+
+
+def _rows(request, team):
+    return get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))
+
+
 @pytest.mark.django_db()
 def test_get_integration_rows_composite_ids_are_prefixed_by_provider_type(team, request_for):
     """Row ids stay unique even if an LlmProvider and a VoiceProvider end up sharing a pk.
@@ -46,7 +62,7 @@ def test_get_integration_rows_composite_ids_are_prefixed_by_provider_type(team, 
     voice = VoiceProviderFactory(team=team)
 
     user = UserFactory()
-    rows = get_integration_rows(request_for(user), team)
+    rows = _rows(request=request_for(user), team=team)
 
     ids = [row["id"] for row in rows]
     assert len(ids) == len(set(ids))
@@ -58,12 +74,14 @@ def test_get_integration_rows_composite_ids_are_prefixed_by_provider_type(team, 
 @pytest.mark.django_db()
 def test_mcp_rows_excluded_when_flag_off(team, request_for):
     McpServer.objects.create(team=team, name="Zapier", server_url="https://example.org/mcp")
-    user = UserFactory()
+    request = request_for(UserFactory())
 
-    rows = get_integration_rows(request_for(user), team)
+    rows = _rows(request=request, team=team)
     assert rows == []
 
-    pills = build_integration_filter_pills(rows, None, show_mcp=False)
+    pills = build_integration_filter_pills(
+        rows=rows, active_category=None, visible_categories=_visible_categories(request)
+    )
     labels = [pill.label for pill in pills]
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing"]
     assert "MCP" not in labels
@@ -74,14 +92,16 @@ def test_mcp_rows_excluded_when_flag_off(team, request_for):
 @override_flag("flag_mcp", active=True)
 def test_mcp_rows_included_when_flag_on(team, request_for):
     McpServer.objects.create(team=team, name="Zapier", server_url="https://example.org/mcp")
-    user = UserFactory()
+    request = request_for(UserFactory())
 
-    rows = get_integration_rows(request_for(user), team)
+    rows = _rows(request=request, team=team)
     assert len(rows) == 1
     assert rows[0]["category"] == "MCP"
     assert rows[0]["name"] == "Zapier"
 
-    pills = build_integration_filter_pills(rows, None, show_mcp=True)
+    pills = build_integration_filter_pills(
+        rows=rows, active_category=None, visible_categories=_visible_categories(request)
+    )
     labels = [pill.label for pill in pills]
     assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "MCP"]
     mcp_pill = pills[-1]
@@ -178,7 +198,7 @@ def test_integrations_table_edit_action_hidden_without_permission(client, team):
 def test_llm_rows_carry_the_provider_for_its_verification_result(team, request_for):
     provider = LlmProviderFactory(team=team)
 
-    (row,) = get_integration_rows(request_for(UserFactory()), team)
+    (row,) = _rows(request=request_for(UserFactory()), team=team)
 
     assert row["verifiable_provider"] == provider
 
@@ -194,7 +214,7 @@ def test_llm_rows_carry_the_provider_for_its_verification_result(team, request_f
 def test_rows_for_providers_without_a_check_carry_no_verification(team, request_for, make_provider):
     make_provider(team)
 
-    (row,) = get_integration_rows(request_for(UserFactory()), team)
+    (row,) = _rows(request=request_for(UserFactory()), team=team)
 
     assert row["verifiable_provider"] is None
 

@@ -24,6 +24,7 @@ from apps.service_providers import auth_service, const, model_audit_fields
 from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.service_providers.minimax import build_minimax_synthetic_voices
+from apps.service_providers.moderation_service import ModerationService, OpenAIModerationService
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -976,6 +977,51 @@ class TraceProvider(BaseTeamModel):
             return None
         config = {**config, "sample_rate": effective_rate}
         return self.type_enum.get_service(config)
+
+
+class ModerationProviderType(models.TextChoices):
+    openai = "openai", _("OpenAI")
+
+    @property
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
+
+        match self:
+            case ModerationProviderType.openai:
+                return forms.OpenAIModerationConfigForm
+        raise Exception(f"No config form configured for {self}")
+
+    def get_moderation_service(self, config: dict, **service_kwargs) -> ModerationService:
+        """Build the service from ``config``, ignoring empty values. ``service_kwargs`` are passed through as given."""
+        config = {key: value for key, value in config.items() if value}
+        try:
+            match self:
+                case ModerationProviderType.openai:
+                    return OpenAIModerationService(**config, **service_kwargs)
+        except ValidationError as e:
+            raise ServiceProviderConfigError(provider_type=self, message=str(e)) from e
+        raise ServiceProviderConfigError(provider_type=self, message="No moderation service configured")
+
+
+@audit_fields(*model_audit_fields.MODERATION_PROVIDER_FIELDS, audit_special_queryset_writes=True)
+class ModerationProvider(BaseTeamModel, ProviderMixin):
+    objects = AuditingManager()
+    type = models.CharField(max_length=255, choices=ModerationProviderType.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return ModerationProviderType(self.type)
+
+    def get_moderation_service(self) -> ModerationService:
+        return self.type_enum.get_moderation_service(self.config)
 
 
 class EmbeddingProviderModelManager(models.Manager):

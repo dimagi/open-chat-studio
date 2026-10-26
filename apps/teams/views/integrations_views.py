@@ -7,13 +7,25 @@ from waffle import flag_is_active
 
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.models import LlmProvider
-from apps.service_providers.utils import ServiceProvider, get_available_subtypes
+from apps.service_providers.utils import (
+    ServiceProvider,
+    get_available_subtypes,
+    get_enabled_providers,
+)
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.tables import IntegrationsTable
 
 MCP_CATEGORY = "MCP"
 
-_CATEGORY_ORDER = ["LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", MCP_CATEGORY]
+_CATEGORY_ORDER = [
+    "LLM & embedding",
+    "Speech",
+    "Messaging",
+    "Authentication",
+    "Tracing",
+    ServiceProvider.moderation.category,
+    MCP_CATEGORY,
+]
 
 _CATEGORY_ICONS = {
     "LLM & embedding": "fa-brain",
@@ -21,6 +33,7 @@ _CATEGORY_ICONS = {
     "Messaging": "fa-comment-sms",
     "Authentication": "fa-key",
     "Tracing": "fa-magnifying-glass-location",
+    ServiceProvider.moderation.category: "fa-shield-halved",
     MCP_CATEGORY: "fa-server",
 }
 
@@ -30,7 +43,7 @@ def _verifiable(provider) -> LlmProvider | None:
     return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
 
 
-def get_integration_rows(request, team) -> list[dict]:
+def get_integration_rows(request, team, *, providers: list[ServiceProvider]) -> list[dict]:
     """One row per configured integration, across all provider types plus MCP servers.
 
     Each row's `id` is a composite key (`{provider_slug}-{pk}`) because provider pks are
@@ -38,7 +51,7 @@ def get_integration_rows(request, team) -> list[dict]:
     can share the same pk.
     """
     rows = []
-    for provider in ServiceProvider:
+    for provider in providers:
         rows.extend(
             {
                 "id": f"{provider.slug}-{obj.pk}",
@@ -87,7 +100,7 @@ def get_integration_new_choices(request, team) -> list[IntegrationNewGroup]:
     type the user can add, plus MCP once `flag_mcp` is on. Mirrors the permission check
     each provider's own (now-retired) per-section "Add new" dropdown used to apply."""
     options_by_category: dict[str, list[tuple[str, str]]] = {}
-    for provider in ServiceProvider:
+    for provider in get_enabled_providers(request):
         if not request.user.has_perm(provider.get_permission("add")):
             continue
         for subtype in get_available_subtypes(provider, request):
@@ -115,13 +128,20 @@ class IntegrationFilterPill:
     active: bool
 
 
+def get_visible_categories(request, providers: list[ServiceProvider]) -> set[str]:
+    """The categories of ``providers``, plus MCP once `flag_mcp` is on."""
+    categories = {provider.category for provider in providers}
+    if flag_is_active(request, "flag_mcp"):
+        categories.add(MCP_CATEGORY)
+    return categories
+
+
 def build_integration_filter_pills(
-    rows: list[dict], active_category: str | None, *, show_mcp: bool = False
+    rows: list[dict], active_category: str | None, *, visible_categories: set[str]
 ) -> list[IntegrationFilterPill]:
-    """Always shows every provider-type category, even at a count of 0, matching the mockup
-    (e.g. "Speech 0"). MCP is the exception: it's only a real category once `flag_mcp` is on."""
+    """One pill per visible category, even at a count of 0, matching the mockup (e.g. "Speech 0")."""
     counts = Counter(row["category"] for row in rows)
-    categories = [category for category in _CATEGORY_ORDER if category != MCP_CATEGORY or show_mcp]
+    categories = [category for category in _CATEGORY_ORDER if category in visible_categories]
     pills = [IntegrationFilterPill(label="All", value=None, count=len(rows), active=active_category is None)]
     pills.extend(
         IntegrationFilterPill(
@@ -144,7 +164,8 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
     template_name = "teams/components/integrations_table.html"
 
     def get_queryset(self):
-        self.all_rows = get_integration_rows(self.request, self.request.team)
+        self.providers = get_enabled_providers(self.request)
+        self.all_rows = get_integration_rows(request=self.request, team=self.request.team, providers=self.providers)
         category = self.request.GET.get("category")
         if category:
             return [row for row in self.all_rows if row["category"] == category]
@@ -153,7 +174,9 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["filter_pills"] = build_integration_filter_pills(
-            self.all_rows, self.request.GET.get("category"), show_mcp=flag_is_active(self.request, "flag_mcp")
+            rows=self.all_rows,
+            active_category=self.request.GET.get("category"),
+            visible_categories=get_visible_categories(request=self.request, providers=self.providers),
         )
         context["table_url"] = self.request.path
         self._table = context["table"]

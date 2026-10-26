@@ -7,6 +7,9 @@ TEAM_FIELDS = [
     "is_migrating",
     "require_mfa",
     "exportable_experiments",
+    "moderation_enabled",
+    "moderation_provider",
+    "auto_block_enabled",
 ]
 MEMBERSHIP_FIELDS = ["team", "user"]
 FLAG_FIELDS = [

@@ -1,12 +1,18 @@
 import json
+from unittest import mock
 
 import pytest
 from django.urls import reverse
 
 from apps.admin.provider_keys import mask_secret
 from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.utils import ServiceProvider
 from apps.users.models import CustomUser
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, TraceProviderFactory
+from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
+    ModerationProviderFactory,
+    TraceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -197,3 +203,18 @@ def test_trace_provider_without_metadata_reports_blank_project(superuser_client)
     record = response.json()["trace_providers"][0]
     assert record["project_id"] == ""
     assert record["organization_id"] == ""
+
+
+@pytest.mark.django_db()
+def test_find_provider_by_key_searches_moderation_providers(superuser_client):
+    provider = ModerationProviderFactory.create(name="Main moderation", config={"openai_api_key": OPENAI_KEY})
+
+    response = superuser_client.post(
+        reverse("ocs_admin:find_provider_by_key"),
+        data={"provider_type": "moderation", "key": OPENAI_KEY, "match": "exact"},
+    )
+
+    assert response.status_code == 200
+    assert response.context["results"] == [
+        {"provider": provider, "service_provider": ServiceProvider.moderation, "usages": mock.ANY}
+    ]
