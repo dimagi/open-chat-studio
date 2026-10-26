@@ -69,7 +69,7 @@
     {% else %}
       <div class="rounded-box border border-dashed border-base-300 p-4" data-testid="moderation-empty-state">
         <p class="text-sm whitespace-normal">
-          {% translate "Moderation uses your own OpenAI API key, so the checks run on your account's rate limits and costs. Add a moderation provider to turn moderation on." %}
+          {% translate "No moderation provider configured." %}
         </p>
         {% if can_add_moderation_provider %}
           <button type="button" class="btn btn-sm btn-primary mt-2"
