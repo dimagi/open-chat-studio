@@ -1,5 +1,5 @@
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.config import ConfigDict
 from pydantic_core import ValidationError
 
@@ -14,7 +14,13 @@ from apps.evaluations.const import (
 )
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
-from apps.evaluations.generation import GenerationRecord
+from apps.evaluations.generation import (
+    GenerationRecord,
+    SpanType,
+    judged_response,
+    span_kwarg,
+    span_prompt_variables,
+)
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.usage import EvaluatorUsageContext, track_evaluator_usage
 from apps.evaluations.utils import schema_to_pydantic_model
@@ -55,6 +61,38 @@ class BaseEvaluator(BaseModel):
         raise NotImplementedError
 
 
+class SpanSelectorMixin(BaseModel):
+    span_type: SpanType = Field(
+        default="reply",
+        title="Span",
+        description="What the evaluator judges: the whole reply, or one node, tool call or LLM call of the generation",
+    )
+    span_name: str = Field(
+        default="",
+        title="Span name",
+        description="The node name, tool name or LLM node name to select; leave empty for the whole reply",
+    )
+    span_as_response: bool = Field(
+        default=False,
+        title="Use the span's output as the generated response",
+        description="Judge the selected span's output in place of the bot's reply",
+        json_schema_extra=UiSchema(widget=Widgets.toggle),
+    )
+
+    @model_validator(mode="after")
+    def selector_is_consistent(self):
+        if self.span_type != "reply" and not self.span_name:
+            raise ValueError("A span name is required when a node, tool or LLM span is selected")
+        if self.span_type == "reply" and self.span_as_response:
+            raise ValueError("Select a span to use its output as the generated response")
+        return self
+
+    def selected_spans(self, generation: GenerationRecord | None) -> list[dict]:
+        if self.span_type == "reply":
+            return []
+        return (generation or GenerationRecord()).select_spans(self.span_type, self.span_name)
+
+
 class LLMResponseMixin(BaseModel):
     # Supplied by ``Evaluator.get_evaluator_params`` from the
     # ``Evaluator.llm_provider``/``llm_provider_model`` FKs, which are where the selection is
@@ -92,7 +130,7 @@ class LLMResponseMixin(BaseModel):
 LLM_PROVIDER_FIELDS = ("llm_provider_id", "llm_provider_model_id")
 
 
-class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
+class LlmEvaluator(SpanSelectorMixin, LLMResponseMixin, BaseEvaluator):
     model_config = ConfigDict(evaluator_schema=EvaluatorSchema(label="LLM Evaluator", icon="fa-robot"))  # ty: ignore[invalid-key]
 
     prompt: str = Field(
@@ -136,6 +174,12 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
     )
 
+    @model_validator(mode="after")
+    def span_variables_need_a_selector(self):
+        if self.span_type == "reply" and "span" in prompt_variable_roots(self.prompt):
+            raise ValueError("The prompt uses {span.input} or {span.output} but no span is selected")
+        return self
+
     def run(
         self,
         message: EvaluationMessage,
@@ -144,6 +188,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         usage_context: EvaluatorUsageContext | None = None,
         generation: GenerationRecord | None = None,
     ) -> EvaluatorResult:
+        spans = self.selected_spans(generation)
+        response = judged_response(spans, generated_response) if self.span_as_response else generated_response
         # Create a pydantic class so the llm output is validated
         output_model = schema_to_pydantic_model(self.output_schema)
         llm = structured_output_runnable(self.get_chat_model(), output_model)
@@ -170,13 +216,14 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             participant_data=SafeAccessWrapper(message.participant_data or {}),
             session_state=SafeAccessWrapper(message.session_state or {}),
             full_history=message.full_history,
-            generated_response=generated_response,
+            generated_response=response,
             generation=SafeAccessWrapper((generation or GenerationRecord()).prompt_variables()),
+            span=SafeAccessWrapper(span_prompt_variables(spans)),
         )
         with track_evaluator_usage(usage_context) as callbacks:
             result_model = llm_with_retry.invoke(formatted_prompt, config={"callbacks": callbacks})
         result = result_model.model_dump()
-        return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
+        return EvaluatorResult(message=message.as_result_dict(), generated_response=response, result=result)
 
 
 DEFAULT_FUNCTION = """# The main function is called for each message in the evaluation dataset
@@ -193,7 +240,9 @@ def main(input: dict, output: dict, context: dict, full_history: str, generated_
         **kwargs: Carries participant_data and session_state, both dicts captured at the time
               of the message (e.g. kwargs['session_state'].get('current_step')), and generation,
               a dict of what the bot generation did: node_outputs, path, message_tags, session_tags,
-              participant_data_diff, llm_calls and tool_calls (e.g. 'urgent' in kwargs['generation']['message_tags'])
+              participant_data_diff, llm_calls and tool_calls (e.g. 'urgent' in kwargs['generation']['message_tags']),
+              and span, the selected node, tool or LLM span as a dict with type, node, name, input, output
+              and error (a list when several match, None when no span is selected)
 
     Returns:
         dict: Evaluation results where keys become columns in the output
@@ -203,7 +252,7 @@ def main(input: dict, output: dict, context: dict, full_history: str, generated_
 """
 
 
-class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
+class PythonEvaluator(SpanSelectorMixin, BaseEvaluator, RestrictedPythonExecutionMixin):
     """Runs python"""
 
     model_config = ConfigDict(
@@ -244,22 +293,26 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
         except ValidationError:
             output = {}
 
+        spans = self.selected_spans(generation)
+        response = judged_response(spans, generated_response) if self.span_as_response else generated_response
+
         try:
             result = self.compile_and_execute_code(
                 input=input,
                 output=output,
                 context=message.context,
                 full_history=message.full_history,
-                generated_response=generated_response,
+                generated_response=response,
                 # Via **kwargs: _validate_function_signature demands an exact positional match,
                 # so widening _get_function_args would invalidate every saved evaluator.
                 participant_data=message.participant_data or {},
                 session_state=message.session_state or {},
                 generation=(generation or GenerationRecord()).as_dict(),
+                span=span_kwarg(spans),
             )
             if not isinstance(result, dict):
                 raise EvaluationRunException("The python function did not return a dictionary")
         except Exception as exc:
             raise EvaluationRunException(get_code_error_message("<inline_code>", self.code)) from exc
 
-        return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
+        return EvaluatorResult(message=message.as_result_dict(), generated_response=response, result=result)

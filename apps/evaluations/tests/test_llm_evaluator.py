@@ -674,3 +674,49 @@ def test_generation_variables_render_empty_without_a_record(get_llm_service, llm
     evaluator.run(EvaluationMessageFactory.create(), "")
 
     assert "Tags: []" in _prompt_sent_to(service)
+
+
+def test_span_variables_need_a_selector():
+    with pytest.raises(ValidationError, match="no span is selected"):
+        LlmEvaluator(
+            llm_provider_id=1, llm_provider_model_id=1, prompt="Judge {span.output}", output_schema=_OUTPUT_SCHEMA
+        )
+
+
+@pytest.mark.parametrize("prompt", ["Judge {span.input}", "Judge {span.output}"])
+def test_span_variables_are_accepted_with_a_selector(prompt):
+    evaluator = LlmEvaluator(
+        llm_provider_id=1,
+        llm_provider_model_id=1,
+        prompt=prompt,
+        output_schema=_OUTPUT_SCHEMA,
+        span_type="tool",
+        span_name="file-search",
+    )
+    assert evaluator.prompt == prompt
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_the_selected_span_reaches_the_prompt_and_the_response(get_llm_service, llm_provider, llm_provider_model):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Chunks: {span.output} for {span.input}",
+        output_schema=_OUTPUT_SCHEMA,
+        span_type="tool",
+        span_name="file-search",
+        span_as_response=True,
+    )
+    record = GenerationRecord(
+        tool_calls=[
+            {"node": "Answer", "name": "file-search", "input": {"query": "q"}, "output": "chunk a", "error": None}
+        ]
+    )
+
+    result = evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
+
+    assert 'Chunks: chunk a for {"query": "q"}' in _prompt_sent_to(service)
+    assert result.generated_response == "chunk a"
