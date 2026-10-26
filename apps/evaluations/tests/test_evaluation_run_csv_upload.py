@@ -289,7 +289,7 @@ def test_upload_task_recomputes_aggregates(evaluation_setup):
 @pytest.mark.django_db()
 def test_exported_results_upload_back_without_the_formula_guard(evaluation_setup):
     result = evaluation_setup["result1"]
-    result.output = {"result": {"verdict": "=needs review", "score": -2}}
+    result.output = {"result": {"verdict": "=needs review", "score": -2, "handle": "'@handle"}}
     result.save()
     rows = iter_evaluation_table_rows(
         annotate_export_fields(evaluation_setup["run"].export_results).order_by("message_id"), include_ids=True
@@ -299,6 +299,7 @@ def test_exported_results_upload_back_without_the_formula_guard(evaluation_setup
     column_mappings = {
         "verdict (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
         "score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
+        "handle (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
     }
 
     stats = process_evaluation_results_csv_rows(
@@ -307,4 +308,4 @@ def test_exported_results_upload_back_without_the_formula_guard(evaluation_setup
 
     assert stats == {"updated_count": 0, "created_count": 0, "error_messages": []}
     result.refresh_from_db()
-    assert result.output["result"] == {"verdict": "=needs review", "score": -2}
+    assert result.output["result"] == {"verdict": "=needs review", "score": -2, "handle": "'@handle"}
