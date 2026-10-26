@@ -58,7 +58,8 @@ def _stringify_keys(value: Any) -> Any:
 class GenerationRecord:
     """What a bot generation did, for evaluators to judge beside the reply text.
 
-    `llm_calls` and `tool_calls` list calls in completion order. A node LangGraph retried is
+    `llm_calls` and `tool_calls` list calls in the order they started, which for a model's
+    parallel tool calls is the order the model requested them. A node LangGraph retried is
     recorded once per attempt. Calls made outside a pipeline node, such as the reply phrased
     for an error, are left out.
     """

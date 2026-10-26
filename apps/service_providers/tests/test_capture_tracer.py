@@ -138,7 +138,29 @@ def test_interleaved_calls_are_attributed_by_run_id():
     handler.on_tool_start({"name": "second"}, "b", run_id=second)
     handler.on_tool_end("B", run_id=second)
     handler.on_tool_end("A", run_id=first)
-    assert [(span.name, span.output) for span in handler.spans] == [("second", "B"), ("first", "A")]
+    assert [(span.name, span.output) for span in handler.spans] == [("first", "A"), ("second", "B")]
+
+
+def test_spans_are_listed_in_the_order_the_calls_started():
+    handler = CaptureCallbackHandler()
+    first, second = uuid4(), uuid4()
+    handler.on_tool_start({"name": "A"}, "a", run_id=first)
+    handler.on_tool_start({"name": "B"}, "b", run_id=second)
+    handler.on_tool_end("B", run_id=second)
+    handler.on_tool_end("A", run_id=first)
+    assert [span.name for span in handler.spans] == ["A", "B"]
+
+
+def test_the_tracer_keeps_the_start_order_of_the_calls():
+    tracer = CaptureTracer()
+    first, second = uuid4(), uuid4()
+    with tracer.trace(TraceContext(id=uuid4(), name="eval"), session=None):
+        handler = tracer.get_langchain_callback()
+        handler.on_tool_start({"name": "A"}, "a", run_id=first)
+        handler.on_tool_start({"name": "B"}, "b", run_id=second)
+        handler.on_tool_end("B", run_id=second)
+        handler.on_tool_end("A", run_id=first)
+    assert [span.name for span in tracer.spans] == ["A", "B"]
 
 
 def test_a_tool_error_is_recorded_on_the_span():

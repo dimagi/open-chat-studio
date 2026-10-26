@@ -44,6 +44,7 @@ class _PendingSpan:
     name: str
     node_id: str | None
     input: Any
+    sequence: int
 
 
 def _error_text(error: BaseException) -> str:
@@ -76,22 +77,24 @@ def _pipeline_node_id(metadata: dict[str, Any]) -> str | None:
 
 
 class CaptureCallbackHandler(BaseCallbackHandler):
-    """Records completed LLM and tool calls, in completion order.
+    """Records completed LLM and tool calls, listed in the order the calls started.
 
-    Events arrive from LangGraph's thread pool, so the pending calls and the span list
-    are guarded by one lock.
+    For a model's parallel tool calls that is the order the model requested them, however
+    they finish. Events arrive from LangGraph's thread pool, so the pending calls, the
+    start counter and the span list are guarded by one lock.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self._lock = threading.Lock()
+        self._sequence = 0
         self._pending: dict[UUID, _PendingSpan] = {}
-        self._spans: list[CapturedSpan] = []
+        self._spans: list[tuple[int, CapturedSpan]] = []
 
     @property
     def spans(self) -> list[CapturedSpan]:
         with self._lock:
-            return list(self._spans)
+            return [span for _, span in sorted(self._spans, key=lambda entry: entry[0])]
 
     def on_chat_model_start(
         self, serialized: dict[str, Any], messages: list[list[BaseMessage]], *, run_id: UUID, **kwargs: Any
@@ -132,30 +135,32 @@ class CaptureCallbackHandler(BaseCallbackHandler):
         run_id: UUID,
         kwargs: dict[str, Any],
     ) -> None:
-        pending = _PendingSpan(
-            type=span_type,
-            name=get_langchain_run_name(serialized, **kwargs),
-            node_id=_pipeline_node_id(kwargs.get("metadata") or {}),
-            input=span_input,
-        )
+        name = get_langchain_run_name(serialized, **kwargs)
+        node_id = _pipeline_node_id(kwargs.get("metadata") or {})
         with self._lock:
-            self._pending[run_id] = pending
+            self._pending[run_id] = _PendingSpan(
+                type=span_type,
+                name=name,
+                node_id=node_id,
+                input=span_input,
+                sequence=self._sequence,
+            )
+            self._sequence += 1
 
     def _finish(self, run_id: UUID, output: Any = None, error: str | None = None) -> None:
         with self._lock:
             pending = self._pending.pop(run_id, None)
             if pending is None:
                 return
-            self._spans.append(
-                CapturedSpan(
-                    type=pending.type,
-                    name=pending.name,
-                    node_id=pending.node_id,
-                    input=pending.input,
-                    output=output,
-                    error=error,
-                )
+            span = CapturedSpan(
+                type=pending.type,
+                name=pending.name,
+                node_id=pending.node_id,
+                input=pending.input,
+                output=output,
+                error=error,
             )
+            self._spans.append((pending.sequence, span))
 
 
 class CaptureTracer(Tracer):
