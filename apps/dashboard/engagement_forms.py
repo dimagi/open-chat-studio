@@ -2,7 +2,6 @@ from typing import Any
 
 from django import forms
 
-from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment
 
@@ -12,7 +11,6 @@ class EngagementFilterForm(forms.Form):
         queryset=Experiment.objects.none(), required=False, widget=forms.SelectMultiple()
     )
     channels = forms.MultipleChoiceField(choices=[], required=False, widget=forms.SelectMultiple())
-    tags = forms.ModelMultipleChoiceField(queryset=Tag.objects.none(), required=False, widget=forms.SelectMultiple())
 
     def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -31,8 +29,6 @@ class EngagementFilterForm(forms.Form):
             (label_to_value[label], label) for label in available_platform_labels if label in label_to_value
         ]
 
-        self.fields["tags"].queryset = Tag.objects.filter(team=team).exclude(category=TagCategories.EXPERIMENT_VERSION)
-
     def get_filter_params(self) -> dict[str, Any]:
         if not self.is_valid():
             return {}
@@ -44,7 +40,5 @@ class EngagementFilterForm(forms.Form):
             params["experiment_ids"] = list(data["experiments"].values_list("id", flat=True))
         if data.get("channels"):
             params["platform_names"] = data["channels"]
-        if data.get("tags"):
-            params["tag_ids"] = list(data["tags"].values_list("id", flat=True))
 
         return params

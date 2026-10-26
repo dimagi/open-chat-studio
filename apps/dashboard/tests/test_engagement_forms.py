@@ -9,7 +9,7 @@ class TestEngagementFilterForm:
 
         forbidden = {"date_range", "start_date", "end_date", "granularity", "filter_data", "name", "is_default"}
         assert forbidden.isdisjoint(form.fields.keys())
-        assert set(form.fields.keys()) == {"experiments", "channels", "tags"}
+        assert set(form.fields.keys()) == {"experiments", "channels"}
 
     @pytest.mark.django_db()
     def test_get_filter_params_scopes_querysets_to_team(self, team, experiment, participant):

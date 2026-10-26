@@ -13,8 +13,7 @@ const TOM_SELECT_CONFIG = {
 
 const FILTER_PLACEHOLDERS = {
     experiments: 'All chatbots',
-    channels: 'All channels',
-    tags: 'All tags'
+    channels: 'All channels'
 };
 
 const FILTER_KEYS = Object.keys(FILTER_PLACEHOLDERS);
@@ -23,7 +22,7 @@ const WEEK_BUCKETS = ['1_week', '2_weeks', '3_weeks', '4_plus_weeks'];
 
 function engagementDashboard() {
     return {
-        filters: {experiments: [], channels: [], tags: []},
+        filters: {experiments: [], channels: []},
         summaryStats: [],
         headlineMonth: '',
         hasFrequencyData: true,
@@ -65,7 +64,7 @@ function engagementDashboard() {
             const form = document.getElementById('engagementFilterForm');
             if (!form) return;
             const formData = new FormData(form);
-            const filters = {experiments: [], channels: [], tags: []};
+            const filters = {experiments: [], channels: []};
             for (const [key, value] of formData.entries()) {
                 if (filters[key]) filters[key].push(value);
             }

@@ -30,7 +30,7 @@
       <div class="card-body">
         <div class="card-title">{% translate "Filters" %}</div>
 
-        <form id="engagementFilterForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" @change="handleFilterChange()">
+        <form id="engagementFilterForm" class="grid grid-cols-1 md:grid-cols-3 gap-4" @change="handleFilterChange()">
           <div class="form-control col-span-2">
             <label class="label label-text">{% translate "Chatbots" %}</label>
             {% with field=filter_form.experiments %}
@@ -43,15 +43,6 @@
           <div class="form-control">
             <label class="label label-text">{% translate "Channels" %}</label>
             {% with field=filter_form.channels %}
-              <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
-                {% for option in field %}{{ option }}{% endfor %}
-              </select>
-            {% endwith %}
-          </div>
-
-          <div class="form-control">
-            <label class="label label-text">{% translate "Tags" %}</label>
-            {% with field=filter_form.tags %}
               <select x-cloak class="w-full h-10" id="{{ field.id_for_label }}" name="{{ field.name }}" multiple>
                 {% for option in field %}{{ option }}{% endfor %}
               </select>
