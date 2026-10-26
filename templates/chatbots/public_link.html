@@ -24,6 +24,7 @@
       {% endif %}
       <div class="w-full max-w-3xl flex-1 relative">
         <open-chat-studio-widget
+          theme="{% if dark_mode %}dark{% else %}light{% endif %}"
           mode="kiosk"
           chatbot-id="{{ public_id }}"
           embed-key="{{ token }}"
