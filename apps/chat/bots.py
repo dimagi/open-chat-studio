@@ -284,10 +284,25 @@ class EvalsBot(PipelineBot):
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, participant_data: dict):
         super().__init__(session, experiment, trace_service, False)
         self._participant_data = participant_data
+        self.pipeline_output: dict | None = None
+        self.participant_data_diff: list = []
 
     def _update_state_with_participant_data(self, state):
         state["participant_data"] = self._participant_data
         return state
+
+    def _persist_pipeline_state(self, input_state, output):
+        self.pipeline_output = output
+        super()._persist_pipeline_state(input_state, output)
+
+    def _persist_participant_data(self, input_state, output):
+        """Record the diff only: the row is the team-wide evaluations participant's, and a name key would rename it."""
+        out_pd = _changed_participant_data(input_state, output)
+        if out_pd is None:
+            return
+        self.participant_data_diff = _participant_data_diff(input_state, out_pd)
+        if self.trace_service:
+            self.trace_service.set_participant_data_diff(self.participant_data_diff)
 
 
 class PipelineTestBot:
