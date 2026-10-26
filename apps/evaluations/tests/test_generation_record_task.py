@@ -8,35 +8,17 @@ from langchain_core.messages import AIMessage
 
 from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import EvaluationRun
-from apps.evaluations.tasks import evaluate_message, run_bot_generation
+from apps.evaluations.tasks import evaluate_message
+from apps.evaluations.tests.generation_helpers import _generate, _llm_experiment, _python_evaluator
 from apps.experiments.models import AgentTools, Participant, ParticipantData
 from apps.pipelines.tests.utils import (
     code_node,
-    create_pipeline_model,
     end_node,
     llm_response_node,
     llm_response_with_prompt_node,
     start_node,
 )
-from apps.utils.factories.evaluations import (
-    EvaluationConfigFactory,
-    EvaluationDatasetFactory,
-    EvaluationMessageFactory,
-    EvaluationRunFactory,
-    EvaluatorFactory,
-)
-from apps.utils.factories.experiment import ChatbotFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-from apps.utils.tests.langchain import build_fake_llm_service
-
-TAGGING_CODE = textwrap.dedent("""
-    def main(input, **kwargs):
-        add_message_tag("urgent")
-        add_session_tag("needs-review")
-        set_participant_data_key("plan", "pro")
-        set_participant_data_key("name", "Ada")
-        return "tagged: " + input
-    """)
+from apps.utils.factories.evaluations import EvaluationConfigFactory
 
 RAISING_CODE = textwrap.dedent("""
     def main(input, **kwargs):
@@ -47,49 +29,6 @@ READ_TAGS_CODE = textwrap.dedent("""
     def main(input, output, context, full_history, generated_response, **kwargs):
         return {"tags": kwargs["generation"]["message_tags"]}
     """)
-
-
-@pytest.fixture()
-def tagging_experiment(team_with_users):
-    experiment = ChatbotFactory.create(team=team_with_users)
-    create_pipeline_model(
-        [start_node(), code_node(TAGGING_CODE, name="Tagger"), end_node()], pipeline=experiment.pipeline
-    )
-    experiment.pipeline.save()
-    return experiment
-
-
-@pytest.fixture()
-def message(team_with_users):
-    message = EvaluationMessageFactory.create(
-        input={"content": "hello", "role": "human"}, participant_data={"plan": "free"}
-    )
-    EvaluationDatasetFactory.create(team=team_with_users, messages=[message])
-    return message
-
-
-def _python_evaluator(team, code):
-    return EvaluatorFactory.create(
-        team=team, type="PythonEvaluator", params={"code": code}, llm_provider=None, llm_provider_model=None
-    )
-
-
-def _llm_experiment(team, build_nodes):
-    """A chatbot whose pipeline is `build_nodes(provider_id, model_id)`."""
-    provider = LlmProviderFactory.create(team=team)
-    model = LlmProviderModelFactory.create(team=team, type=provider.type)
-    experiment = ChatbotFactory.create(team=team)
-    create_pipeline_model(build_nodes(str(provider.id), str(model.id)), pipeline=experiment.pipeline)
-    experiment.pipeline.save()
-    return experiment
-
-
-def _generate(team, message, experiment, responses=()):
-    with patch(
-        "apps.service_providers.models.LlmProvider.get_llm_service",
-        return_value=build_fake_llm_service(responses=list(responses)),
-    ):
-        return run_bot_generation(team, message, experiment, evaluation_run=EvaluationRunFactory.create(team=team))
 
 
 @pytest.mark.django_db()
