@@ -67,6 +67,17 @@ def test_node_names_resolve_from_the_map_before_the_state():
     assert record.path == [(None, "start", ["Renamed"]), ("start", "Renamed", ["Second"])]
 
 
+def test_calls_made_outside_a_pipeline_node_are_left_out():
+    spans = [
+        CapturedSpan(type="llm", name="FakeLlm", node_id="code-1", input="hi", output="ok"),
+        CapturedSpan(type="llm", name="EventBot", node_id=None, input="phrase the error", output="Sorry"),
+        CapturedSpan(type="tool", name="calc", node_id=None, input="x", output="y"),
+    ]
+    record = GenerationRecord.from_run(STATE, [], spans)
+    assert [call["name"] for call in record.llm_calls] == ["FakeLlm"]
+    assert record.tool_calls == []
+
+
 def test_the_diff_is_carried_as_given():
     diff = [("change", "plan", ("free", "pro"))]
     assert GenerationRecord.from_run({}, diff, []).participant_data_diff == diff

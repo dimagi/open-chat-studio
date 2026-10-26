@@ -47,7 +47,12 @@ def _cap(value: str) -> str:
 
 @dataclass(frozen=True)
 class GenerationRecord:
-    """What a bot generation did, for evaluators to judge beside the reply text."""
+    """What a bot generation did, for evaluators to judge beside the reply text.
+
+    `llm_calls` and `tool_calls` list calls in completion order. A node LangGraph retried is
+    recorded once per attempt. Calls made outside a pipeline node, such as the reply phrased
+    for an error, are left out.
+    """
 
     node_outputs: dict[str, Any] = field(default_factory=dict)
     path: list[tuple[str | None, str | None, list[str | None]]] = field(default_factory=list)
@@ -68,9 +73,10 @@ class GenerationRecord:
     ) -> GenerationRecord:
         names = node_names or {}
         state = PipelineState(pipeline_state) if pipeline_state is not None else None
+        node_spans = [span for span in spans if span.node_id is not None]
         calls = {
-            "llm_calls": [_call(span, names, state) for span in spans if span.type == "llm"],
-            "tool_calls": [_call(span, names, state) for span in spans if span.type == "tool"],
+            "llm_calls": [_call(span, names, state) for span in node_spans if span.type == "llm"],
+            "tool_calls": [_call(span, names, state) for span in node_spans if span.type == "tool"],
         }
         if state is None:
             return cls(participant_data_diff=participant_data_diff, **calls)
