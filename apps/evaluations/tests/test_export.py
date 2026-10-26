@@ -1,5 +1,8 @@
 """Tests for the evaluations export/table helpers (apps/evaluations/export.py)."""
 
+import csv
+import io
+
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -10,6 +13,7 @@ from apps.evaluations.export import (
     categorical_columns_for_evaluators,
     evaluator_output_columns,
     order_evaluation_headers,
+    write_evaluation_csv,
 )
 from apps.utils.factories.evaluations import EvaluationRunFactory, EvaluatorFactory
 
@@ -145,6 +149,25 @@ def test_generation_error_is_ordered_with_the_other_error_columns():
     headers = order_evaluation_headers(["Dataset Input", "score (Judge)", "generation_error", "error (Judge)"])
 
     assert headers == ["Dataset Input", "score (Judge)", "error (Judge)", "generation_error"]
+
+
+def test_write_evaluation_csv_neutralizes_spreadsheet_formulas_in_data_cells():
+    output = io.StringIO()
+    rows = [
+        {
+            "id": 7,
+            "Dataset Input": "+1",
+            "Dataset Output": "plain answer",
+            "Generated Response": '=HYPERLINK("http://evil","x")',
+            "-score (Judge)": "-2",
+        }
+    ]
+
+    write_evaluation_csv(csv.writer(output), rows)
+
+    header, data = list(csv.reader(io.StringIO(output.getvalue())))
+    assert header == ["id", "Dataset Input", "Dataset Output", "Generated Response", "-score (Judge)"]
+    assert data == ["7", "'+1", "plain answer", '\'=HYPERLINK("http://evil","x")', "'-2"]
 
 
 @pytest.mark.django_db()

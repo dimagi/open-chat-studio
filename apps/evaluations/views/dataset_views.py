@@ -70,6 +70,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.csv_export import neutralize_csv_formula
 from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
@@ -641,26 +642,25 @@ def download_dataset_csv(request, team_slug: str, pk: int):
         return str(value) if value is not None else ""
 
     for message in messages:
-        row = [
-            message.id,
+        values = [
             message.input.get("content", ""),
             message.output.get("content", ""),
         ]
 
         for key in context_keys:
             value = message.context.get(key, "") if message.context else ""
-            row.append(_serialize_value(value))
+            values.append(_serialize_value(value))
 
         for key in participant_data_keys:
             value = message.participant_data.get(key, "") if message.participant_data else ""
-            row.append(_serialize_value(value))
+            values.append(_serialize_value(value))
 
         for key in session_state_keys:
             value = message.session_state.get(key, "") if message.session_state else ""
-            row.append(_serialize_value(value))
+            values.append(_serialize_value(value))
 
-        row.append(message.full_history)
-        writer.writerow(row)
+        values.append(message.full_history)
+        writer.writerow([message.id, *(neutralize_csv_formula(value) for value in values)])
 
     return response
 
