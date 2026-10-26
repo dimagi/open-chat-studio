@@ -4,10 +4,10 @@ import pytest
 from django.test import override_settings
 
 from apps.chat.models import ChatMessageType
+from apps.evaluations.evaluation_messages import make_session_evaluation_messages
 from apps.evaluations.forms import EvaluationConfigForm, EvaluationDatasetEditForm, EvaluationDatasetForm
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
 from apps.evaluations.tasks import create_dataset_from_sessions_task
-from apps.evaluations.utils import make_session_evaluation_messages
 from apps.trace.models import TraceStatus
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory

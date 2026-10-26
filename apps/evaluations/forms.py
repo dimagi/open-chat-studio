@@ -13,7 +13,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from apps.annotations.models import Tag
 from apps.chatbots.version_resolver import VersionSelectionRule
-from apps.evaluations.dataset_clone import SessionSelection, check_message_mode_clone_size
+from apps.evaluations.dataset_clone import SessionSelection
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.models import (
     ConditionType,
@@ -673,16 +673,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
 
-    def _is_session_mode(self) -> bool:
-        """Whether the dataset being saved is session-mode.
-
-        Read from the form on create, and from the instance on edit, where `evaluation_mode` is
-        immutable and so removed from the form.
-        """
-        if "evaluation_mode" in self.fields:
-            return self.cleaned_data.get("evaluation_mode") == EvaluationMode.SESSION
-        return self.instance.evaluation_mode == EvaluationMode.SESSION
-
     def _clean_clone(self) -> SessionSelection:
         """Resolve what clone mode should pull in: hand-picked sessions, or a filter."""
         if self.cleaned_data.get("session_scope") == "all_matching":
@@ -711,10 +701,9 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
     def _clean_clone_all_matching(self) -> SessionSelection:
         """Resolve "every session matching the current filters" without going through the browser.
 
-        Session-mode datasets keep the filter and re-resolve it inside the task, so no ids are
-        materialised at all — the ~390 KB of UUIDs that used to be posted (and rejected by the
-        WAF above a few hundred sessions) is the problem this mode exists to solve. Message-mode
-        still needs ids, so it resolves them here rather than client-side, and is capped.
+        Both modes keep the filter and re-resolve it inside the task, so no ids are materialised
+        at all — the ~390 KB of UUIDs that used to be posted (and rejected by the WAF above a few
+        hundred sessions) is the problem this mode exists to solve.
         """
         available = resolve_dataset_available_sessions(
             self.team,
@@ -722,15 +711,8 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
             dataset_id=self.instance.pk,
             timezone=self.timezone,
         )
-        if self._is_session_mode():
-            filter_query = self.filter_params.to_query() if self.filter_params else ""
-            return SessionSelection(count=available.count(), filter_query=filter_query)
-
-        # Counted before the ids are read, so an oversized selection is rejected without building
-        # the list it is being rejected for.
-        check_message_mode_clone_size(available.count())
-        external_ids = [str(external_id) for external_id in available.values_list("external_id", flat=True)]
-        return SessionSelection(count=len(external_ids), external_ids=external_ids)
+        filter_query = self.filter_params.to_query() if self.filter_params else ""
+        return SessionSelection(count=available.count(), filter_query=filter_query)
 
     @staticmethod
     def _complete_empty_clone(dataset):
@@ -746,17 +728,20 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
     def _save_session_messages_clone(self, dataset):
         """Dispatch async task to clone messages from sessions."""
         selection = self.cleaned_data.get("session_selection")
-        if not selection or not selection.external_ids:
+        if not selection or not selection.count:
             self._complete_empty_clone(dataset)
             return
 
+        # A worker from the previous release does not accept session_filter_query, so it is only sent when set.
+        extra_kwargs = {"session_filter_query": selection.filter_query} if selection.filter_query is not None else {}
         task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
-            list(selection.external_ids),
+            list(selection.external_ids or []),
             [],  # filtered_session_ids: the create form has no per-row filtered selection
             None,  # filter_query: the create form has no per-row filtered selection
             self.timezone,
+            **extra_kwargs,
         )
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])

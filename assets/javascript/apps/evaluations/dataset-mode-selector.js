@@ -94,9 +94,6 @@ window.datasetModeSelector = function(options = {}) {
     filterParams: [],
     totalCount: 0,
     sessionCountUrl: options.sessionCountUrl || '',
-    // Message-level datasets cap 'all_matching' (see MESSAGE_MODE_ALL_MATCHING_LIMIT); 0 disables
-    // the client-side warning and leaves the server as the only check.
-    messageModeLimit: options.messageModeLimit || 0,
     // Monotonic request token rather than an in-flight boolean: in 'all_matching' scope the count
     // IS what the user is told will be cloned, so a request must never be dropped just because an
     // older one is still open — the last request issued has to be the one that sets totalCount.
@@ -167,15 +164,6 @@ window.datasetModeSelector = function(options = {}) {
     // invokes getters once at build time instead of carrying them over.
     cloneCount() {
       return this.sessionScope === 'all_matching' ? this.totalCount : this.selectedSessionIds.size;
-    },
-
-    // Warn before submitting a message-level 'all_matching' clone the server will reject. Session
-    // level is exempt: it ships the filter instead of the ids, so it has no ceiling.
-    overMessageModeLimit() {
-      return this.messageModeLimit > 0
-        && this.sessionScope === 'all_matching'
-        && this.evaluationMode !== 'session'
-        && this.totalCount > this.messageModeLimit;
     },
 
     validateForm(e) {

@@ -4,7 +4,9 @@ from django.contrib.contenttypes.models import ContentType
 
 from apps.cost_tracking.models import PricingRule, ServiceKind
 from apps.evaluations.models import ConditionType, Evaluator
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.evaluations import EvaluationTagFactory, EvaluatorTagRuleFactory
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import GroupFactory
 
@@ -56,3 +58,9 @@ def tag_rule(team, evaluator, tag_a):
         condition_type=ConditionType.EQUALS,
         condition_value={"value": "negative"},
     )
+
+
+@pytest.fixture()
+def experiment_and_channel():
+    experiment = ExperimentFactory.create()
+    return experiment, ExperimentChannelFactory.create(team=experiment.team)

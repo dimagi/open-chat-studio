@@ -27,6 +27,10 @@ from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
 from apps.evaluations.errors import evaluator_error_output, generation_error_fields, is_failed_output
+from apps.evaluations.evaluation_messages import (
+    iter_message_evaluation_chunks,
+    iter_session_evaluation_messages_for_sessions,
+)
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.export import (
     annotate_export_fields,
@@ -51,11 +55,7 @@ from apps.evaluations.notifications import evaluation_run_outcome_notification
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
-from apps.evaluations.utils import (
-    iter_session_evaluation_messages_for_sessions,
-    parse_csv_value_as_json,
-    parse_history_text,
-)
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
@@ -1344,6 +1344,7 @@ def create_dataset_from_session_messages_task(
     filtered_session_ids: list[str],
     filter_query: str | None,
     timezone: str | None,
+    session_filter_query: str | None = None,
 ) -> dict:
     """
     Clone messages from sessions asynchronously.
@@ -1351,10 +1352,11 @@ def create_dataset_from_session_messages_task(
     Args:
         dataset_id: ID of the EvaluationDataset to populate
         team_id: ID of the team
-        session_ids: List of session external IDs to clone from
-        filtered_session_ids: List of filtered session external IDs
-        filter_query: Serialized filter parameters as query string (or None)
+        session_ids: Session external IDs cloned with every pair; when non-empty, the other id list is ignored
+        filtered_session_ids: Session external IDs cloned with filter_query applied, when session_ids is empty
+        filter_query: Serialized message filter (or None); ignored when session_ids picks the sessions
         timezone: Timezone for filtering
+        session_filter_query: Serialized session filter resolved server-side; takes precedence over both id lists
     """
 
     progress_recorder = ProgressRecorder(self)
@@ -1370,25 +1372,34 @@ def create_dataset_from_session_messages_task(
     dataset.status = DatasetCreationStatus.PROCESSING
     dataset.save(update_fields=["status"])
 
+    sessions_done = 0
+    total_sessions = 0
+
     try:
         progress_recorder.set_progress(0, 100, "Starting clone...")
 
         filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
+        ids = session_ids or filtered_session_ids
+        message_filter = None if session_ids and session_filter_query is None else filter_params
 
         with current_team(team):
-            evaluation_messages = EvaluationMessage.create_from_sessions(
-                team=team,
-                external_session_ids=session_ids,
-                filtered_session_ids=filtered_session_ids,
-                filter_params=filter_params,
-                timezone=timezone,
-            )
-
-            progress_recorder.set_progress(
-                40, 100, f"Found {len(evaluation_messages)} messages, checking for duplicates..."
-            )
-
-            created_messages, duplicates_skipped = dataset.add_messages(evaluation_messages)
+            session_qs = _sessions_for_clone(dataset, ids, session_filter_query, timezone)
+            total_sessions = session_qs.count()
+            created_ids: list[int] = []
+            duplicates_skipped = 0
+            for session_count, chunk in iter_message_evaluation_chunks(
+                session_qs, filter_params=message_filter, timezone=timezone
+            ):
+                # Committing whole sessions keeps a failed run from leaving a session half-cloned, which the
+                # stored-filter re-run would then exclude as already present.
+                chunk_created, chunk_skipped = dataset.add_messages_stream(chunk, batch_boundary=_message_session_id)
+                created_ids.extend(chunk_created)
+                duplicates_skipped += chunk_skipped
+                sessions_done += session_count
+                percent = min(100, int(sessions_done / total_sessions * 100)) if total_sessions else 100
+                progress_recorder.set_progress(
+                    percent, 100, f"Cloned messages from {sessions_done} of {total_sessions} sessions"
+                )
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -1398,24 +1409,36 @@ def create_dataset_from_session_messages_task(
 
             return {
                 "success": True,
-                "created_count": len(created_messages),
+                "created_count": len(created_ids),
                 "duplicates_skipped": duplicates_skipped,
             }
 
-    except Exception as e:
+    # BaseException, not Exception: a gevent.Timeout (raised when a hard task time limit fires)
+    # derives from BaseException and would otherwise leave the dataset stuck in PROCESSING.
+    except BaseException as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
-        message = "An error occurred while cloning messages from sessions"
+        message = (
+            f"Failed after cloning messages from {sessions_done} of {total_sessions} session(s): {e}. "
+            "Re-running will resume from where it stopped."
+        )
         _save_dataset_error(dataset, message)
+        if not isinstance(e, Exception):
+            # Record the failure, but never swallow SystemExit/KeyboardInterrupt/gevent.Timeout.
+            raise
         return {"success": False, "error": message}
 
 
-def _sessions_for_session_mode_clone(
+def _message_session_id(message: EvaluationMessage) -> int | None:
+    return message.session_id
+
+
+def _sessions_for_clone(
     dataset: EvaluationDataset,
     session_ids: list[str] | None,
     filter_query: str | None,
     timezone: str | None,
 ) -> QuerySet[ExperimentSession]:
-    """Resolve which sessions a session-mode clone should walk.
+    """Resolve which sessions a clone task should walk.
 
     A stored filter is resolved here rather than by the request that dispatched the job, so an
     "everything matching these filters" selection never travels as tens of thousands of UUIDs.
@@ -1480,7 +1503,7 @@ def create_dataset_from_sessions_task(
         progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
 
         with current_team(dataset.team):
-            session_qs = _sessions_for_session_mode_clone(dataset, session_ids, filter_query, timezone)
+            session_qs = _sessions_for_clone(dataset, session_ids, filter_query, timezone)
 
             # Counted up front: the message source is a generator, so it has no len(), and the
             # count is needed as the progress denominator. Empty sessions are excluded because
