@@ -1279,9 +1279,9 @@ def process_evaluation_results_csv_rows(  # noqa: C901 - parser: one branch per 
                     value = ""
                 value = restore_csv_formula(value)
 
-                result_key = column_name
-                if "(" in column_name and column_name.endswith(")"):
-                    result_key = column_name[: column_name.rfind("(")].strip()
+                result_key = restore_csv_formula(column_name)
+                if "(" in result_key and result_key.endswith(")"):
+                    result_key = result_key[: result_key.rfind("(")].strip()
 
                 try:
                     evaluator_id = int(evaluator_id)

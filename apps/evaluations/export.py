@@ -244,7 +244,7 @@ def write_evaluation_csv(writer, rows: Iterable[dict]) -> None:
             return
 
         ordered_headers = order_evaluation_headers(headers)
-        writer.writerow(ordered_headers)
+        writer.writerow([neutralize_csv_formula(header) for header in ordered_headers])
         spool.seek(0)
         for line in spool:
             row = json.loads(line)

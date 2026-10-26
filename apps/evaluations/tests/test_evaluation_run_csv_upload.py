@@ -309,3 +309,26 @@ def test_exported_results_upload_back_without_the_formula_guard(evaluation_setup
     assert stats == {"updated_count": 0, "created_count": 0, "error_messages": []}
     result.refresh_from_db()
     assert result.output["result"] == {"verdict": "=needs review", "score": -2, "handle": "'@handle"}
+
+
+@pytest.mark.django_db()
+def test_edited_export_updates_a_field_whose_name_starts_with_a_formula_character(evaluation_setup):
+    result = evaluation_setup["result1"]
+    result.output = {"result": {"-score": 3}}
+    result.save()
+    rows = iter_evaluation_table_rows(
+        annotate_export_fields(evaluation_setup["run"].export_results).order_by("message_id"), include_ids=True
+    )
+    with export_evaluation_csv_to_tempfile(rows) as exported:
+        csv_data = list(csv.DictReader(io.StringIO(exported.read().decode("utf-8"))))
+    header = "'-score (GPT-4 Evaluator)"
+    edited = [{**row, header: "5"} for row in csv_data]
+    suggestions = generate_evaluation_results_column_suggestions([header], evaluation_setup["run"])
+
+    stats = process_evaluation_results_csv_rows(
+        evaluation_setup["run"], edited, suggestions, Mock(), evaluation_setup["team"]
+    )
+
+    assert stats == {"updated_count": 1, "created_count": 0, "error_messages": []}
+    result.refresh_from_db()
+    assert result.output["result"] == {"-score": 5}

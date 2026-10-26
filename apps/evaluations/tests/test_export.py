@@ -166,8 +166,19 @@ def test_write_evaluation_csv_neutralizes_spreadsheet_formulas_in_data_cells():
     write_evaluation_csv(csv.writer(output), rows)
 
     header, data = list(csv.reader(io.StringIO(output.getvalue())))
-    assert header == ["id", "Dataset Input", "Dataset Output", "Generated Response", "-score (Judge)"]
+    assert header == ["id", "Dataset Input", "Dataset Output", "Generated Response", "'-score (Judge)"]
     assert data == ["7", "'+1", "plain answer", '\'=HYPERLINK("http://evil","x")', "'-2"]
+
+
+def test_write_evaluation_csv_neutralizes_spreadsheet_formulas_in_header_cells():
+    output = io.StringIO()
+    rows = [{"id": 7, "Dataset Input": "question", "=1+1": "context value"}]
+
+    write_evaluation_csv(csv.writer(output), rows)
+
+    header, data = list(csv.reader(io.StringIO(output.getvalue())))
+    assert header == ["id", "Dataset Input", "'=1+1"]
+    assert data == ["7", "question", "context value"]
 
 
 @pytest.mark.django_db()
