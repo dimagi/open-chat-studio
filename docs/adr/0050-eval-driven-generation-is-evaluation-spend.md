@@ -39,7 +39,7 @@ We will bill eval-driven generation as evaluation spend, and record it without a
 
 The eval channel now attaches a second tracer, `CaptureTracer`, beside the usage tracer. Its LangChain callback records each LLM and tool call of the generation (name, node, input, output, error) in memory, and the channel hands them back on `EvaluationReply` so evaluators can judge what the generation did ([#3085](https://github.com/dimagi/open-chat-studio/issues/3085)).
 
-The decision stands for everything it protects: the capture tracer writes no `Trace` row, sends no notification, bills nothing, and is discarded with the reply. "Sole tracer" above now reads as the sole tracer that bills; the usage tracer is still the only path from an eval run to `UsageRecord`.
+The decision still holds: the capture tracer writes no `Trace` row, sends no notification, bills nothing, and is discarded with the reply. "Sole tracer" above now reads as the sole tracer that bills; the usage tracer is still the only path from an eval run to `UsageRecord`.
 
 ## Alternatives considered
 
