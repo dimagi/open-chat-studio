@@ -10,6 +10,7 @@ from apps.evaluations.const import (
 )
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
+from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
 from apps.evaluations.usage import EvaluatorUsageContext, track_evaluator_usage
 from apps.evaluations.utils import schema_to_pydantic_model
@@ -42,9 +43,11 @@ class BaseEvaluator(BaseModel):
         generated_response: str,
         *,
         usage_context: EvaluatorUsageContext | None = None,
+        generation: GenerationRecord | None = None,
     ) -> EvaluatorResult:
         """Evaluate one message. `usage_context` attributes any LLM spend the
-        evaluator incurs; evaluators that don't call an LLM ignore it."""
+        evaluator incurs; evaluators that don't call an LLM ignore it. `generation`
+        is what the bot generation did; an absent record reads as empty."""
         raise NotImplementedError
 
 
@@ -125,6 +128,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         generated_response: str,
         *,
         usage_context: EvaluatorUsageContext | None = None,
+        generation: GenerationRecord | None = None,
     ) -> EvaluatorResult:
         # Create a pydantic class so the llm output is validated
         output_model = schema_to_pydantic_model(self.output_schema)
@@ -153,6 +157,7 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             session_state=SafeAccessWrapper(message.session_state or {}),
             full_history=message.full_history,
             generated_response=generated_response,
+            generation=SafeAccessWrapper((generation or GenerationRecord()).prompt_variables()),
         )
         with track_evaluator_usage(usage_context) as callbacks:
             result_model = llm_with_retry.invoke(formatted_prompt, config={"callbacks": callbacks})
@@ -172,7 +177,9 @@ def main(input: dict, output: dict, context: dict, full_history: str, generated_
         full_history: Complete conversation history as a string (e.g., "user: hello!\nassistant: hello!\n")
         generated_response: The AI-generated response being evaluated, if enabled
         **kwargs: Carries participant_data and session_state, both dicts captured at the time
-              of the message (e.g., kwargs['session_state'].get('current_step'))
+              of the message (e.g. kwargs['session_state'].get('current_step')), and generation,
+              a dict of what the bot generation did: node_outputs, path, message_tags, session_tags,
+              participant_data_diff, llm_calls and tool_calls (e.g. 'urgent' in kwargs['generation']['message_tags'])
 
     Returns:
         dict: Evaluation results where keys become columns in the output
@@ -211,6 +218,7 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
         generated_response: str,
         *,
         usage_context: EvaluatorUsageContext | None = None,
+        generation: GenerationRecord | None = None,
     ) -> EvaluatorResult:
         try:
             input = EvaluationMessageContent.model_validate(message.input).model_dump()
@@ -233,6 +241,7 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
                 # so widening _get_function_args would invalidate every saved evaluator.
                 participant_data=message.participant_data or {},
                 session_state=message.session_state or {},
+                generation=(generation or GenerationRecord()).as_dict(),
             )
             if not isinstance(result, dict):
                 raise EvaluationRunException("The python function did not return a dictionary")

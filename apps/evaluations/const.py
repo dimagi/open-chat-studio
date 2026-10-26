@@ -39,6 +39,15 @@ EVALUATOR_PROMPT_VARIABLES = {
         ("session_state", True),
         ("full_history", False),
         ("generated_response", False),
+        # JSON strings of the generation record (``GenerationRecord.prompt_variables``), capped at
+        # ``GENERATION_PROMPT_VARIABLE_MAX_LENGTH``, so no sub-key is addressable.
+        ("generation.node_outputs", False),
+        ("generation.path", False),
+        ("generation.message_tags", False),
+        ("generation.session_tags", False),
+        ("generation.participant_data_diff", False),
+        ("generation.llm_calls", False),
+        ("generation.tool_calls", False),
     ],
     "session": [
         ("context", True),

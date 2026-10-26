@@ -5,8 +5,10 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
+from apps.evaluations.const import evaluator_prompt_variable_names
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
+from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tasks import evaluate_message
 from apps.evaluations.utils import schema_to_pydantic_model
@@ -27,6 +29,8 @@ _VALID_PROMPTS = [
     "State: {session_state.current_step}",
     "Full history: {full_history}",
     "Generated: {generated_response}",
+    "Tags: {generation.message_tags}",
+    "Calls: {generation.tool_calls}",
     # Unadvertised sub-keys stay valid: the validator matches on the root.
     "Role: {input.role}",
     "Role: {output.role}",
@@ -76,6 +80,7 @@ def test_llm_evaluator_prompt_no_variables_raises(prompt):
         pytest.param("Input: {input.content}\nResponse: {generated_reponse}", "{generated_reponse}", id="typo"),
         pytest.param("Input: {input.content} {contextual.value}", "{contextual}", id="prefix-of-a-root"),
         pytest.param("Input: {input.content} {0}", "{0}", id="positional"),
+        pytest.param("Input: {input.content} {generations.tags}", "{generations}", id="generation-plural"),
     ],
 )
 def test_llm_evaluator_prompt_unknown_variable_raises(prompt, unknown):
@@ -550,3 +555,54 @@ def test_missing_structured_result_is_not_retried(get_llm_service, llm_provider,
     )
 
     assert len(get_llm_service.return_value.llm.get_calls()) == 1
+
+
+def _structured_response():
+    return AIMessage(content="", tool_calls=[{"name": "DynamicModel", "args": {"result": "ok"}, "id": "call_1"}])
+
+
+def _prompt_sent_to(service) -> str:
+    return "\n".join(message.content for message in service.llm.get_call_messages()[0])
+
+
+def test_advertised_generation_variables_match_the_record():
+    advertised = {
+        name.removeprefix("generation.")
+        for name in evaluator_prompt_variable_names("message")
+        if name.startswith("generation.")
+    }
+    assert advertised == set(GenerationRecord().prompt_variables())
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_generation_variables_are_rendered_as_json(get_llm_service, llm_provider, llm_provider_model):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Tags: {generation.message_tags} Calls: {generation.tool_calls}",
+        output_schema=_OUTPUT_SCHEMA,
+    )
+
+    evaluator.run(EvaluationMessageFactory.create(), "", generation=GenerationRecord(message_tags=["urgent"]))
+
+    assert 'Tags: ["urgent"] Calls: []' in _prompt_sent_to(service)
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_generation_variables_render_empty_without_a_record(get_llm_service, llm_provider, llm_provider_model):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Tags: {generation.message_tags}",
+        output_schema=_OUTPUT_SCHEMA,
+    )
+
+    evaluator.run(EvaluationMessageFactory.create(), "")
+
+    assert "Tags: []" in _prompt_sent_to(service)
