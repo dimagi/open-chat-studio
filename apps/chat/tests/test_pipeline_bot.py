@@ -41,6 +41,7 @@ class TestPersistPipelineState:
         )
         assert participant_data.data == {"test": "demo"}
         participant_data.save.assert_called()
+        session.participant.update_name_from_data.assert_called_once_with({"test": "demo"})
 
     def test_computes_and_sets_participant_data_diff(self):
         session = mock.Mock()
