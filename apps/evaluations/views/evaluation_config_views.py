@@ -883,7 +883,7 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
         judged_responses = [
             {"evaluator_name": result.evaluator.name, "value": result.output.get("judged_response")}
             for result in results
-            if result.output.get("judged_response")
+            if result.output.get("judged_response") is not None
         ]
 
         # `result.session` is this run's own session (set for generation-mode runs, where a

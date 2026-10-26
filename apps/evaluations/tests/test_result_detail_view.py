@@ -1,5 +1,7 @@
 """Tests for EvaluationResultDetailView: the side panel a results-table row opens into."""
 
+import re
+
 import pytest
 from django.urls import reverse
 
@@ -66,6 +68,33 @@ class TestEvaluationResultDetailView:
         assert "hi there" in content
         assert "tagged: hello" in content
         assert "JUDGED RESPONSE (Judge)" in content
+
+    def test_shows_a_dash_when_the_judged_span_text_is_empty(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator, judged="")
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert content.count('data-testid="result-detail-judged-response"') == 1
+        assert "JUDGED RESPONSE (Judge)" in content
+        assert re.search(r'data-testid="result-detail-judged-response">\s*—\s*</div>', content)
+
+    def test_escapes_the_judged_span_text(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator, judged='<b>tagged</b> & "quoted"')
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert "&lt;b&gt;tagged&lt;/b&gt; &amp; &quot;quoted&quot;" in content
+        assert "<b>tagged</b>" not in content
 
     def test_no_judged_response_block_when_the_evaluator_judged_the_reply(self, client, team_with_users):
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
