@@ -5,7 +5,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 
-from apps.evaluations.const import evaluator_prompt_variable_names
+from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_NAMES, evaluator_prompt_variable_names
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
 from apps.evaluations.generation import GenerationRecord
@@ -29,8 +29,8 @@ _VALID_PROMPTS = [
     "State: {session_state.current_step}",
     "Full history: {full_history}",
     "Generated: {generated_response}",
-    "Tags: {generation.message_tags}",
-    "Calls: {generation.tool_calls}",
+    *(pytest.param(f"Generation: {{{name}}}", id=name) for name in GENERATION_PROMPT_VARIABLE_NAMES),
+    pytest.param(" ".join(f"{{{name}}}" for name in GENERATION_PROMPT_VARIABLE_NAMES), id="every-generation-variable"),
     # Unadvertised sub-keys stay valid: the validator matches on the root.
     "Role: {input.role}",
     "Role: {output.role}",

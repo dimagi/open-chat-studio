@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 
+import pytest
 from pydantic import BaseModel
 
 from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_MAX_LENGTH
@@ -118,11 +119,25 @@ def test_prompt_variables_are_json_strings_for_every_field():
     assert variables["tool_calls"] == "[]"
 
 
-def test_prompt_variables_are_capped():
-    record = GenerationRecord(node_outputs={"n": "x" * (GENERATION_PROMPT_VARIABLE_MAX_LENGTH + 50)})
-    value = record.prompt_variables()["node_outputs"]
-    assert len(value) == GENERATION_PROMPT_VARIABLE_MAX_LENGTH + len(" [truncated]")
-    assert value.endswith(" [truncated]")
+@pytest.mark.parametrize(
+    ("length", "expected_length", "truncated"),
+    [
+        pytest.param(
+            GENERATION_PROMPT_VARIABLE_MAX_LENGTH, GENERATION_PROMPT_VARIABLE_MAX_LENGTH, False, id="at-the-cap"
+        ),
+        pytest.param(
+            GENERATION_PROMPT_VARIABLE_MAX_LENGTH + 1,
+            GENERATION_PROMPT_VARIABLE_MAX_LENGTH + len(" [truncated]"),
+            True,
+            id="one-over-the-cap",
+        ),
+    ],
+)
+def test_prompt_variables_are_capped(length, expected_length, truncated):
+    record = GenerationRecord(message_tags=["x" * (length - len('[""]'))])
+    value = record.prompt_variables()["message_tags"]
+    assert len(value) == expected_length
+    assert value.endswith(" [truncated]") is truncated
 
 
 def test_prompt_variables_keep_non_ascii_text():
