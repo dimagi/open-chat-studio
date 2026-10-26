@@ -9,7 +9,7 @@ from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import EarlyAbort
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.stages.core import BlockedParticipantStage, ParticipantResolverStage
-from apps.channels.tests.channels.conftest import StubChannel, core_stages, make_context, make_trace_service
+from apps.channels.tests.channels.conftest import core_stages, make_context, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -24,15 +24,6 @@ FLAG = Flags.ABUSE_DETECTION.slug
 
 def _block(session):
     DeniedParticipantFactory.create(team=session.team, participant=session.participant)
-
-
-def _messaging_channel(session):
-    """A stub messaging channel whose inbound messages resolve to the session's participant."""
-    session.participant.platform = session.experiment_channel.platform
-    session.participant.save()
-    channel = StubChannel(session.experiment, session.experiment_channel, session)
-    channel.trace_service = make_trace_service()
-    return channel
 
 
 @pytest.mark.django_db()
@@ -75,7 +66,7 @@ class TestBlockedParticipantPerChannel:
     def test_messaging_channel_sends_no_reply(self):
         session = ExperimentSessionFactory.create()
         _block(session)
-        channel = _messaging_channel(session)
+        channel = messaging_channel(session)
 
         with patch("apps.channels.stages.core.get_bot") as get_bot:
             response = channel.new_user_message(
@@ -91,7 +82,7 @@ class TestBlockedParticipantPerChannel:
     def test_messaging_channel_replies_when_flag_off(self):
         session = ExperimentSessionFactory.create()
         _block(session)
-        channel = _messaging_channel(session)
+        channel = messaging_channel(session)
 
         with patch("apps.channels.stages.core.get_bot") as get_bot:
             get_bot.return_value.process_input.return_value = ChatMessage(
