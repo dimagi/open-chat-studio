@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -190,7 +191,9 @@ class TestEvaluationChannelEndToEnd:
         assert reply.participant_data_diff == [("change", "plan", ("free", "pro"))]
 
     @patch("apps.chat.bots.PipelineBot.process_input")
-    def test_reply_carries_an_unexpected_failure_and_its_spans(self, mock_process, evals_experiment, evals_channel):
+    def test_reply_carries_an_unexpected_failure_and_its_spans(
+        self, mock_process, evals_experiment, evals_channel, caplog
+    ):
         error = RuntimeError("boom")
         mock_process.side_effect = error
         session = ExperimentSessionFactory.create(experiment=evals_experiment, experiment_channel=evals_channel)
@@ -201,8 +204,12 @@ class TestEvaluationChannelEndToEnd:
             participant_data={},
         )
 
-        reply = channel.generate_reply(BaseMessage(participant_id=session.participant.identifier, message_text="Hi"))
+        with caplog.at_level(logging.ERROR):
+            reply = channel.generate_reply(
+                BaseMessage(participant_id=session.participant.identifier, message_text="Hi")
+            )
 
+        assert f"session {session.id}" in caplog.text
         assert reply.error is error
         assert reply.message.content == ""
         assert reply.pipeline_state is None

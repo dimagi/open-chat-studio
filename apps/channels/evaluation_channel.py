@@ -80,7 +80,11 @@ class EvaluationChannel(ChannelBase):
         try:
             response, ctx = self._process_message(message)
         except Exception as exc:
-            logger.exception("Evaluation generation failed for experiment %s", self.experiment.id)
+            logger.exception(
+                "Evaluation generation failed for experiment %s, session %s",
+                self.experiment.id,
+                self.experiment_session.id,
+            )
             return EvaluationReply(
                 message=ChatMessage(content="", message_type=ChatMessageType.AI),
                 error=exc,
