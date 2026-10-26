@@ -879,6 +879,13 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
             if key not in self.categorical_column_keys and row.get(key) not in (None, "")
         ]
 
+        # Only evaluators with `span_as_response` write `judged_response`; the rest judge the reply itself.
+        judged_responses = [
+            {"evaluator_name": result.evaluator.name, "value": result.output.get("judged_response")}
+            for result in results
+            if result.output.get("judged_response")
+        ]
+
         # `result.session` is this run's own session (set for generation-mode runs, where a
         # new session is created to produce a response); `result.message.session` is the
         # source session the dataset message was imported from (message-mode evaluation
@@ -910,6 +917,7 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
             "dataset_input": row.get("Dataset Input"),
             "dataset_output": row.get("Dataset Output"),
             "generated_response": row.get("Generated Response"),
+            "judged_responses": judged_responses,
             "badges": badges,
             "text_fields": text_fields,
             "tokens": row.get("Tokens"),

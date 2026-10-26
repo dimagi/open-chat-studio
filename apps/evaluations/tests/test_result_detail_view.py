@@ -15,7 +15,7 @@ from apps.utils.factories.evaluations import (
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
-def _result(run, evaluator, *, sentiment="positive", input_content="hi", generated="hi there", **kwargs):
+def _result(run, evaluator, *, sentiment="positive", input_content="hi", generated="hi there", judged=None, **kwargs):
     output = EvaluatorResult(
         message={
             "input": {"content": input_content, "role": "human"},
@@ -26,6 +26,7 @@ def _result(run, evaluator, *, sentiment="positive", input_content="hi", generat
         },
         result={"sentiment": sentiment},
         generated_response=generated,
+        judged_response=judged,
     ).model_dump()
     return EvaluationResultFactory.create(output=output, team=run.team, run=run, evaluator=evaluator, **kwargs)
 
@@ -51,6 +52,49 @@ class TestEvaluationResultDetailView:
         assert "It went well." in content
         assert "expected output" in content
         assert "#1" in content
+
+    def test_shows_the_judged_span_text_beside_the_generated_response(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator, generated="hi there", judged="tagged: hello")
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert "hi there" in content
+        assert "tagged: hello" in content
+        assert "JUDGED RESPONSE (Judge)" in content
+
+    def test_no_judged_response_block_when_the_evaluator_judged_the_reply(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator)
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        assert "JUDGED RESPONSE" not in response.content.decode()
+
+    def test_only_the_span_evaluator_gets_a_judged_response_block(self, client, team_with_users):
+        span_evaluator = EvaluatorFactory.create(team=team_with_users, name="Span Judge")
+        reply_evaluator = EvaluatorFactory.create(team=team_with_users, name="Reply Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[span_evaluator, reply_evaluator])
+        run = EvaluationRunFactory.create(
+            team=team_with_users, config=config, evaluator_ids=[span_evaluator.id, reply_evaluator.id]
+        )
+        result = _result(run, span_evaluator, judged="tagged: hello")
+        _result(run, reply_evaluator, message=result.message)
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert content.count('data-testid="result-detail-judged-response"') == 1
+        assert "JUDGED RESPONSE (Span Judge)" in content
+        assert "JUDGED RESPONSE (Reply Judge)" not in content
 
     def test_panel_carries_its_message_id_for_the_table_row_highlight_sync(self, client, team_with_users):
         """The panel root's data-result-id drives `syncEvalResultHighlight()` (see

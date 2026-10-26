@@ -81,6 +81,13 @@
         <div class="bg-primary/10 rounded-lg p-3 text-sm whitespace-pre-wrap">{{ generated_response|default:"—" }}</div>
       </div>
 
+      {% for judged in judged_responses %}
+        <div>
+          <div class="text-xs font-semibold text-base-content/60 tracking-wide mb-1">JUDGED RESPONSE ({{ judged.evaluator_name }})</div>
+          <div class="bg-primary/10 rounded-lg p-3 text-sm whitespace-pre-wrap" data-testid="result-detail-judged-response">{{ judged.value }}</div>
+        </div>
+      {% endfor %}
+
       {% for field in text_fields %}
         <div>
           <div class="text-xs font-semibold text-base-content/60 tracking-wide mb-1">{{ field.label|upper }}</div>
