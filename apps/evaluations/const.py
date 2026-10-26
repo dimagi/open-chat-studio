@@ -41,7 +41,7 @@ EVALUATOR_PROMPT_VARIABLES = {
         ("generated_response", False),
         # JSON strings of the generation record (``GenerationRecord.prompt_variables``), capped at
         # ``GENERATION_PROMPT_VARIABLE_MAX_LENGTH``, so no sub-key is addressable. The validator
-        # accepts exactly these names.
+        # accepts exactly these names, with no conversion or format spec.
         ("generation.node_outputs", False),
         ("generation.path", False),
         ("generation.message_tags", False),
@@ -95,17 +95,23 @@ def prompt_variable_roots(prompt: str) -> set[str]:
     return {re.split(r"[.\[]", field, maxsplit=1)[0] for field in fields}
 
 
-def unknown_generation_variables(prompt: str) -> set[str]:
-    """Format fields rooted at ``generation`` that are not one of the advertised names.
+def _field_as_written(field: str, format_spec: str, conversion: str | None) -> str:
+    return field + (f"!{conversion}" if conversion else "") + (f":{format_spec}" if format_spec else "")
 
-    A malformed template yields nothing, as in `prompt_variable_roots`.
+
+def unknown_generation_variables(prompt: str) -> set[str]:
+    """Format fields rooted at ``generation`` that are not an advertised name or carry a conversion or format spec.
+
+    Each is returned as written, e.g. ``generation.message_tags!r``. A malformed template yields
+    nothing, as in `prompt_variable_roots`.
     """
     try:
-        fields = [field for _, field, _, _ in Formatter().parse(prompt) if field]
+        parsed = [(field, spec, conversion) for _, field, spec, conversion in Formatter().parse(prompt) if field]
     except ValueError:
         return set()
     return {
-        field
-        for field in fields
-        if re.split(r"[.\[]", field, maxsplit=1)[0] == "generation" and field not in GENERATION_PROMPT_VARIABLE_NAMES
+        _field_as_written(field, spec or "", conversion)
+        for field, spec, conversion in parsed
+        if re.split(r"[.\[]", field, maxsplit=1)[0] == "generation"
+        and (field not in GENERATION_PROMPT_VARIABLE_NAMES or spec or conversion)
     }

@@ -104,6 +104,9 @@ def test_llm_evaluator_prompt_unknown_variable_raises(prompt, unknown):
         pytest.param("{generation.tool_call}", id="singular-key"),
         pytest.param("{generation.tool_calls[0]}", id="indexed"),
         pytest.param("{generation}", id="bare-root"),
+        pytest.param("{generation.message_tags!r}", id="conversion"),
+        pytest.param("{generation.message_tags:>30}", id="format-spec"),
+        pytest.param("{generation.llm_calls!s:>60000}", id="conversion-and-format-spec"),
     ],
 )
 def test_llm_evaluator_prompt_unknown_generation_variable_raises(offending):
