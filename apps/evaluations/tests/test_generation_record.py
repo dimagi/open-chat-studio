@@ -62,6 +62,19 @@ def test_no_state_means_an_empty_record():
     assert GenerationRecord.from_run(None, [], []) == GenerationRecord()
 
 
+def test_spans_are_kept_when_the_run_left_no_state():
+    spans = [CapturedSpan(type="tool", name="file-search", node_id="llm-1", input={"query": "q"}, output="chunks")]
+    record = GenerationRecord.from_run(None, [], spans)
+    assert record.tool_calls == [
+        {"node": "llm-1", "name": "file-search", "input": {"query": "q"}, "output": "chunks", "error": None}
+    ]
+    assert record.llm_calls == []
+    assert record.node_outputs == {}
+    assert record.path == []
+    assert record.message_tags == []
+    assert record.session_tags == []
+
+
 def test_prompt_variables_are_json_strings_for_every_field():
     variables = GenerationRecord(message_tags=["urgent"]).prompt_variables()
     assert set(variables) == {
