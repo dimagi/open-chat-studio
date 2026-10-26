@@ -12,6 +12,9 @@ FINALIZATION_GRACE = timedelta(minutes=10)
 # The results table shows only failed rows when this query parameter is "1".
 FAILED_FILTER_PARAM = "failed"
 
+# Caps the characters of each generation record field substituted into an evaluator prompt.
+GENERATION_PROMPT_VARIABLE_MAX_LENGTH = 10_000
+
 EVALUATION_RUN_FIXED_HEADERS = [
     "id",
     "session",
