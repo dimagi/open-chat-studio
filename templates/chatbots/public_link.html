@@ -24,6 +24,7 @@
       {% endif %}
       <div class="w-full max-w-3xl flex-1 relative">
         <open-chat-studio-widget
+          theme="{% if dark_mode %}dark{% else %}light{% endif %}"
           mode="kiosk"
           chatbot-id="{{ public_id }}"
           embed-key="{{ token }}"
@@ -31,6 +32,7 @@
           persistent-session="tab"
           welcome-messages="{{ welcome_json }}"
           starter-questions="{{ starters_json }}"
+          {% if allow_attachments %}allow-attachments="true"{% endif %}
           {% if not widget_enabled %}disabled="true"{% endif %}
           {% if user %}user-id="{{ user.email }}" user-name="{{ user.get_full_name }}"{% endif %}
         ></open-chat-studio-widget>

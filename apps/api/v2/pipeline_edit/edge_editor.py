@@ -15,7 +15,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.settings import api_settings
 
-from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData
+from apps.pipelines.flow import EdgeDiff, Flow, FlowEdge, FlowNodeData, react_flow_edge_id
 from apps.pipelines.node_type import NoOutputHandles
 
 from .facade import PipelineEdit, graph_diff
@@ -276,6 +276,6 @@ def _unused_edge_id(flow: Flow, planned: list[FlowEdge], wiring: Wiring) -> str:
     whole of what differs from how a node id is drawn.
     """
     source, source_handle, target, target_handle = wiring
-    base = f"reactflow__edge-{source}{source_handle}-{target}{target_handle}"
+    base = react_flow_edge_id(source, source_handle, target, target_handle)
     taken = {edge.id for edge in flow.edges} | {edge.id for edge in planned}
     return base if base not in taken else with_free_suffix(base, taken)

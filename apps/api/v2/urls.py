@@ -12,6 +12,7 @@ from apps.api.v2.discovery import (
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
 from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
+from apps.api.v2.triggers.views import ScheduledTriggerView, StaticTriggerView, TimeoutTriggerView, TriggerView
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.versions.views import (
     ChatbotVersionCreateView,
@@ -20,6 +21,23 @@ from apps.api.v2.versions.views import (
 )
 
 app_name = "v2"
+
+
+def trigger_paths(*, kind: str, view: type[TriggerView]) -> list:
+    """The create route and the update/archive route for one kind of trigger."""
+    return [
+        path(
+            f"chatbots/<str:id>/{kind}-triggers/",
+            view.as_view(http_method_names=["post", "options"]),
+            name=f"chatbot-{kind}-trigger-create",
+        ),
+        path(
+            f"chatbots/<str:id>/{kind}-triggers/<int:trigger_id>/",
+            view.as_view(http_method_names=["patch", "delete", "options"]),
+            name=f"chatbot-{kind}-trigger-update",
+        ),
+    ]
+
 
 router = routers.SimpleRouter()
 router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
@@ -60,6 +78,9 @@ urlpatterns = [
         PipelineEdgeEditView.as_view(http_method_names=["delete", "options"]),
         name="pipeline-edge-delete",
     ),
+    *trigger_paths(kind="static", view=StaticTriggerView),
+    *trigger_paths(kind="timeout", view=TimeoutTriggerView),
+    *trigger_paths(kind="scheduled", view=ScheduledTriggerView),
     path(
         "chatbots/<str:id>/versions/",
         ChatbotVersionCreateView.as_view(),

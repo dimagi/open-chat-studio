@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import DateTimeField, F, OuterRef, Q, Subquery
 from field_audit.models import AuditAction
 
 from apps.channels.exceptions import ChannelDisabledException
@@ -113,3 +113,14 @@ def publish_version(version: Experiment) -> None:
         )
         version.is_default_version = True
         version.save(update_fields=["is_default_version"])
+
+
+def last_activity_subquery() -> Subquery:
+    """Annotation for an ``Experiment`` queryset: the latest ``last_activity_at`` of its non-evaluation sessions."""
+    return Subquery(
+        ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+        .exclude(platform=ChannelPlatform.EVALUATIONS)
+        .order_by(F("last_activity_at").desc(nulls_last=True))
+        .values("last_activity_at")[:1],
+        output_field=DateTimeField(),
+    )

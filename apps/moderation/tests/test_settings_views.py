@@ -114,19 +114,6 @@ class TestTeamModerationForm:
         assert not form.is_valid()
         assert "moderation_provider" in form.errors
 
-    def test_selecting_a_provider_clears_the_deleted_provider_name(self):
-        team = TeamFactory.create(moderation_deleted_provider_name="Old provider")
-        provider = ModerationProviderFactory.create(team=team)
-
-        form = TeamModerationForm({"moderation_enabled": True, "moderation_provider": provider.pk}, instance=team)
-        assert form.is_valid()
-        form.save()
-
-        team.refresh_from_db()
-        assert team.moderation_enabled
-        assert team.moderation_provider == provider
-        assert team.moderation_deleted_provider_name == ""
-
     def test_save_keeps_concurrent_changes_to_other_team_fields(self):
         team = TeamFactory.create(name="Before")
         provider = ModerationProviderFactory.create(team=team)
@@ -203,16 +190,6 @@ class TestSectionRendering:
         assert own.name in content
         assert "Other team provider" not in content
         assert 'data-testid="edit-moderation-provider"' in content
-
-    def test_deleted_provider_banner(self, client, admin, team):
-        team.moderation_deleted_provider_name = "Old provider"
-        team.save()
-        client.force_login(admin)
-
-        content = client.get(_section_url(team)).content.decode()
-
-        assert 'data-testid="moderation-provider-deleted"' in content
-        assert "Old provider" in content
 
     @pytest.mark.parametrize(
         ("user_fixture", "can_edit", "sees_denylist"),

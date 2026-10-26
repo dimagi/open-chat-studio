@@ -1,33 +1,41 @@
+<style>
+  open-chat-studio-widget[data-version-kind='published'] {
+    --header-bg-color: oklch(0.982 0.018 155.826);
+    --header-bg-hover-color: oklch(0.76 0.177 163.223);
+    --header-text-color: oklch(0.527 0.154 150.069);
+  }
+  open-chat-studio-widget[data-version-kind='working'] {
+    --header-bg-color: oklch(0.987 0.026 102.212);
+    --header-bg-hover-color: oklch(0.82 0.189 84.429);
+    --header-text-color: oklch(0.476 0.114 61.907);
+  }
+  open-chat-studio-widget[theme='dark'][data-version-kind='published'] {
+    --header-bg-color: oklch(0.26 0.05 155);
+    --header-bg-hover-color: oklch(0.38 0.08 160);
+    --header-text-color: oklch(0.85 0.12 155);
+  }
+  open-chat-studio-widget[theme='dark'][data-version-kind='working'] {
+    --header-bg-color: oklch(0.27 0.05 85);
+    --header-bg-hover-color: oklch(0.4 0.09 80);
+    --header-text-color: oklch(0.9 0.12 90);
+  }
+</style>
 <script>
   (function () {
     const apiBaseUrl = "{{ request.scheme }}://{{ request.get_host }}";
     const userId = "{{ request.user.email|escapejs }}";
     const userName = "{{ request.user.get_full_name|escapejs }}";
-    const widgetStyles = {
-      published: {
-        '--header-bg-color': 'oklch(0.982 0.018 155.826)',
-        '--header-bg-hover-color': 'oklch(0.76 0.177 163.223)',
-        '--header-text-color': 'oklch(0.527 0.154 150.069)',
-      },
-      working: {
-        '--header-bg-color': 'oklch(0.987 0.026 102.212)',
-        '--header-bg-hover-color': 'oklch(0.82 0.189 84.429)',
-        '--header-text-color': 'oklch(0.476 0.114 61.907)',
-      },
-    };
-
     // Apply the version-specific header text and colour theme to a widget element. Shared by the
     // new-chat launcher (openChatWidget) and the continue-session launcher below. Version 0 is the
     // "published version" alias. The default label assumes any other number is the working version,
     // which only holds for the chatbot-home dropdown; callers that can target an older version
-    // (the versions table, an existing session) pass headerText instead.
+    // (the versions table, an existing session) pass headerText instead. The colours come from the
+    // stylesheet above, keyed on data-version-kind and the widget's `theme` attribute, so they
+    // follow theme changes while the widget is open.
     window.ocsApplyWidgetVersionTheme = function (widget, versionNumber, headerText) {
       const isPublished = versionNumber === 0;
       widget.setAttribute('header-text', headerText || (isPublished ? 'Published Version' : `Working Version (v${versionNumber})`));
-      const styles = isPublished ? widgetStyles.published : widgetStyles.working;
-      for (const [prop, value] of Object.entries(styles)) {
-        widget.style.setProperty(prop, value);
-      }
+      widget.dataset.versionKind = isPublished ? 'published' : 'working';
     };
 
     // Open an existing session in a fresh, session-bound widget. A new element is mounted each
@@ -48,6 +56,7 @@
       widget.setAttribute('visible', 'true');
       widget.setAttribute('position', 'right');
       widget.setAttribute('persistent-session', 'false');
+      widget.setAttribute('theme', document.documentElement.dataset.theme || 'light');
       if (button.dataset.allowAttachments === 'true') {
         widget.setAttribute('allow-attachments', 'true');
       }

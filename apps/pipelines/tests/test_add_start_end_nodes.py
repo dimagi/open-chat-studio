@@ -453,5 +453,6 @@ def test_pipeline_edge_connections(team):
     llm_to_end = edges[1]
     assert start_to_llm["sourceHandle"] == "output"
     assert start_to_llm["targetHandle"] == "input"
+    assert start_to_llm["id"] == f"reactflow__edge-{start_to_llm['source']}output-{start_to_llm['target']}input"
     assert llm_to_end["sourceHandle"] == "output"
     assert llm_to_end["targetHandle"] == "input"

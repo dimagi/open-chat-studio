@@ -71,3 +71,38 @@
   @apply text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-600;
   @apply px-2 py-1 rounded-full;
 }
+
+/* Engagement dashboard visualisation tokens. Chart.js and the sparklines read these
+   through getComputedStyle, so they have to be custom properties rather than classes.
+   Greys follow Tailwind's scale; tick and legend text clears 4.5:1 on both surfaces. */
+.viz-root {
+  --viz-surface: #ffffff;
+  --viz-ordinal-1: #86b6ef;
+  --viz-ordinal-2: #5598e7;
+  --viz-ordinal-3: #2a78d6;
+  --viz-ordinal-4: #184f95;
+  --viz-series-new: #3b82f6;
+  --viz-series-returning: #f59e0b;
+  --viz-rank: #3b82f6;
+  --viz-ink-muted: #6b7280;
+  --viz-grid: #d1d5db;
+  --viz-axis: #9ca3af;
+  --viz-spark: #9ca3af;
+  --viz-spark-accent: #3b82f6;
+}
+
+:root[data-theme="dark"] .viz-root {
+  --viz-surface: #1d232a;
+  --viz-ordinal-1: #b7d3f6;
+  --viz-ordinal-2: #6da7ec;
+  --viz-ordinal-3: #2a78d6;
+  --viz-ordinal-4: #1c5cab;
+  --viz-ink-muted: #9ca3af;
+  --viz-grid: #374151;
+  --viz-axis: #6b7280;
+  --viz-spark: #6b7280;
+}
+
+.stat-delta {
+  font-variant-numeric: tabular-nums;
+}
