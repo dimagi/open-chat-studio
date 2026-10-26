@@ -19,7 +19,7 @@ Simply turning the tracer back on would resurrect what was deliberately switched
 We will bill eval-driven generation as evaluation spend, and record it without a trace.
 
 - **Generation is not the chatbot's cost.** The run exercised the chatbot, but not on anyone's behalf, so under the ADR-0048 rule the spend is the team's and never enters per-entity attribution.
-- **A usage-only tracer** collects token usage and drains it into `UsageRecord`, and does nothing else: no `Trace`, no spans, no notifications. It is the eval channel's sole tracer.
+- **A usage-only tracer** collects token usage and drains it into `UsageRecord`, and does nothing else: no `Trace`, no spans, no notifications. It is the eval channel's sole tracer (see the amendment below).
 - **Both halves of a run are attributed alike**: `source=EVALUATION`, the config as FK, the run id in `extra`, and the generation experiment resolved to its working version.
 - **`OCSTracer` classifies by the session's platform.** Other traced paths reach an eval session — a static trigger firing on one does — so the rule is applied there rather than assumed to be the eval channel's alone.
 - **No backfill.** Pre-existing rows are chat traffic; nothing is misclassified.
@@ -34,6 +34,12 @@ We will bill eval-driven generation as evaluation spend, and record it without a
 - The admin report's halves diverged further while its tokens came from `Trace`: cost counted eval runs and tokens could not. [#3984](https://github.com/dimagi/open-chat-studio/issues/3984) closed that by moving token reporting onto `UsageRecord`, so both halves now read the same rows.
 - Eval runs still write no trace, so debugging a failing one stays as hard as it was.
 - A tracer now exists that keeps no trace, so "tracer implies `Trace` row" is no longer true.
+
+## Amendment: a capture tracer for evaluators (2026-10-26)
+
+The eval channel now attaches a second tracer, `CaptureTracer`, beside the usage tracer. Its LangChain callback records each LLM and tool call of the generation (name, node, input, output, error) in memory, and the channel hands them back on `EvaluationReply` so evaluators can judge what the generation did ([#3085](https://github.com/dimagi/open-chat-studio/issues/3085)).
+
+The decision stands for everything it protects: the capture tracer writes no `Trace` row, sends no notification, bills nothing, and is discarded with the reply. "Sole tracer" above now reads as the sole tracer that bills; the usage tracer is still the only path from an eval run to `UsageRecord`.
 
 ## Alternatives considered
 
