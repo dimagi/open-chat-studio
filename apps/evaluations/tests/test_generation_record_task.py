@@ -4,12 +4,19 @@ import textwrap
 from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import EvaluationRun
 from apps.evaluations.tasks import evaluate_message, run_bot_generation
-from apps.experiments.models import Participant, ParticipantData
-from apps.pipelines.tests.utils import code_node, create_pipeline_model, end_node, start_node
+from apps.experiments.models import AgentTools, Participant, ParticipantData
+from apps.pipelines.tests.utils import (
+    code_node,
+    create_pipeline_model,
+    end_node,
+    llm_response_with_prompt_node,
+    start_node,
+)
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -18,7 +25,9 @@ from apps.utils.factories.evaluations import (
     EvaluatorFactory,
 )
 from apps.utils.factories.experiment import ChatbotFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.tests.langchain import build_fake_llm_service
 
 TAGGING_CODE = textwrap.dedent("""
     def main(input, **kwargs):
@@ -78,6 +87,41 @@ def test_record_carries_what_the_run_did(team, tagging_experiment, message):
     assert ("change", "plan", ("free", "pro")) in record.participant_data_diff
     assert record.node_outputs["Tagger"] == "tagged: hello"
     assert [current for _previous, current, _next in record.path] == ["start", "Tagger", "end"]
+
+
+@pytest.mark.django_db()
+def test_record_carries_the_tool_calls_of_an_llm_node(team, message):
+    provider = LlmProviderFactory.create(team=team)
+    model = LlmProviderModelFactory.create(team=team, type=provider.type)
+    experiment = ChatbotFactory.create(team=team)
+    create_pipeline_model(
+        [
+            start_node(),
+            llm_response_with_prompt_node(
+                str(provider.id), str(model.id), tools=[AgentTools.CALCULATOR.value], name="Agent"
+            ),
+            end_node(),
+        ],
+        pipeline=experiment.pipeline,
+    )
+    experiment.pipeline.save()
+    calculate = {"name": AgentTools.CALCULATOR.value, "args": {"expression": "2+2"}, "id": "call_1"}
+    responses = [AIMessage(content="", tool_calls=[calculate]), AIMessage(content="Done")]
+
+    with patch(
+        "apps.service_providers.models.LlmProvider.get_llm_service",
+        return_value=build_fake_llm_service(responses=responses),
+    ):
+        generation = run_bot_generation(
+            team, message, experiment, evaluation_run=EvaluationRunFactory.create(team=team)
+        )
+
+    record = generation.record
+    assert generation.response == "Done"
+    assert record.tool_calls[0]["name"] == AgentTools.CALCULATOR.value
+    assert record.tool_calls[0]["node"] == "Agent"
+    assert record.llm_calls
+    assert all(call["node"] == "Agent" for call in record.llm_calls)
 
 
 @pytest.mark.django_db()
