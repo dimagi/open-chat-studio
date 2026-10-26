@@ -14,6 +14,7 @@ from apps.pipelines.tests.utils import (
     code_node,
     create_pipeline_model,
     end_node,
+    llm_response_node,
     llm_response_with_prompt_node,
     start_node,
 )
@@ -35,6 +36,11 @@ TAGGING_CODE = textwrap.dedent("""
         set_participant_data_key("plan", "pro")
         set_participant_data_key("name", "Ada")
         return "tagged: " + input
+    """)
+
+RAISING_CODE = textwrap.dedent("""
+    def main(input, **kwargs):
+        raise ValueError("boom")
     """)
 
 READ_TAGS_CODE = textwrap.dedent("""
@@ -124,6 +130,44 @@ def test_record_carries_the_tool_calls_of_an_llm_node(team_with_users, message):
     assert record.tool_calls[0]["node"] == "Agent"
     assert record.llm_calls
     assert all(call["node"] == "Agent" for call in record.llm_calls)
+
+
+@pytest.mark.django_db()
+def test_unexpected_failure_keeps_the_calls_made_before_it(team_with_users, message):
+    experiment = _llm_experiment(
+        team_with_users,
+        lambda provider_id, model_id: [
+            start_node(),
+            llm_response_with_prompt_node(provider_id, model_id, name="Answer"),
+            llm_response_with_prompt_node(provider_id, model_id, name="Second"),
+            end_node(),
+        ],
+    )
+
+    generation = _generate(team_with_users, message, experiment, responses=["first", AIMessage(content="")])
+
+    assert generation.error is not None
+    assert generation.response == ""
+    assert [call["node"] for call in generation.record.llm_calls] == ["Answer", "Second"]
+    assert generation.record.node_outputs == {}
+
+
+@pytest.mark.django_db()
+def test_canned_reply_failure_keeps_the_calls_made_before_it(team_with_users, message):
+    experiment = _llm_experiment(
+        team_with_users,
+        lambda provider_id, model_id: [
+            start_node(),
+            llm_response_node(provider_id, model_id, name="Answer"),
+            code_node(RAISING_CODE, name="Guard"),
+            end_node(),
+        ],
+    )
+
+    generation = _generate(team_with_users, message, experiment, responses=["first"])
+
+    assert generation.error is not None
+    assert generation.record.llm_calls[0]["node"] == "Answer"
 
 
 @pytest.mark.django_db()

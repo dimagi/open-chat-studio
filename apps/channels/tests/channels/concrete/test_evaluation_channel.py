@@ -190,6 +190,26 @@ class TestEvaluationChannelEndToEnd:
         assert reply.participant_data_diff == [("change", "plan", ("free", "pro"))]
 
     @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_reply_carries_an_unexpected_failure_and_its_spans(self, mock_process, evals_experiment, evals_channel):
+        error = RuntimeError("boom")
+        mock_process.side_effect = error
+        session = ExperimentSessionFactory.create(experiment=evals_experiment, experiment_channel=evals_channel)
+        channel = EvaluationChannel(
+            experiment=evals_experiment,
+            experiment_channel=evals_channel,
+            experiment_session=session,
+            participant_data={},
+        )
+
+        reply = channel.generate_reply(BaseMessage(participant_id=session.participant.identifier, message_text="Hi"))
+
+        assert reply.error is error
+        assert reply.message.content == ""
+        assert reply.pipeline_state is None
+        assert reply.participant_data_diff == []
+        assert reply.spans == channel._capture_tracer.spans
+
+    @patch("apps.chat.bots.PipelineBot.process_input")
     def test_reply_without_a_completed_run_has_no_state(self, mock_process, evals_experiment, evals_channel):
         mock_process.side_effect = ProviderConfigurationError(
             "The LLM provider account has no credit or quota remaining."

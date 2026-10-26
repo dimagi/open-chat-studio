@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -20,6 +21,7 @@ from apps.channels.stages.core import (
 from apps.channels.stages.terminal import ActivityTrackingStage
 from apps.chat.bots import EvalsBot
 from apps.chat.exceptions import ChannelException
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.service_providers.tracing import TracingService
 from apps.service_providers.tracing.capture_tracer import CaptureTracer
 
@@ -27,17 +29,18 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.channels.sender import ChannelSender
-    from apps.chat.models import ChatMessage
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.service_providers.tracing.base import Tracer
     from apps.service_providers.tracing.capture_tracer import CapturedSpan
+
+logger = logging.getLogger("ocs.channels")
 
 
 @dataclass(frozen=True)
 class EvaluationReply:
     message: ChatMessage
-    # Set when the pipeline answered with its canned error reply: `message` is then that
-    # reply, not a response the bot generated.
+    # Set when the generation failed: `message` is then the pipeline's canned error reply,
+    # or empty when the failure escaped the pipeline, not a response the bot generated.
     error: Exception | None = None
     # The bot's final pipeline state; None when no run completed.
     pipeline_state: dict | None = None
@@ -73,8 +76,16 @@ class EvaluationChannel(ChannelBase):
         self._participant_data = participant_data
 
     def generate_reply(self, message: BaseMessage) -> EvaluationReply:
-        """Run `message` through the pipeline and return the reply."""
-        response, ctx = self._process_message(message)
+        """Run `message` through the pipeline and return the reply, with any failure and the calls made before it."""
+        try:
+            response, ctx = self._process_message(message)
+        except Exception as exc:
+            logger.exception("Evaluation generation failed for experiment %s", self.experiment.id)
+            return EvaluationReply(
+                message=ChatMessage(content="", message_type=ChatMessageType.AI),
+                error=exc,
+                spans=self._capture_tracer.spans,
+            )
         bot = ctx.bot if isinstance(ctx.bot, EvalsBot) else None
         return EvaluationReply(
             message=response,
