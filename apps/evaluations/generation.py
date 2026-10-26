@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict, deque
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -142,11 +143,20 @@ class GenerationRecord:
 
 
 def _node_spans(node_outputs: dict[str, Any], path: list[list]) -> list[dict]:
+    """One span per node run, its input the output of the run that fed it.
+
+    Pairs runs as ``PipelineState.get_node_inputs`` does: each run of a node queues its output on
+    every edge it targets, and a run of the target consumes the head of its incoming edge's queue.
+    """
     runs: dict[str, int] = {}
-    last_output: dict[str, Any] = {}
+    pending: dict[tuple[str, str], deque] = defaultdict(deque)
     spans = []
-    for previous, current, _targets in path:
-        if current is None or current not in node_outputs:
+    for previous, current, targets in path:
+        if current is None:
+            continue
+        incoming = pending[(previous, current)] if previous is not None else deque()
+        node_input = incoming.popleft() if incoming else None
+        if current not in node_outputs:
             continue
         output = node_outputs[current]
         run = runs.get(current, 0)
@@ -162,12 +172,13 @@ def _node_spans(node_outputs: dict[str, Any], path: list[list]) -> list[dict]:
                 "type": "node",
                 "node": current,
                 "name": current,
-                "input": last_output.get(previous) if previous is not None else None,
+                "input": node_input,
                 "output": output,
                 "error": None,
             }
         )
-        last_output[current] = output
+        for target in targets:
+            pending[(current, target)].append(output)
     return spans
 
 

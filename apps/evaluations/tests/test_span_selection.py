@@ -61,6 +61,40 @@ def test_a_node_run_twice_gives_one_span_per_run(record):
     ]
 
 
+def test_a_successor_run_pairs_with_the_run_that_fed_it():
+    record = GenerationRecord(
+        node_outputs={
+            "start": "s",
+            "A": "a",
+            "B": "b",
+            "B2": "b2",
+            "M": ["m-a", "m-b"],
+            "end": ["m-a", "m-b"],
+        },
+        path=[
+            (None, "start", ["A", "B"]),
+            ("start", "A", ["M"]),
+            ("start", "B", ["B2"]),
+            ("A", "M", ["end"]),
+            ("B2", "M", ["end"]),
+            ("M", "end", []),
+            ("M", "end", []),
+        ],
+    )
+    assert [(span["input"], span["output"]) for span in record.select_spans("node", "end")] == [
+        ("m-a", "m-a"),
+        ("m-b", "m-b"),
+    ]
+
+
+def test_a_branch_node_takes_its_own_predecessors_output():
+    record = GenerationRecord(
+        node_outputs={"X": "x", "A": "a", "B": "b"},
+        path=[(None, "X", ["A", "B"]), ("X", "A", []), ("X", "B", [])],
+    )
+    assert record.select_spans("node", "B")[0]["input"] == "x"
+
+
 @pytest.mark.parametrize(
     ("span_type", "span_name", "message"),
     [
