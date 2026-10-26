@@ -84,17 +84,9 @@ def evaluator_prompt_variable_names(evaluation_mode: str) -> list[str]:
 
 
 def evaluator_prompt_variable_hints(evaluation_mode: str) -> list[str]:
-    """Display forms for `evaluation_mode`, e.g. ``{context.[key]}``, for the form's help text.
-
-    Span variables carry a ``(needs a span)`` note: only an evaluator with a span selected may use them.
-    """
+    """Display forms for `evaluation_mode`, e.g. ``{context.[key]}``, for the form's help text."""
     variables = EVALUATOR_PROMPT_VARIABLES.get(evaluation_mode, EVALUATOR_PROMPT_VARIABLES["message"])
-    return [_hint(name, dotted) for name, dotted in variables]
-
-
-def _hint(name: str, dotted: bool) -> str:
-    hint = f"{{{name}.[key]}}" if dotted else f"{{{name}}}"
-    return f"{hint} (needs a span)" if name.split(".")[0] == "span" else hint
+    return [f"{{{name}.[key]}}" if dotted else f"{{{name}}}" for name, dotted in variables]
 
 
 def prompt_variable_roots(prompt: str) -> set[str]:

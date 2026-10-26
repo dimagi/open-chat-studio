@@ -150,6 +150,9 @@
                             <span><template x-if="i > 0"><span>, </span></template><code x-text="hint"></code></span>
                         </template>
                     </p>
+                    <p class="text-sm text-gray-500" x-show="evaluationMode === 'message'">
+                        {% translate "The span variables need a span selected on this evaluator." %}
+                    </p>
                 </div>
             </template>
 
