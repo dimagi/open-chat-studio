@@ -23,9 +23,20 @@ def _node_output(entry: dict | list[dict]) -> Any:
     return entry["message"]
 
 
-def _call(span: CapturedSpan, state: PipelineState | None) -> dict:
-    node = (state.get_node_name(span.node_id) if state else None) or span.node_id
-    return {"node": node, "name": span.name, "input": span.input, "output": span.output, "error": span.error}
+def _node_name(node_id: str | None, node_names: dict[str, str], state: PipelineState | None) -> str | None:
+    if node_id is None:
+        return None
+    return node_names.get(node_id) or (state.get_node_name(node_id) if state else None) or node_id
+
+
+def _call(span: CapturedSpan, node_names: dict[str, str], state: PipelineState | None) -> dict:
+    return {
+        "node": _node_name(span.node_id, node_names, state),
+        "name": span.name,
+        "input": span.input,
+        "output": span.output,
+        "error": span.error,
+    }
 
 
 def _cap(value: str) -> str:
@@ -48,18 +59,31 @@ class GenerationRecord:
 
     @classmethod
     def from_run(
-        cls, pipeline_state: dict | None, participant_data_diff: list, spans: list[CapturedSpan]
+        cls,
+        pipeline_state: dict | None,
+        participant_data_diff: list,
+        spans: list[CapturedSpan],
+        *,
+        node_names: dict[str, str] | None = None,
     ) -> GenerationRecord:
+        names = node_names or {}
         state = PipelineState(pipeline_state) if pipeline_state is not None else None
         calls = {
-            "llm_calls": [_call(span, state) for span in spans if span.type == "llm"],
-            "tool_calls": [_call(span, state) for span in spans if span.type == "tool"],
+            "llm_calls": [_call(span, names, state) for span in spans if span.type == "llm"],
+            "tool_calls": [_call(span, names, state) for span in spans if span.type == "tool"],
         }
         if state is None:
             return cls(participant_data_diff=participant_data_diff, **calls)
         return cls(
             node_outputs={name: _node_output(entry) for name, entry in state.get("outputs", {}).items()},
-            path=state.get_execution_flow(),
+            path=[
+                (
+                    _node_name(previous, names, state),
+                    _node_name(current, names, state),
+                    [_node_name(target, names, state) for target in targets],
+                )
+                for previous, current, targets in state.get("path", [])
+            ],
             message_tags=_format_tags(state.get("output_message_tags", [])),
             session_tags=_format_tags(state.get("session_tags", [])),
             participant_data_diff=participant_data_diff,

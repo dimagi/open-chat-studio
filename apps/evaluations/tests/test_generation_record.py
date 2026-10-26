@@ -53,6 +53,20 @@ def test_spans_split_into_llm_and_tool_calls_named_by_node():
     ]
 
 
+def test_node_names_resolve_from_the_map_before_the_state():
+    spans = [
+        CapturedSpan(type="llm", name="FakeLlm", node_id="llm-2", input="hi", output=""),
+        CapturedSpan(type="tool", name="calc", node_id="code-1", input="x", output="y"),
+    ]
+    state = {**STATE, "path": [(None, "start-1", ["code-1"]), ("start-1", "code-1", ["llm-2"])]}
+    record = GenerationRecord.from_run(
+        state, [], spans, node_names={"llm-2": "Second", "code-1": "Renamed", "start-1": "start"}
+    )
+    assert record.llm_calls[0]["node"] == "Second"
+    assert record.tool_calls[0]["node"] == "Renamed"
+    assert record.path == [(None, "start", ["Renamed"]), ("start", "Renamed", ["Second"])]
+
+
 def test_the_diff_is_carried_as_given():
     diff = [("change", "plan", ("free", "pro"))]
     assert GenerationRecord.from_run({}, diff, []).participant_data_diff == diff

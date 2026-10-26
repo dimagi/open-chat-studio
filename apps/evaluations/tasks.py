@@ -59,6 +59,7 @@ from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_trace
 from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.pipelines.graph import PipelineGraph
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
@@ -733,6 +734,7 @@ def run_bot_generation(
 
         participant_data = message.participant_data | {}
         participant_data = session.participant.global_data | participant_data
+        node_names = _pipeline_node_names(experiment)
 
         # Call the bot with the evaluation message and session
         reply = handle_evaluation_message(
@@ -750,13 +752,22 @@ def run_bot_generation(
             session_id=session.id,
             response=response_content,
             error=reply.error,
-            record=GenerationRecord.from_run(reply.pipeline_state, reply.participant_data_diff, reply.spans),
+            record=GenerationRecord.from_run(
+                reply.pipeline_state, reply.participant_data_diff, reply.spans, node_names=node_names
+            ),
         )
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
         return BotGeneration(session_id=session.id, error=e)
+
+
+def _pipeline_node_names(experiment: Experiment) -> dict[str, str]:
+    """Each node id in the experiment's pipeline mapped to the node's name."""
+    if experiment.pipeline is None:
+        return {}
+    return PipelineGraph.build_from_pipeline(experiment.pipeline).node_id_to_name_mapping
 
 
 def _create_message_history(chat: Chat, history: list[dict]) -> None:
