@@ -8,13 +8,30 @@ from langchain_core.messages import AIMessage
 
 from apps.evaluations.tests.generation_helpers import _llm_experiment, _python_evaluator, _run_with
 from apps.experiments.models import AgentTools
-from apps.pipelines.tests.utils import end_node, llm_response_with_prompt_node, start_node
+from apps.pipelines.tests.utils import (
+    code_node,
+    create_pipeline_model,
+    end_node,
+    llm_response_with_prompt_node,
+    start_node,
+)
 from apps.utils.factories.evaluations import EvaluatorFactory
+from apps.utils.factories.experiment import ChatbotFactory
 from apps.utils.tests.langchain import build_fake_llm_service
 
 READ_SPAN_CODE = textwrap.dedent("""
     def main(input, output, context, full_history, generated_response, **kwargs):
         return {"span": kwargs["span"]}
+    """)
+
+TAGGER_CODE = textwrap.dedent("""
+    def main(input, **kwargs):
+        return "tagged: " + input
+    """)
+
+FINISHING_CODE = textwrap.dedent("""
+    def main(input, **kwargs):
+        return "final: " + input
     """)
 
 CALCULATE = {"name": AgentTools.CALCULATOR.value, "args": {"expression": "2+2"}, "id": "call_1"}
@@ -51,19 +68,47 @@ def test_a_python_evaluator_judges_a_tool_span(team_with_users, message):
     assert run.results.get().output["result"] == {"expression": "2+2", "answer": "4"}
 
 
-@pytest.mark.django_db()
-def test_a_node_span_as_response_replaces_the_generated_response(team_with_users, tagging_experiment, message):
-    code = textwrap.dedent("""
-        def main(input, output, context, full_history, generated_response, **kwargs):
-            return {"judged": generated_response}
-        """)
-    evaluator = _python_evaluator(team_with_users, code, span_type="node", span_name="Tagger", span_as_response=True)
+@pytest.fixture()
+def two_code_node_experiment(team_with_users):
+    experiment = ChatbotFactory.create(team=team_with_users)
+    create_pipeline_model(
+        [start_node(), code_node(TAGGER_CODE, name="Tagger"), code_node(FINISHING_CODE, name="Finisher"), end_node()],
+        pipeline=experiment.pipeline,
+    )
+    experiment.pipeline.save()
+    return experiment
 
-    run = _run_with(team_with_users, message, tagging_experiment, evaluator)
+
+JUDGE_RESPONSE_CODE = textwrap.dedent("""
+    def main(input, output, context, full_history, generated_response, **kwargs):
+        return {"judged": generated_response}
+    """)
+
+
+@pytest.mark.django_db()
+def test_a_node_span_as_response_replaces_the_generated_response(team_with_users, two_code_node_experiment, message):
+    evaluator = _python_evaluator(
+        team_with_users, JUDGE_RESPONSE_CODE, span_type="node", span_name="Tagger", span_as_response=True
+    )
+
+    run = _run_with(team_with_users, message, two_code_node_experiment, evaluator)
 
     result = run.results.get()
     assert result.output["result"] == {"judged": "tagged: hello"}
     assert result.output["generated_response"] == "tagged: hello"
+
+
+@pytest.mark.django_db()
+def test_without_a_selector_the_generated_response_is_the_final_reply(
+    team_with_users, two_code_node_experiment, message
+):
+    evaluator = _python_evaluator(team_with_users, JUDGE_RESPONSE_CODE)
+
+    run = _run_with(team_with_users, message, two_code_node_experiment, evaluator)
+
+    result = run.results.get()
+    assert result.output["result"] == {"judged": "final: tagged: hello"}
+    assert result.output["generated_response"] == "final: tagged: hello"
 
 
 @pytest.mark.django_db()
