@@ -4,6 +4,7 @@
     "tag": {
       "default": "",
       "description": "The tag that the output message should be tagged with",
+      "maxLength": 100,
       "title": "Message Tag",
       "type": "string"
     },
