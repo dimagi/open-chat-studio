@@ -45,6 +45,15 @@ def _cap(value: str) -> str:
     return value[:GENERATION_PROMPT_VARIABLE_MAX_LENGTH] + TRUNCATION_SUFFIX
 
 
+def _stringify_keys(value: Any) -> Any:
+    """Copy nested dicts and lists with every non-string dict key replaced by its string form."""
+    if isinstance(value, dict):
+        return {key if isinstance(key, str) else str(key): _stringify_keys(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_stringify_keys(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class GenerationRecord:
     """What a bot generation did, for evaluators to judge beside the reply text.
@@ -98,7 +107,7 @@ class GenerationRecord:
 
     def as_dict(self) -> dict:
         """The record as JSON types only: tuples become lists and other values their string form."""
-        return json.loads(json.dumps(asdict(self), default=str))
+        return json.loads(json.dumps(_stringify_keys(asdict(self)), default=str))
 
     def prompt_variables(self) -> dict[str, str]:
         return {name: _cap(json.dumps(value, ensure_ascii=False)) for name, value in self.as_dict().items()}

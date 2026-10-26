@@ -174,3 +174,11 @@ def test_as_dict_is_plain_data():
     assert json.loads(json.dumps(data)) == data
     assert _json_types_only(data)
     assert data["message_tags"] == ["urgent", "safety_layer_response:blocked"]
+
+
+def test_non_string_dict_keys_are_stringified():
+    output = {("a", 1): "x", datetime(2026, 10, 26): "y"}
+    record = GenerationRecord(tool_calls=[{"node": "n", "name": "t", "input": None, "output": output, "error": None}])
+
+    assert record.as_dict()["tool_calls"][0]["output"] == {"('a', 1)": "x", "2026-10-26 00:00:00": "y"}
+    assert isinstance(record.prompt_variables()["tool_calls"], str)
