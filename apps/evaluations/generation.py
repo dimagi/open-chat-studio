@@ -182,20 +182,22 @@ def _node_spans(node_outputs: dict[str, Any], path: list[list]) -> list[dict]:
     return spans
 
 
+SPAN_PROMPT_KEYS = ("input", "output", "error")
+
+
 def _render(value: Any) -> str:
+    if value is None:
+        return ""
     return _cap(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
 
 
 def span_prompt_variables(spans: list[dict]) -> dict[str, str]:
-    """The `input` and `output` prompt variables for the selected spans."""
+    """The `input`, `output` and `error` prompt variables for the selected spans."""
     if not spans:
-        return {"input": "", "output": ""}
+        return dict.fromkeys(SPAN_PROMPT_KEYS, "")
     if len(spans) == 1:
-        return {"input": _render(spans[0]["input"]), "output": _render(spans[0]["output"])}
-    return {
-        "input": _cap(json.dumps([span["input"] for span in spans], ensure_ascii=False)),
-        "output": _cap(json.dumps([span["output"] for span in spans], ensure_ascii=False)),
-    }
+        return {key: _render(spans[0][key]) for key in SPAN_PROMPT_KEYS}
+    return {key: _cap(json.dumps([span[key] for span in spans], ensure_ascii=False)) for key in SPAN_PROMPT_KEYS}
 
 
 def span_kwarg(spans: list[dict]) -> dict | list[dict] | None:
@@ -208,7 +210,13 @@ def span_kwarg(spans: list[dict]) -> dict | list[dict] | None:
 
 
 def judged_response(spans: list[dict], generated_response: str) -> str:
-    """The last selected span's output as text, or the generated response when nothing is selected."""
+    """The last selected span's output as text, or the generated response when nothing is selected.
+
+    Raises `EvaluationRunException` when that span failed, since it has no output to judge.
+    """
     if not spans:
         return generated_response
-    return _render(spans[-1]["output"])
+    span = spans[-1]
+    if span["error"]:
+        raise EvaluationRunException(f"Span '{span['name']}' ({span['type']}) failed: {span['error']}")
+    return _render(span["output"])

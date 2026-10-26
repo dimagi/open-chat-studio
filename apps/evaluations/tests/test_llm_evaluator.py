@@ -143,7 +143,7 @@ def test_llm_evaluator_prompt_unknown_span_variable_raises(offending):
     error_message = str(exc_info.value)
     assert "Unknown span variable" in error_message
     assert offending in error_message
-    assert "{span.input}, {span.output}" in error_message
+    assert "{span.input}, {span.output}, {span.error}" in error_message
 
 
 def test_unknown_span_variables():
@@ -153,7 +153,7 @@ def test_unknown_span_variables():
         "span.output!r",
         "span",
     }
-    assert unknown_span_variables("{span.input} {span.output}") == set()
+    assert unknown_span_variables("{span.input} {span.output} {span.error}") == set()
 
 
 @pytest.fixture()
@@ -683,7 +683,7 @@ def test_span_variables_need_a_selector():
         )
 
 
-@pytest.mark.parametrize("prompt", ["Judge {span.input}", "Judge {span.output}"])
+@pytest.mark.parametrize("prompt", ["Judge {span.input}", "Judge {span.output}", "Judge {span.error}"])
 def test_span_variables_are_accepted_with_a_selector(prompt):
     evaluator = LlmEvaluator(
         llm_provider_id=1,
@@ -723,3 +723,25 @@ def test_the_selected_span_reaches_the_prompt_and_the_response(get_llm_service, 
     assert 'Chunks: chunk a for {"query": "q"}' in _prompt_sent_to(service)
     assert result.generated_response == "the reply"
     assert result.judged_response == "chunk a"
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_the_span_error_reaches_the_prompt(get_llm_service, llm_provider, llm_provider_model):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Did {span.input} fail? Error: {span.error}",
+        output_schema=_OUTPUT_SCHEMA,
+        span_type="tool",
+        span_name="file-search",
+    )
+    record = GenerationRecord(
+        tool_calls=[{"node": "Answer", "name": "file-search", "input": "q", "output": None, "error": "timed out"}]
+    )
+
+    evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
+
+    assert "Did q fail? Error: timed out" in _prompt_sent_to(service)

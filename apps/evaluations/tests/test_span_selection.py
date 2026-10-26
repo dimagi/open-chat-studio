@@ -129,7 +129,24 @@ def test_prompt_variables_render_strings_raw_and_other_values_as_json(record):
     assert span_prompt_variables(record.select_spans("tool", "file-search")) == {
         "input": '{"query": "q"}',
         "output": "chunk a\nchunk b",
+        "error": "",
     }
+
+
+def _tool_span(**fields):
+    return {"type": "tool", "node": "n", "name": "t", "input": "x", "output": "y", "error": None, **fields}
+
+
+@pytest.mark.parametrize(
+    ("output", "rendered"),
+    [
+        pytest.param(None, "", id="none"),
+        pytest.param({"answer": 4}, '{"answer": 4}', id="dict-as-json"),
+        pytest.param({"städte": "Zürich"}, '{"städte": "Zürich"}', id="non-ascii-kept"),
+    ],
+)
+def test_a_single_span_output_renders(output, rendered):
+    assert span_prompt_variables([_tool_span(output=output)])["output"] == rendered
 
 
 def test_prompt_variables_for_several_spans_are_json_lists(record):
@@ -139,7 +156,21 @@ def test_prompt_variables_for_several_spans_are_json_lists(record):
 
 
 def test_prompt_variables_without_a_selector_are_empty():
-    assert span_prompt_variables([]) == {"input": "", "output": ""}
+    assert span_prompt_variables([]) == {"input": "", "output": "", "error": ""}
+
+
+def test_prompt_variables_include_the_error():
+    assert span_prompt_variables([_tool_span(error="boom")])["error"] == "boom"
+    assert json.loads(span_prompt_variables([_tool_span(), _tool_span(error="boom")])["error"]) == [None, "boom"]
+
+
+def test_judged_response_raises_for_an_errored_span():
+    with pytest.raises(EvaluationRunException, match=r"Span 't' \(tool\) failed: boom"):
+        judged_response([_tool_span(error="boom")], "original")
+
+
+def test_judged_response_renders_a_dict_output_as_json():
+    assert judged_response([_tool_span(output={"answer": 4})], "original") == '{"answer": 4}'
 
 
 def test_prompt_variables_are_capped():

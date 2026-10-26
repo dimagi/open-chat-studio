@@ -427,6 +427,16 @@ class TestPromptVariables:
         assert {"participant_data", "session_state"} <= set(variables["autocomplete"])
         assert "{session_state.[key]}" in variables["hints"]
 
+    def test_span_hints_say_they_need_a_span(self, client_with_user, team):
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        hints = response.context_data["prompt_variables_by_mode"]["message"]["hints"]
+        assert [hint for hint in hints if hint.startswith("{span.")] == [
+            "{span.input} (needs a span)",
+            "{span.output} (needs a span)",
+            "{span.error} (needs a span)",
+        ]
+
     def test_session_mode_omits_the_per_message_variables(self, client_with_user, team):
         """A session-mode dataset holds a whole conversation, not one input/output pair."""
         response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))

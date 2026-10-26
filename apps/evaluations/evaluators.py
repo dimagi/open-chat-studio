@@ -178,7 +178,7 @@ class LlmEvaluator(SpanSelectorMixin, LLMResponseMixin, BaseEvaluator):
     @model_validator(mode="after")
     def span_variables_need_a_selector(self):
         if self.span_type == "reply" and "span" in prompt_variable_roots(self.prompt):
-            raise ValueError("The prompt uses {span.input} or {span.output} but no span is selected")
+            raise ValueError("The prompt uses {span.input}, {span.output} or {span.error} but no span is selected")
         return self
 
     def run(

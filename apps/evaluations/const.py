@@ -49,9 +49,11 @@ EVALUATOR_PROMPT_VARIABLES = {
         ("generation.participant_data_diff", False),
         ("generation.llm_calls", False),
         ("generation.tool_calls", False),
-        # Rendered values of the selected span; the validator accepts exactly these names.
+        # Rendered input, output and error of the selected span (``span_prompt_variables``); the
+        # validator accepts exactly these names.
         ("span.input", False),
         ("span.output", False),
+        ("span.error", False),
     ],
     "session": [
         ("context", True),
@@ -82,9 +84,17 @@ def evaluator_prompt_variable_names(evaluation_mode: str) -> list[str]:
 
 
 def evaluator_prompt_variable_hints(evaluation_mode: str) -> list[str]:
-    """Display forms for `evaluation_mode`, e.g. ``{context.[key]}``, for the form's help text."""
+    """Display forms for `evaluation_mode`, e.g. ``{context.[key]}``, for the form's help text.
+
+    Span variables carry a ``(needs a span)`` note: only an evaluator with a span selected may use them.
+    """
     variables = EVALUATOR_PROMPT_VARIABLES.get(evaluation_mode, EVALUATOR_PROMPT_VARIABLES["message"])
-    return [f"{{{name}.[key]}}" if dotted else f"{{{name}}}" for name, dotted in variables]
+    return [_hint(name, dotted) for name, dotted in variables]
+
+
+def _hint(name: str, dotted: bool) -> str:
+    hint = f"{{{name}.[key]}}" if dotted else f"{{{name}}}"
+    return f"{hint} (needs a span)" if name.split(".")[0] == "span" else hint
 
 
 def prompt_variable_roots(prompt: str) -> set[str]:
