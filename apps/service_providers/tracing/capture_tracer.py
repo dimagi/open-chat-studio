@@ -49,6 +49,19 @@ def _error_text(error: BaseException) -> str:
     return str(error) or type(error).__name__
 
 
+def _pipeline_node_id(metadata: dict[str, Any]) -> str | None:
+    """The outermost graph node a call ran under.
+
+    An agent inside a pipeline node reports its own inner node (`model`, `tools`) as
+    `langgraph_node`; the pipeline node is the first segment of the checkpoint namespace
+    (`<node id>:<task id>|model:<task id>`).
+    """
+    namespace = metadata.get("langgraph_checkpoint_ns")
+    if namespace:
+        return namespace.split("|", maxsplit=1)[0].split(":", maxsplit=1)[0]
+    return metadata.get("langgraph_node")
+
+
 class CaptureCallbackHandler(BaseCallbackHandler):
     """Records completed LLM and tool calls, in completion order.
 
@@ -109,7 +122,7 @@ class CaptureCallbackHandler(BaseCallbackHandler):
         pending = _PendingSpan(
             type=span_type,
             name=get_langchain_run_name(serialized, **kwargs),
-            node_id=(kwargs.get("metadata") or {}).get("langgraph_node"),
+            node_id=_pipeline_node_id(kwargs.get("metadata") or {}),
             input=span_input,
         )
         with self._lock:

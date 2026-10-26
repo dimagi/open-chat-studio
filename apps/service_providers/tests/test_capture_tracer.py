@@ -53,6 +53,19 @@ def test_tool_name_falls_back_to_the_serialized_name():
     ]
 
 
+def test_a_call_inside_an_agent_is_attributed_to_the_pipeline_node():
+    handler = CaptureCallbackHandler()
+    run_id = uuid4()
+    handler.on_tool_start(
+        {"name": "calculator"},
+        "2+2",
+        run_id=run_id,
+        metadata={"langgraph_node": "tools", "langgraph_checkpoint_ns": "llm-1:task-a|tools:task-b"},
+    )
+    handler.on_tool_end("4", run_id=run_id)
+    assert handler.spans[0].node_id == "llm-1"
+
+
 class _Hit(BaseModel):
     title: str
     score: int
