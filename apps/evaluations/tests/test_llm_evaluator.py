@@ -694,6 +694,8 @@ def test_span_variables_are_accepted_with_a_selector(prompt):
         span_name="file-search",
     )
     assert evaluator.prompt == prompt
+    assert evaluator.span_type == "tool"
+    assert evaluator.span_name == "file-search"
 
 
 @pytest.mark.django_db()
