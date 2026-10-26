@@ -80,6 +80,11 @@ class SpanSelectorMixin(BaseModel):
         json_schema_extra=UiSchema(widget=Widgets.toggle),
     )
 
+    @field_validator("span_name")
+    @classmethod
+    def strip_span_name(cls, value: str) -> str:
+        return value.strip()
+
     @model_validator(mode="after")
     def selector_is_consistent(self):
         if self.span_type != "reply" and not self.span_name:

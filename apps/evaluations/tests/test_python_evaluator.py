@@ -245,9 +245,15 @@ def test_span_is_none_without_a_selector():
     "params",
     [
         pytest.param({"span_type": "tool"}, id="type-without-name"),
+        pytest.param({"span_type": "tool", "span_name": "   "}, id="type-with-whitespace-name"),
         pytest.param({"span_as_response": True}, id="response-without-selector"),
     ],
 )
 def test_inconsistent_selectors_are_rejected(params):
     with pytest.raises(ValidationError):
         PythonEvaluator(code=DEFAULT_FUNCTION, **params)
+
+
+def test_span_name_is_stripped():
+    evaluator = PythonEvaluator(code=DEFAULT_FUNCTION, span_type="node", span_name=" Tagger ")
+    assert evaluator.span_name == "Tagger"
