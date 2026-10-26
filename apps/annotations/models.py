@@ -55,6 +55,12 @@ class Tag(TagBase, BaseTeamModel):
     def label(self):
         return TagCategories(self.category).label if self.category else "User Defined"
 
+    def slugify(self, tag, i=None):
+        """Keep the slug within its column when taggit appends a "_<i>" suffix to make it unique."""
+        suffix = f"_{i}" if i is not None else ""
+        max_length = self._meta.get_field("slug").max_length
+        return super().slugify(tag)[: max_length - len(suffix)] + suffix
+
 
 @audit_fields(
     "user",
@@ -110,7 +116,7 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
 
     def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser | None = None):
         tag, _ = Tag.objects.get_or_create(
-            name=tag,
+            name=tag[: Tag._meta.get_field("name").max_length],
             team=team,
             is_system_tag=bool(tag_category),
             category=tag_category or "",
