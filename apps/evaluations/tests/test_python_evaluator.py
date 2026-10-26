@@ -241,16 +241,23 @@ def test_span_is_none_without_a_selector():
     assert PythonEvaluator(code=code).run(EvaluationMessageFactory.create(), "").result == {"span": None}
 
 
+_NAME_REQUIRED = "A span name is required when a node, tool or LLM span is selected"
+
+
 @pytest.mark.parametrize(
-    "params",
+    ("params", "message"),
     [
-        pytest.param({"span_type": "tool"}, id="type-without-name"),
-        pytest.param({"span_type": "tool", "span_name": "   "}, id="type-with-whitespace-name"),
-        pytest.param({"span_as_response": True}, id="response-without-selector"),
+        pytest.param({"span_type": "tool"}, _NAME_REQUIRED, id="type-without-name"),
+        pytest.param({"span_type": "tool", "span_name": "   "}, _NAME_REQUIRED, id="type-with-whitespace-name"),
+        pytest.param(
+            {"span_as_response": True},
+            "Select a span to use its output as the generated response",
+            id="response-without-selector",
+        ),
     ],
 )
-def test_inconsistent_selectors_are_rejected(params):
-    with pytest.raises(ValidationError):
+def test_inconsistent_selectors_are_rejected(params, message):
+    with pytest.raises(ValidationError, match=message):
         PythonEvaluator(code=DEFAULT_FUNCTION, **params)
 
 

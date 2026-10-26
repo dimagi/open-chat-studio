@@ -48,8 +48,11 @@ def _edit_url(team, evaluator):
     return reverse("evaluations:evaluator_edit", args=[team.slug, evaluator.pk])
 
 
+_CODE = "def main(input, output, context, full_history, generated_response, **kwargs):\n    return {}"
+
+
 def _params(output_schema):
-    return {"llm_prompt": "prompt", "output_schema": output_schema}
+    return {"prompt": "Judge {full_history}", "output_schema": output_schema}
 
 
 def _post_data(evaluator, output_schema, rule_rows, params=None, **overrides):
@@ -337,21 +340,6 @@ class TestEvaluatorLlmProviderSelection:
         assert evaluator.llm_provider_id is None
         assert evaluator.llm_provider_model_id is None
 
-    def test_a_model_level_params_error_is_shown_without_a_field_label(self, client_with_user, team, evaluator):
-        code = "def main(input, output, context, full_history, generated_response, **kwargs):\n    return {}"
-        data = _post_data(evaluator, {}, [], params={"code": code, "span_type": "tool"})
-        data["type"] = "PythonEvaluator"
-        del data["llm_provider"]
-        del data["llm_provider_model"]
-
-        response = client_with_user.post(_edit_url(team, evaluator), data)
-
-        content = response.content.decode()
-        assert response.status_code == 200
-        assert "A span name is required when a node, tool or LLM span is selected" in content
-        assert "Unknown:" not in content
-        assert "Value error," not in content
-
 
 @pytest.mark.django_db()
 class TestSpanSelectorForm:
@@ -387,13 +375,37 @@ class TestSpanSelectorForm:
         assert response.status_code == 200
         assert "Selecting a span needs a generation, which session mode does not run" in response.content.decode()
 
-    def test_session_mode_accepts_the_default_selector(self, client_with_user, team, evaluator):
-        data = _post_data(evaluator, {}, [], params=_params({}), evaluation_mode="session")
+    @pytest.mark.parametrize(
+        ("evaluator_type", "params"),
+        [
+            pytest.param("LlmEvaluator", _params({}), id="llm"),
+            pytest.param("PythonEvaluator", {"code": _CODE}, id="python"),
+        ],
+    )
+    def test_session_mode_accepts_the_default_selector(self, client_with_user, team, evaluator, evaluator_type, params):
+        data = _post_data(evaluator, {}, [], params=params | {"span_type": "reply"}, evaluation_mode="session")
+        data["type"] = evaluator_type
+        if evaluator_type == "PythonEvaluator":
+            del data["llm_provider"]
+            del data["llm_provider_model"]
 
-        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
-            response = client_with_user.post(_edit_url(team, evaluator), data)
+        response = client_with_user.post(_edit_url(team, evaluator), data)
 
         assert response.status_code == 302, response.context_data["form"].errors
+
+    def test_a_model_level_params_error_is_shown_without_a_field_label(self, client_with_user, team, evaluator):
+        data = _post_data(evaluator, {}, [], params={"code": _CODE, "span_type": "tool"})
+        data["type"] = "PythonEvaluator"
+        del data["llm_provider"]
+        del data["llm_provider_model"]
+
+        response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "A span name is required when a node, tool or LLM span is selected" in content
+        assert "Unknown:" not in content
+        assert "Value error," not in content
 
     @pytest.mark.parametrize(
         ("params", "expected"),

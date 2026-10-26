@@ -684,7 +684,14 @@ def test_span_variables_need_a_selector():
         )
 
 
-@pytest.mark.parametrize("prompt", ["Judge {span.input}", "Judge {span.output}", "Judge {span.error}"])
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        pytest.param("Judge {span.input}", id="input"),
+        pytest.param("Judge {span.output}", id="output"),
+        pytest.param("Judge {span.error}", id="error"),
+    ],
+)
 def test_span_variables_are_accepted_with_a_selector(prompt):
     evaluator = LlmEvaluator(
         llm_provider_id=1,

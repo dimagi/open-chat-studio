@@ -4,7 +4,13 @@ import pytest
 
 from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_MAX_LENGTH
 from apps.evaluations.exceptions import EvaluationRunException
-from apps.evaluations.generation import GenerationRecord, judged_response, span_kwarg, span_prompt_variables
+from apps.evaluations.generation import (
+    SPAN_KEYS,
+    GenerationRecord,
+    judged_response,
+    span_kwarg,
+    span_prompt_variables,
+)
 
 SEARCH = {"node": "Answer", "name": "file-search", "input": {"query": "q"}, "output": "chunk a\nchunk b", "error": None}
 CALC = {"node": "Answer", "name": "calculator", "input": {"expression": "2+2"}, "output": "4", "error": None}
@@ -59,6 +65,39 @@ def test_a_node_run_twice_gives_one_span_per_run(record):
         ("reply", "a"),
         ("a", "b"),
     ]
+
+
+@pytest.mark.parametrize(
+    ("span_type", "span_name"),
+    [
+        pytest.param("node", "Answer", id="node"),
+        pytest.param("tool", "calculator", id="tool"),
+        pytest.param("llm", "Answer", id="llm"),
+    ],
+)
+def test_every_span_has_exactly_the_span_keys(record, span_type, span_name):
+    for span in record.select_spans(span_type, span_name):
+        assert set(span) == set(SPAN_KEYS)
+
+
+def test_a_node_with_an_output_but_no_run_has_no_span():
+    record = GenerationRecord(node_outputs={"start": "s", "Ghost": "g"}, path=[(None, "start", [])])
+    with pytest.raises(EvaluationRunException, match=r"Available node spans: start$"):
+        record.select_spans("node", "Ghost")
+
+
+def test_a_node_run_with_no_output_has_no_span():
+    record = GenerationRecord(node_outputs={"start": "s"}, path=[(None, "start", ["Ghost"]), ("start", "Ghost", [])])
+    with pytest.raises(EvaluationRunException, match=r"Available node spans: start$"):
+        record.select_spans("node", "Ghost")
+
+
+def test_runs_beyond_a_list_output_have_no_span():
+    record = GenerationRecord(
+        node_outputs={"Loop": ["a", "b"]},
+        path=[(None, "Loop", ["Loop"]), ("Loop", "Loop", ["Loop"]), ("Loop", "Loop", ["end"])],
+    )
+    assert [span["output"] for span in record.select_spans("node", "Loop")] == ["a", "b"]
 
 
 def test_a_successor_run_pairs_with_the_run_that_fed_it():
@@ -173,27 +212,42 @@ def test_judged_response_renders_a_dict_output_as_json():
     assert judged_response([_tool_span(output={"answer": 4})], "original") == '{"answer": 4}'
 
 
-def test_prompt_variables_are_capped():
-    spans = [
-        {
-            "type": "tool",
-            "node": "n",
-            "name": "t",
-            "input": "x",
-            "output": "y" * (GENERATION_PROMPT_VARIABLE_MAX_LENGTH + 1),
-            "error": None,
-        }
-    ]
-    assert span_prompt_variables(spans)["output"].endswith(" [truncated]")
+@pytest.mark.parametrize("key", ["input", "output"])
+@pytest.mark.parametrize("span_count", [pytest.param(1, id="single"), pytest.param(2, id="several")])
+def test_prompt_variables_are_capped(key, span_count):
+    long_span = _tool_span(**{key: "y" * (GENERATION_PROMPT_VARIABLE_MAX_LENGTH + 1)})
+    variables = span_prompt_variables([long_span] * span_count)
+    assert variables[key].endswith(" [truncated]")
+    assert len(variables[key]) == GENERATION_PROMPT_VARIABLE_MAX_LENGTH + len(" [truncated]")
 
 
-def test_span_kwarg_is_none_a_dict_or_a_list(record):
-    assert span_kwarg([]) is None
-    assert span_kwarg(record.select_spans("tool", "calculator")) == {"type": "tool", **CALC}
-    assert isinstance(span_kwarg(record.select_spans("node", "Loop")), list)
+@pytest.mark.parametrize(
+    ("span_type", "span_name", "expected"),
+    [
+        pytest.param("reply", "", None, id="none-without-a-selector"),
+        pytest.param("tool", "calculator", {"type": "tool", **CALC}, id="dict-for-one-span"),
+        pytest.param(
+            "node",
+            "Loop",
+            [
+                {"type": "node", "node": "Loop", "name": "Loop", "input": "reply", "output": "a", "error": None},
+                {"type": "node", "node": "Loop", "name": "Loop", "input": "a", "output": "b", "error": None},
+            ],
+            id="list-for-several-spans",
+        ),
+    ],
+)
+def test_span_kwarg_is_none_a_dict_or_a_list(record, span_type, span_name, expected):
+    assert span_kwarg(record.select_spans(span_type, span_name)) == expected
 
 
-def test_judged_response_is_the_last_spans_output(record):
-    assert judged_response(record.select_spans("node", "Loop"), "original") == "b"
-    assert judged_response(record.select_spans("tool", "calculator"), "original") == "4"
-    assert judged_response([], "original") == "original"
+@pytest.mark.parametrize(
+    ("span_type", "span_name", "expected"),
+    [
+        pytest.param("node", "Loop", "b", id="last-of-several"),
+        pytest.param("tool", "calculator", "4", id="single"),
+        pytest.param("reply", "", "original", id="reply-without-a-selector"),
+    ],
+)
+def test_judged_response_is_the_last_spans_output(record, span_type, span_name, expected):
+    assert judged_response(record.select_spans(span_type, span_name), "original") == expected

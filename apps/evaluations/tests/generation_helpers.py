@@ -11,7 +11,7 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory, 
 from apps.utils.tests.langchain import build_fake_llm_service
 
 
-def _python_evaluator(team, code, **params):
+def python_evaluator(team, code, **params):
     return EvaluatorFactory.create(
         team=team,
         type="PythonEvaluator",
@@ -21,7 +21,7 @@ def _python_evaluator(team, code, **params):
     )
 
 
-def _llm_experiment(team, build_nodes):
+def llm_experiment(team, build_nodes):
     """A chatbot whose pipeline is `build_nodes(provider_id, model_id)`."""
     provider = LlmProviderFactory.create(team=team)
     model = LlmProviderModelFactory.create(team=team, type=provider.type)
@@ -31,7 +31,7 @@ def _llm_experiment(team, build_nodes):
     return experiment
 
 
-def _generate(team, message, experiment, responses=()):
+def generate(team, message, experiment, responses=()):
     with patch(
         "apps.service_providers.models.LlmProvider.get_llm_service",
         return_value=build_fake_llm_service(responses=list(responses)),
@@ -39,7 +39,7 @@ def _generate(team, message, experiment, responses=()):
         return run_bot_generation(team, message, experiment, evaluation_run=EvaluationRunFactory.create(team=team))
 
 
-def _run_with(team, message, experiment, *evaluators, responses=()):
+def run_with(team, message, experiment, *evaluators, responses=()):
     """Evaluate `message` against `experiment`'s generation with `evaluators`, in the order given.
 
     The LLM service is patched only when `responses` is given.

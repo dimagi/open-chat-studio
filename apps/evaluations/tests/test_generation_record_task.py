@@ -7,9 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from apps.evaluations.generation import GenerationRecord
-from apps.evaluations.models import EvaluationRun
-from apps.evaluations.tasks import evaluate_message
-from apps.evaluations.tests.generation_helpers import _generate, _llm_experiment, _python_evaluator
+from apps.evaluations.tests.generation_helpers import generate, llm_experiment, python_evaluator, run_with
 from apps.experiments.models import AgentTools, Participant, ParticipantData
 from apps.pipelines.tests.utils import (
     code_node,
@@ -18,7 +16,6 @@ from apps.pipelines.tests.utils import (
     llm_response_with_prompt_node,
     start_node,
 )
-from apps.utils.factories.evaluations import EvaluationConfigFactory
 
 RAISING_CODE = textwrap.dedent("""
     def main(input, **kwargs):
@@ -33,7 +30,7 @@ READ_TAGS_CODE = textwrap.dedent("""
 
 @pytest.mark.django_db()
 def test_record_carries_what_the_run_did(team_with_users, tagging_experiment, message):
-    generation = _generate(team_with_users, message, tagging_experiment)
+    generation = generate(team_with_users, message, tagging_experiment)
 
     record = generation.record
     assert generation.response == "tagged: hello"
@@ -46,7 +43,7 @@ def test_record_carries_what_the_run_did(team_with_users, tagging_experiment, me
 
 @pytest.mark.django_db()
 def test_record_carries_the_tool_calls_of_an_llm_node(team_with_users, message):
-    experiment = _llm_experiment(
+    experiment = llm_experiment(
         team_with_users,
         lambda provider_id, model_id: [
             start_node(),
@@ -56,7 +53,7 @@ def test_record_carries_the_tool_calls_of_an_llm_node(team_with_users, message):
     )
     calculate = {"name": AgentTools.CALCULATOR.value, "args": {"expression": "2+2"}, "id": "call_1"}
 
-    generation = _generate(
+    generation = generate(
         team_with_users,
         message,
         experiment,
@@ -73,7 +70,7 @@ def test_record_carries_the_tool_calls_of_an_llm_node(team_with_users, message):
 
 @pytest.mark.django_db()
 def test_record_carries_a_participant_data_tool_call(team_with_users, message):
-    experiment = _llm_experiment(
+    experiment = llm_experiment(
         team_with_users,
         lambda provider_id, model_id: [
             start_node(),
@@ -89,7 +86,7 @@ def test_record_carries_a_participant_data_tool_call(team_with_users, message):
     )
     update = {"name": AgentTools.UPDATE_PARTICIPANT_DATA.value, "args": {"key": "plan", "value": "pro"}, "id": "call_1"}
 
-    generation = _generate(
+    generation = generate(
         team_with_users,
         message,
         experiment,
@@ -104,7 +101,7 @@ def test_record_carries_a_participant_data_tool_call(team_with_users, message):
 
 @pytest.mark.django_db()
 def test_unexpected_failure_keeps_the_calls_made_before_it(team_with_users, message):
-    experiment = _llm_experiment(
+    experiment = llm_experiment(
         team_with_users,
         lambda provider_id, model_id: [
             start_node(),
@@ -114,7 +111,7 @@ def test_unexpected_failure_keeps_the_calls_made_before_it(team_with_users, mess
         ],
     )
 
-    generation = _generate(team_with_users, message, experiment, responses=["first", AIMessage(content="")])
+    generation = generate(team_with_users, message, experiment, responses=["first", AIMessage(content="")])
 
     assert generation.error is not None
     assert generation.response == ""
@@ -124,7 +121,7 @@ def test_unexpected_failure_keeps_the_calls_made_before_it(team_with_users, mess
 
 @pytest.mark.django_db()
 def test_canned_reply_failure_keeps_the_calls_made_before_it(team_with_users, message):
-    experiment = _llm_experiment(
+    experiment = llm_experiment(
         team_with_users,
         lambda provider_id, model_id: [
             start_node(),
@@ -134,7 +131,7 @@ def test_canned_reply_failure_keeps_the_calls_made_before_it(team_with_users, me
         ],
     )
 
-    generation = _generate(team_with_users, message, experiment, responses=["first"])
+    generation = generate(team_with_users, message, experiment, responses=["first"])
 
     assert generation.error is not None
     assert generation.record.llm_calls[0]["node"] == "Answer"
@@ -142,7 +139,7 @@ def test_canned_reply_failure_keeps_the_calls_made_before_it(team_with_users, me
 
 @pytest.mark.django_db()
 def test_run_leaves_the_shared_participant_untouched(team_with_users, tagging_experiment, message):
-    _generate(team_with_users, message, tagging_experiment)
+    generate(team_with_users, message, tagging_experiment)
 
     participant = Participant.objects.get(identifier="evaluations", team=team_with_users)
     assert participant.name == "Evaluations Bot"
@@ -153,7 +150,7 @@ def test_run_leaves_the_shared_participant_untouched(team_with_users, tagging_ex
 @pytest.mark.django_db()
 def test_failed_generation_has_an_empty_record(team_with_users, tagging_experiment, message):
     with patch("apps.evaluations.tasks.handle_evaluation_message", side_effect=RuntimeError("boom")):
-        generation = _generate(team_with_users, message, tagging_experiment)
+        generation = generate(team_with_users, message, tagging_experiment)
 
     assert generation.error is not None
     assert generation.record == GenerationRecord()
@@ -167,25 +164,17 @@ def test_python_evaluator_judges_the_record(team_with_users, tagging_experiment,
             changed = [op[1] for op in generation["participant_data_diff"] if op[0] == "change"]
             return {"urgent": "urgent" in generation["message_tags"], "upgraded": "plan" in changed}
         """)
-    evaluator = _python_evaluator(team_with_users, code)
-    config = EvaluationConfigFactory.create(
-        team=team_with_users, dataset=message.evaluationdataset_set.first(), evaluators=[evaluator]
-    )
-    run = EvaluationRun.objects.create(team=team_with_users, config=config, generation_experiment=tagging_experiment)
+    evaluator = python_evaluator(team_with_users, code)
 
-    evaluate_message(run.id, [evaluator.id], message.id)
+    run = run_with(team_with_users, message, tagging_experiment, evaluator)
 
     assert run.results.get().output["result"] == {"urgent": True, "upgraded": True}
 
 
 @pytest.mark.django_db()
 def test_no_generation_experiment_supplies_an_empty_record(team_with_users, message):
-    evaluator = _python_evaluator(team_with_users, READ_TAGS_CODE)
-    config = EvaluationConfigFactory.create(
-        team=team_with_users, dataset=message.evaluationdataset_set.first(), evaluators=[evaluator]
-    )
-    run = EvaluationRun.objects.create(team=team_with_users, config=config)
+    evaluator = python_evaluator(team_with_users, READ_TAGS_CODE)
 
-    evaluate_message(run.id, [evaluator.id], message.id)
+    run = run_with(team_with_users, message, None, evaluator)
 
     assert run.results.get().output["result"] == {"tags": []}
