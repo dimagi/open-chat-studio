@@ -15,7 +15,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
 
 from apps.cost_tracking.services.estimation import response_text
-from apps.service_providers.tracing.callback import get_langchain_run_name
+from apps.service_providers.tracing.callback import get_langchain_run_name, safe_serialize
 from apps.service_providers.tracing.const import CAPTURE_TRACE_PROVIDER, SpanLevel
 
 from .base import ServiceNotInitializedException, TraceContext, Tracer
@@ -90,10 +90,10 @@ class CaptureCallbackHandler(BaseCallbackHandler):
         inputs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self._start("tool", serialized, inputs if inputs is not None else input_str, run_id, kwargs)
+        self._start("tool", serialized, safe_serialize(inputs if inputs is not None else input_str), run_id, kwargs)
 
     def on_tool_end(self, output: Any, *, run_id: UUID, **kwargs: Any) -> None:
-        self._finish(run_id, output=output.content if isinstance(output, BaseMessage) else output)
+        self._finish(run_id, output=safe_serialize(output.content if isinstance(output, BaseMessage) else output))
 
     def on_tool_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         self._finish(run_id, error=_error_text(error))

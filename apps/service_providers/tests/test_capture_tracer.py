@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
+from pydantic import BaseModel
 
 from apps.service_providers.tracing.base import ServiceNotInitializedException, TraceContext
 from apps.service_providers.tracing.capture_tracer import CaptureCallbackHandler, CapturedSpan, CaptureTracer
@@ -50,6 +51,27 @@ def test_tool_name_falls_back_to_the_serialized_name():
     assert handler.spans == [
         CapturedSpan(type="tool", name="file-search", node_id=None, input="weather", output="chunks")
     ]
+
+
+class _Hit(BaseModel):
+    title: str
+    score: int
+
+
+def test_a_model_returned_by_a_tool_is_recorded_as_plain_data():
+    handler = CaptureCallbackHandler()
+    run_id = uuid4()
+    handler.on_tool_start({"name": "search"}, "q", run_id=run_id)
+    handler.on_tool_end(_Hit(title="a", score=2), run_id=run_id)
+    assert handler.spans[0].output == {"title": "a", "score": 2}
+
+
+def test_a_model_passed_to_a_tool_is_recorded_as_plain_data():
+    handler = CaptureCallbackHandler()
+    run_id = uuid4()
+    handler.on_tool_start({"name": "search"}, "q", run_id=run_id, inputs={"query": _Hit(title="a", score=2)})
+    handler.on_tool_end("done", run_id=run_id)
+    assert handler.spans[0].input == {"query": {"title": "a", "score": 2}}
 
 
 def test_string_prompts_are_the_input_of_a_plain_llm_call():
