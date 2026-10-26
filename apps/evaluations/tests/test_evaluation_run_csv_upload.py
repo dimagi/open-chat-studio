@@ -332,3 +332,20 @@ def test_edited_export_updates_a_field_whose_name_starts_with_a_formula_characte
     assert stats == {"updated_count": 1, "created_count": 0, "error_messages": []}
     result.refresh_from_db()
     assert result.output["result"] == {"-score": 5}
+
+
+@pytest.mark.django_db()
+def test_hand_typed_apostrophe_before_a_number_is_restored_in_an_int_column(evaluation_setup):
+    result = evaluation_setup["result1"]
+    result.output = {"result": {"score": 3}}
+    result.save()
+    csv_data = [{"id": str(evaluation_setup["message"].id), "score (GPT-4 Evaluator)": "'-5"}]
+    column_mappings = {"score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id}
+
+    stats = process_evaluation_results_csv_rows(
+        evaluation_setup["run"], csv_data, column_mappings, Mock(), evaluation_setup["team"]
+    )
+
+    assert stats == {"updated_count": 1, "created_count": 0, "error_messages": []}
+    result.refresh_from_db()
+    assert result.output["result"] == {"score": -5}

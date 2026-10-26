@@ -358,7 +358,9 @@ class TestCSVUploadCreate:
         assert messages[1].input["content"] == "Valid"
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    def test_csv_dataset_creation_strips_the_export_formula_guard(self, client_with_user, team_with_users):
+    def test_csv_dataset_creation_restores_an_apostrophe_before_a_formula_character_in_any_csv(
+        self, client_with_user, team_with_users
+    ):
         csv_content = (
             "input_content,output_content,context.offset,participant_data.handle,session_state.note\n"
             "'=SUM(A1),'-answer,'-5,'@someone,'+1\n"
@@ -649,6 +651,16 @@ class TestCSVUploadEdit:
         assert stats["created_count"] == 1
         assert stats["updated_count"] == 0
         assert len(stats["error_messages"]) == 0
+
+    def test_csv_upload_new_row_restores_an_apostrophe_before_a_formula_character(self, dataset):
+        rows = [{"id": "", "input_content": "'-5", "output_content": "answer"}]
+
+        stats = process_csv_rows(
+            dataset, rows, ["id", "input_content", "output_content"], MockProgressRecorder(), dataset.team
+        )
+
+        assert stats == {"updated_count": 0, "created_count": 1, "error_messages": []}
+        assert dataset.messages.order_by("-id").first().input["content"] == "-5"
 
     def test_csv_upload_updates_row(self, dataset):
         mock_progress_recorder = MockProgressRecorder()
