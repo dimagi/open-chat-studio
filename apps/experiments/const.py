@@ -1,10 +1,16 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
 # The legacy embedded web chat flow (the `/embed/start/` endpoints and the pages they
 # served) was removed on this date. Replaced by the chat widget backed by `/api/chat/*`.
 # Tracking issue: https://github.com/dimagi/open-chat-studio/issues/3540
 EMBED_FLOW_REMOVED_ON = date(2026, 8, 3)
 EMBED_FLOW_SUCCESSOR_URL = "https://docs.openchatstudio.com/chat_widget/"
+
+# The server-rendered web chat (public link, invitations, full-page chat) is retired on this date.
+# Replaced by the public link channel.
+# Tracking issue: https://github.com/dimagi/open-chat-studio/issues/4209
+LEGACY_WEB_CHAT_SUNSET_AT = datetime(2026, 12, 7, tzinfo=UTC)
+LEGACY_WEB_CHAT_SUCCESSOR_URL = "https://docs.openchatstudio.com/how-to/deploy_public_link_channel/"
 
 DEFAULT_CONSENT_TEXT = """
 Welcome to this chatbot built on Open Chat Studio!

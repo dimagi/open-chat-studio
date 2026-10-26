@@ -37,6 +37,14 @@ version section when a release is cut.
      migrations that run automatically. Omit the section if none qualify. -->
 
 ### Deprecations and removals
+- The legacy web chat (public `/start/` links, invitations, the server-rendered chat page and the
+  full-page logged-in chat) is deprecated in favour of the public link channel (#4209). Its
+  routes now send RFC 8594 `Deprecation`, `Sunset` and `Link` headers. Once the sunset date in
+  `LEGACY_WEB_CHAT_SUNSET_AT` has passed and the new `flag_sunset_legacy_web_chat_enforce` flag
+  is on for a team (via `/admin/flags/`, off by default), that team's legacy entry points return
+  `410 Gone`. Invitations can no longer be created or sent. A new daily Celery beat task,
+  `ocs_notifications.tasks.notify_http_sunsets` (02:30), notifies teams still using the legacy
+  chat; Celery beat must be running for those notices to go out.
 
 ### Configuration
 <!-- Every new, renamed, retyped or removed setting that can be configured through

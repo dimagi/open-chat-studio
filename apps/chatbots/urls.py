@@ -68,16 +68,6 @@ urlpatterns = [
         views.chatbot_session_pagination_view,
         name="chatbot_session_pagination_view",
     ),
-    path(
-        "<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
-    ),
-    path(
-        "<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
-    ),
     path("<int:experiment_id>/invitations/", views.chatbot_invitations, name="chatbots_invitations"),
     path(
         "<int:experiment_id>/invitations/<str:session_id>/send/",
