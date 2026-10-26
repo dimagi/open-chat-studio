@@ -358,6 +358,44 @@ class TestCSVUploadCreate:
         assert messages[1].input["content"] == "Valid"
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_csv_dataset_creation_strips_the_export_formula_guard(self, client_with_user, team_with_users):
+        csv_content = (
+            "input_content,output_content,context.offset,participant_data.handle,session_state.note\n"
+            "'=SUM(A1),'-answer,'-5,'@someone,'+1\n"
+        )
+        file_instance = File.create(
+            filename="exported.csv",
+            file_obj=SimpleUploadedFile("exported.csv", csv_content.encode(), content_type="text/csv"),
+            team_id=team_with_users.id,
+            purpose=FilePurpose.EVALUATION_DATASET,
+        )
+        column_mapping = {
+            "input": "input_content",
+            "output": "output_content",
+            "context": {"offset": "context.offset"},
+            "participant_data": {"handle": "participant_data.handle"},
+            "session_state": {"note": "session_state.note"},
+        }
+        form_data = {
+            "name": "Re-imported Export",
+            "mode": "csv",
+            "evaluation_mode": "message",
+            "csv_file_id": str(file_instance.id),
+            "column_mapping": json.dumps(column_mapping),
+            "populate_history": False,
+        }
+
+        response = client_with_user.post(reverse("evaluations:dataset_new", args=[team_with_users.slug]), form_data)
+
+        assert response.status_code == 302
+        message = EvaluationDataset.objects.get(name="Re-imported Export", team=team_with_users).messages.get()
+        assert message.input["content"] == "=SUM(A1)"
+        assert message.output["content"] == "-answer"
+        assert message.context == {"offset": "-5"}
+        assert message.participant_data == {"handle": "@someone"}
+        assert message.session_state == {"note": "+1"}
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_dataset_creation_with_generated_history(self, client_with_user, team_with_users):
         """Test creating dataset from CSV using a history column."""
         csv_content = (

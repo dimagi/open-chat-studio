@@ -915,8 +915,8 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                 row_count += 1
 
                 # Extract mapped columns
-                input_content = row.get(column_mapping.get("input", ""), "").strip()
-                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                input_content = restore_csv_formula(row.get(column_mapping.get("input", ""), "")).strip()
+                output_content = restore_csv_formula(row.get(column_mapping.get("output", ""), "")).strip()
                 if not input_content or not output_content:
                     continue
 
@@ -924,19 +924,19 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                 if context_mapping := column_mapping.get("context"):
                     for field_name, csv_column in context_mapping.items():
                         if csv_column in row:
-                            context[field_name] = parse_csv_value_as_json(row[csv_column])
+                            context[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 participant_data = {}
                 if participant_data_mapping := column_mapping.get("participant_data"):
                     for field_name, csv_column in participant_data_mapping.items():
                         if csv_column in row:
-                            participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+                            participant_data[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 session_state = {}
                 if session_state_mapping := column_mapping.get("session_state"):
                     for field_name, csv_column in session_state_mapping.items():
                         if csv_column in row:
-                            session_state[field_name] = parse_csv_value_as_json(row[csv_column])
+                            session_state[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 message_history = []
                 if populate_history:
@@ -944,7 +944,7 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                     message_history = [msg.copy() for msg in auto_history]
                 elif history_column and history_column in row:
                     # Parse history from CSV column
-                    history_text = row[history_column].strip()
+                    history_text = restore_csv_formula(row[history_column]).strip()
                     if history_text:
                         message_history = parse_history_text(history_text)
 
