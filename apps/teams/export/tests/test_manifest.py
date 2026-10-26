@@ -327,6 +327,13 @@ def test_the_allowlist_is_not_exported():
     assert "exportable_experiments" in manifest.EXCLUDE_REGISTRY["teams.team"]
 
 
+def test_moderation_settings_are_not_exported():
+    """The provider isn't synced, so auto-block would arrive on without the moderation it depends on."""
+    assert {"moderation_enabled", "moderation_provider", "auto_block_enabled"} <= set(
+        manifest.EXCLUDE_REGISTRY["teams.team"]
+    )
+
+
 @pytest.mark.django_db()
 def test_scoped_queryset_without_a_scope_matches_the_team_queryset():
     team = TeamFactory()
