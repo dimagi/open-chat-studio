@@ -1,0 +1,190 @@
+"""A tracer that keeps a run's LLM and tool calls in memory for evaluators.
+
+It writes nothing: no `Trace` rows and no usage. The spans are read from `CaptureTracer.spans`
+once the trace has closed. See the ADR-0050 amendment.
+"""
+
+from __future__ import annotations
+
+import threading
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
+
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import BaseMessage
+
+from apps.cost_tracking.services.estimation import response_text
+from apps.service_providers.tracing.callback import get_langchain_run_name
+from apps.service_providers.tracing.const import CAPTURE_TRACE_PROVIDER, SpanLevel
+
+from .base import ServiceNotInitializedException, TraceContext, Tracer
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from uuid import UUID
+
+    from apps.experiments.models import ExperimentSession
+
+
+@dataclass(frozen=True)
+class CapturedSpan:
+    type: Literal["llm", "tool"]
+    name: str
+    node_id: str | None
+    input: Any
+    output: Any = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _PendingSpan:
+    type: Literal["llm", "tool"]
+    name: str
+    node_id: str | None
+    input: Any
+
+
+def _error_text(error: BaseException) -> str:
+    return str(error) or type(error).__name__
+
+
+class CaptureCallbackHandler(BaseCallbackHandler):
+    """Records completed LLM and tool calls, in completion order.
+
+    Events arrive from LangGraph's thread pool, so the pending calls and the span list
+    are guarded by one lock.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._pending: dict[UUID, _PendingSpan] = {}
+        self._spans: list[CapturedSpan] = []
+
+    @property
+    def spans(self) -> list[CapturedSpan]:
+        with self._lock:
+            return list(self._spans)
+
+    def on_chat_model_start(
+        self, serialized: dict[str, Any], messages: list[list[BaseMessage]], *, run_id: UUID, **kwargs: Any
+    ) -> None:
+        self._start("llm", serialized, [{"type": m.type, "content": m.content} for m in messages[0]], run_id, kwargs)
+
+    def on_llm_start(self, serialized: dict[str, Any], prompts: list[str], *, run_id: UUID, **kwargs: Any) -> None:
+        self._start("llm", serialized, prompts, run_id, kwargs)
+
+    def on_llm_end(self, response: Any, *, run_id: UUID, **kwargs: Any) -> None:
+        self._finish(run_id, output=response_text(response))
+
+    def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
+        self._finish(run_id, error=_error_text(error))
+
+    def on_tool_start(
+        self,
+        serialized: dict[str, Any],
+        input_str: str,
+        *,
+        run_id: UUID,
+        inputs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self._start("tool", serialized, inputs if inputs is not None else input_str, run_id, kwargs)
+
+    def on_tool_end(self, output: Any, *, run_id: UUID, **kwargs: Any) -> None:
+        self._finish(run_id, output=output.content if isinstance(output, BaseMessage) else output)
+
+    def on_tool_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
+        self._finish(run_id, error=_error_text(error))
+
+    def _start(
+        self,
+        span_type: Literal["llm", "tool"],
+        serialized: dict[str, Any],
+        span_input: Any,
+        run_id: UUID,
+        kwargs: dict[str, Any],
+    ) -> None:
+        pending = _PendingSpan(
+            type=span_type,
+            name=get_langchain_run_name(serialized, **kwargs),
+            node_id=(kwargs.get("metadata") or {}).get("langgraph_node"),
+            input=span_input,
+        )
+        with self._lock:
+            self._pending[run_id] = pending
+
+    def _finish(self, run_id: UUID, output: Any = None, error: str | None = None) -> None:
+        with self._lock:
+            pending = self._pending.pop(run_id, None)
+            if pending is None:
+                return
+            self._spans.append(
+                CapturedSpan(
+                    type=pending.type,
+                    name=pending.name,
+                    node_id=pending.node_id,
+                    input=pending.input,
+                    output=output,
+                    error=error,
+                )
+            )
+
+
+class CaptureTracer(Tracer):
+    """Exposes the LLM and tool calls made inside a trace as `spans` once it closes."""
+
+    def __init__(self) -> None:
+        super().__init__(CAPTURE_TRACE_PROVIDER, {})
+        self.spans: list[CapturedSpan] = []
+        self._handler: CaptureCallbackHandler | None = None
+
+    @property
+    def ready(self) -> bool:
+        return self._handler is not None
+
+    @contextmanager
+    def trace(
+        self,
+        trace_context: TraceContext,
+        session: ExperimentSession | None,
+        inputs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Iterator[TraceContext]:
+        """Capture calls for the duration of the trace, then keep them on `spans`."""
+        handler = CaptureCallbackHandler()
+        self._handler = handler
+        try:
+            yield trace_context
+        finally:
+            self.spans = handler.spans
+            self._handler = None
+
+    @contextmanager
+    def span(
+        self,
+        span_context: TraceContext,
+        inputs: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        level: SpanLevel = "DEFAULT",
+    ) -> Iterator[TraceContext]:
+        """No-op: only LLM and tool calls are captured."""
+        yield span_context
+
+    def get_langchain_callback(self) -> BaseCallbackHandler:
+        if self._handler is None:
+            raise ServiceNotInitializedException("No active trace")
+        return self._handler
+
+    def add_trace_tags(self, tags: list[str]) -> None:
+        pass
+
+    def set_output_message_id(self, output_message_id: str) -> None:
+        pass
+
+    def set_input_message_id(self, input_message_id: str) -> None:
+        pass
+
+    def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
+        pass
