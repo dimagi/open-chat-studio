@@ -250,7 +250,7 @@ def test_create_and_add_tag_truncates_long_name(chat):
 @pytest.mark.django_db()
 def test_tags_with_same_long_name_in_different_teams_get_unique_slugs():
     name = "x" * 100
-    tags = [Tag.objects.create(name=name, team=TeamWithUsersFactory.create()) for _ in range(2)]
+    tags = [Tag.objects.create(name=name, team=TeamWithUsersFactory.create()) for _ in range(3)]
 
-    assert tags[0].slug != tags[1].slug
+    assert len({tag.slug for tag in tags}) == 3
     assert all(len(tag.slug) <= 100 for tag in tags)
