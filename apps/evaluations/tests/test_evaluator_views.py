@@ -337,6 +337,21 @@ class TestEvaluatorLlmProviderSelection:
         assert evaluator.llm_provider_id is None
         assert evaluator.llm_provider_model_id is None
 
+    def test_a_model_level_params_error_is_shown_without_a_field_label(self, client_with_user, team, evaluator):
+        code = "def main(input, output, context, full_history, generated_response, **kwargs):\n    return {}"
+        data = _post_data(evaluator, {}, [], params={"code": code, "span_type": "tool"})
+        data["type"] = "PythonEvaluator"
+        del data["llm_provider"]
+        del data["llm_provider_model"]
+
+        response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        content = response.content.decode()
+        assert response.status_code == 200
+        assert "A span name is required when a node, tool or LLM span is selected" in content
+        assert "Unknown:" not in content
+        assert "Value error," not in content
+
 
 class TestPromptVariables:
     """The form's autocomplete and help text are derived from the evaluators' actual kwargs."""
