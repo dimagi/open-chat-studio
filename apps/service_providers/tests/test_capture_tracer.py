@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
+from langgraph.types import Command
 from pydantic import BaseModel
 
 from apps.service_providers.tracing.base import ServiceNotInitializedException, TraceContext
@@ -85,6 +87,40 @@ def test_a_model_passed_to_a_tool_is_recorded_as_plain_data():
     handler.on_tool_start({"name": "search"}, "q", run_id=run_id, inputs={"query": _Hit(title="a", score=2)})
     handler.on_tool_end("done", run_id=run_id)
     assert handler.spans[0].input == {"query": {"title": "a", "score": 2}}
+
+
+@pytest.mark.parametrize(
+    ("messages", "expected"),
+    [
+        pytest.param([ToolMessage(content="set", tool_call_id="c1")], "set", id="one-message"),
+        pytest.param(
+            [ToolMessage(content="a", tool_call_id="c1"), ToolMessage(content="b", tool_call_id="c1")],
+            "a\nb",
+            id="two-messages",
+        ),
+        pytest.param([], "", id="no-messages"),
+    ],
+)
+def test_a_command_returned_by_a_tool_records_its_message_content(messages, expected):
+    handler = CaptureCallbackHandler()
+    run_id = uuid4()
+    handler.on_tool_start({"name": "update-user-data"}, "plan", run_id=run_id)
+    handler.on_tool_end(Command(update={"participant_data": {"plan": "pro"}, "messages": messages}), run_id=run_id)
+    assert handler.spans[0].output == expected
+
+
+@dataclass
+class _Page:
+    hit: _Hit
+    pair: tuple[str, int]
+
+
+def test_a_dataclass_returned_by_a_tool_is_recorded_as_plain_data():
+    handler = CaptureCallbackHandler()
+    run_id = uuid4()
+    handler.on_tool_start({"name": "search"}, "q", run_id=run_id)
+    handler.on_tool_end(_Page(hit=_Hit(title="a", score=2), pair=("b", 3)), run_id=run_id)
+    assert handler.spans[0].output == {"hit": {"title": "a", "score": 2}, "pair": ["b", 3]}
 
 
 def test_string_prompts_are_the_input_of_a_plain_llm_call():

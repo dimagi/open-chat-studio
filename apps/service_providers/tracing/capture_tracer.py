@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
+from langgraph.types import Command
 
 from apps.cost_tracking.services.estimation import response_text
 from apps.service_providers.tracing.callback import get_langchain_run_name, safe_serialize
@@ -47,6 +48,18 @@ class _PendingSpan:
 
 def _error_text(error: BaseException) -> str:
     return str(error) or type(error).__name__
+
+
+def _tool_output(output: Any) -> Any:
+    """A tool's result as plain data.
+
+    A tool that updates graph state returns a `Command` whose messages carry its reply; the
+    state change reaches evaluators through the participant data diff.
+    """
+    if isinstance(output, Command):
+        update = output.update if isinstance(output.update, dict) else {}
+        return "\n".join(message.text for message in update.get("messages", []))
+    return safe_serialize(output.content if isinstance(output, BaseMessage) else output)
 
 
 def _pipeline_node_id(metadata: dict[str, Any]) -> str | None:
@@ -106,7 +119,7 @@ class CaptureCallbackHandler(BaseCallbackHandler):
         self._start("tool", serialized, safe_serialize(inputs if inputs is not None else input_str), run_id, kwargs)
 
     def on_tool_end(self, output: Any, *, run_id: UUID, **kwargs: Any) -> None:
-        self._finish(run_id, output=safe_serialize(output.content if isinstance(output, BaseMessage) else output))
+        self._finish(run_id, output=_tool_output(output))
 
     def on_tool_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         self._finish(run_id, error=_error_text(error))

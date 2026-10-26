@@ -133,6 +133,37 @@ def test_record_carries_the_tool_calls_of_an_llm_node(team_with_users, message):
 
 
 @pytest.mark.django_db()
+def test_record_carries_a_participant_data_tool_call(team_with_users, message):
+    experiment = _llm_experiment(
+        team_with_users,
+        lambda provider_id, model_id: [
+            start_node(),
+            llm_response_with_prompt_node(
+                provider_id,
+                model_id,
+                prompt="You are a helpful assistant. {participant_data}",
+                tools=[AgentTools.UPDATE_PARTICIPANT_DATA.value],
+                name="Agent",
+            ),
+            end_node(),
+        ],
+    )
+    update = {"name": AgentTools.UPDATE_PARTICIPANT_DATA.value, "args": {"key": "plan", "value": "pro"}, "id": "call_1"}
+
+    generation = _generate(
+        team_with_users,
+        message,
+        experiment,
+        responses=[AIMessage(content="", tool_calls=[update]), AIMessage(content="Done")],
+    )
+
+    record = generation.record
+    assert isinstance(record.tool_calls[0]["output"], str)
+    assert record.tool_calls[0]["node"] == "Agent"
+    assert ("change", "plan", ("free", "pro")) in record.participant_data_diff
+
+
+@pytest.mark.django_db()
 def test_unexpected_failure_keeps_the_calls_made_before_it(team_with_users, message):
     experiment = _llm_experiment(
         team_with_users,
