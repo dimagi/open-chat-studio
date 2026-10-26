@@ -97,6 +97,29 @@ def test_llm_evaluator_prompt_unknown_variable_raises(prompt, unknown):
     assert "{generated_response}" in error_message
 
 
+@pytest.mark.parametrize(
+    "offending",
+    [
+        pytest.param("{generation.tags}", id="unknown-key"),
+        pytest.param("{generation.tool_call}", id="singular-key"),
+        pytest.param("{generation.tool_calls[0]}", id="indexed"),
+        pytest.param("{generation}", id="bare-root"),
+    ],
+)
+def test_llm_evaluator_prompt_unknown_generation_variable_raises(offending):
+    with pytest.raises(ValidationError) as exc_info:
+        LlmEvaluator(
+            llm_provider_id=1,
+            llm_provider_model_id=1,
+            prompt=f"Input: {{input.content}} {offending}",
+            output_schema=_OUTPUT_SCHEMA,
+        )
+    error_message = str(exc_info.value)
+    assert "Unknown generation variable" in error_message
+    assert offending in error_message
+    assert "{generation.tool_calls}" in error_message
+
+
 @pytest.fixture()
 def llm_provider():
     return LlmProviderFactory.create()

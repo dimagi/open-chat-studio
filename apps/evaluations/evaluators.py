@@ -5,8 +5,10 @@ from pydantic_core import ValidationError
 
 from apps.evaluations.const import (
     ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS,
+    GENERATION_PROMPT_VARIABLE_NAMES,
     evaluator_prompt_variable_hints,
     prompt_variable_roots,
+    unknown_generation_variables,
 )
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
@@ -114,6 +116,11 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             raise ValueError(
                 f"Unknown prompt variable(s): {', '.join(f'{{{name}}}' for name in unknown)}. "
                 f"Available variables: {', '.join(evaluator_prompt_variable_hints('message'))}"
+            )
+        if unknown_generation := sorted(unknown_generation_variables(v)):
+            raise ValueError(
+                f"Unknown generation variable(s): {', '.join(f'{{{name}}}' for name in unknown_generation)}. "
+                f"Available: {', '.join(f'{{{name}}}' for name in GENERATION_PROMPT_VARIABLE_NAMES)}"
             )
         return v
 

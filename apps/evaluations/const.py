@@ -40,7 +40,8 @@ EVALUATOR_PROMPT_VARIABLES = {
         ("full_history", False),
         ("generated_response", False),
         # JSON strings of the generation record (``GenerationRecord.prompt_variables``), capped at
-        # ``GENERATION_PROMPT_VARIABLE_MAX_LENGTH``, so no sub-key is addressable.
+        # ``GENERATION_PROMPT_VARIABLE_MAX_LENGTH``, so no sub-key is addressable. The validator
+        # accepts exactly these names.
         ("generation.node_outputs", False),
         ("generation.path", False),
         ("generation.message_tags", False),
@@ -62,6 +63,11 @@ EVALUATOR_PROMPT_VARIABLES = {
 ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS = {
     name.split(".")[0] for variables in EVALUATOR_PROMPT_VARIABLES.values() for name, _ in variables
 }
+
+
+GENERATION_PROMPT_VARIABLE_NAMES = [
+    name for name, _ in EVALUATOR_PROMPT_VARIABLES["message"] if name.split(".")[0] == "generation"
+]
 
 
 def evaluator_prompt_variable_names(evaluation_mode: str) -> list[str]:
@@ -87,3 +93,19 @@ def prompt_variable_roots(prompt: str) -> set[str]:
     except ValueError:
         return set()
     return {re.split(r"[.\[]", field, maxsplit=1)[0] for field in fields}
+
+
+def unknown_generation_variables(prompt: str) -> set[str]:
+    """Format fields rooted at ``generation`` that are not one of the advertised names.
+
+    A malformed template yields nothing, as in `prompt_variable_roots`.
+    """
+    try:
+        fields = [field for _, field, _, _ in Formatter().parse(prompt) if field]
+    except ValueError:
+        return set()
+    return {
+        field
+        for field in fields
+        if re.split(r"[.\[]", field, maxsplit=1)[0] == "generation" and field not in GENERATION_PROMPT_VARIABLE_NAMES
+    }
