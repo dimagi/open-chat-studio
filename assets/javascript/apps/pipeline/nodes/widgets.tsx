@@ -751,15 +751,93 @@ function getKeywordsNodeData(old: Node, keywords: string[], newDefaultIndex?: nu
   });
 }
 
+/**
+ * Builds the stored `{KEYWORD: description}` map from each row's description. A row whose keyword
+ * is empty, or repeats an earlier row's keyword, is left out.
+ */
+function routeDescriptionsByKeyword(keywords: string[], rows: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  keywords.forEach((keyword, index) => {
+    if (keyword && rows[index] && keywords.indexOf(keyword) === index) {
+      result[keyword] = rows[index];
+    }
+  });
+  return result;
+}
+
+/** Each row's description as stored: a row whose keyword is empty or repeats an earlier one has none. */
+function rowsFromStored(keywords: string[], stored: Record<string, string>): string[] {
+  return keywords.map((keyword, index) => (keywords.indexOf(keyword) === index ? stored[keyword] ?? "" : ""));
+}
+
+/**
+ * Whether `rows` agree with the stored map. Only rows with a keyword the map can hold are compared,
+ * so a description kept for an empty or repeated keyword, and a stored entry with no keyword, never count.
+ */
+function rowsMatchStored(keywords: string[], rows: string[], stored: Record<string, string>): boolean {
+  return rows.length === keywords.length && keywords.every((keyword, index) =>
+    !keyword || keywords.indexOf(keyword) !== index || (stored[keyword] ?? "") === rows[index]
+  );
+}
+
+/**
+ * Each route's description tracked by row, so it stays with its route while the keyword is cleared,
+ * retyped or briefly matches another route. The rows are reloaded from the stored map when they no
+ * longer agree with it, as after undo.
+ */
+function useRowDescriptions(keywords: unknown, stored: unknown) {
+  const keywordList: string[] = Array.isArray(keywords) ? keywords : [];
+  const storedMap = (stored || {}) as Record<string, string>;
+  const [rows, setRows] = useState(() => rowsFromStored(keywordList, storedMap));
+
+  let currentRows = rows;
+  if (!rowsMatchStored(keywordList, rows, storedMap)) {
+    currentRows = rowsFromStored(keywordList, storedMap);
+    setRows(currentRows);
+  }
+
+  /** Records the rows and returns the map to store beside `keywords`. */
+  const write = (keywords: string[], rows: string[]) => {
+    setRows(rows);
+    return routeDescriptionsByKeyword(keywords, rows);
+  };
+  return {rows: currentRows, write};
+}
+
+function routeDescriptionPlaceholder(keyword: string, isDuplicate: boolean): string {
+  if (!keyword) {
+    return "Enter a keyword first";
+  }
+  if (isDuplicate) {
+    return "Keywords must be unique";
+  }
+  return "When should this route be chosen?";
+}
+
 export function KeywordsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
   const setEdges = usePipelineStore((state) => state.setEdges);
   const updateNodeInternals = useUpdateNodeInternals()
+  const hasDescriptions = !!props.nodeSchema.properties.route_descriptions;
+  const {rows: rowDescriptions, write: writeDescriptions} = useRowDescriptions(
+    props.nodeParams.keywords, props.nodeParams.route_descriptions
+  );
+
+  /** Stores `keywords` and, on a node with route descriptions, the descriptions in `rows` beside them. */
+  const getRoutesNodeData = (old: Node, keywords: string[], rows: string[], newDefaultIndex?: number) => {
+    const updated = getKeywordsNodeData(old, keywords, newDefaultIndex);
+    if (!hasDescriptions) {
+      return updated;
+    }
+    return produce(updated, next => {
+      next.data.params["route_descriptions"] = writeDescriptions(keywords, rows);
+    });
+  };
 
   const addKeyword = () => {
     setNode(props.nodeId, (old) => {
       const updatedList = [...(old.data.params["keywords"] || []), ""];
-      return getKeywordsNodeData(old, updatedList);
+      return getRoutesNodeData(old, updatedList, [...rowDescriptions, ""]);
     });
     updateNodeInternals(props.nodeId);
   }
@@ -769,9 +847,17 @@ export function KeywordsWidget(props: WidgetParams) {
     setNode(props.nodeId, (old) => {
         const updatedList = [...(old.data.params["keywords"] || [])];
         updatedList[index] = value;
-        return getKeywordsNodeData(old, updatedList);
+        return getRoutesNodeData(old, updatedList, rowDescriptions);
       }
     );
+  };
+
+  const updateDescription = (index: number, value: string) => {
+    setNode(props.nodeId, (old) => {
+      const rows = [...rowDescriptions];
+      rows[index] = value;
+      return getRoutesNodeData(old, old.data.params["keywords"] || [], rows);
+    });
   };
 
   const deleteKeyword = (index: number) => {
@@ -787,7 +873,9 @@ export function KeywordsWidget(props: WidgetParams) {
         newDefaultIndex = defaultIndex - 1;
       }
 
-      return getKeywordsNodeData(old, updatedList, newDefaultIndex);
+      const rows = [...rowDescriptions];
+      rows.splice(index, 1);
+      return getRoutesNodeData(old, updatedList, rows, newDefaultIndex);
     });
     updateNodeInternals(props.nodeId);
 
@@ -841,6 +929,7 @@ export function KeywordsWidget(props: WidgetParams) {
       <div className="ml-2">
         {Array.from({length: length}, (_, index) => {
           const value = keywords ? keywords[index] || "" : "";
+          const isDuplicate = !!value && keywords.some((keyword: string, i: number) => i !== index && keyword === value);
           const label = `Output Keyword ${index + 1}`;
           const isDefault = index === defaultIndex;
 
@@ -863,7 +952,7 @@ export function KeywordsWidget(props: WidgetParams) {
                   </div>
                 </label>
                 {!props.readOnly && <div className="tooltip tooltip-left" data-tip={`Delete Keyword ${index + 1}`}>
-                  <button type="button" className="btn btn-xs btn-ghost" onClick={() => deleteKeyword(index)} disabled={!canDelete}>
+                  <button type="button" className="btn btn-xs btn-ghost" aria-label={`Delete Keyword ${index + 1}`} onClick={() => deleteKeyword(index)} disabled={!canDelete}>
                     <i className="fa-solid fa-minus"></i>
                   </button>
                 </div>}
@@ -875,6 +964,24 @@ export function KeywordsWidget(props: WidgetParams) {
                 value={value}
                 readOnly={props.readOnly}
               ></input>
+              {hasDescriptions && (
+                <textarea
+                  className="textarea textarea-sm w-full mt-1 normal-case nodrag"
+                  name="route_descriptions"
+                  aria-label={`Description for ${label}`}
+                  placeholder={routeDescriptionPlaceholder(value, isDuplicate)}
+                  rows={2}
+                  onChange={(event) => updateDescription(index, event.target.value)}
+                  value={rowDescriptions[index] ?? ""}
+                  readOnly={props.readOnly}
+                  disabled={!value || isDuplicate}
+                ></textarea>
+              )}
+              {hasDescriptions && rowDescriptions[index] && (!value || keywords.indexOf(value) !== index) && (
+                <small className="text-warning normal-case">
+                  {value ? "Not saved until this keyword is unique" : "Not saved until this keyword has a name"}
+                </small>
+              )}
             </div>
           );
         })}
@@ -1358,6 +1465,10 @@ export function TextEditorWidget(props: WidgetParams) {
     const defaultRoute = String(keywords[Number(default_keyword_index ?? 0)] ?? "");
     return {routes: keywords.filter(Boolean).map(String), defaultRoute};
   }, [isRouter, keywords, default_keyword_index]);
+  const promptText = concatenate(props.paramValue);
+  const routesWarning = isRouter && !promptText.includes("{routes}") && !promptText.includes("{routes_list}")
+    ? "Add {routes} to the prompt to give the router each route and its description."
+    : undefined;
   const modalId = useId();
   const setNode = usePipelineStore((state) => state.setNode);
 
@@ -1395,6 +1506,7 @@ export function TextEditorWidget(props: WidgetParams) {
         label={label}
         help_text={props.helpText}
         inputError={props.inputError}
+        inputWarning={routesWarning}
       >
         <div className="relative w-full">
           <textarea className="textarea textarea-bordered resize-none textarea-sm w-full nodrag"

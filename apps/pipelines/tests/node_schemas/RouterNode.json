@@ -121,12 +121,21 @@
     },
     "prompt": {
       "default": "You are an extremely helpful router",
-      "description": "Instructions telling the LLM how to choose between `keywords`. The model is constrained to return one of them, so describe when each applies rather than asking for free text. The only template variables available are `{participant_data}`, `{temp_state}` and `{session_state}`, in single braces.",
+      "description": "Instructions telling the LLM how to choose between `keywords`. The model is constrained to return one of them, so describe when each applies rather than asking for free text. The only template variables available are `{participant_data}`, `{temp_state}`, `{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone.",
       "minLength": 1,
       "title": "Prompt",
       "type": "string",
       "ui:optionsSource": "router_prompt_variables",
       "ui:widget": "text_editor_widget"
+    },
+    "route_descriptions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` variable. Keys are uppercased on save. An entry for a keyword not in `keywords` is kept but not used.",
+      "title": "Route Descriptions",
+      "type": "object",
+      "ui:widget": "none"
     }
   },
   "required": [
