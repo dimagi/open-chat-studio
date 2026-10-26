@@ -12,6 +12,7 @@ from apps.evaluations.const import (
     unknown_span_variables,
 )
 from apps.evaluations.evaluators import LlmEvaluator
+from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
 from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
@@ -745,3 +746,54 @@ def test_the_span_error_reaches_the_prompt(get_llm_service, llm_provider, llm_pr
     evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
 
     assert "Did q fail? Error: timed out" in _prompt_sent_to(service)
+
+
+_FILE_SEARCH_RECORD = GenerationRecord(
+    tool_calls=[{"node": "Answer", "name": "file-search", "input": "q", "output": "chunk a", "error": None}]
+)
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_generated_response_in_the_prompt_is_the_span_output_when_span_as_response_is_on(
+    get_llm_service, llm_provider, llm_provider_model
+):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Judge {generated_response}",
+        output_schema=_OUTPUT_SCHEMA,
+        span_type="tool",
+        span_name="file-search",
+        span_as_response=True,
+    )
+
+    evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=_FILE_SEARCH_RECORD)
+
+    prompt = _prompt_sent_to(service)
+    assert "Judge chunk a" in prompt
+    assert "the reply" not in prompt
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_a_selector_with_no_match_is_an_error_before_the_judge_is_called(
+    get_llm_service, llm_provider, llm_provider_model
+):
+    service = build_fake_llm_service(responses=[_structured_response()])
+    get_llm_service.return_value = service
+    evaluator = LlmEvaluator(
+        llm_provider_id=llm_provider.id,
+        llm_provider_model_id=llm_provider_model.id,
+        prompt="Judge {span.output}",
+        output_schema=_OUTPUT_SCHEMA,
+        span_type="tool",
+        span_name="calculator",
+    )
+
+    with pytest.raises(EvaluationRunException, match="No tool span named 'calculator'"):
+        evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=_FILE_SEARCH_RECORD)
+
+    assert service.llm.get_calls() == []
