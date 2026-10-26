@@ -44,6 +44,7 @@ class EvaluatorResult(BaseModel):
     message: dict | None  # A copy of the message this was run against
     generated_response: str  # The generated response from the bot
     result: dict | None  # The output from the evaluator
+    judged_response: str | None = None  # The selected span's output judged in place of the reply, if any
 
 
 class BaseEvaluator(BaseModel):
@@ -223,7 +224,12 @@ class LlmEvaluator(SpanSelectorMixin, LLMResponseMixin, BaseEvaluator):
         with track_evaluator_usage(usage_context) as callbacks:
             result_model = llm_with_retry.invoke(formatted_prompt, config={"callbacks": callbacks})
         result = result_model.model_dump()
-        return EvaluatorResult(message=message.as_result_dict(), generated_response=response, result=result)
+        return EvaluatorResult(
+            message=message.as_result_dict(),
+            generated_response=generated_response,
+            result=result,
+            judged_response=response if self.span_as_response else None,
+        )
 
 
 DEFAULT_FUNCTION = """# The main function is called for each message in the evaluation dataset
@@ -315,4 +321,9 @@ class PythonEvaluator(SpanSelectorMixin, BaseEvaluator, RestrictedPythonExecutio
         except Exception as exc:
             raise EvaluationRunException(get_code_error_message("<inline_code>", self.code)) from exc
 
-        return EvaluatorResult(message=message.as_result_dict(), generated_response=response, result=result)
+        return EvaluatorResult(
+            message=message.as_result_dict(),
+            generated_response=generated_response,
+            result=result,
+            judged_response=response if self.span_as_response else None,
+        )

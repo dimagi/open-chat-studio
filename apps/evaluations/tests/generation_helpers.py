@@ -39,18 +39,22 @@ def _generate(team, message, experiment, responses=()):
         return run_bot_generation(team, message, experiment, evaluation_run=EvaluationRunFactory.create(team=team))
 
 
-def _run_with(team, message, experiment, evaluator, responses=()):
-    """Evaluate `message` against `experiment`'s generation; patch the LLM service only when `responses` is given."""
+def _run_with(team, message, experiment, *evaluators, responses=()):
+    """Evaluate `message` against `experiment`'s generation with `evaluators`, in the order given.
+
+    The LLM service is patched only when `responses` is given.
+    """
     config = EvaluationConfigFactory.create(
-        team=team, dataset=message.evaluationdataset_set.first(), evaluators=[evaluator]
+        team=team, dataset=message.evaluationdataset_set.first(), evaluators=list(evaluators)
     )
     run = EvaluationRun.objects.create(team=team, config=config, generation_experiment=experiment)
+    evaluator_ids = [evaluator.id for evaluator in evaluators]
     if not responses:
-        evaluate_message(run.id, [evaluator.id], message.id)
+        evaluate_message(run.id, evaluator_ids, message.id)
         return run
     with patch(
         "apps.service_providers.models.LlmProvider.get_llm_service",
         return_value=build_fake_llm_service(responses=list(responses)),
     ):
-        evaluate_message(run.id, [evaluator.id], message.id)
+        evaluate_message(run.id, evaluator_ids, message.id)
     return run

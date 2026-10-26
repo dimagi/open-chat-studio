@@ -228,7 +228,8 @@ def test_python_evaluator_receives_the_selected_span():
     )
     result = evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
     assert result.result == {"tool": "calculator", "output": "4", "response": "4"}
-    assert result.generated_response == "4"
+    assert result.generated_response == "the reply"
+    assert result.judged_response == "4"
 
 
 @pytest.mark.django_db()

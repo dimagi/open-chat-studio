@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from langchain_core.messages import AIMessage
 
+from apps.evaluations.export import annotate_export_fields, build_evaluation_table_data
 from apps.evaluations.tests.generation_helpers import _llm_experiment, _python_evaluator, _run_with
 from apps.experiments.models import AgentTools
 from apps.pipelines.tests.utils import (
@@ -95,7 +96,25 @@ def test_a_node_span_as_response_replaces_the_generated_response(team_with_users
 
     result = run.results.get()
     assert result.output["result"] == {"judged": "tagged: hello"}
-    assert result.output["generated_response"] == "tagged: hello"
+    assert result.output["generated_response"] == "final: tagged: hello"
+    assert result.output["judged_response"] == "tagged: hello"
+
+
+@pytest.mark.django_db()
+def test_the_generated_response_column_stays_the_reply_with_mixed_evaluators(
+    team_with_users, two_code_node_experiment, message
+):
+    span_evaluator = _python_evaluator(
+        team_with_users, JUDGE_RESPONSE_CODE, span_type="node", span_name="Tagger", span_as_response=True
+    )
+    plain_evaluator = _python_evaluator(team_with_users, JUDGE_RESPONSE_CODE)
+    assert span_evaluator.id < plain_evaluator.id
+
+    run = _run_with(team_with_users, message, two_code_node_experiment, span_evaluator, plain_evaluator)
+
+    assert run.results.get(evaluator=plain_evaluator).output["judged_response"] is None
+    [row] = build_evaluation_table_data(annotate_export_fields(run.results.order_by("created_at")))
+    assert row["Generated Response"] == "final: tagged: hello"
 
 
 @pytest.mark.django_db()

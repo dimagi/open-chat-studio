@@ -721,4 +721,5 @@ def test_the_selected_span_reaches_the_prompt_and_the_response(get_llm_service, 
     result = evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
 
     assert 'Chunks: chunk a for {"query": "q"}' in _prompt_sent_to(service)
-    assert result.generated_response == "chunk a"
+    assert result.generated_response == "the reply"
+    assert result.judged_response == "chunk a"
