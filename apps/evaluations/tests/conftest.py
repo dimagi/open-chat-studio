@@ -15,6 +15,7 @@ from apps.utils.factories.evaluations import (
     EvaluatorTagRuleFactory,
 )
 from apps.utils.factories.experiment import ChatbotFactory, ExperimentFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import GroupFactory
 
@@ -95,6 +96,16 @@ def tag_rule(team, evaluator, tag_a):
         condition_type=ConditionType.EQUALS,
         condition_value={"value": "negative"},
     )
+
+
+@pytest.fixture()
+def llm_provider():
+    return LlmProviderFactory.create()
+
+
+@pytest.fixture()
+def llm_provider_model():
+    return LlmProviderModelFactory.create(name="gpt-4o")
 
 
 @pytest.fixture()

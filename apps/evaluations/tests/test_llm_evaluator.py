@@ -9,14 +9,13 @@ from apps.evaluations.const import (
     GENERATION_PROMPT_VARIABLE_NAMES,
     evaluator_prompt_variable_names,
     unknown_generation_variables,
-    unknown_span_variables,
 )
 from apps.evaluations.evaluators import LlmEvaluator
-from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
 from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tasks import evaluate_message
+from apps.evaluations.tests.llm_evaluator_helpers import OUTPUT_SCHEMA, prompt_sent_to, structured_response
 from apps.evaluations.utils import schema_to_pydantic_model
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -24,7 +23,6 @@ from apps.utils.factories.evaluations import (
     EvaluationMessageFactory,
     EvaluatorFactory,
 )
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.tests.langchain import build_fake_llm_service
 
 _VALID_PROMPTS = [
@@ -52,8 +50,6 @@ _INVALID_PROMPTS = [
     pytest.param("Evaluate {context.my_param", id="malformed-template"),
 ]
 
-_OUTPUT_SCHEMA = {"result": {"type": "string", "description": "result"}}
-
 
 @pytest.mark.parametrize("prompt", _VALID_PROMPTS)
 def test_llm_evaluator_prompt_valid_variables(prompt):
@@ -61,7 +57,7 @@ def test_llm_evaluator_prompt_valid_variables(prompt):
         llm_provider_id=1,
         llm_provider_model_id=1,
         prompt=prompt,
-        output_schema=_OUTPUT_SCHEMA,
+        output_schema=OUTPUT_SCHEMA,
     )
     assert evaluator.prompt == prompt
 
@@ -73,7 +69,7 @@ def test_llm_evaluator_prompt_no_variables_raises(prompt):
             llm_provider_id=1,
             llm_provider_model_id=1,
             prompt=prompt,
-            output_schema=_OUTPUT_SCHEMA,
+            output_schema=OUTPUT_SCHEMA,
         )
     error_message = str(exc_info.value)
     assert "at least one variable" in error_message
@@ -95,7 +91,7 @@ def test_llm_evaluator_prompt_unknown_variable_raises(prompt, unknown):
             llm_provider_id=1,
             llm_provider_model_id=1,
             prompt=prompt,
-            output_schema=_OUTPUT_SCHEMA,
+            output_schema=OUTPUT_SCHEMA,
         )
     error_message = str(exc_info.value)
     assert "Unknown prompt variable" in error_message
@@ -121,50 +117,12 @@ def test_llm_evaluator_prompt_unknown_generation_variable_raises(offending):
             llm_provider_id=1,
             llm_provider_model_id=1,
             prompt=f"Input: {{input.content}} {offending}",
-            output_schema=_OUTPUT_SCHEMA,
+            output_schema=OUTPUT_SCHEMA,
         )
     error_message = str(exc_info.value)
     assert "Unknown generation variable" in error_message
     assert offending in error_message
     assert "{generation.tool_calls}" in error_message
-
-
-_UNKNOWN_SPAN_FIELDS = ["{span.name}", "{span.output[0]}", "{span.output!r}", "{span}"]
-
-
-@pytest.mark.parametrize("offending", [pytest.param(field, id=field) for field in _UNKNOWN_SPAN_FIELDS])
-def test_llm_evaluator_prompt_unknown_span_variable_raises(offending):
-    with pytest.raises(ValidationError) as exc_info:
-        LlmEvaluator(
-            llm_provider_id=1,
-            llm_provider_model_id=1,
-            prompt=f"Input: {{input.content}} {offending}",
-            output_schema=_OUTPUT_SCHEMA,
-        )
-    error_message = str(exc_info.value)
-    assert "Unknown span variable" in error_message
-    assert offending in error_message
-    assert "{span.input}, {span.output}, {span.error}" in error_message
-
-
-def test_unknown_span_variables():
-    assert unknown_span_variables(" ".join(_UNKNOWN_SPAN_FIELDS)) == {
-        "span.name",
-        "span.output[0]",
-        "span.output!r",
-        "span",
-    }
-    assert unknown_span_variables("{span.input} {span.output} {span.error}") == set()
-
-
-@pytest.fixture()
-def llm_provider():
-    return LlmProviderFactory.create()
-
-
-@pytest.fixture()
-def llm_provider_model():
-    return LlmProviderModelFactory.create(name="gpt-4o")
 
 
 @pytest.mark.django_db()
@@ -617,14 +575,6 @@ def test_missing_structured_result_is_not_retried(get_llm_service, llm_provider,
     assert len(get_llm_service.return_value.llm.get_calls()) == 1
 
 
-def _structured_response():
-    return AIMessage(content="", tool_calls=[{"name": "DynamicModel", "args": {"result": "ok"}, "id": "call_1"}])
-
-
-def _prompt_sent_to(service) -> str:
-    return "\n".join(message.content for message in service.llm.get_call_messages()[0])
-
-
 def test_advertised_generation_variables_match_the_record():
     advertised = {
         name.removeprefix("generation.")
@@ -646,193 +596,32 @@ def test_unknown_generation_variables_ignores_a_malformed_template(prompt):
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_generation_variables_are_rendered_as_json(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[_structured_response()])
+    service = build_fake_llm_service(responses=[structured_response()])
     get_llm_service.return_value = service
     evaluator = LlmEvaluator(
         llm_provider_id=llm_provider.id,
         llm_provider_model_id=llm_provider_model.id,
         prompt="Tags: {generation.message_tags} Calls: {generation.tool_calls}",
-        output_schema=_OUTPUT_SCHEMA,
+        output_schema=OUTPUT_SCHEMA,
     )
 
     evaluator.run(EvaluationMessageFactory.create(), "", generation=GenerationRecord(message_tags=["urgent"]))
 
-    assert 'Tags: ["urgent"] Calls: []' in _prompt_sent_to(service)
+    assert 'Tags: ["urgent"] Calls: []' in prompt_sent_to(service)
 
 
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_generation_variables_render_empty_without_a_record(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[_structured_response()])
+    service = build_fake_llm_service(responses=[structured_response()])
     get_llm_service.return_value = service
     evaluator = LlmEvaluator(
         llm_provider_id=llm_provider.id,
         llm_provider_model_id=llm_provider_model.id,
         prompt="Tags: {generation.message_tags}",
-        output_schema=_OUTPUT_SCHEMA,
+        output_schema=OUTPUT_SCHEMA,
     )
 
     evaluator.run(EvaluationMessageFactory.create(), "")
 
-    assert "Tags: []" in _prompt_sent_to(service)
-
-
-def test_span_variables_need_a_selector():
-    with pytest.raises(ValidationError, match="no span is selected"):
-        LlmEvaluator(
-            llm_provider_id=1, llm_provider_model_id=1, prompt="Judge {span.output}", output_schema=_OUTPUT_SCHEMA
-        )
-
-
-@pytest.mark.parametrize(
-    "prompt",
-    [
-        pytest.param("Judge {span.input}", id="input"),
-        pytest.param("Judge {span.output}", id="output"),
-        pytest.param("Judge {span.error}", id="error"),
-    ],
-)
-def test_span_variables_are_accepted_with_a_selector(prompt):
-    evaluator = LlmEvaluator(
-        llm_provider_id=1,
-        llm_provider_model_id=1,
-        prompt=prompt,
-        output_schema=_OUTPUT_SCHEMA,
-        span_type="tool",
-        span_name="file-search",
-    )
-    assert evaluator.prompt == prompt
-    assert evaluator.span_type == "tool"
-    assert evaluator.span_name == "file-search"
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_the_selected_span_reaches_the_prompt_and_the_response(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[_structured_response()])
-    get_llm_service.return_value = service
-    evaluator = LlmEvaluator(
-        llm_provider_id=llm_provider.id,
-        llm_provider_model_id=llm_provider_model.id,
-        prompt="Chunks: {span.output} for {span.input}",
-        output_schema=_OUTPUT_SCHEMA,
-        span_type="tool",
-        span_name="file-search",
-        span_as_response=True,
-    )
-    record = GenerationRecord(
-        tool_calls=[
-            {"node": "Answer", "name": "file-search", "input": {"query": "q"}, "output": "chunk a", "error": None}
-        ]
-    )
-
-    result = evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
-
-    assert 'Chunks: chunk a for {"query": "q"}' in _prompt_sent_to(service)
-    assert result.generated_response == "the reply"
-    assert result.judged_response == "chunk a"
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_the_span_error_reaches_the_prompt(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[_structured_response()])
-    get_llm_service.return_value = service
-    evaluator = LlmEvaluator(
-        llm_provider_id=llm_provider.id,
-        llm_provider_model_id=llm_provider_model.id,
-        prompt="Did {span.input} fail? Error: {span.error}",
-        output_schema=_OUTPUT_SCHEMA,
-        span_type="tool",
-        span_name="file-search",
-    )
-    record = GenerationRecord(
-        tool_calls=[{"node": "Answer", "name": "file-search", "input": "q", "output": None, "error": "timed out"}]
-    )
-
-    evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
-
-    assert "Did q fail? Error: timed out" in _prompt_sent_to(service)
-
-
-_FILE_SEARCH_RECORD = GenerationRecord(
-    tool_calls=[{"node": "Answer", "name": "file-search", "input": "q", "output": "chunk a", "error": None}]
-)
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_generated_response_in_the_prompt_is_the_span_output_when_span_as_response_is_on(
-    get_llm_service, llm_provider, llm_provider_model
-):
-    service = build_fake_llm_service(responses=[_structured_response()])
-    get_llm_service.return_value = service
-    evaluator = LlmEvaluator(
-        llm_provider_id=llm_provider.id,
-        llm_provider_model_id=llm_provider_model.id,
-        prompt="Judge {generated_response}",
-        output_schema=_OUTPUT_SCHEMA,
-        span_type="tool",
-        span_name="file-search",
-        span_as_response=True,
-    )
-
-    evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=_FILE_SEARCH_RECORD)
-
-    prompt = _prompt_sent_to(service)
-    assert "Judge chunk a" in prompt
-    assert "the reply" not in prompt
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_a_selector_with_no_match_is_an_error_before_the_judge_is_called(
-    get_llm_service, llm_provider, llm_provider_model
-):
-    service = build_fake_llm_service(responses=[_structured_response()])
-    get_llm_service.return_value = service
-    evaluator = LlmEvaluator(
-        llm_provider_id=llm_provider.id,
-        llm_provider_model_id=llm_provider_model.id,
-        prompt="Judge {span.output}",
-        output_schema=_OUTPUT_SCHEMA,
-        span_type="tool",
-        span_name="calculator",
-    )
-
-    with pytest.raises(EvaluationRunException, match="No tool span named 'calculator'"):
-        evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=_FILE_SEARCH_RECORD)
-
-    assert service.llm.get_calls() == []
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_an_errored_span_is_refused_before_the_judge_is_called(get_llm_service, llm_provider, llm_provider_model):
-    service = build_fake_llm_service(responses=[_structured_response()])
-    get_llm_service.return_value = service
-    evaluator = LlmEvaluator(
-        llm_provider_id=llm_provider.id,
-        llm_provider_model_id=llm_provider_model.id,
-        prompt="Judge {generated_response}",
-        output_schema=_OUTPUT_SCHEMA,
-        span_type="tool",
-        span_name="calculator",
-        span_as_response=True,
-    )
-    record = GenerationRecord(
-        tool_calls=[
-            {
-                "node": "Agent",
-                "name": "calculator",
-                "input": {"expression": "1/0"},
-                "output": None,
-                "error": "division by zero",
-            }
-        ]
-    )
-
-    with pytest.raises(EvaluationRunException, match="calculator"):
-        evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
-
-    assert service.llm.get_calls() == []
+    assert "Tags: []" in prompt_sent_to(service)
