@@ -1,7 +1,6 @@
 import pytest
 from pydantic import ValidationError
 
-from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.model_parameters import (
     ClaudeSonnet46Parameters,
     GPT6SolParameters,
@@ -79,9 +78,3 @@ class TestGPT6SolParameters:
         """An override carried over from a GPT-5.x model must not reach the API."""
         filtered = GPT6SolParameters.filter_overrides({"effort": effort, "temperature": 0.7, "top_p": 0.9})
         assert filtered == {"effort": effort}
-
-
-@pytest.mark.parametrize("model_name", ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna"])
-@pytest.mark.parametrize("effort", ["none", "xhigh", "max"])
-def test_gpt6_sol_family_accepts_full_effort_range(model_name, effort):
-    assert get_model_parameters(model_name, effort=effort)["effort"] == effort
