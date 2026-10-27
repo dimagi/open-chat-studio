@@ -98,6 +98,13 @@ class SpanSelectorMixin(BaseModel):
             return []
         return (generation or GenerationRecord()).select_spans(self.span_type, self.span_name)
 
+    def response_to_judge(self, spans: list[dict], generated_response: str) -> tuple[str, str | None]:
+        """The text the judge sees, and that text again when a span stands in for the reply (else None)."""
+        if not self.span_as_response:
+            return generated_response, None
+        judged = judged_response(spans, generated_response)
+        return judged, judged
+
 
 class LLMResponseMixin(BaseModel):
     # Supplied by ``Evaluator.get_evaluator_params`` from the
@@ -195,7 +202,7 @@ class LlmEvaluator(SpanSelectorMixin, LLMResponseMixin, BaseEvaluator):
         generation: GenerationRecord | None = None,
     ) -> EvaluatorResult:
         spans = self.selected_spans(generation)
-        response = judged_response(spans, generated_response) if self.span_as_response else generated_response
+        response, judged = self.response_to_judge(spans, generated_response)
         # Create a pydantic class so the llm output is validated
         output_model = schema_to_pydantic_model(self.output_schema)
         llm = structured_output_runnable(self.get_chat_model(), output_model)
@@ -233,7 +240,7 @@ class LlmEvaluator(SpanSelectorMixin, LLMResponseMixin, BaseEvaluator):
             message=message.as_result_dict(),
             generated_response=generated_response,
             result=result,
-            judged_response=response if self.span_as_response else None,
+            judged_response=judged,
         )
 
 
@@ -305,7 +312,7 @@ class PythonEvaluator(SpanSelectorMixin, BaseEvaluator, RestrictedPythonExecutio
             output = {}
 
         spans = self.selected_spans(generation)
-        response = judged_response(spans, generated_response) if self.span_as_response else generated_response
+        response, judged = self.response_to_judge(spans, generated_response)
 
         try:
             result = self.compile_and_execute_code(
@@ -330,5 +337,5 @@ class PythonEvaluator(SpanSelectorMixin, BaseEvaluator, RestrictedPythonExecutio
             message=message.as_result_dict(),
             generated_response=generated_response,
             result=result,
-            judged_response=response if self.span_as_response else None,
+            judged_response=judged,
         )
