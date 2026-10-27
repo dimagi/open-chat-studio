@@ -107,6 +107,10 @@ def get_experiment_version_choices(experiment_queryset):
     return choices
 
 
+def span_selecting_evaluator_names(evaluators) -> list[str]:
+    return sorted(e.name for e in evaluators if (e.params or {}).get("span_type", "reply") != "reply")
+
+
 class ExperimentChoiceField(forms.ChoiceField):
     def __init__(self, queryset, *args, **kwargs):
         self.queryset = queryset
@@ -222,13 +226,7 @@ class EvaluationConfigForm(forms.ModelForm):
             self.add_error("evaluators", "Generation is not supported for session-mode datasets.")
             cleaned_data["run_generation"] = False
 
-        if evaluators and not cleaned_data.get("run_generation"):
-            selecting = sorted(e.name for e in evaluators if (e.params or {}).get("span_type", "reply") != "reply")
-            if selecting:
-                self.add_error(
-                    "evaluators",
-                    f"These evaluators select a span, which needs the generation step: {', '.join(selecting)}",
-                )
+        self._refuse_span_selectors_without_generation(cleaned_data, evaluators)
 
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
@@ -268,6 +266,16 @@ class EvaluationConfigForm(forms.ModelForm):
                 self.add_error("experiment_version", "This experiment version was not found")
 
         return cleaned_data
+
+    def _refuse_span_selectors_without_generation(self, cleaned_data, evaluators):
+        if not evaluators or cleaned_data.get("run_generation"):
+            return
+        selecting = span_selecting_evaluator_names(evaluators)
+        if selecting:
+            self.add_error(
+                "evaluators",
+                f"These evaluators select a span, which needs the generation step: {', '.join(selecting)}",
+            )
 
     def save(self, commit=True):
         instance = super().save(commit=False)
