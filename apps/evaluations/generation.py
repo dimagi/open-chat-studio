@@ -185,10 +185,14 @@ def _node_spans(node_outputs: dict[str, Any], path: list[list]) -> list[dict]:
 SPAN_PROMPT_KEYS = ("input", "output", "error")
 
 
-def _render(value: Any) -> str:
+def _text(value: Any) -> str:
     if value is None:
         return ""
-    return _cap(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
+def _render(value: Any) -> str:
+    return _cap(_text(value))
 
 
 def span_prompt_variables(spans: list[dict]) -> dict[str, str]:
@@ -219,4 +223,4 @@ def judged_response(spans: list[dict], generated_response: str) -> str:
     span = spans[-1]
     if span["error"]:
         raise EvaluationRunException(f"Span '{span['name']}' ({span['type']}) failed: {span['error']}")
-    return _render(span["output"])
+    return _text(span["output"])

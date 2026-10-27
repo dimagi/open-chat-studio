@@ -222,6 +222,16 @@ def test_judged_response_renders_a_dict_output_as_json():
     assert judged_response([_tool_span(output={"answer": 4})], "original") == '{"answer": 4}'
 
 
+def test_judged_response_is_not_capped_for_a_long_string_output():
+    long_output = "y" * (GENERATION_PROMPT_VARIABLE_MAX_LENGTH + 1)
+    assert judged_response([_tool_span(output=long_output)], "original") == long_output
+
+
+def test_judged_response_is_not_capped_for_a_long_non_string_output():
+    long_output = {"answer": "y" * (GENERATION_PROMPT_VARIABLE_MAX_LENGTH + 1)}
+    assert judged_response([_tool_span(output=long_output)], "original") == json.dumps(long_output)
+
+
 @pytest.mark.parametrize("key", ["input", "output"])
 @pytest.mark.parametrize("span_count", [pytest.param(1, id="single"), pytest.param(2, id="several")])
 def test_prompt_variables_are_capped(key, span_count):
