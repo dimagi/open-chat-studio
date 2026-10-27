@@ -19,9 +19,13 @@ def neutralize_csv_formula(value):
 
 def restore_csv_formula(value):
     """Undo `neutralize_csv_formula` for a value read back from an exported CSV."""
-    if isinstance(value, str) and value.startswith("'") and _starts_with_formula(value[1:]):
+    if isinstance(value, str) and _is_guarded(value):
         return value[1:]
     return value
+
+
+def _is_guarded(value: str) -> bool:
+    return value.startswith("'") and _starts_with_formula(value[1:])
 
 
 def _starts_with_formula(value: str) -> bool:
