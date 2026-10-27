@@ -100,6 +100,16 @@ def test_runs_beyond_a_list_output_have_no_span():
     assert [span["output"] for span in record.select_spans("node", "Loop")] == ["a", "b"]
 
 
+def test_a_path_entry_with_no_current_node_has_no_span():
+    record = GenerationRecord(node_outputs={"start": "s"}, path=[(None, "start", []), ("start", None, [])])
+    assert [span["output"] for span in record.select_spans("node", "start")] == ["s"]
+
+
+def test_a_second_run_of_a_node_with_a_single_output_has_no_span():
+    record = GenerationRecord(node_outputs={"start": "s"}, path=[(None, "start", ["start"]), ("start", "start", [])])
+    assert [span["output"] for span in record.select_spans("node", "start")] == ["s"]
+
+
 def test_a_successor_run_pairs_with_the_run_that_fed_it():
     record = GenerationRecord(
         node_outputs={
