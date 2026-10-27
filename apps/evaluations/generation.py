@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict, deque
 from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from apps.evaluations.const import GENERATION_PROMPT_VARIABLE_MAX_LENGTH
+from apps.evaluations.exceptions import EvaluationRunException
 from apps.pipelines.nodes.base import PipelineState
 
 if TYPE_CHECKING:
     from apps.service_providers.tracing.capture_tracer import CapturedSpan
 
 TRUNCATION_SUFFIX = " [truncated]"
+
+SpanType = Literal["reply", "node", "tool", "llm"]
+SPAN_KEYS = ("type", "node", "name", "input", "output", "error")
 
 
 def _format_tags(tags: list[tuple[str, str]]) -> list[str]:
@@ -112,3 +117,110 @@ class GenerationRecord:
 
     def prompt_variables(self) -> dict[str, str]:
         return {name: _cap(json.dumps(value, ensure_ascii=False)) for name, value in self.as_dict().items()}
+
+    def select_spans(self, span_type: SpanType, span_name: str) -> list[dict]:
+        """Spans in run order: a tool by tool name, an LLM call by its node, a node by its name; none for a reply."""
+        if span_type == "reply":
+            return []
+        spans = self._spans_of_type(span_type)
+        matched_key = "node" if span_type == "llm" else "name"
+        matches = [span for span in spans if span[matched_key] == span_name]
+        if matches:
+            return matches
+        available = ", ".join(sorted({str(span[matched_key]) for span in spans})) or "none"
+        raise EvaluationRunException(
+            f"No {span_type} span named '{span_name}' in this generation. Available {span_type} spans: {available}"
+        )
+
+    def _spans_of_type(self, span_type: SpanType) -> list[dict]:
+        """Spans built from `as_dict`, so an evaluator that changes one cannot change the record."""
+        data = self.as_dict()
+        if span_type == "tool":
+            return [{"type": "tool", **call} for call in data["tool_calls"]]
+        if span_type == "llm":
+            return [{"type": "llm", **call} for call in data["llm_calls"]]
+        return _node_spans(data["node_outputs"], data["path"])
+
+
+def _node_spans(node_outputs: dict[str, Any], path: list[list]) -> list[dict]:
+    """One span per node run, its input the output of the run that fed it.
+
+    Pairs runs as ``PipelineState.get_node_inputs`` does: each run of a node queues its output on
+    every edge it targets, and a run of the target consumes the head of its incoming edge's queue.
+    """
+    runs: dict[str, int] = {}
+    pending: dict[tuple[str, str], deque] = defaultdict(deque)
+    spans = []
+    for previous, current, targets in path:
+        if current is None:
+            continue
+        incoming = pending[(previous, current)] if previous is not None else deque()
+        node_input = incoming.popleft() if incoming else None
+        if current not in node_outputs:
+            continue
+        output = node_outputs[current]
+        run = runs.get(current, 0)
+        runs[current] = run + 1
+        if isinstance(output, list):
+            if run >= len(output):
+                continue
+            output = output[run]
+        elif run > 0:
+            continue
+        spans.append(
+            {
+                "type": "node",
+                "node": current,
+                "name": current,
+                "input": node_input,
+                "output": output,
+                "error": None,
+            }
+        )
+        for target in targets:
+            pending[(current, target)].append(output)
+    return spans
+
+
+SPAN_PROMPT_KEYS = ("input", "output", "error")
+
+
+def _text(value: Any) -> str:
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
+def _render(value: Any) -> str:
+    return _cap(_text(value))
+
+
+def span_prompt_variables(spans: list[dict]) -> dict[str, str]:
+    """The `input`, `output` and `error` prompt variables for the selected spans."""
+    if not spans:
+        return dict.fromkeys(SPAN_PROMPT_KEYS, "")
+    if len(spans) == 1:
+        return {key: _render(spans[0][key]) for key in SPAN_PROMPT_KEYS}
+    return {key: _cap(json.dumps([span[key] for span in spans], ensure_ascii=False)) for key in SPAN_PROMPT_KEYS}
+
+
+def span_kwarg(spans: list[dict]) -> dict | list[dict] | None:
+    """The selected spans as an evaluator kwarg: None, the one span, or the list."""
+    if not spans:
+        return None
+    if len(spans) == 1:
+        return spans[0]
+    return spans
+
+
+def judged_response(spans: list[dict], generated_response: str) -> str:
+    """The last selected span's output as text, or the generated response when nothing is selected.
+
+    Raises `EvaluationRunException` when that span failed, since it has no output to judge.
+    """
+    if not spans:
+        return generated_response
+    span = spans[-1]
+    if span["error"]:
+        raise EvaluationRunException(f"Span '{span['name']}' ({span['type']}) failed: {span['error']}")
+    return _text(span["output"])

@@ -150,6 +150,9 @@
                             <span><template x-if="i > 0"><span>, </span></template><code x-text="hint"></code></span>
                         </template>
                     </p>
+                    <p class="text-sm text-gray-500" x-show="evaluationMode === 'message'">
+                        {% translate "The span variables need a span selected on this evaluator." %}
+                    </p>
                 </div>
             </template>
 
@@ -461,11 +464,28 @@
                         x-model="params[fieldName]"
                         class="select select-bordered w-full"
                         :required="isRequired(fieldName)">
-                  <option value="">Select...</option>
+                  <template x-if="field.default === undefined">
+                    <option value="">Select...</option>
+                  </template>
                   <template x-for="option in field.enum" :key="option">
                     <option :value="option" x-text="option"></option>
                   </template>
                 </select>
+                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
+              </div>
+            </template>
+
+            <!-- Boolean fields -->
+            <template x-if="getWidget(field) === 'toggle' || field.type === 'boolean'">
+              <div class="form-control">
+                <label :for="'param_' + fieldName" class="label cursor-pointer justify-start gap-2">
+                  <input type="checkbox"
+                         :id="'param_' + fieldName"
+                         :name="'param_' + fieldName"
+                         x-model="params[fieldName]"
+                         class="checkbox checkbox-sm checkbox-primary">
+                  <span class="label-text font-bold" x-text="field.title || fieldName"></span>
+                </label>
                 <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
               </div>
             </template>

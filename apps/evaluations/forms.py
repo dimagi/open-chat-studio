@@ -107,6 +107,10 @@ def get_experiment_version_choices(experiment_queryset):
     return choices
 
 
+def span_selecting_evaluator_names(evaluators) -> list[str]:
+    return sorted(e.name for e in evaluators if (e.params or {}).get("span_type", "reply") != "reply")
+
+
 class ExperimentChoiceField(forms.ChoiceField):
     def __init__(self, queryset, *args, **kwargs):
         self.queryset = queryset
@@ -222,6 +226,8 @@ class EvaluationConfigForm(forms.ModelForm):
             self.add_error("evaluators", "Generation is not supported for session-mode datasets.")
             cleaned_data["run_generation"] = False
 
+        self._refuse_span_selectors_without_generation(cleaned_data, evaluators)
+
         experiment_version = cleaned_data.get("experiment_version")
         experiment = cleaned_data.get("experiment")
 
@@ -260,6 +266,16 @@ class EvaluationConfigForm(forms.ModelForm):
                 self.add_error("experiment_version", "This experiment version was not found")
 
         return cleaned_data
+
+    def _refuse_span_selectors_without_generation(self, cleaned_data, evaluators):
+        if not evaluators or cleaned_data.get("run_generation"):
+            return
+        selecting = span_selecting_evaluator_names(evaluators)
+        if selecting:
+            self.add_error(
+                "evaluators",
+                f"These evaluators select a span, which needs the generation step: {', '.join(selecting)}",
+            )
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -318,6 +334,11 @@ class EvaluatorForm(forms.ModelForm):
 
         params = _clean_params(self.cleaned_data.get("params"), evaluators_module.LLM_PROVIDER_FIELDS)
         cleaned_data["params"] = params
+
+        selects_span = params.get("span_type", "reply") != "reply"
+        if selects_span and self.cleaned_data.get("evaluation_mode") == EvaluationMode.SESSION:
+            self.add_error(None, "Selecting a span needs a generation, which session mode does not run")
+            return cleaned_data
 
         if issubclass(evaluator_class, evaluators_module.LLMResponseMixin):
             self._validate_llm_provider_selection()
@@ -383,8 +404,11 @@ def _validate_evaluator_params(evaluator_class, params: dict) -> None:
     except PydanticValidationError as err:
         error_messages = []
         for error in err.errors():
-            field_name = error["loc"][0] if error["loc"] else "unknown"
-            error_messages.append(f"{str(field_name).replace('_', ' ').title()}: {error['msg']}")
+            message = error["msg"].removeprefix("Value error, ")
+            if not error["loc"]:
+                error_messages.append(message)
+                continue
+            error_messages.append(f"{str(error['loc'][0]).replace('_', ' ').title()}: {message}")
         raise forms.ValidationError(", ".join(error_messages)) from err
 
 
