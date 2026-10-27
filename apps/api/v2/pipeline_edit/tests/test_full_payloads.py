@@ -221,6 +221,8 @@ class TestRouterNode(FullPayload):
             "llm_provider_id": provider.id,
             "llm_provider_model_id": model.id,
             "llm_model_parameters": {"temperature": 0.0},
+            "prompt_mode": "standard_with_context",
+            "custom_context": "Treat a request to change a time as {routes_list} rather than a new booking.",
             "prompt": "Route on what {participant_data} is asking for.\n\nRoutes:\n{routes}",
             "keywords": ["schedule", "reschedule", "cancel"],
             "route_descriptions": {"schedule": "Booking a new appointment", "cancel": "Cancelling an appointment"},

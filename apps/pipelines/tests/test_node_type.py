@@ -49,6 +49,8 @@ class TestNullObject:
         assert unresolvable.is_server_managed is False
         assert unresolvable.is_structural is False
         assert unresolvable.versioned_param_specs == ()
+        assert unresolvable.params_for_version({"name": "odd"}) == {"name": "odd"}
+        assert unresolvable.working_params({"name": "odd"}) == {"name": "odd"}
         assert unresolvable.output_handles({"name": "odd"}, "odd-1") == []
         assert unresolvable.why_no_output_handles() is NoOutputHandles.UNKNOWN_TYPE
         assert unresolvable.input_handles() == ["input"]

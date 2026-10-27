@@ -37,6 +37,7 @@ from apps.pipelines.jinja_utils import parse_jinja_template
 from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
+from apps.pipelines.nodes import router_prompts
 from apps.pipelines.nodes.base import (
     Intents,
     NodeSchema,
@@ -669,6 +670,12 @@ class BooleanNode(RouteTagMixin, PipelineRouterNode):
         return {"output_0": "true", "output_1": "false"}
 
 
+class RouterPromptMode(TextChoices):
+    STANDARD = "standard", "Standard"
+    STANDARD_WITH_CONTEXT = "standard_with_context", "Standard + Context"
+    CUSTOM = "custom", "Custom (Advanced)"
+
+
 class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
@@ -681,23 +688,63 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
                 "llm_provider_id",
                 "llm_temperature",
                 "history_type",
+                "prompt_mode",
+                "custom_context",
                 "prompt",
                 "keywords",
                 "tag_output_message",
             ],
         )
     )
+    prompt_mode: RouterPromptMode = Field(
+        RouterPromptMode.STANDARD,
+        title="Prompt Mode",
+        description=(
+            "How the router's prompt is built. `standard` builds it from the routes and their "
+            "`route_descriptions`; `standard_with_context` adds `custom_context` to that; `custom` sends "
+            "`prompt` instead. A router saved without this setting reads as `custom`."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.router_prompt_mode, enum_labels=RouterPromptMode.labels),
+    )
+    custom_context: str = Field(
+        default="",
+        title="Additional Context",
+        description=(
+            "Instructions added to the standard prompt in `standard_with_context` mode, such as which "
+            "route to prefer in a borderline case. Takes the same template variables as `prompt`."
+        ),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor,
+            options_source=OptionsSource.router_prompt_variables,
+            visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.STANDARD_WITH_CONTEXT.value),
+            keep_when_hidden=True,
+        ),
+    )
     prompt: str = Field(
         default="You are an extremely helpful router",
         min_length=1,
         description=(
-            "Instructions telling the LLM how to choose between `keywords`. The model is constrained "
-            "to return one of them, so describe when each applies rather than asking for free text. "
-            "The only template variables available are `{participant_data}`, `{temp_state}`, "
+            "Instructions telling the LLM how to choose between `keywords`, used in `custom` mode. The "
+            "model is constrained to return one of them, so describe when each applies rather than asking "
+            "for free text. The only template variables available are `{participant_data}`, `{temp_state}`, "
             "`{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each "
             "keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone."
         ),
-        json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.router_prompt_variables),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor,
+            options_source=OptionsSource.router_prompt_variables,
+            visible_when=VisibleWhen(
+                field="prompt_mode",
+                operator="not_in",
+                value=[RouterPromptMode.STANDARD.value, RouterPromptMode.STANDARD_WITH_CONTEXT.value],
+            ),
+            keep_when_hidden=True,
+        ),
+    )
+    prompt_template_version: str | None = Field(
+        default=None,
+        description="The version of the standard prompt a published version uses, set when the version is created.",
+        json_schema_extra=UiSchema(widget=Widgets.none, api_exclude=True),
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NODE,
@@ -728,20 +775,54 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             descriptions[keyword] = description
         return descriptions
 
+    @model_validator(mode="before")
+    @classmethod
+    def read_a_router_without_a_mode_as_custom(cls, data):
+        """A router saved before prompt modes existed keeps sending the prompt it was written with."""
+        if isinstance(data, dict) and not data.get("prompt_mode"):
+            return {**data, "prompt_mode": RouterPromptMode.CUSTOM}
+        return data
+
+    @field_validator("prompt_template_version")
+    @classmethod
+    def ensure_prompt_template_version_exists(cls, value):
+        if value is not None and value not in router_prompts.ROUTER_PROMPT_TEMPLATES:
+            raise PydanticCustomError(
+                "invalid_prompt_template_version",
+                "Unknown router prompt template version: {version}",
+                {"version": value},
+            )
+        return value
+
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
-        context = {
-            "prompt": self.prompt,
-        }
+        if self.prompt_mode == RouterPromptMode.CUSTOM:
+            self._check_template_variables("prompt", self.prompt)
+        elif self.prompt_mode == RouterPromptMode.STANDARD_WITH_CONTEXT:
+            self._check_template_variables("custom_context", self.custom_context)
+        return self
+
+    def _check_template_variables(self, field: str, text: str) -> None:
         try:
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
-            return self
+            validate_prompt_variables(context={field: text}, prompt_key=field, known_vars=PromptVars.router_node_vars())
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt",
-                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
-                {"field": "prompt"},
+                e.error_dict[field][0].message,  # ty: ignore[not-subscriptable]
+                {"field": field},
             ) from None
+
+    @classmethod
+    def params_for_version(cls, params: dict) -> dict:
+        """Pins the standard prompt's current version, so a published version keeps the prompt it was tested with."""
+        if params.get("prompt_mode") in (None, "", RouterPromptMode.CUSTOM) or params.get("prompt_template_version"):
+            return params
+        return {**params, "prompt_template_version": router_prompts.LATEST_ROUTER_PROMPT_VERSION}
+
+    @classmethod
+    def working_params(cls, params: dict) -> dict:
+        """Drops the pinned version: a working router always uses the latest standard prompt."""
+        return {name: value for name, value in params.items() if name != "prompt_template_version"}
 
     def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
@@ -758,7 +839,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
         )
         system_message = get_system_message(
-            prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
+            prompt_template=self._system_prompt_template(default_keyword),
             prompt_context=template_context,
         )
 
@@ -797,6 +878,13 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         if session:
             self.save_history(node_input, keyword)
         return keyword, is_default_keyword
+
+    def _system_prompt_template(self, default_keyword: str | None) -> str:
+        if self.prompt_mode == RouterPromptMode.CUSTOM:
+            return f"{self.prompt}\nThe default routing destination is: {default_keyword}"
+        context = self.custom_context if self.prompt_mode == RouterPromptMode.STANDARD_WITH_CONTEXT else ""
+        version = self.prompt_template_version or router_prompts.LATEST_ROUTER_PROMPT_VERSION
+        return router_prompts.render_router_prompt(version, context, default_keyword or "")
 
     def _format_routes(self) -> str:
         """One `- KEYWORD: description` line per route; a route with no description is the bare keyword."""

@@ -59,6 +59,8 @@ FULL_PARAMS: dict[str, dict] = {
         "llm_provider_id": 4,
         "llm_provider_model_id": 12,
         "llm_model_parameters": {"temperature": 0.0},
+        "prompt_mode": "standard_with_context",
+        "custom_context": "A request to change an existing booking is a reschedule, not a new booking.",
         "prompt": "Route on what {participant_data} is asking for.\n\nRoutes:\n{routes}",
         "keywords": ["schedule", "reschedule", "cancel"],
         "route_descriptions": {
@@ -123,8 +125,9 @@ NOTES: dict[str, str] = {
     "ExtractStructuredData": "`data_schema` maps field name -> what to look for.",
     "ExtractParticipantData": "As ExtractStructuredData, plus `key_name` to nest the result under.",
     "RouterNode": (
-        "`keywords[i]` routes to handle `output_i`; keywords are uppercased on save. "
-        "`{routes}` renders each keyword with its `route_descriptions` entry."
+        "`keywords[i]` routes to handle `output_i`; keywords are uppercased on save. The standard prompt "
+        "lists each keyword with its `route_descriptions` entry; `custom_context` adds to it, and `prompt` "
+        "is used only when `prompt_mode` is `custom`."
     ),
     "StaticRouterNode": "Routes on stored data instead of an LLM; takes no LLM params.",
     "LLMResponseWithPrompt": "A normal LLM node, with every optional param set.",

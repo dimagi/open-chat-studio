@@ -40,6 +40,10 @@ beforeAll(() => {
     tool_config: {},
   });
   setScript('default-values', {});
+  setScript('router-prompt-templates', {
+    latest: 'v2',
+    templates: {v1: 'Old {routes}', v2: 'Routes:\n{routes}\n{custom_context}Default: {default_route}'},
+  });
   setScript('node-schemas', []);
   setScript('flags-enabled', []);
   setScript('llm-model-params', {});
@@ -403,6 +407,52 @@ describe('KeywordsWidget route descriptions', () => {
     const {queryByLabelText} = render(<Harness nodeSchema={staticRouterSchema} />);
 
     expect(queryByLabelText('Description for Output Keyword 1')).not.toBeInTheDocument();
+  });
+});
+
+describe('RouterPromptModeWidget', () => {
+  const schema = {
+    type: 'string',
+    enum: ['standard', 'standard_with_context', 'custom'],
+    'ui:enumLabels': ['Standard', 'Standard + Context', 'Custom (Advanced)'],
+  } as unknown as PropertySchema;
+  const routes = {
+    name: 'router',
+    keywords: ['BILLING', 'SUPPORT'],
+    route_descriptions: {BILLING: 'Payments'},
+    default_keyword_index: 1,
+    custom_context: 'Refunds are billing.',
+  };
+
+  const renderWidget = (nodeParams: Record<string, unknown>) => {
+    const Widget = getWidget('router_prompt_mode', schema);
+    return render(
+      <Widget {...baseProps} name="prompt_mode" label="Prompt Mode" schema={schema} nodeParams={nodeParams as never}
+        paramValue={String(nodeParams.prompt_mode ?? 'standard')} />
+    );
+  };
+
+  it('reads a router without a prompt_mode as custom and warns about it', () => {
+    const {getByRole, getByText, queryByText} = renderWidget(routes);
+
+    expect(getByRole('combobox')).toHaveValue('custom');
+    expect(getByText(/does not get improvements made to the standard prompt/)).toBeInTheDocument();
+    expect(queryByText(/Preview generated prompt/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['standard', 'Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT'],
+    ['standard_with_context', 'Routes:\n- BILLING: Payments\n- SUPPORT\n\nAdditional context:\nRefunds are billing.\nDefault: SUPPORT'],
+  ])('previews the latest standard prompt in %s mode', (mode, expected) => {
+    const {container} = renderWidget({...routes, prompt_mode: mode});
+
+    expect(container.querySelector('pre')?.textContent).toBe(expected);
+  });
+
+  it('previews the pinned version of a published router', () => {
+    const {container} = renderWidget({...routes, prompt_mode: 'standard', prompt_template_version: 'v1'});
+
+    expect(container.querySelector('pre')?.textContent).toBe('Old - BILLING: Payments\n- SUPPORT');
   });
 });
 

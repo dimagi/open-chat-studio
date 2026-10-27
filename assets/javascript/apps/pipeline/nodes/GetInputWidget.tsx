@@ -48,6 +48,7 @@ type VisibleWhenWrapperProps = {
   fieldName: string;
   nodeId: string;
   schemaDefault: unknown;
+  keepWhenHidden?: boolean;
   onHide?: () => void;
   onShow?: () => void;
   children: React.ReactNode;
@@ -69,6 +70,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   fieldName,
   nodeId,
   schemaDefault,
+  keepWhenHidden = false,
   onHide,
   onShow,
   children,
@@ -96,7 +98,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
     // 1. The field is initially hidden on mount (prevVisibleRef.current === undefined)
     // 2. The field transitions from visible to hidden (prevVisibleRef.current === true)
     const wasVisibleOrUnmounted = prevVisibleRef.current === undefined || prevVisibleRef.current === true;
-    if (wasVisibleOrUnmounted && !isVisible) {
+    if (wasVisibleOrUnmounted && !isVisible && !keepWhenHidden) {
       if (onHide) {
         onHide();
       } else {
@@ -114,7 +116,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
       }
     }
     prevVisibleRef.current = isVisible;
-  }, [isVisible, fieldIdentity, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
+  }, [isVisible, fieldIdentity, keepWhenHidden, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
 
   if (!isVisible) return <></>;
   return <>{children}</>;
@@ -145,7 +147,7 @@ export type InputWidgetParams = {
 }
 
 const nodeTypeToInputParamsMap: Record<string, string[]> = {
-  "RouterNode": ["llm_model", "history_type", "prompt"],
+  "RouterNode": ["llm_model", "history_type", "prompt_mode", "custom_context", "prompt"],
   "StaticRouterNode": ["data_source", "route_key"],
   "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
   "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
@@ -315,6 +317,7 @@ export const getInputWidget = (
       fieldName={params.name}
       nodeId={params.id}
       schemaDefault={widgetSchema.default}
+      keepWhenHidden={widgetSchema["ui:keepWhenHidden"]}
       onHide={onHide}
       onShow={onShow}
     >

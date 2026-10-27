@@ -91,4 +91,27 @@ describe('VisibleWhenWrapper', () => {
 
     expect(onHideB).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['clears', false, 1],
+    ['keeps', true, 0],
+  ])('%s a hidden field when keepWhenHidden is %s', (_verb, keepWhenHidden, clears) => {
+    const onHide = vi.fn();
+
+    render(
+      <VisibleWhenWrapper
+        visibleWhen={{field: 'toggle', value: true}}
+        nodeParams={{name: 'x', toggle: false}}
+        fieldName="field"
+        nodeId="node-1"
+        schemaDefault={null}
+        keepWhenHidden={keepWhenHidden}
+        onHide={onHide}
+      >
+        <span>content</span>
+      </VisibleWhenWrapper>,
+    );
+
+    expect(onHide).toHaveBeenCalledTimes(clears);
+  });
 });

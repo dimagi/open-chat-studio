@@ -202,6 +202,17 @@ class NodeType:
         """The params of this type that reference database records (``apps.pipelines.versioning``)."""
         return NODE_PARAM_SPECS.get(self.type, ())
 
+    def params_for_version(self, params: dict) -> dict:
+        """``params`` as a published version of this type stores them, with anything the working node
+        leaves to run time fixed, such as the router's standard prompt version."""
+        node_class = self.node_class
+        return params if node_class is None else node_class.params_for_version(params)
+
+    def working_params(self, params: dict) -> dict:
+        """``params`` from a published version, as a working node of this type stores them."""
+        node_class = self.node_class
+        return params if node_class is None else node_class.working_params(params)
+
     def input_handles(self) -> list[str]:
         """The input handles a node of this type accepts an edge on.
 

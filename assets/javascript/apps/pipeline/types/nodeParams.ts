@@ -21,6 +21,7 @@ export type PropertySchema = {
   "ui:enumLabels"?: string | undefined;
   "ui:flagRequired"?: string | undefined;
   "ui:visibleWhen"?: VisibleWhenCondition | VisibleWhenCondition[] | undefined;
+  "ui:keepWhenHidden"?: boolean | undefined;
   "ui:rows"?: number | undefined;
   [k: string]: unknown;
 }

@@ -141,6 +141,17 @@ class TestDefaultsAndLabel:
         assert node.params["name"] == node_id
         assert response.json()["node"]["label"] == "LLM"
 
+    def test_a_new_router_uses_the_standard_prompt_and_cannot_pin_its_version(self, client, chatbot):
+        """The server pins the standard prompt's version when a chatbot version is created."""
+        response = client.post(
+            nodes_url(chatbot), {"type": "RouterNode", "params": {"prompt_template_version": "v1"}}, format="json"
+        )
+
+        assert response.status_code == 201, response.content
+        params = Node.objects.get(pipeline=chatbot.pipeline, flow_id=response.json()["node"]["node_id"]).params
+        assert params["prompt_mode"] == "standard"
+        assert params.get("prompt_template_version") is None
+
     def test_create_takes_a_label_and_a_name_over_the_defaults(self, client, chatbot):
         response = client.post(
             nodes_url(chatbot),

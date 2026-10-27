@@ -1,5 +1,5 @@
 import {beforeAll, describe, expect, it} from 'vitest';
-import {getCachedData} from './utils';
+import {getCachedData, renderRouterPromptPreview} from './utils';
 
 beforeAll(() => {
   const setScript = (id: string, data: unknown) => {
@@ -27,5 +27,29 @@ describe('getCachedData', () => {
     const secondValues = getCachedData().parameterValues;
     expect(secondSchemas).toBe(firstSchemas);
     expect(secondValues).toBe(firstValues);
+  });
+});
+
+describe('renderRouterPromptPreview', () => {
+  const template = 'Routes:\n{routes}\n{custom_context}\nDefault: {default_route}';
+  const routes = {
+    keywords: ['BILLING', 'SUPPORT', ''],
+    routeDescriptions: {BILLING: 'Payments and invoices', SUPPORT: '  '},
+    defaultRoute: 'BILLING',
+  };
+
+  it('lists each route with its description and fills the default route', () => {
+    expect(renderRouterPromptPreview(template, {...routes, customContext: ''})).toBe(
+      'Routes:\n- BILLING: Payments and invoices\n- SUPPORT\n\nDefault: BILLING'
+    );
+  });
+
+  it('adds the context, filling the route variables and leaving the others as written', () => {
+    const preview = renderRouterPromptPreview(template, {
+      ...routes,
+      customContext: ' Prefer {routes_list} for {participant_data.plan}. ',
+    });
+
+    expect(preview).toContain('\nAdditional context:\nPrefer BILLING, SUPPORT for {participant_data.plan}.\n');
   });
 });
