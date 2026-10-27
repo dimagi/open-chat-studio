@@ -11,6 +11,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
+from apps.moderation.settings_section import SETTINGS_SECTION as MODERATION_SETTINGS_SECTION
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.utils import ServiceProvider, get_enabled_providers
 from apps.teams.decorators import login_and_team_required
@@ -23,7 +24,7 @@ from apps.teams.forms import (
     TeamPublicKeyForm,
 )
 from apps.teams.models import Invitation
-from apps.teams.settings_sections import SettingsSection, is_team_admin, with_registered_sections
+from apps.teams.settings_sections import SettingsSection, is_team_admin
 from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
 from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
@@ -119,7 +120,7 @@ def _internal_metadata_context(request) -> dict:
     return {"metadata_form": TeamMetadataForm(team=request.team)}
 
 
-_BUILT_IN_SECTIONS = [
+_SECTIONS = [
     SettingsSection(
         key="integrations",
         label=_("Integrations"),
@@ -136,6 +137,7 @@ _BUILT_IN_SECTIONS = [
         is_visible=_can_view_notifications,
         get_context=_notifications_context,
     ),
+    MODERATION_SETTINGS_SECTION,
     SettingsSection(
         key="members",
         label=_("Members"),
@@ -177,7 +179,7 @@ _BUILT_IN_SECTIONS = [
 
 
 def _visible_sections(request) -> list[SettingsSection]:
-    return [section for section in with_registered_sections(_BUILT_IN_SECTIONS) if section.is_visible(request)]
+    return [section for section in _SECTIONS if section.is_visible(request)]
 
 
 def _get_section(visible_sections: list[SettingsSection], section_key: str | None) -> SettingsSection:
