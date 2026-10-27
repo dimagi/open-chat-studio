@@ -52,4 +52,21 @@ describe('renderRouterPromptPreview', () => {
 
     expect(preview).toContain('\nAdditional context:\nPrefer BILLING, SUPPORT for {participant_data.plan}.\n');
   });
+
+  it('shows escaped braces in the context as the literal braces the router sends', () => {
+    const preview = renderRouterPromptPreview(template, {...routes, customContext: 'Write {{routes_list}} as is.'});
+
+    expect(preview).toContain('\nWrite {routes_list} as is.\n');
+  });
+
+  it('inserts descriptions and context as written, without treating $ as a replacement pattern', () => {
+    const preview = renderRouterPromptPreview(template, {
+      ...routes,
+      routeDescriptions: {BILLING: 'Costs $& fees'},
+      customContext: "Refunds over $' go to billing.",
+    });
+
+    expect(preview).toContain('- BILLING: Costs $& fees');
+    expect(preview).toContain("Refunds over $' go to billing.");
+  });
 });

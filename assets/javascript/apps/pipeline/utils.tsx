@@ -218,11 +218,17 @@ export function renderRouterPromptPreview(
     const description = (routeDescriptions[keyword] || "").trim();
     return description ? `- ${keyword}: ${description}` : `- ${keyword}`;
   }).join("\n");
-  const context = customContext.trim();
+  const routeVariables = {routes, routes_list: routeNames.join(", ")};
+  const context = fillPromptVariables(customContext.trim(), routeVariables);
   const contextSection = context ? `\nAdditional context:\n${context}\n` : "";
-  return template
-    .replaceAll("{default_route}", defaultRoute)
-    .replaceAll("{custom_context}", contextSection)
-    .replaceAll("{routes_list}", routeNames.join(", "))
-    .replaceAll("{routes}", routes);
+  return fillPromptVariables(template, {...routeVariables, default_route: defaultRoute, custom_context: contextSection});
+}
+
+/** Fills `{name}` variables in one pass, as Python's `str.format` does: `{{` and `}}` are literal braces. */
+function fillPromptVariables(text: string, values: Record<string, string>): string {
+  return text.replace(/\{\{|\}\}|\{(\w+)\}/g, (token, name?: string) => {
+    if (token === "{{") return "{";
+    if (token === "}}") return "}";
+    return name !== undefined && Object.hasOwn(values, name) ? values[name] : token;
+  });
 }

@@ -722,7 +722,6 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     )
     prompt: str = Field(
         default="You are an extremely helpful router",
-        min_length=1,
         description=(
             "Instructions telling the LLM how to choose between `keywords`, used in `custom` mode. The "
             "model is constrained to return one of them, so describe when each applies rather than asking "
@@ -797,6 +796,8 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
         if self.prompt_mode == RouterPromptMode.CUSTOM:
+            if not self.prompt:
+                raise PydanticCustomError("invalid_prompt", "Prompt cannot be empty", {"field": "prompt"})
             self._check_template_variables("prompt", self.prompt)
         elif self.prompt_mode == RouterPromptMode.STANDARD_WITH_CONTEXT:
             self._check_template_variables("custom_context", self.custom_context)

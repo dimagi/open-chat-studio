@@ -133,6 +133,21 @@ class TestValidation:
             with pytest.raises(PydanticValidationError, match="unknown variables: unknown"):
                 _router(**params)
 
+    @pytest.mark.parametrize(
+        ("prompt_mode", "is_valid"),
+        [
+            pytest.param("custom", False, id="custom-requires-prompt"),
+            pytest.param("standard", True, id="standard-allows-empty-prompt"),
+            pytest.param("standard_with_context", True, id="context-mode-allows-empty-prompt"),
+        ],
+    )
+    def test_an_empty_prompt_is_rejected_only_in_custom_mode(self, prompt_mode, is_valid):
+        if is_valid:
+            _router(prompt_mode=prompt_mode, prompt="")
+        else:
+            with pytest.raises(PydanticValidationError, match="Prompt cannot be empty"):
+                _router(prompt_mode=prompt_mode, prompt="")
+
 
 class TestParamsForVersion:
     @pytest.mark.parametrize(
