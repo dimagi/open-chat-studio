@@ -208,7 +208,7 @@ class GPT6Parameters(LLMModelParamBase):
 
 
 class GPT6SolParameters(LLMModelParamBase):
-    # gpt-6-sol and gpt-6-luna take the same effort range as gpt-6-astra plus `none`, so
+    # gpt-6-sol, gpt-6-luna and the gpt-6.1 models take the same effort range as gpt-6-astra plus `none`, so
     # GPT6Parameters does not fit. Temperature and top_p stay unexposed at every effort level,
     # including `none`: the GPT-6 migration guide rejects both parameters family-wide, and
     # GPT-5.1 likewise exposes `none` effort without them. The API returns a 400 for a parameter
