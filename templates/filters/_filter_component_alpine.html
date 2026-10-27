@@ -35,7 +35,7 @@
 
         const App = SiteJS.app;
         this._participantIdentifierUrl = "{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}";
-        this._participantFetchTimer = null;
+        this._participantFetchTimers = {};
         this.loadFiltersFromQueryString(window.location.search);
 
         // Load starred filters on initialization
@@ -197,9 +197,9 @@
 
         // Participant and remote_id columns use server-side search
         if (column === 'participant' || column === 'remote_id') {
-          clearTimeout(this._participantFetchTimer);
+          clearTimeout(this._participantFetchTimers[index]);
           const query = (filter.searchQuery || '').trim();
-          this._participantFetchTimer = setTimeout(() => {
+          this._participantFetchTimers[index] = setTimeout(() => {
             this.fetchParticipantOptions(index, query);
           }, 300);
           return;

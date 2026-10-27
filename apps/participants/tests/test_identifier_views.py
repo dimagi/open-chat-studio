@@ -52,7 +52,7 @@ class TestAllParticipantIdentifiers:
         response = client.get(self._url(team), {"q": "match"})
 
         data = response.json()
-        assert data["identifiers"] == ["alice@example.com"]
+        assert data["identifiers"] == []
         assert data["remote_ids"] == ["match-remote"]
 
     def test_search_is_case_insensitive(self, client, team_with_users):
@@ -65,9 +65,7 @@ class TestAllParticipantIdentifiers:
         assert response.json()["identifiers"] == ["Alice@Example.com"]
 
     def test_truncated_flag_set_when_results_exceed_limit(self, client, team_with_users, monkeypatch):
-        import apps.participants.views as pv
-
-        monkeypatch.setattr(pv, "PARTICIPANT_IDENTIFIER_LIMIT", 2)
+        monkeypatch.setattr("apps.participants.views.PARTICIPANT_IDENTIFIER_LIMIT", 2)
         team = team_with_users
         self._login(client, team)
         for i in range(3):
@@ -78,6 +76,18 @@ class TestAllParticipantIdentifiers:
         data = response.json()
         assert len(data["identifiers"]) == 2
         assert data["truncated"] is True
+
+    def test_not_truncated_when_distinct_values_fit_limit(self, client, team_with_users, monkeypatch):
+        monkeypatch.setattr("apps.participants.views.PARTICIPANT_IDENTIFIER_LIMIT", 2)
+        team = team_with_users
+        self._login(client, team)
+        for i in range(3):
+            ParticipantFactory.create(team=team, identifier=f"user{i}@example.com", remote_id="shared")
+
+        data = client.get(self._url(team), {"q": "shared"}).json()
+
+        assert data["remote_ids"] == ["shared"]
+        assert data["truncated"] is False
 
     def test_does_not_leak_other_team_participants(self, client, team_with_users):
         team = team_with_users

@@ -4,7 +4,6 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -482,45 +481,39 @@ PARTICIPANT_IDENTIFIER_LIMIT = 200
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
-    query = (
-        Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
-        .values_list("identifier", "remote_id")
-        .distinct()
-    )
-    return _get_identifiers_response(query, request)
+    participants = Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
+    return _get_identifiers_response(participants, request)
 
 
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
-    query = Participant.objects.filter(team=request.team).values_list("identifier", "remote_id").distinct()
-    return _get_identifiers_response(query, request)
+    participants = Participant.objects.filter(team=request.team)
+    return _get_identifiers_response(participants, request)
 
 
-def _get_identifiers_response(queryset, request):
+def _get_identifiers_response(participants, request):
     search = request.GET.get("q", "").strip()
-    limit = PARTICIPANT_IDENTIFIER_LIMIT
-
-    if search:
-        queryset = queryset.filter(Q(identifier__icontains=search) | Q(remote_id__icontains=search))
-
-    # Exclude rows where both values are empty, then slice so the DB applies LIMIT
-    queryset = queryset.exclude(Q(identifier="") | Q(identifier=None), Q(remote_id="") | Q(remote_id=None))
-    rows = list(queryset[: limit + 1])
-    truncated = len(rows) > limit
-    rows = rows[:limit]
-
-    identifiers = {ident for ident, _ in rows if ident}
-    remote_ids = {remote_id for _, remote_id in rows if remote_id}
-
+    identifiers, identifiers_truncated = _distinct_field_values(participants, "identifier", search)
+    remote_ids, remote_ids_truncated = _distinct_field_values(participants, "remote_id", search)
     return JsonResponse(
         {
-            "identifiers": list(identifiers),
-            "remote_ids": list(remote_ids),
-            "truncated": truncated,
+            "identifiers": identifiers,
+            "remote_ids": remote_ids,
+            "truncated": identifiers_truncated or remote_ids_truncated,
         },
         safe=False,
     )
+
+
+def _distinct_field_values(participants, field: str, search: str) -> tuple[list[str], bool]:
+    """Return up to PARTICIPANT_IDENTIFIER_LIMIT distinct non-empty values of `field` and whether more exist."""
+    queryset = participants.exclude(**{field: ""})
+    if search:
+        queryset = queryset.filter(**{f"{field}__icontains": search})
+    limit = PARTICIPANT_IDENTIFIER_LIMIT
+    values = list(queryset.order_by(field).values_list(field, flat=True).distinct()[: limit + 1])
+    return values[:limit], len(values) > limit
 
 
 @permission_required(IMPORT_PERMISSIONS)
