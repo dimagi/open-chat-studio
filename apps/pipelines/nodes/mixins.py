@@ -12,7 +12,7 @@ from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_v
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
-from apps.annotations.models import TagCategories
+from apps.annotations.models import Tag, TagCategories
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
     PipelineNodeRunError,
@@ -55,6 +55,7 @@ OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance
 class OutputMessageTagMixin(BaseModel):
     tag: str = Field(
         default="",
+        max_length=Tag._meta.get_field("name").max_length,
         title="Message Tag",
         description="The tag that the output message should be tagged with",
     )
