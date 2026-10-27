@@ -17,8 +17,8 @@ from apps.utils.factories.evaluations import (
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
-def _result(run, evaluator, *, sentiment="positive", input_content="hi", generated="hi there", judged=None, **kwargs):
-    output = EvaluatorResult(
+def _output(*, sentiment="positive", input_content="hi", generated="hi there", judged=None) -> dict:
+    return EvaluatorResult(
         message={
             "input": {"content": input_content, "role": "human"},
             "output": {"content": "expected output", "role": "ai"},
@@ -30,7 +30,12 @@ def _result(run, evaluator, *, sentiment="positive", input_content="hi", generat
         generated_response=generated,
         judged_response=judged,
     ).model_dump()
-    return EvaluationResultFactory.create(output=output, team=run.team, run=run, evaluator=evaluator, **kwargs)
+
+
+def _result(run, evaluator, output=None, **kwargs):
+    return EvaluationResultFactory.create(
+        output=output or _output(), team=run.team, run=run, evaluator=evaluator, **kwargs
+    )
 
 
 def _detail_url(team, config, run, message_id):
@@ -43,7 +48,7 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        result = _result(run, evaluator, input_content="What happened?", generated="It went well.")
+        result = _result(run, evaluator, output=_output(input_content="What happened?", generated="It went well."))
         client.force_login(team_with_users.members.first())
 
         response = client.get(_detail_url(team_with_users, config, run, result.message_id))
@@ -59,7 +64,7 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        result = _result(run, evaluator, generated="hi there", judged="tagged: hello")
+        result = _result(run, evaluator, output=_output(generated="hi there", judged="tagged: hello"))
         client.force_login(team_with_users.members.first())
 
         response = client.get(_detail_url(team_with_users, config, run, result.message_id))
@@ -73,7 +78,7 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        result = _result(run, evaluator, judged="")
+        result = _result(run, evaluator, output=_output(judged=""))
         client.force_login(team_with_users.members.first())
 
         response = client.get(_detail_url(team_with_users, config, run, result.message_id))
@@ -87,7 +92,7 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        result = _result(run, evaluator, judged='<b>tagged</b> & "quoted"')
+        result = _result(run, evaluator, output=_output(judged='<b>tagged</b> & "quoted"'))
         client.force_login(team_with_users.members.first())
 
         response = client.get(_detail_url(team_with_users, config, run, result.message_id))
@@ -114,7 +119,7 @@ class TestEvaluationResultDetailView:
         run = EvaluationRunFactory.create(
             team=team_with_users, config=config, evaluator_ids=[span_evaluator.id, reply_evaluator.id]
         )
-        result = _result(run, span_evaluator, judged="tagged: hello")
+        result = _result(run, span_evaluator, output=_output(judged="tagged: hello"))
         _result(run, reply_evaluator, message=result.message)
         client.force_login(team_with_users.members.first())
 
@@ -179,9 +184,9 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        first = _result(run, evaluator, sentiment="positive")
-        middle = _result(run, evaluator, sentiment="neutral")
-        last = _result(run, evaluator, sentiment="negative")
+        first = _result(run, evaluator, output=_output(sentiment="positive"))
+        middle = _result(run, evaluator, output=_output(sentiment="neutral"))
+        last = _result(run, evaluator, output=_output(sentiment="negative"))
         client.force_login(team_with_users.members.first())
 
         first_resp = client.get(_detail_url(team_with_users, config, run, first.message_id)).content.decode()
