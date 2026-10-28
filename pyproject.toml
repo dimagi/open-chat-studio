@@ -71,7 +71,7 @@ dependencies = [
     "tiktoken",
     "turn-python>=1.0.0",
     "twilio",
-    "whitenoise[brotli]",
+    "whitenoise[brotli]>=6.8.0",
     "phonenumberslite",
     "emoji",
     "python-magic",
