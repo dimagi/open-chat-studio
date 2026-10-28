@@ -179,6 +179,11 @@ class ChatMessageMetadataKeys(StrEnum):
 EXTERNAL_ID_MAX_LENGTH = 600
 
 
+def _file_matches(file, ids: set[str], external_ids: set[str]) -> bool:
+    """Whether ``file`` is referenced by the given (stringified) file ids or external ids."""
+    return str(file.id) in ids or bool(file.external_id and file.external_id in external_ids)
+
+
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
@@ -377,14 +382,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         query per message.
         """
         saved_messages = [message for message in messages if message.chat_id]
-        message_file_ids = {}
-        all_ids, all_external_ids = set(), set()
-        for message in saved_messages:
-            ids, external_ids = message._attachment_file_ids()
-            ids, external_ids = {str(i) for i in ids}, {str(i) for i in external_ids}
-            message_file_ids[message.pk] = (ids, external_ids)
-            all_ids |= ids
-            all_external_ids |= external_ids
+        message_file_ids = {message.pk: message._normalized_attachment_file_ids() for message in saved_messages}
+        all_ids = set().union(*(ids for ids, _ in message_file_ids.values()))
+        all_external_ids = set().union(*(external_ids for _, external_ids in message_file_ids.values()))
 
         files = []
         if all_ids or all_external_ids:
@@ -394,9 +394,12 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
 
         for message in saved_messages:
             ids, external_ids = message_file_ids[message.pk]
-            message._prefetched_attached_files = [
-                file for file in files if str(file.id) in ids or (file.external_id and file.external_id in external_ids)
-            ]
+            message._prefetched_attached_files = [file for file in files if _file_matches(file, ids, external_ids)]
+
+    def _normalized_attachment_file_ids(self) -> tuple[set[str], set[str]]:
+        """Like ``_attachment_file_ids`` but as sets of strings, for in-memory matching."""
+        ids, external_ids = self._attachment_file_ids()
+        return {str(i) for i in ids}, {str(i) for i in external_ids}
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
