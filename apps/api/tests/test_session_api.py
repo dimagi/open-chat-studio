@@ -704,11 +704,18 @@ def test_retrieve_session_query_count_does_not_scale_with_messages(session, djan
     client = ApiTestClient(user, session.team)
     url = reverse("api:session-detail", kwargs={"id": session.external_id})
 
+    attachment, _created = ChatAttachment.objects.get_or_create(chat_id=session.chat.id, tool_type="file_search")
+
     def _add_messages(count):
-        for i in range(count):
-            message = session.chat.messages.create(message_type="human", content=f"msg {i}", summary="sum")
+        for _ in range(count):
+            message = session.chat.messages.create(message_type="human", content="msg", summary="sum")
             message.add_tag(tag, session.team, user)
-            _create_attachments(session.chat, message)
+            # Attachments are matched by id / external id within the chat, so each message gets
+            # files with their own external ids.
+            files = [FileFactory.create(external_id=f"file_{message.id}_{i}") for i in range(2)]
+            attachment.files.add(*files)
+            message.metadata = {"openai_file_ids": [f.external_id for f in files]}
+            message.save()
 
     _add_messages(2)
     client.get(url)  # warm up any per-process caches (e.g. content types)
