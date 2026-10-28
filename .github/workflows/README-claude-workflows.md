@@ -27,7 +27,7 @@ Check the comment block at the top of each file for what it does, when it is ski
 
 ### OpenCodeReview stage
 
-The `ocr` job in `claude-code-review.yml` runs [OpenCodeReview](https://github.com/alibaba/open-code-review) before the Claude review. It runs its own CLI, not `claude-code-action`, and is configured through action inputs. It posts findings as inline comments, and the Claude review runs only when it reports none. The `Automated review verdict` check fails if either stage has findings. Both stages share the `ANTHROPIC_API_KEY` secret. Review rules for all reviewers start at `REVIEW.md`.
+The `ocr` job in `claude-code-review.yml` runs [OpenCodeReview](https://github.com/alibaba/open-code-review) before the Claude review. It runs its own CLI, not `claude-code-action`, and is configured through action inputs. It posts findings as inline comments, and the Claude review runs only when it reports none. The `Automated review verdict` check fails if either stage has findings. Both stages share the `ANTHROPIC_API_KEY` secret. Its per-path rules live in `.opencodereview/`.
 
 ## Forked PR limitations
 
