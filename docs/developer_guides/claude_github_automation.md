@@ -130,7 +130,7 @@ This workflow can also be triggered manually via **Actions > Claude Dependabot P
 
 ### PR Code Review
 
-Every non-draft, non-fork, non-Dependabot PR triggers an automated Claude code review. Claude reads the PR diff and posts findings as **inline comments** directly on the changed lines.
+Every non-draft, non-fork, non-Dependabot PR triggers an automated code review in two stages. [OpenCodeReview](https://github.com/alibaba/open-code-review) runs first, applying the rules in `REVIEW.md`, and posts findings as **inline comments**. If it finds nothing, the Claude review runs and posts its findings as inline comments on the changed lines. If OCR has findings, fix them and push; the Claude review runs on that push. The `Automated review verdict` check fails while either stage has findings.
 
 It runs when a PR is opened, when it is marked **ready for review**, and on every push. Drafts are skipped — which is why the [development workflow](../getting-started/dev-workflow.md#then-hand-it-over) has you clean up the PR as a draft first, then flip it to ready to get this review. There is no manual trigger; to get a fresh review, push a new commit.
 
