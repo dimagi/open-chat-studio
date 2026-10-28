@@ -520,6 +520,8 @@ SPECTACULAR_SETTINGS = {
         "NotificationLevelEnum": "apps.ocs_notifications.models.LevelChoices",
         "VersionStatusEnum": "apps.api.v2.versions.serializers.VersionStatus",
         "MessageRoleEnum": "apps.api.serializers.MESSAGE_ROLES",
+        "StaticTriggerTypeEnum": "apps.events.models.StaticTriggerType",
+        "TriggerActionTypeEnum": "apps.events.models.EventActionType",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
@@ -536,6 +538,13 @@ SPECTACULAR_SETTINGS = {
         {
             "name": "Chatbots",
             "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Chatbot Triggers",
+            "description": (
+                "Add, change and archive the triggers that run an action on a conversation event, "
+                "after inactivity, or at a set time."
+            ),
         },
         {
             "name": "Me",
@@ -658,6 +667,10 @@ SCHEDULED_TASKS = {
     "channels.tasks.ratchet_widget_auth_levels": {
         "task": "apps.channels.tasks.ratchet_widget_auth_levels",
         "schedule": crontab(minute="0", hour="2"),
+    },
+    "ocs_notifications.tasks.notify_http_sunsets": {
+        "task": "apps.ocs_notifications.tasks.notify_http_sunsets",
+        "schedule": crontab(minute="30", hour="2"),
     },
     "ocs_notifications.tasks.cleanup_old_notification_events": {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",

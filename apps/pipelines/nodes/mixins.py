@@ -12,7 +12,7 @@ from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_v
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 
-from apps.annotations.models import TagCategories
+from apps.annotations.models import Tag, TagCategories
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
     PipelineNodeRunError,
@@ -55,6 +55,7 @@ OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance
 class OutputMessageTagMixin(BaseModel):
     tag: str = Field(
         default="",
+        max_length=Tag._meta.get_field("name").max_length,
         title="Message Tag",
         description="The tag that the output message should be tagged with",
     )
@@ -410,7 +411,7 @@ class ExtractStructuredDataNodeMixin:
             #     input=f"\nReference data:\n{new_reference_data}\nChunk data:\n{message_chunk}\n\n",
             #     output=f"\nExtracted data:\n{output}",
             # )
-            new_reference_data = self.update_reference_data(output, reference_data)
+            new_reference_data = self.update_reference_data(output, new_reference_data)
 
         if not extracted:
             return self.get_unextracted_output(context)

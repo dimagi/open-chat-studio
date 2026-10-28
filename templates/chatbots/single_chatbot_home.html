@@ -253,6 +253,7 @@
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
     <open-chat-studio-widget
+          theme="{% if dark_mode %}dark{% else %}light{% endif %}"
       id="chatbot-widget"
       show-button="false"
       visible="false"

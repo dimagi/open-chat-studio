@@ -44,4 +44,12 @@
       {% endfor %}
     </ul>
   {% endif %}
+  {% if team_settings %}
+    <h2 class="font-semibold my-2">Team settings</h2>
+    <ul class="list-disc list-inside">
+      {% for setting in team_settings %}
+        <li>{{ setting }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
 </div>

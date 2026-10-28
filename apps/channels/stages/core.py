@@ -791,7 +791,6 @@ class AbuseRulesStage(ProcessingStage):
         return ctx.human_message is not None and abuse_detection_enabled(ctx.experiment.team)
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        assert ctx.human_message is not None
         record_rule_hits(
             message=ctx.human_message,
             text=ctx.user_query or "",

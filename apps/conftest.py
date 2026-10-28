@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db import connections
+from silk.collector import DataCollector
 
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.teams.models import Flag
@@ -128,3 +129,12 @@ def _reset_team_context():
         yield
     finally:
         unset_current_team()
+
+
+@pytest.fixture(autouse=True)
+def _clear_silk_request():
+    """Clears the request silk keeps per thread after profiling one, which makes it EXPLAIN every later query."""
+    try:
+        yield
+    finally:
+        DataCollector().clear()

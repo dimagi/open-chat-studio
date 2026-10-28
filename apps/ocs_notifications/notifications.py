@@ -7,8 +7,8 @@ from django.utils.text import slugify
 
 from apps.chat.schemas import ModerationSkipReason
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.teams.utils import section_url
 from apps.utils.decorators import silence_exceptions
+from apps.utils.sunset import HttpSunset
 
 from .models import LevelChoices
 from .utils import create_notification
@@ -400,21 +400,20 @@ def deleted_model_notification(
     )
 
 
-@silence_exceptions(logger, log_message="Failed to create moderation provider deleted notification")
-def moderation_provider_deleted_notification(team, provider_id: int, provider_name: str) -> None:
-    """Notify a team that its selected moderation provider was deleted and moderation was turned off."""
+@silence_exceptions(logger, log_message="Failed to create HTTP sunset notification")
+def http_sunset_notification(spec: HttpSunset, team, experiments: list, milestone: str) -> None:
+    """Tell a team's channel admins that a surface their chatbots still use is being retired."""
     create_notification(
-        title="Moderation provider deleted",
-        message=(
-            f"The moderation provider '{provider_name}' was deleted, so message moderation has been turned off. "
-            "Add or select another moderation provider to turn it back on."
-        ),
+        title=spec.notification_title,
+        message=spec.build_message(experiments, milestone),
         level=LevelChoices.WARNING,
         team=team,
-        slug="moderation-provider-deleted",
-        event_data={"provider_id": provider_id},
-        permissions=["experiments.change_experiment", "experiments.change_participant"],
-        links={"Moderation settings": section_url(team_slug=team.slug, section_key="moderation")},
+        slug=spec.notification_slug,
+        # Keyed on the milestone so each one opens its own thread.
+        event_data={"sunset": spec.key, "milestone": milestone},
+        permissions=list(spec.audience_permissions),
+        links={**{e.name: e.get_absolute_url() for e in experiments}, "Migration guide": spec.successor_url},
+        once_per_event_type=True,
     )
 
 

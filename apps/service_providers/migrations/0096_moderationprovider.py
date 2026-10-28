@@ -11,7 +11,7 @@ import apps.utils.models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0093_deprecate_google_gemini_3_5_flash'),
+        ('service_providers', '0095_auto_model_sync_20261018'),
         ('teams', '0019_team_exportable_experiments'),
     ]
 

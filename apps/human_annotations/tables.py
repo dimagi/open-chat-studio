@@ -1,11 +1,11 @@
 from django.conf import settings
 from django.urls import reverse
-from django_tables2 import TemplateColumn, columns, tables
+from django_tables2 import columns, tables
 
 from apps.experiments.models import ExperimentSession
 from apps.generics import actions
 from apps.generics.actions import chip_action
-from apps.generics.tables import TemplateColumnWithCustomHeader
+from apps.generics.tables import TemplateColumn, TemplateColumnWithCustomHeader
 from apps.teams.utils import get_slug_for_team
 
 from .models import AnnotationItem, AnnotationQueue

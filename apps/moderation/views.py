@@ -1,6 +1,6 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
@@ -17,6 +17,7 @@ from apps.service_providers.views import CreateServiceProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.settings_sections import is_team_admin
 
 PROVIDER_SAVED_EVENT = "moderation-provider-saved"
 SETTINGS_FORM_TEMPLATE = "moderation/components/settings_form.html"
@@ -24,10 +25,11 @@ SETTINGS_FORM_TEMPLATE = "moderation/components/settings_form.html"
 
 @login_and_team_required
 @waffle_flag(Flags.ABUSE_DETECTION.slug)
-@permission_required(perm="teams.change_team", raise_exception=True)
 @require_POST
 def moderation_settings(request, team_slug: str):
     """Save the team's moderation switches and selected provider."""
+    if not is_team_admin(request):
+        raise PermissionDenied
     form = TeamModerationForm(data=request.POST, instance=request.team)
     if form.is_valid():
         form.save()
@@ -70,8 +72,8 @@ class ModerationProviderDialog(CreateServiceProvider):
 
     template_name = "moderation/components/provider_dialog.html"
 
-    def get_permission_required(self):
-        return (*super().get_permission_required(), "teams.change_team")
+    def has_permission(self):
+        return is_team_admin(self.request) and super().has_permission()
 
     def saved_response(self, *, obj, had_connection_test_warning: bool):
         # The settings form's own fields are posted along with the dialog, so unsaved switch changes are kept.

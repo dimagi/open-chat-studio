@@ -197,10 +197,8 @@ class TestUnblockParticipant:
             pytest.param("https://evil.example.com/", False, id="other_host"),
         ],
     )
-    def test_redirects_to_safe_next_url(
-        self, client, team_with_users, team_flag, admin, participant, next_url, follows_next
-    ):
-        team_flag(flag_name=FLAG, team=team_with_users)
+    @override_flag(FLAG, active=True)
+    def test_redirects_to_safe_next_url(self, client, team_with_users, admin, participant, next_url, follows_next):
         DeniedParticipantFactory.create(team=team_with_users, participant=participant)
         client.force_login(admin)
 

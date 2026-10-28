@@ -152,6 +152,14 @@ class LLMResponseWithPromptParams(_TagParams, _HistoryParams):
 @extend_schema_serializer(component_name="RouterNodeParams")
 class RouterNodeParams(_HistoryParams, _RouterParams):
     prompt = serializers.CharField(required=False, help_text="Prompt steering the LLM router's choice.")
+    route_descriptions = serializers.DictField(
+        child=serializers.CharField(allow_blank=True),
+        required=False,
+        help_text=(
+            "What each route is for, keyed by keyword. The ``{routes}`` prompt variable renders each "
+            "keyword with its description."
+        ),
+    )
 
 
 @extend_schema_serializer(component_name="StaticRouterNodeParams")

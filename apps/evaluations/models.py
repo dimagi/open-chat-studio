@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 import itertools
 import uuid
-from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -28,17 +27,15 @@ from apps.evaluations.rule_validation import (
     validate_field_in_schema,
     validate_tag_compatibility,
 )
-from apps.evaluations.utils import make_evaluation_messages_from_sessions
-from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
-from apps.teams.models import BaseTeamModel, Team
+from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Iterator
 
     from apps.evaluations.evaluators import EvaluatorResult
     from apps.evaluations.usage import EvaluatorUsageContext
@@ -46,6 +43,22 @@ if TYPE_CHECKING:
 # Messages written per transaction by EvaluationDataset.add_messages_stream. Bounds both the
 # INSERT size and how long the dataset row lock is held on any one batch.
 DATASET_ADD_BATCH_SIZE = 500
+
+
+def _boundary_aligned_batches(
+    messages: Iterable[EvaluationMessage],
+    batch_size: int,
+    batch_boundary: Callable[[EvaluationMessage], object],
+) -> Iterator[list[EvaluationMessage]]:
+    """Yield batches of at least batch_size messages that only close where the boundary value changes."""
+    batch: list[EvaluationMessage] = []
+    for message in messages:
+        if len(batch) >= batch_size and batch_boundary(message) != batch_boundary(batch[-1]):
+            yield batch
+            batch = []
+        batch.append(message)
+    if batch:
+        yield batch
 
 
 class EvaluationRunStatus(models.TextChoices):
@@ -265,41 +278,6 @@ class EvaluationMessage(BaseModel):
         raise_if_runs_in_flight(related_runs, "message")
         return super().delete(*args, **kwargs)
 
-    @classmethod
-    def create_from_sessions(
-        cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None
-    ) -> list[EvaluationMessage]:
-        base_queryset = (
-            ChatMessage.objects.filter(
-                chat__experiment_session__team=team,
-            )
-            .select_related(
-                "chat__experiment_session",
-                "chat__experiment_session__participant",
-                "chat__experiment_session__experiment",
-            )
-            .prefetch_related("comments", "tags")
-            .order_by("chat__experiment_session__created_at", "created_at")
-        )
-
-        message_ids_per_session = defaultdict(list)
-        if external_session_ids:
-            regular_messages = base_queryset.filter(chat__experiment_session__external_id__in=external_session_ids)
-            for session_id, message_id in regular_messages.values_list("chat__experiment_session__external_id", "id"):
-                message_ids_per_session[session_id].append(message_id)
-
-        if filtered_session_ids and filter_params is not None:
-            filtered_messages = base_queryset.filter(chat__experiment_session__external_id__in=filtered_session_ids)
-            message_filter = ChatMessageFilter()
-            filtered_messages = message_filter.apply(filtered_messages, filter_params, timezone)
-            for session_id, message_id in filtered_messages.values_list("chat__experiment_session__external_id", "id"):
-                message_ids_per_session[session_id].append(message_id)
-
-        if not message_ids_per_session:
-            return []
-
-        return make_evaluation_messages_from_sessions(message_ids_per_session)
-
     def as_langchain_messages(self) -> list[BaseMessage]:
         """
         Converts this message instance into a list of Langchain `BaseMessage` objects.
@@ -483,6 +461,7 @@ class EvaluationDataset(BaseTeamModel):
         *,
         batch_size: int = DATASET_ADD_BATCH_SIZE,
         progress_callback: Callable[[int, int], None] | None = None,
+        batch_boundary: Callable[[EvaluationMessage], object] | None = None,
     ) -> tuple[list[int], int]:
         """Persist and link messages from an iterable, committing one batch at a time.
 
@@ -493,6 +472,9 @@ class EvaluationDataset(BaseTeamModel):
         stream. Two concurrent streams therefore interleave between batches without either
         inserting a duplicate.
 
+        A *batch_boundary* keeps every group of messages sharing a boundary value in one batch, at
+        the cost of one oversized batch when a group exceeds batch_size.
+
         Returns (created_ids, skipped_count) — ids rather than instances, since holding 10k
         EvaluationMessage objects is the memory problem this method exists to avoid.
 
@@ -501,8 +483,12 @@ class EvaluationDataset(BaseTeamModel):
         """
         created_ids: list[int] = []
         skipped = 0
-        # strict=False: the final batch is expected to be short.
-        for batch in itertools.batched(messages, batch_size, strict=False):
+        if batch_boundary is None:
+            # strict=False: the final batch is expected to be short.
+            batches = itertools.batched(messages, batch_size, strict=False)
+        else:
+            batches = _boundary_aligned_batches(messages, batch_size, batch_boundary)
+        for batch in batches:
             keyed_batch = [(message, self._dedup_key(message)) for message in batch]
             with transaction.atomic():
                 EvaluationDataset.objects.select_for_update().get(pk=self.pk)
