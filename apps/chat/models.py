@@ -276,11 +276,13 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return self.message_type == ChatMessageType.HUMAN
 
     @property
+    def is_flagged(self) -> bool:
+        return self.moderation_status == ModerationStatus.FLAGGED
+
+    @property
     def is_excluded_from_history(self) -> bool:
         """A human message that moderation flagged, or that led to a refused or filtered turn, is not replayed."""
-        return self.is_human_message and (
-            self.moderation_status == ModerationStatus.FLAGGED or ChatMessageMetadataKeys.MODEL_REFUSED in self.metadata
-        )
+        return self.is_human_message and (self.is_flagged or ChatMessageMetadataKeys.MODEL_REFUSED in self.metadata)
 
     @property
     def is_summary(self):

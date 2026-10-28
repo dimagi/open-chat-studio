@@ -16,7 +16,7 @@ from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -576,7 +576,7 @@ class ConsentFlowStage(ProcessingStage):
             return None
         if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
             return None
-        if first_human_message.moderation_status == ModerationStatus.FLAGGED:
+        if first_human_message.is_flagged:
             return None
         return first_human_message
 
