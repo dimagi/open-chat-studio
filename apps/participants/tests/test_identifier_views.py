@@ -16,99 +16,101 @@ class TestAllParticipantIdentifiers:
         client.login(username=user.username, password="password")
         return user
 
-    def test_returns_identifiers_and_remote_ids(self, client, team_with_users):
+    @pytest.mark.parametrize(
+        ("field", "expected"),
+        [
+            pytest.param("identifier", ["alice@example.com", "bob@example.com"], id="identifier"),
+            pytest.param("remote_id", ["remote-1"], id="remote-id-skips-empty"),
+        ],
+    )
+    def test_returns_values_for_field(self, client, team_with_users, field, expected):
         team = team_with_users
         self._login(client, team)
         ParticipantFactory.create(team=team, identifier="alice@example.com", remote_id="remote-1")
         ParticipantFactory.create(team=team, identifier="bob@example.com", remote_id="")
 
-        response = client.get(self._url(team))
+        response = client.get(self._url(team), {"field": field})
 
         assert response.status_code == 200
-        data = response.json()
-        assert set(data["identifiers"]) == {"alice@example.com", "bob@example.com"}
-        assert data["remote_ids"] == ["remote-1"]
-        assert data["truncated"] is False
+        assert response.json() == {"values": expected, "has_more": False}
 
-    def test_search_filters_by_identifier(self, client, team_with_users):
+    @pytest.mark.parametrize(
+        "field",
+        [
+            pytest.param(None, id="missing"),
+            pytest.param("name", id="not-allowed"),
+        ],
+    )
+    def test_rejects_invalid_field(self, client, team_with_users, field):
         team = team_with_users
         self._login(client, team)
-        ParticipantFactory.create(team=team, identifier="alice@example.com", remote_id="")
-        ParticipantFactory.create(team=team, identifier="bob@example.com", remote_id="")
 
-        response = client.get(self._url(team), {"q": "alice"})
+        params = {"field": field} if field else {}
+        response = client.get(self._url(team), params)
 
-        data = response.json()
-        assert data["identifiers"] == ["alice@example.com"]
-        assert data["remote_ids"] == []
-        assert data["truncated"] is False
+        assert response.status_code == 400
 
-    def test_search_filters_by_remote_id(self, client, team_with_users):
+    @pytest.mark.parametrize(
+        ("field", "query", "expected"),
+        [
+            pytest.param("identifier", "alice", ["Alice@Example.com"], id="identifier-case-insensitive"),
+            pytest.param("remote_id", "match", ["match-remote"], id="remote-id"),
+        ],
+    )
+    def test_search(self, client, team_with_users, field, query, expected):
         team = team_with_users
         self._login(client, team)
-        ParticipantFactory.create(team=team, identifier="alice@example.com", remote_id="match-remote")
+        ParticipantFactory.create(team=team, identifier="Alice@Example.com", remote_id="match-remote")
         ParticipantFactory.create(team=team, identifier="bob@example.com", remote_id="other-remote")
 
-        response = client.get(self._url(team), {"q": "match"})
+        data = client.get(self._url(team), {"field": field, "q": query}).json()
 
-        data = response.json()
-        assert data["identifiers"] == []
-        assert data["remote_ids"] == ["match-remote"]
+        assert data["values"] == expected
 
-    def test_search_is_case_insensitive(self, client, team_with_users):
-        team = team_with_users
-        self._login(client, team)
-        ParticipantFactory.create(team=team, identifier="Alice@Example.com", remote_id="")
-
-        response = client.get(self._url(team), {"q": "alice"})
-
-        assert response.json()["identifiers"] == ["Alice@Example.com"]
-
-    def test_truncated_flag_set_when_results_exceed_limit(self, client, team_with_users, monkeypatch):
+    def test_pages_through_values(self, client, team_with_users, monkeypatch):
         monkeypatch.setattr("apps.participants.views.PARTICIPANT_IDENTIFIER_LIMIT", 2)
         team = team_with_users
         self._login(client, team)
         for i in range(3):
-            ParticipantFactory.create(team=team, identifier=f"user{i}@example.com", remote_id="")
+            ParticipantFactory.create(team=team, identifier=f"user{i}@example.com")
 
-        response = client.get(self._url(team))
+        first = client.get(self._url(team), {"field": "identifier"}).json()
+        second = client.get(self._url(team), {"field": "identifier", "after": first["values"][-1]}).json()
 
-        data = response.json()
-        assert len(data["identifiers"]) == 2
-        assert data["truncated"] is True
+        assert first == {"values": ["user0@example.com", "user1@example.com"], "has_more": True}
+        assert second == {"values": ["user2@example.com"], "has_more": False}
 
-    def test_not_truncated_when_distinct_values_fit_limit(self, client, team_with_users, monkeypatch):
+    def test_has_more_false_when_distinct_values_fit_limit(self, client, team_with_users, monkeypatch):
         monkeypatch.setattr("apps.participants.views.PARTICIPANT_IDENTIFIER_LIMIT", 2)
         team = team_with_users
         self._login(client, team)
         for i in range(3):
             ParticipantFactory.create(team=team, identifier=f"user{i}@example.com", remote_id="shared")
 
-        data = client.get(self._url(team), {"q": "shared"}).json()
+        data = client.get(self._url(team), {"field": "remote_id"}).json()
 
-        assert data["remote_ids"] == ["shared"]
-        assert data["truncated"] is False
+        assert data == {"values": ["shared"], "has_more": False}
 
     def test_does_not_leak_other_team_participants(self, client, team_with_users):
         team = team_with_users
         self._login(client, team)
-        ParticipantFactory.create(team=team, identifier="mine@example.com", remote_id="")
-        ParticipantFactory.create(identifier="other@example.com", remote_id="")  # different team
+        ParticipantFactory.create(team=team, identifier="mine@example.com")
+        ParticipantFactory.create(identifier="other@example.com")  # different team
 
-        data = client.get(self._url(team)).json()
-        assert data["identifiers"] == ["mine@example.com"]
+        data = client.get(self._url(team), {"field": "identifier"}).json()
+        assert data["values"] == ["mine@example.com"]
 
     def test_scoped_to_experiment(self, client, team_with_users):
         team = team_with_users
         self._login(client, team)
         experiment = ExperimentFactory.create(team=team)
-        in_session = ParticipantFactory.create(team=team, identifier="in@example.com", remote_id="")
+        in_session = ParticipantFactory.create(team=team, identifier="in@example.com")
         ExperimentSessionFactory.create(team=team, experiment=experiment, participant=in_session)
-        ParticipantFactory.create(team=team, identifier="out@example.com", remote_id="")
+        ParticipantFactory.create(team=team, identifier="out@example.com")
 
         url = reverse(
             "participants:participant_identifier",
             kwargs={"team_slug": team.slug, "experiment_id": experiment.id},
         )
-        data = client.get(url).json()
-        assert data["identifiers"] == ["in@example.com"]
+        data = client.get(url, {"field": "identifier"}).json()
+        assert data["values"] == ["in@example.com"]

@@ -476,6 +476,7 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
 
 
 PARTICIPANT_IDENTIFIER_LIMIT = 200
+PARTICIPANT_IDENTIFIER_FIELDS = ("identifier", "remote_id")
 
 
 @permission_required("experiments.view_participant")
@@ -493,27 +494,19 @@ def all_participant_identifiers(request, team_slug: str):
 
 
 def _get_identifiers_response(participants, request):
-    search = request.GET.get("q", "").strip()
-    identifiers, identifiers_truncated = _distinct_field_values(participants, "identifier", search)
-    remote_ids, remote_ids_truncated = _distinct_field_values(participants, "remote_id", search)
-    return JsonResponse(
-        {
-            "identifiers": identifiers,
-            "remote_ids": remote_ids,
-            "truncated": identifiers_truncated or remote_ids_truncated,
-        },
-        safe=False,
-    )
+    """Return one page of distinct values of the requested field, sorted, starting after the `after` value."""
+    field = request.GET.get("field")
+    if field not in PARTICIPANT_IDENTIFIER_FIELDS:
+        return JsonResponse({"error": f"field must be one of {', '.join(PARTICIPANT_IDENTIFIER_FIELDS)}"}, status=400)
 
-
-def _distinct_field_values(participants, field: str, search: str) -> tuple[list[str], bool]:
-    """Return up to PARTICIPANT_IDENTIFIER_LIMIT distinct non-empty values of `field` and whether more exist."""
     queryset = participants.exclude(**{field: ""})
-    if search:
+    if search := request.GET.get("q", "").strip():
         queryset = queryset.filter(**{f"{field}__icontains": search})
+    if after := request.GET.get("after"):
+        queryset = queryset.filter(**{f"{field}__gt": after})
     limit = PARTICIPANT_IDENTIFIER_LIMIT
     values = list(queryset.order_by(field).values_list(field, flat=True).distinct()[: limit + 1])
-    return values[:limit], len(values) > limit
+    return JsonResponse({"values": values[:limit], "has_more": len(values) > limit})
 
 
 @permission_required(IMPORT_PERMISSIONS)

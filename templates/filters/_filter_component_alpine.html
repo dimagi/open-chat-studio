@@ -17,6 +17,8 @@
       nlLoading: false,
       nlError: '',
       filterSlug: "{{ df_filter_slug }}",
+      // Columns whose options are searched on the server, mapped to the endpoint's `field` parameter
+      serverOptionFields: {participant: 'identifier', remote_id: 'remote_id'},
       starredFilters: [],
       savedFilters: [],
       savedFiltersLoaded: false,
@@ -33,9 +35,8 @@
         })
 
 
-        const App = SiteJS.app;
         this._participantIdentifierUrl = "{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}";
-        this._participantFetchTimers = {};
+        this._optionsSearchTimers = {};
         this.loadFiltersFromQueryString(window.location.search);
 
         // Load starred filters on initialization
@@ -100,9 +101,9 @@
           filter.value = '';
           filter.selectedValues = [];
           filter.searchQuery = '';
-          if (column === 'participant' || column === 'remote_id') {
+          if (this.serverOptionFields[column]) {
             filter.filteredOptions = [];
-            this.fetchParticipantOptions(index, '');
+            this.searchServerOptions(index, '');
           } else if (['choice', 'string', 'exclusive_choice'].includes(this.filterData.columns[column].type)) {
             filter.filteredOptions = [...this.filterData.columns[column].options || []];
           } else {
@@ -154,48 +155,79 @@
         }
       },
 
-      fetchParticipantOptions(filterIndex, query) {
+      searchServerOptions(filterIndex, query) {
         const filter = this.filterData.filters[filterIndex];
         if (!filter) return;
-        const requestedQuery = (query || '').trim();
+        // Each new search starts a new list; responses to older requests are ignored
+        filter.optionsRequestId = (filter.optionsRequestId || 0) + 1;
+        filter.optionsQuery = (query || '').trim();
+        filter.optionsHasMore = false;
+        filter.optionsLoadingMore = false;
+        this.requestServerOptions(filter, false);
+      },
+
+      loadMoreOptions(event, index) {
+        const filter = this.filterData.filters[index];
+        if (!filter || !this.serverOptionFields[filter.column]) return;
+        if (filter.optionsLoadingMore || !filter.optionsHasMore) return;
+        const el = event.target;
+        if (el.scrollTop + el.clientHeight < el.scrollHeight - 40) return;
+        filter.optionsLoadingMore = true;
+        this.requestServerOptions(filter, true);
+      },
+
+      requestServerOptions(filter, append) {
+        const requestId = filter.optionsRequestId;
+        const field = this.serverOptionFields[filter.column];
         const url = new URL(this._participantIdentifierUrl, window.location.origin);
-        if (requestedQuery) {
-          url.searchParams.set('q', requestedQuery);
+        url.searchParams.set('field', field);
+        if (filter.optionsQuery) {
+          url.searchParams.set('q', filter.optionsQuery);
         }
-        const App = SiteJS.app;
+        if (append) {
+          url.searchParams.set('after', filter.filteredOptions.at(-1));
+        }
         fetch(url.toString(), {
           method: 'GET',
           credentials: 'same-origin',
           headers: {
-            'X-CSRFToken': App.Cookies.get('csrftoken'),
+            'X-CSRFToken': SiteJS.app.Cookies.get('csrftoken'),
             'Accept': 'application/json'
           }
         })
-          .then(res => res.json())
-          .then(data => {
-            // Discard stale responses: a newer request may have already resolved
-            if ((filter.searchQuery || '').trim() !== requestedQuery) return;
-            const col = filter.column;
-            if (col === 'participant') {
-              filter.filteredOptions = data.identifiers || [];
-            } else if (col === 'remote_id') {
-              filter.filteredOptions = data.remote_ids || [];
-            }
+          .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
           })
-          .catch(err => console.error("Failed to load participant options", err));
+          .then(data => {
+            if (filter.optionsRequestId !== requestId || this.serverOptionFields[filter.column] !== field) return;
+            if (append) {
+              filter.filteredOptions.push(...data.values);
+            } else {
+              filter.filteredOptions = data.values;
+            }
+            filter.optionsHasMore = data.has_more;
+          })
+          .catch(err => console.error("Failed to load filter options", err))
+          .finally(() => {
+            if (append && filter.optionsRequestId === requestId) {
+              filter.optionsLoadingMore = false;
+            }
+          });
       },
 
-      filterDropdownOptions(index) {
+      filterDropdownOptions(index, searchInput) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
         if (!column || !this.filterData.columns[column]) return;
+        // Show new results from the top. A list left scrolled to the bottom would also load extra pages
+        searchInput.closest('.overflow-y-auto')?.scrollTo({top: 0});
 
-        // Participant and remote_id columns use server-side search
-        if (column === 'participant' || column === 'remote_id') {
-          clearTimeout(this._participantFetchTimers[index]);
+        if (this.serverOptionFields[column]) {
+          clearTimeout(this._optionsSearchTimers[index]);
           const query = (filter.searchQuery || '').trim();
-          this._participantFetchTimers[index] = setTimeout(() => {
-            this.fetchParticipantOptions(index, query);
+          this._optionsSearchTimers[index] = setTimeout(() => {
+            this.searchServerOptions(index, query);
           }, 300);
           return;
         }
@@ -277,8 +309,8 @@
 
         // Seed participant/remote_id filteredOptions for any pre-loaded filters
         this.filterData.filters.forEach((filter, idx) => {
-          if (filter.column === 'participant' || filter.column === 'remote_id') {
-            this.fetchParticipantOptions(idx, '');
+          if (this.serverOptionFields[filter.column]) {
+            this.searchServerOptions(idx, '');
           }
         });
 
@@ -745,8 +777,8 @@
           this.filterData.filters = newFilters;
           // Seed participant/remote_id filteredOptions via server since column.options is no longer pre-loaded
           newFilters.forEach((filter, idx) => {
-            if (filter.column === 'participant' || filter.column === 'remote_id') {
-              this.fetchParticipantOptions(idx, '');
+            if (this.serverOptionFields[filter.column]) {
+              this.searchServerOptions(idx, '');
             }
           });
           this.triggerFilterChange();
