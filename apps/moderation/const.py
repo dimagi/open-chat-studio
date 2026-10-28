@@ -1,6 +1,9 @@
 MODERATION_WAIT_TIMEOUT = 10
 """Seconds `ModerationResultStage` waits for the moderation task after the bot has answered."""
 
+REQUEST_TIMEOUT_SECONDS = 2
+"""Timeout for one moderation provider request."""
+
 STRIKE_CATEGORIES = frozenset(
     {
         "sexual/minors",

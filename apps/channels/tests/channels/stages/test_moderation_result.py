@@ -34,7 +34,7 @@ STRIKE_OUTPUT = {"illicit/violent": {"flagged": True, "score": 0.84}, "hate": {"
 
 
 def _ok(output: dict) -> dict:
-    return {"status": "ok", "output": output}
+    return {"output": output, "skip_reason": None}
 
 
 def _terminal_stage_types(channel_cls):
@@ -110,9 +110,9 @@ class TestModerationResultStage:
         ("wait", "expected_reason"),
         [
             pytest.param(
-                {"return_value": {"status": "skipped", "reason": "rate_limited"}}, "rate_limited", id="rate_limited"
+                {"return_value": {"output": None, "skip_reason": "rate_limited"}}, "rate_limited", id="rate_limited"
             ),
-            pytest.param({"return_value": {"status": "skipped", "reason": "error"}}, "error", id="task_error"),
+            pytest.param({"return_value": {"output": None, "skip_reason": "error"}}, "error", id="task_error"),
             pytest.param(
                 {"side_effect": connection_error(openai.APIConnectionError)}, "error", id="task_failed_after_retries"
             ),

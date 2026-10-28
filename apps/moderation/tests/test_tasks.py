@@ -4,6 +4,7 @@ import openai
 import pytest
 
 from apps.chat.models import ChatMessageType
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT, REQUEST_TIMEOUT_SECONDS
 from apps.moderation.tasks import moderate_message
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.moderation_service import ModerationRateLimited
@@ -38,8 +39,8 @@ def test_returns_the_output():
 
     moderate.assert_called_once_with("hello")
     assert result.get() == {
-        "status": "ok",
         "output": {"illicit": {"flagged": True, "score": 0.9}, "hate": {"flagged": False, "score": 0.01}},
+        "skip_reason": None,
     }
 
 
@@ -65,7 +66,7 @@ def test_is_skipped_without_retry(side_effect, delete_provider, expected_reason,
     with mock.patch(MODERATE, side_effect=side_effect) as moderate:
         result = _run(provider.id)
 
-    assert result.get() == {"status": "skipped", "reason": expected_reason}
+    assert result.get() == {"output": None, "skip_reason": expected_reason}
     assert moderate.call_count == expected_calls
 
 
@@ -96,7 +97,7 @@ def test_retry_that_succeeds_returns_the_output():
     with mock.patch(MODERATE, side_effect=[connection_error(openai.APIConnectionError), output]):
         result = _run(provider.id)
 
-    assert result.get()["status"] == "ok"
+    assert result.get()["output"] == {"hate": {"flagged": False, "score": 0.01}}
 
 
 @pytest.mark.django_db()
@@ -106,7 +107,7 @@ def test_skips_a_deleted_message():
     with mock.patch(MODERATE) as moderate:
         result = _run(provider.id, message_id=0)
 
-    assert result.get() == {"status": "skipped", "reason": "error"}
+    assert result.get() == {"output": None, "skip_reason": "error"}
     moderate.assert_not_called()
 
 
@@ -117,3 +118,10 @@ def test_writes_nothing_to_the_database(django_assert_num_queries):
 
     with mock.patch(MODERATE, return_value=ModerationOutput({})), django_assert_num_queries(2):
         _run(provider.id, message_id=message.id)
+
+
+def test_retries_finish_before_the_wait_times_out():
+    """The task's worst case (every request times out) fits inside the stage's wait. Queue time is not counted."""
+    attempts = moderate_message.max_retries + 1
+    backoff = sum(moderate_message.retry_backoff * 2**retry for retry in range(moderate_message.max_retries))
+    assert REQUEST_TIMEOUT_SECONDS * attempts + backoff < MODERATION_WAIT_TIMEOUT

@@ -2,8 +2,9 @@ from unittest import mock
 
 import pytest
 from celery.exceptions import TimeoutError as CeleryTimeoutError
+from django.db import DatabaseError
 
-from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT
 from apps.moderation.services import (
@@ -11,11 +12,14 @@ from apps.moderation.services import (
     record_moderation_result,
     record_rule_hits,
     remove_turn_from_pipeline_histories,
+    replace_bot_reply,
     start_moderation,
     strike_categories,
 )
+from apps.moderation.tasks import moderate_message
 from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryTypes
 from apps.pipelines.repository import ORMRepository
+from apps.service_providers.moderation_service import ModerationRateLimited
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
@@ -168,20 +172,24 @@ def test_start_moderation(moderation_enabled, has_provider, text, started):
     ("wait", "expected"),
     [
         pytest.param(
-            {"return_value": {"status": "ok", "output": {"hate": {"flagged": False, "score": 0.1}}}},
+            {"return_value": {"output": {"hate": {"flagged": False, "score": 0.1}}, "skip_reason": None}},
             (ModerationOutput({"hate": ModerationCategory(flagged=False, score=0.1)}), None),
             id="ok",
         ),
         pytest.param(
-            {"return_value": {"status": "skipped", "reason": "rate_limited"}}, (None, "rate_limited"), id="skipped"
+            {"return_value": {"output": None, "skip_reason": "rate_limited"}}, (None, "rate_limited"), id="skipped"
         ),
         pytest.param({"side_effect": CeleryTimeoutError()}, (None, "timeout"), id="timeout"),
         pytest.param({"side_effect": RuntimeError("boom")}, (None, "error"), id="task_raised"),
         pytest.param(
-            {"return_value": {"status": "ok", "output": {"hate": {"flagged": True, "score": 2}}}},
+            {"return_value": {"output": {"hate": {"flagged": True, "score": 2}}, "skip_reason": None}},
             (None, "error"),
             id="invalid_output",
         ),
+        pytest.param(
+            {"return_value": {"output": None, "skip_reason": "unknown"}}, (None, "error"), id="unknown_skip_reason"
+        ),
+        pytest.param({"return_value": {"status": "ok"}}, (None, "error"), id="unexpected_shape"),
     ],
 )
 def test_get_moderation_result(wait, expected):
@@ -194,6 +202,27 @@ def test_get_moderation_result(wait, expected):
     async_result.return_value.get.assert_called_once_with(
         timeout=MODERATION_WAIT_TIMEOUT, disable_sync_subtasks=False, interval=0.1
     )
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("moderate", "expected"),
+    [
+        pytest.param({"return_value": OUTPUT}, (OUTPUT, None), id="output"),
+        pytest.param({"side_effect": ModerationRateLimited("429")}, (None, "rate_limited"), id="skipped"),
+    ],
+)
+def test_get_moderation_result_reads_the_task_result(moderate, expected):
+    message = _human_message()
+    provider = ModerationProviderFactory.create()
+    with mock.patch("apps.service_providers.moderation_service.OpenAIModerationService.moderate", **moderate):
+        task_result = moderate_message.apply(
+            kwargs={"chat_message_id": message.id, "moderation_provider_id": provider.id}
+        ).get()
+
+    with mock.patch("apps.moderation.services.AsyncResult") as async_result:
+        async_result.return_value.get.return_value = task_result
+        assert get_moderation_result("task-1") == expected
 
 
 @pytest.mark.django_db()
@@ -237,3 +266,38 @@ def test_get_moderation_result_logs_a_failed_task_as_a_warning(error, caplog):
 
     assert [record.levelname for record in caplog.records] == ["WARNING"]
     assert caplog.records[0].exc_info is None
+
+
+def _bot_reply():
+    return ChatMessageFactory.create(
+        chat=ChatFactory.create(),
+        message_type=ChatMessageType.AI,
+        content="The bot's answer",
+        metadata={ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS: [1], "trace_info": {"trace_id": "t-1"}},
+    )
+
+
+@pytest.mark.django_db()
+def test_replace_bot_reply_drops_attachments():
+    message = _bot_reply()
+
+    replace_bot_reply(message=message, text="Flagged")
+
+    message.refresh_from_db()
+    assert message.content == "Flagged"
+    assert message.metadata == {"trace_info": {"trace_id": "t-1"}}
+
+
+@pytest.mark.django_db()
+def test_replace_bot_reply_restores_the_message_when_the_save_fails():
+    message = _bot_reply()
+    original_metadata = message.metadata
+
+    with (
+        mock.patch.object(message, "save", side_effect=DatabaseError("connection lost")),
+        pytest.raises(DatabaseError),
+    ):
+        replace_bot_reply(message=message, text="Flagged")
+
+    assert message.content == "The bot's answer"
+    assert message.metadata == original_metadata

@@ -11,13 +11,14 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext, generate_user_message
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.stages.core import RESET_COMMAND
-from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
+from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.files.models import File, FilePurpose
 from apps.moderation.const import FLAGGED_MESSAGE
 from apps.moderation.services import (
     get_moderation_result,
     record_moderation_result,
     remove_turn_from_pipeline_histories,
+    replace_bot_reply,
 )
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
@@ -120,21 +121,8 @@ class ModerationResultStage(ProcessingStage):
 
     def _save_reply(self, ctx: MessageProcessingContext, reply: str) -> None:
         """Save `reply` as the bot response, without attachments, and make it the reply to send."""
-        bot_response = ctx.bot_response
-        assert bot_response is not None
-        previous_content, previous_metadata = bot_response.content, bot_response.metadata
-        bot_response.content = reply
-        bot_response.metadata = {
-            key: value
-            for key, value in previous_metadata.items()
-            if key not in ChatMessageMetadataKeys.attachment_keys()
-        }
-        try:
-            bot_response.save(update_fields=["content", "metadata", "updated_at"])
-        except Exception:
-            # Keep the in-memory message, which web and API channels return, matching the database.
-            bot_response.content, bot_response.metadata = previous_content, previous_metadata
-            raise
+        assert ctx.bot_response is not None
+        replace_bot_reply(message=ctx.bot_response, text=reply)
         ctx.replace_response(reply)
 
 
