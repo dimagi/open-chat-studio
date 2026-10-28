@@ -14,7 +14,7 @@ This project has GitHub Actions workflows that use Claude Code for [autonomous i
 
 **Automatic behaviours** (no action needed):
 
-- **PR Code Review** — every non-draft, non-fork, non-Dependabot PR automatically receives a Claude code review with findings posted as inline diff comments. [How it works](#pr-code-review)
+- **PR Code Review** — every non-fork, non-Dependabot PR, draft or not, automatically receives a Claude code review with findings posted as inline diff comments. [How it works](#pr-code-review)
 - **Auto-repair** — Claude fixes its own CI failures and addresses reviewer comments automatically, so PRs are in a clean state by the time you review them. [How it works](#automatic-follow-up)
 - **Dependabot review** — every Dependabot PR includes a Claude-written assessment: what changed, whether anything is breaking, and a clear merge recommendation, saving engineers time. [How it works](#dependabot-pr-review)
 
@@ -130,9 +130,9 @@ This workflow can also be triggered manually via **Actions > Claude Dependabot P
 
 ### PR Code Review
 
-Every non-draft, non-fork, non-Dependabot PR triggers an automated code review in two stages. [OpenCodeReview](https://github.com/alibaba/open-code-review) runs first and posts findings as **inline comments**. If it finds nothing, the Claude review runs and posts its findings as inline comments on the changed lines. If OCR has findings, fix them and push; the Claude review runs on that push. The `Automated review verdict` check fails while either stage has findings.
+Every non-fork, non-Dependabot PR, including drafts, triggers an automated code review in two stages. [OpenCodeReview](https://github.com/alibaba/open-code-review) runs first and posts findings as **inline comments**. If it finds nothing, the Claude review runs and posts its findings as inline comments on the changed lines. If OCR has findings, fix them and push; the Claude review runs on that push. The `Automated review verdict` check fails while either stage has findings.
 
-It runs when a PR is opened, when it is marked **ready for review**, and on every push. Drafts are skipped — which is why the [development workflow](../getting-started/dev-workflow.md#then-hand-it-over) has you clean up the PR as a draft first, then flip it to ready to get this review. There is no manual trigger; to get a fresh review, push a new commit.
+It runs when a PR is opened, when it is marked **ready for review**, and on every push, so you get feedback while the PR is still a draft. There is no manual trigger; to get a fresh review, push a new commit.
 
 !!! note
 
