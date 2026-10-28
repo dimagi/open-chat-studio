@@ -54,11 +54,6 @@
         window.addEventListener('popstate', () => {
           this.setLabelFromURL();
         });
-        Object.entries(this.filterData.columns).forEach(([key, column]) => {
-          if (column.type === 'string' && !column.options) {
-            column.operators = column.operators.filter(item => item !== 'any of');
-          }
-        })
       },
 
       toggleFilters() {

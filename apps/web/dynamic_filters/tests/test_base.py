@@ -2,8 +2,9 @@ import pytest
 from waffle.testutils import override_flag
 
 from apps.experiments.filters import ExperimentSessionFilter
+from apps.participants.filters import ParticipantFilter
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.web.dynamic_filters.base import ChoiceColumnFilter
+from apps.web.dynamic_filters.base import ChoiceColumnFilter, Operators
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
@@ -34,3 +35,18 @@ def test_columns_handles_a_mix_of_overridden_and_default_prepare(team):
         columns = ExperimentSessionFilter.columns(team)
 
     assert set(columns) == {f.query_param for f in ExperimentSessionFilter.filters}
+
+
+@pytest.mark.parametrize(
+    ("filter_class", "query_param", "has_any_of"),
+    [
+        pytest.param(ExperimentSessionFilter, "participant", True, id="session-participant"),
+        pytest.param(ExperimentSessionFilter, "session_id", False, id="session-id"),
+        pytest.param(ParticipantFilter, "participant", True, id="participants-page-participant"),
+        pytest.param(ParticipantFilter, "remote_id", True, id="participants-page-remote-id"),
+    ],
+)
+def test_string_columns_offer_any_of_only_when_allowed(filter_class, query_param, has_any_of):
+    column = next(f for f in filter_class.filters if f.query_param == query_param)
+
+    assert (Operators.ANY_OF in column.model_dump()["operators"]) is has_any_of

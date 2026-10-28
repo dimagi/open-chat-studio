@@ -205,6 +205,16 @@ class ChoiceColumnFilter(ColumnFilter):
 class StringColumnFilter(ColumnFilter):
     type: str = TYPE_STRING
     columns: list[str] = Field(default_factory=list)
+    # 'any of' needs a list of values to pick from, which the UI only fetches for some columns
+    allow_any_of: bool = False
+
+    @computed_field
+    @property
+    def operators(self) -> list[Operators]:
+        operators = FIELD_TYPE_FILTERS[self.type]
+        if self.allow_any_of:
+            return operators
+        return [op for op in operators if op != Operators.ANY_OF]
 
     def _apply_with_lookup(self, queryset, lookup, value):
         """Apply filter with optional OR logic across multiple columns.
