@@ -143,6 +143,10 @@ jobs:
     timeout-minutes: 15
     # A failed assessment must not turn the PR red.
     continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
 
     steps:
       - name: Harden the runner
@@ -167,7 +171,6 @@ jobs:
         uses: anthropics/claude-code-action@v1.0.234
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUTPUT_FILE: ${{ runner.temp }}/merge-risk.md
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
