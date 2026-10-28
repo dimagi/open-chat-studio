@@ -57,10 +57,11 @@ version section when a release is cut.
      backing-service versions, resource requirements, new external
      dependencies. -->
 - Abuse detection (`flag_abuse_detection`) runs a `moderate_message` task on the
-  `background` Celery queue while the chat task that started it waits up to 10
-  seconds for the result. The `background` queue must be served by a worker other
-  than the one running chat tasks; with one single-process worker serving both,
-  every moderated message is recorded as not moderated (`timeout`). (#4704)
+  `celery` (chat) queue while the chat task that started it waits up to 30
+  seconds for the result. The worker serving that queue must run more than one
+  task at a time (for example `--pool threads`); a single-process worker cannot
+  start the moderation task while the chat task waits, so every moderated message
+  is recorded as not moderated (`timeout`). (#4704)
 
 ### Deprecated
 <!-- Signals intent to remove. Every entry names the earliest version in which
