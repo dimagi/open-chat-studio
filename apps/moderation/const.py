@@ -1,4 +1,4 @@
-MODERATION_WAIT_TIMEOUT = 10
+MODERATION_WAIT_TIMEOUT = 30
 """Seconds `ModerationResultStage` waits for the moderation task after the bot has answered."""
 
 REQUEST_TIMEOUT_SECONDS = 2

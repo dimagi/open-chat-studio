@@ -18,7 +18,7 @@ logger = logging.getLogger("ocs.moderation")
 # The retries must finish inside `MODERATION_WAIT_TIMEOUT`; `test_retries_finish_before_the_wait_times_out`
 # checks this.
 @shared_task(
-    queue=Queues.BACKGROUND,
+    queue=Queues.CHAT,
     autoretry_for=(APIConnectionError, InternalServerError),
     max_retries=2,
     retry_backoff=1,
