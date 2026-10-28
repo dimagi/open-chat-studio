@@ -1,0 +1,29 @@
+{% load i18n %}
+<section class="app-card" id="moderation">
+  <h2 class="pg-subtitle font-bold">{% translate "Moderation" %}</h2>
+  <span class="text-neutral-500 section-subtitle">{% translate "Check participant messages for abuse and block participants from this team's chatbots." %}</span>
+
+  <div class="flex flex-col gap-4 mt-2">
+    {% include "moderation/components/settings_form.html" %}
+
+    {% if can_view_denylist %}
+      <div class="app-card" id="blocked-participants">
+        <h3 class="pg-subtitle font-bold text-sm">{% translate "Blocked participants" %}</h3>
+        <span class="text-neutral-500 section-subtitle">{% translate "Blocked participants get no replies from any of this team's chatbots." %}</span>
+        <div id="denied-participants-table-container" class="overflow-x-auto mt-2"
+             hx-get="{{ denylist_table_url }}" hx-trigger="load"></div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if can_edit_moderation %}
+  <dialog id="moderation_provider_dialog" class="modal"
+          x-data
+          @moderation-provider-saved.window="$el.close()">
+    <div class="modal-box" id="moderation-provider-dialog-body">
+      {% comment %}Filled by htmx when the add or edit provider button is clicked.{% endcomment %}
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>{% translate "close" %}</button></form>
+  </dialog>
+{% endif %}

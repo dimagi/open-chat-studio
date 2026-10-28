@@ -6354,10 +6354,6 @@ components:
           type: boolean
           description: When set, every member of this team must enrol in two-factor
             authentication.
-        auto_block_enabled:
-          type: boolean
-          description: When set, participants who reach the strike limit are blocked
-            automatically.
         created_by:
           type: integer
           readOnly: true

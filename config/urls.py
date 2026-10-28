@@ -57,6 +57,7 @@ team_urlpatterns = [
     path("files/", include("apps.files.urls")),
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
+    path("moderation/", include("apps.moderation.urls")),
     path("mcp_integrations/", include("apps.mcp_integrations.urls")),
     path("notifications/channels/", include("apps.ocs_notifications.channel_urls")),
     path("oauth/applications/", include(oauth_team_urls)),

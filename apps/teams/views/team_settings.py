@@ -1,8 +1,6 @@
-"""Team settings page, rendering one section at a time from ``SETTINGS_SECTIONS``."""
+"""Team settings page, rendering one section at a time."""
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
 
 from celery.result import AsyncResult
 from celery_progress.backend import PROGRESS_STATE
@@ -13,6 +11,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
+from apps.moderation.settings_section import SETTINGS_SECTION as MODERATION_SETTINGS_SECTION
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.utils import ServiceProvider, get_enabled_providers
 from apps.teams.decorators import login_and_team_required
@@ -25,6 +24,7 @@ from apps.teams.forms import (
     TeamPublicKeyForm,
 )
 from apps.teams.models import Invitation
+from apps.teams.settings_sections import SettingsSection, is_team_admin
 from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
 from apps.teams.views.integrations_views import get_integration_new_choices, get_integration_rows
 from apps.teams.views.members_views import ROLE_CHOICES
@@ -48,30 +48,6 @@ def _team_files_export_context(team):
     if team.files_export_id and team.files_export.file:
         return {"files_export_file": team.files_export}
     return {}
-
-
-def _always_visible(request) -> bool:
-    return True
-
-
-def _no_context(request) -> dict:
-    return {}
-
-
-@dataclass(frozen=True)
-class SettingsSection:
-    key: str
-    label: str
-    icon: str
-    template: str
-    #: Key into the page's `stats` dict whose value is shown as a badge next to the nav item.
-    count_key: str | None = None
-    is_visible: Callable[..., bool] = _always_visible
-    get_context: Callable[..., dict] = _no_context
-
-
-def _is_team_admin(request) -> bool:
-    return request.team_membership.is_team_admin()
 
 
 def _can_view_notifications(request) -> bool:
@@ -136,7 +112,7 @@ def _data_context(request) -> dict:
 def _flags_context(request) -> dict:
     return {
         "flags_form": FeatureFlagForm(team=request.team),
-        "is_team_admin": _is_team_admin(request),
+        "is_team_admin": is_team_admin(request),
     }
 
 
@@ -144,7 +120,7 @@ def _internal_metadata_context(request) -> dict:
     return {"metadata_form": TeamMetadataForm(team=request.team)}
 
 
-SETTINGS_SECTIONS = [
+_SECTIONS = [
     SettingsSection(
         key="integrations",
         label=_("Integrations"),
@@ -161,6 +137,7 @@ SETTINGS_SECTIONS = [
         is_visible=_can_view_notifications,
         get_context=_notifications_context,
     ),
+    MODERATION_SETTINGS_SECTION,
     SettingsSection(
         key="members",
         label=_("Members"),
@@ -180,7 +157,7 @@ SETTINGS_SECTIONS = [
         label=_("Data"),
         icon="fa-box-archive",
         template="teams/sections/data.html",
-        is_visible=_is_team_admin,
+        is_visible=is_team_admin,
         get_context=_data_context,
     ),
     SettingsSection(
@@ -200,36 +177,46 @@ SETTINGS_SECTIONS = [
     ),
 ]
 
-_SECTIONS_BY_KEY = {section.key: section for section in SETTINGS_SECTIONS}
+
+def _visible_sections(request) -> list[SettingsSection]:
+    return [section for section in _SECTIONS if section.is_visible(request)]
 
 
-def get_section(request, section_key: str | None) -> SettingsSection:
-    section = _SECTIONS_BY_KEY.get(section_key or DEFAULT_SETTINGS_SECTION)
-    if section is None or not section.is_visible(request):
+def _get_section(visible_sections: list[SettingsSection], section_key: str | None) -> SettingsSection:
+    key = section_key or DEFAULT_SETTINGS_SECTION
+    section = next((section for section in visible_sections if section.key == key), None)
+    if section is None:
         raise Http404(f"No team settings section named '{section_key}'")
     return section
 
 
-def _nav_items(request, active: SettingsSection, stats: dict) -> list[dict]:
+def _nav_count(request, section: SettingsSection, stats: dict) -> int | None:
+    if section.get_count:
+        return section.get_count(request)
+    return stats.get(section.count_key) if section.count_key else None
+
+
+def _nav_items(request, visible_sections: list[SettingsSection], active: SettingsSection, stats: dict) -> list[dict]:
     return [
         {
             "key": section.key,
             "label": section.label,
             "icon": section.icon,
             "url": section_url(team_slug=request.team.slug, section_key=section.key),
-            "count": stats.get(section.count_key) if section.count_key else None,
+            "count": _nav_count(request=request, section=section, stats=stats),
             "is_active": section.key == active.key,
         }
-        for section in SETTINGS_SECTIONS
-        if section.is_visible(request)
+        for section in visible_sections
     ]
 
 
-def _settings_context(request, section: SettingsSection, team_form=None) -> dict:
+def _settings_context(
+    request, visible_sections: list[SettingsSection], section: SettingsSection, team_form=None
+) -> dict:
     team = request.team
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
-        if not _is_team_admin(request):
+        if not is_team_admin(request):
             set_form_fields_disabled(team_form, True)
     stats = {
         "members": team.membership_set.count(),
@@ -242,7 +229,7 @@ def _settings_context(request, section: SettingsSection, team_form=None) -> dict
         "page_title": _("My Team | {team}").format(team=team),
         "team_form": team_form,
         "active_section": section,
-        "nav_sections": _nav_items(request, section, stats),
+        "nav_sections": _nav_items(request=request, visible_sections=visible_sections, active=section, stats=stats),
         "stats": stats,
         **section.get_context(request),
     }
@@ -250,8 +237,12 @@ def _settings_context(request, section: SettingsSection, team_form=None) -> dict
 
 def render_team_settings(request, section_key: str | None = None, *, team_form=None, **extra_context):
     """Render one settings section: the body alone over htmx, the whole page otherwise."""
-    section = get_section(request, section_key)
-    context = _settings_context(request, section, team_form=team_form) | extra_context
+    visible_sections = _visible_sections(request)
+    section = _get_section(visible_sections=visible_sections, section_key=section_key)
+    context = (
+        _settings_context(request=request, visible_sections=visible_sections, section=section, team_form=team_form)
+        | extra_context
+    )
     # htmx swaps a history-restore response into <body>, so it needs the whole page.
     is_nav_swap = request.htmx and not request.htmx.history_restore_request
     template = "teams/partials/settings_body.html" if is_nav_swap else "teams/manage_team.html"
@@ -263,7 +254,7 @@ def manage_team(request, team_slug, section=None):
     if request.method != "POST":
         return render_team_settings(request, section)
 
-    if not request.team_membership.is_team_admin():
+    if not is_team_admin(request):
         messages.error(request, "Sorry you don't have permission to do that.")
         return render_team_settings(request, section)
 
