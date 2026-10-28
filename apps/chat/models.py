@@ -351,16 +351,52 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # Summary messages are not saved to the DB, so they don't have a chat_id
             return []
 
+        prefetched = getattr(self, "_prefetched_attached_files", None)
+        if prefetched is not None:
+            return prefetched
+
+        ids, external_ids = self._attachment_file_ids()
+        return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
+
+    def _attachment_file_ids(self) -> tuple[list, list]:
+        """Returns the (ids, external_ids) of the files referenced in this message's metadata."""
         external_ids = []
         ids = []
-
         for source in ChatMessageMetadataKeys.attachment_keys():
             # openai_file_ids is a list of external ids
             id_list = external_ids if source == ChatMessageMetadataKeys.OPENAI_FILE_IDS else ids
             if file_ids := self.metadata.get(source, []):
                 id_list.extend(file_ids)
+        return ids, external_ids
 
-        return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
+    @classmethod
+    def prefetch_attached_files(cls, chat, messages) -> None:
+        """Resolve the attached files for all ``messages`` of ``chat`` with a single query.
+
+        The result is cached on each message so that ``get_attached_files`` doesn't issue a
+        query per message.
+        """
+        saved_messages = [message for message in messages if message.chat_id]
+        message_file_ids = {}
+        all_ids, all_external_ids = set(), set()
+        for message in saved_messages:
+            ids, external_ids = message._attachment_file_ids()
+            ids, external_ids = {str(i) for i in ids}, {str(i) for i in external_ids}
+            message_file_ids[message.pk] = (ids, external_ids)
+            all_ids |= ids
+            all_external_ids |= external_ids
+
+        files = []
+        if all_ids or all_external_ids:
+            files = list(
+                File.objects.filter(Q(id__in=all_ids) | Q(external_id__in=all_external_ids), chatattachment__chat=chat)
+            )
+
+        for message in saved_messages:
+            ids, external_ids = message_file_ids[message.pk]
+            message._prefetched_attached_files = [
+                file for file in files if str(file.id) in ids or (file.external_id and file.external_id in external_ids)
+            ]
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)

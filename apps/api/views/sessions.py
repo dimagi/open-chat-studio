@@ -16,6 +16,7 @@ from apps.api.serializers import (
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
 )
+from apps.chat.models import ChatMessage
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -198,8 +199,16 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                     queryset=ParticipantData.objects.only("id", "participant_id", "experiment_id", "data"),
                     to_attr="_prefetched_participant_data",
                 ),
+                # Messages (with their tags) are only serialized on the detail endpoint. Ordering
+                # here lets the serializer read them from the prefetch cache instead of running a
+                # new query (plus one tag query per message) via `Chat.message_iterator`.
+                Prefetch(
+                    "chat__messages",
+                    queryset=ChatMessage.objects.order_by("created_at").prefetch_related("tags"),
+                    to_attr="_prefetched_messages",
+                ),
             )
-        queryset = queryset.prefetch_related("chat__tags", "chat__messages__tags")
+        queryset = queryset.prefetch_related("chat__tags")
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         if experiment_id := self.request.query_params.get("experiment"):

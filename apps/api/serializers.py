@@ -263,8 +263,21 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(MessageSerializer(many=True))
     def get_messages(self, instance):
-        messages = list(instance.chat.message_iterator())
-        return MessageSerializer(reversed(messages), many=True, context=self.context).data
+        chat = instance.chat
+        prefetched = getattr(chat, "_prefetched_messages", None)
+        if prefetched is None:
+            messages = list(reversed(list(chat.message_iterator())))
+        else:
+            # `_prefetched_messages` is ordered by `created_at` with tags prefetched (see
+            # ExperimentSessionViewSet.get_queryset). Mirror `message_iterator`'s output order:
+            # a message's summary is placed directly before the message itself.
+            messages = []
+            for message in prefetched:
+                if message.summary:
+                    messages.append(message.get_summary_message())
+                messages.append(message)
+        ChatMessage.prefetch_attached_files(chat, messages)
+        return MessageSerializer(messages, many=True, context=self.context).data
 
     @extend_schema_field(SessionUsageSerializer)
     def get_usage(self, instance):
