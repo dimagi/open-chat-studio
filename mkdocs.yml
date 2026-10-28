@@ -173,6 +173,7 @@ nav:
       - WAF Management: developer_guides/code_systems/waf_management.md
       - Dynamic Filters: developer_guides/code_systems/dynamic_filters.md
       - Notifications: developer_guides/code_systems/notifications.md
+      - Health Checks: developer_guides/code_systems/health_checks.md
       - Channels:
         - Slack Channel Integration: developer_guides/code_systems/channels/slack_channel_integration.md
         - Meta Cloud API Integration: developer_guides/code_systems/channels/meta_cloud_api_integration.md
