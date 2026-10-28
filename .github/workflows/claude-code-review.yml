@@ -1,15 +1,37 @@
 # Claude Code Review Workflow
 #
-# Automated code review on pull requests using the official Anthropic
-# code-review plugin. Findings are verified by the plugin's review agents
-# and posted as inline comments on the PR diff.
+# Two-stage automated code review on pull requests. Stage 1 runs
+# alibaba/open-code-review (OCR), which is fast and deterministic about which
+# files and rules apply, and posts its findings as inline comments. Stage 2
+# runs the official Anthropic code-review plugin, and only when OCR found
+# nothing. Findings from the plugin's review agents are verified and posted as
+# inline comments on the PR diff.
 #
 # Triggered on: PR opened, marked ready for review, or pushed
 # Requirements: ANTHROPIC_API_KEY secret must be configured
 #
 # Notes:
+# - Review rules live in `REVIEW.md`. OCR reads its per-path checklists from
+#   `.opencodereview/rule.json`; `ocr rules check <path>` shows which rule wins.
+#   That file's `include` undoes one of OCR's defaults: since 1.12.7 the built-in
+#   exclude list drops `test_*.py`, which is every test file in this repo
+# - The `claude` job runs only when `ocr` finished and reported zero comments
+#   (`comments_total` and `comments_failed` both 0). OCR is not run
+#   incrementally: an incremental run counts only comments that do not overlap
+#   earlier ones, so a push that still has the same finding would report zero
+#   and let Claude run
+# - The action installs the OCR CLI from npm at run time, so pinning the action
+#   alone does not freeze behaviour; `ocr_version` is pinned separately
+# - OCR_NO_UPDATE disables the CLI's detached background self-updater. Without
+#   it, once the registry holds a release newer than the pinned `ocr_version`,
+#   any `ocr` call can trigger `npm i -g`, which unlinks the global launcher
+#   while it reinstalls; a later step then fails with `ocr: command not found`
+#   (exit 127). Upstream alibaba/open-code-review#703, fix pending in #1204
+# - OCR has no checkout step here: the action performs its own fetch-depth: 0
+#   checkout and fetches the PR head as git objects without materializing them
 # - Fork PRs are skipped — they can't get an OIDC token, so there's no
-#   credential for the review to run with
+#   credential for the Claude review to run with. OCR is skipped for them too,
+#   as upstream's pull_request_target example would reach secrets from forks
 # - Runs triggered by Dependabot are excluded — Dependabot PRs get their own
 #   review via claude-dependabot.yml when Dependabot is the triggering actor
 # - Draft PRs are skipped; the review runs when the PR is marked ready
@@ -19,23 +41,25 @@
 #   keep this list intentionally narrow
 # - A new push cancels any in-progress review of the same PR — a review of
 #   stale code is wasted spend
-# - The `review` job stays green whatever it finds; the separate `verdict` job
-#   carries the pass/fail. It fails when the review left any inline comment on
-#   this push, which is the signal `auto_merge_low_risk.yml` gates on. Findings
-#   are counted by diffing the PR's review comments either side of the review
-#   step, so it does not depend on the plugin's internals
-# - `verdict` is skipped exactly when `review` is, so a draft or fork PR has no
+# - The `ocr` and `claude` jobs stay green whatever they find; the separate
+#   `verdict` job carries the pass/fail. It fails when OCR left any comment, and
+#   otherwise when the Claude review left any inline comment on this push. That is
+#   the signal `auto_merge_low_risk.yml` gates on. Claude findings are counted by
+#   diffing the PR's review comments either side of the review step, so it does
+#   not depend on the plugin's internals
+# - `verdict` is skipped exactly when `ocr` is, so a draft or fork PR has no
 #   verdict check at all. Auto-merge treats a missing verdict as a refusal
-# - The verdict demands a positive signal on both axes: the action's own `conclusion`
-#   output *and* a finding count of zero. Counting alone would read "the review never
-#   got as far as commenting" as "the review found nothing" — which is not
+# - The verdict demands a positive signal on every axis. When OCR found nothing,
+#   the Claude job must have run, reported its own `conclusion` output, and left
+#   a finding count of zero. Counting alone would read "the review never got as
+#   far as commenting" as "the review found nothing" — which is not
 #   hypothetical: the action declines to run at all when this workflow file differs
 #   from the copy on the default branch, and *exits successfully* when it declines,
-#   leaving a green `review` job and zero findings. It sets no `conclusion` on that
+#   leaving a green `claude` job and zero findings. It sets no `conclusion` on that
 #   path (`skipped_due_to_workflow_validation_mismatch` instead), so the verdict
 #   catches it. Every PR that edits this file will fail the verdict, by design
-# - Findings are counted as inline review comments because that is the channel the
-#   plugin uses — the action buffers them and posts them in its own
+# - Claude findings are counted as inline review comments because that is the
+#   channel the plugin uses — the action buffers them and posts them in its own
 #   "Post buffered inline comments" step. `claude_args` does also permit `gh pr
 #   comment`, `gh pr review` and `gh api`, so a review that chose to summarise
 #   itself elsewhere would count as zero; the `conclusion` check is what stops that
@@ -58,15 +82,70 @@ permissions:
   id-token: write
 
 jobs:
-  review:
+  ocr:
+    name: OpenCodeReview
     # Fork PRs can't get an OIDC token (GitHub omits ACTIONS_ID_TOKEN_REQUEST_URL
-    # for fork-originated pull_request events), so the review is skipped for them.
+    # for fork-originated pull_request events), so the Claude stage can't run for
+    # them; OCR is skipped with it so the verdict stays absent rather than half-run.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository
       && github.actor != 'dependabot[bot]'
       && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      OCR_NO_UPDATE: '1'
+
+    outputs:
+      comments_total: ${{ steps.ocr.outputs.comments_total }}
+      comments_failed: ${{ steps.ocr.outputs.comments_failed }}
+
+    steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Run OpenCodeReview
+        id: ocr
+        uses: alibaba/open-code-review@bccbc15f785269400735d5255540c231e6c02b6d # v1.12.9
+        with:
+          ocr_version: '1.12.8'
+          llm_url: https://api.anthropic.com
+          llm_auth_token: ${{ secrets.ANTHROPIC_API_KEY }}
+          llm_model: claude-sonnet-5
+          llm_use_anthropic: 'true'
+          # Unset, the client defaults to `authorization` (Bearer), which the
+          # Anthropic API does accept. Pinned anyway to match OCR's own built-in
+          # Anthropic provider entry, which sets x-api-key — configuring through
+          # the action's inputs does not go through that entry.
+          llm_auth_header: 'x-api-key'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          sticky_summary: 'true'
+          incremental: 'false'
+          upload_artifacts: 'true'
+
+  claude:
+    name: Claude Code Review
+    needs: ocr
+    # Only reviews code OCR has already cleared. `ocr` must have succeeded: a
+    # failed OCR run reports no counts, and the verdict fails it.
+    if: >-
+      needs.ocr.result == 'success'
+      && needs.ocr.outputs.comments_total == '0'
+      && needs.ocr.outputs.comments_failed == '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
 
     outputs:
       findings: ${{ steps.findings.outputs.count }}
@@ -129,10 +208,10 @@ jobs:
 
   verdict:
     name: Automated review verdict
-    needs: review
-    # Runs whenever `review` did, including when it failed — a review that did not
+    needs: [ocr, claude]
+    # Runs whenever `ocr` did, including when a stage failed — a review that did not
     # finish is not a review that passed.
-    if: always() && needs.review.result != 'skipped'
+    if: always() && needs.ocr.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -140,13 +219,30 @@ jobs:
     steps:
       - name: Require a review with no findings
         env:
-          RESULT: ${{ needs.review.result }}
-          FINDINGS: ${{ needs.review.outputs.findings }}
-          CONCLUSION: ${{ needs.review.outputs.conclusion }}
-          VALIDATION_SKIP: ${{ needs.review.outputs.validation_skip }}
+          OCR_RESULT: ${{ needs.ocr.result }}
+          OCR_COMMENTS: ${{ needs.ocr.outputs.comments_total }}
+          OCR_FAILED: ${{ needs.ocr.outputs.comments_failed }}
+          CLAUDE_RESULT: ${{ needs.claude.result }}
+          FINDINGS: ${{ needs.claude.outputs.findings }}
+          CONCLUSION: ${{ needs.claude.outputs.conclusion }}
+          VALIDATION_SKIP: ${{ needs.claude.outputs.validation_skip }}
         run: |
-          if [[ "$RESULT" != "success" ]]; then
-            echo "::error::The review job did not complete (result: $RESULT)."
+          if [[ "$OCR_RESULT" != "success" ]]; then
+            echo "::error::The OpenCodeReview job did not complete (result: $OCR_RESULT)."
+            exit 1
+          fi
+          # An empty count means OCR produced no outputs. Fail closed.
+          if [[ ! "$OCR_COMMENTS" =~ ^[0-9]+$ || ! "$OCR_FAILED" =~ ^[0-9]+$ ]]; then
+            echo "::error::OpenCodeReview reported no comment counts."
+            exit 1
+          fi
+          if [[ "$OCR_COMMENTS" != "0" || "$OCR_FAILED" != "0" ]]; then
+            echo "::error::OpenCodeReview raised $OCR_COMMENTS finding(s) ($OCR_FAILED failed to post)." \
+                 "The Claude review runs once they are resolved."
+            exit 1
+          fi
+          if [[ "$CLAUDE_RESULT" != "success" ]]; then
+            echo "::error::The Claude review job did not complete (result: $CLAUDE_RESULT)."
             exit 1
           fi
           if [[ "$VALIDATION_SKIP" == "true" ]]; then
@@ -166,4 +262,4 @@ jobs:
             echo "::error::The review left ${FINDINGS:-an unknown number of} inline comment(s) on this push."
             exit 1
           fi
-          echo "The review found nothing on this push."
+          echo "OpenCodeReview and the Claude review found nothing on this push."
