@@ -11,7 +11,7 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext, generate_user_message
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.stages.core import RESET_COMMAND
-from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.files.models import File, FilePurpose
 from apps.moderation.const import FLAGGED_MESSAGE
 from apps.moderation.services import (
@@ -89,40 +89,41 @@ class ModerationResultStage(ProcessingStage):
         return ctx.moderation_task_id is not None and ctx.human_message is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
+        task_id, human_message = ctx.moderation_task_id, ctx.human_message
+        if task_id is None or human_message is None:
+            return
         try:
-            self._apply_result(ctx)
+            self._apply_result(ctx, task_id=task_id, human_message=human_message)
         except Exception:
-            logger.exception("Could not record the moderation result for task %s", ctx.moderation_task_id)
+            logger.exception("Could not record the moderation result for task %s", task_id)
 
-    def _apply_result(self, ctx: MessageProcessingContext) -> None:
-        assert ctx.moderation_task_id is not None
-        assert ctx.human_message is not None
-        output, skip_reason = get_moderation_result(ctx.moderation_task_id)
-        status = record_moderation_result(message=ctx.human_message, output=output, skip_reason=skip_reason)
+    def _apply_result(self, ctx: MessageProcessingContext, *, task_id: str, human_message: ChatMessage) -> None:
+        output, skip_reason = get_moderation_result(task_id)
+        record_moderation_result(message=human_message, output=output, skip_reason=skip_reason)
         if skip_reason is not None:
             moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason=skip_reason)
-        elif status == ModerationStatus.FLAGGED:
-            remove_turn_from_pipeline_histories(human_message=ctx.human_message, bot_response=ctx.bot_response)
-            if ctx.bot_response is not None:
-                self._replace_response(ctx)
+        elif human_message.is_flagged:
+            bot_response = ctx.bot_response
+            remove_turn_from_pipeline_histories(human_message=human_message, bot_response=bot_response)
+            if bot_response is not None:
+                self._replace_response(ctx, bot_response=bot_response)
 
-    def _replace_response(self, ctx: MessageProcessingContext) -> None:
+    def _replace_response(self, ctx: MessageProcessingContext, *, bot_response: ChatMessage) -> None:
         """Replace the stored bot reply with a notice that the message will not be answered, and send only that.
 
         The fixed notice is saved before EventBot writes one, so the original reply is not in the
         conversation history EventBot reads.
         """
-        self._save_reply(ctx, FLAGGED_MESSAGE)
+        self._save_reply(ctx, bot_response=bot_response, reply=FLAGGED_MESSAGE)
         reply = generate_user_message(
             ctx=ctx, prompt=self.FLAGGED_PROMPT, trace_name="moderation flagged", fallback=FLAGGED_MESSAGE
         )
         if reply != FLAGGED_MESSAGE:
-            self._save_reply(ctx, reply)
+            self._save_reply(ctx, bot_response=bot_response, reply=reply)
 
-    def _save_reply(self, ctx: MessageProcessingContext, reply: str) -> None:
+    def _save_reply(self, ctx: MessageProcessingContext, *, bot_response: ChatMessage, reply: str) -> None:
         """Save `reply` as the bot response, without attachments, and make it the reply to send."""
-        assert ctx.bot_response is not None
-        replace_bot_reply(message=ctx.bot_response, text=reply)
+        replace_bot_reply(message=bot_response, text=reply)
         ctx.replace_response(reply)
 
 
