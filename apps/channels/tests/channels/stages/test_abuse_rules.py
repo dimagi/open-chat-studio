@@ -10,7 +10,7 @@ from apps.channels.stages.core import AbuseRulesStage, BotInteractionStage, Chat
 from apps.channels.tests.channels.conftest import core_stages, make_context, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.moderation.models import DeniedParticipant
 from apps.teams.flags import Flags
@@ -88,6 +88,20 @@ class TestAbuseRulesStage:
         AbuseRulesStage()(ctx)
 
         assert ctx.moderation_task_id == "task-1"
+
+    @override_flag(FLAG, active=True)
+    def test_failure_to_queue_moderation_records_a_skip(self, moderated_session, moderation_task):
+        moderation_task.task.delay.side_effect = ConnectionError("broker down")
+        ctx = _context(moderated_session, "hello")
+
+        with patch("apps.channels.stages.core.moderation_skipped_notification") as notification:
+            AbuseRulesStage()(ctx)
+
+        assert ctx.moderation_task_id is None
+        ctx.human_message.refresh_from_db()
+        assert ctx.human_message.moderation_status == ModerationStatus.SKIPPED
+        assert ctx.human_message.moderation_detail.skip_reason == "error"
+        notification.assert_called_once_with(ctx.experiment, session=moderated_session, reason="error")
 
 
 @pytest.mark.django_db()

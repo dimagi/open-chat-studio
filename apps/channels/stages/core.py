@@ -29,10 +29,11 @@ from apps.experiments.models import (
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
-from apps.moderation.services import record_rule_hits, start_moderation
+from apps.moderation.services import record_moderation_result, record_rule_hits, start_moderation
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
+    moderation_skipped_notification,
 )
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
@@ -797,7 +798,12 @@ class AbuseRulesStage(ProcessingStage):
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-        ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
+        try:
+            ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
+        except Exception:
+            logger.exception("Could not queue moderation for message %s", ctx.human_message.id)
+            record_moderation_result(message=ctx.human_message, skip_reason="error")
+            moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason="error")
 
 
 # ---------------------------------------------------------------------------
