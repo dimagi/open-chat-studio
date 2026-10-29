@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from enum import StrEnum
 from urllib.parse import quote
 
@@ -179,7 +180,7 @@ class ChatMessageMetadataKeys(StrEnum):
 EXTERNAL_ID_MAX_LENGTH = 600
 
 
-def _file_matches(file, ids: set[str], external_ids: set[str]) -> bool:
+def _file_matches(file: File, ids: set[str], external_ids: set[str]) -> bool:
     """Whether ``file`` is referenced by the given (stringified) file ids or external ids."""
     return str(file.id) in ids or bool(file.external_id and file.external_id in external_ids)
 
@@ -363,7 +364,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         ids, external_ids = self._attachment_file_ids()
         return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
 
-    def _attachment_file_ids(self) -> tuple[list, list]:
+    def _attachment_file_ids(self) -> tuple[list[int | str], list[str]]:
         """Returns the (ids, external_ids) of the files referenced in this message's metadata."""
         external_ids = []
         ids = []
@@ -375,7 +376,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return ids, external_ids
 
     @classmethod
-    def prefetch_attached_files(cls, chat, messages) -> None:
+    def prefetch_attached_files(cls, chat: Chat, messages: Iterable["ChatMessage"]) -> None:
         """Resolve the attached files for all ``messages`` of ``chat`` with a single query.
 
         The result is cached on each message so that ``get_attached_files`` doesn't issue a
