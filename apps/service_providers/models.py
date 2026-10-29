@@ -1020,8 +1020,8 @@ class ModerationProvider(BaseTeamModel, ProviderMixin):
     def type_enum(self):
         return ModerationProviderType(self.type)
 
-    def get_moderation_service(self) -> ModerationService:
-        return self.type_enum.get_moderation_service(self.config)
+    def get_moderation_service(self, **service_kwargs) -> ModerationService:
+        return self.type_enum.get_moderation_service(self.config, **service_kwargs)
 
 
 class EmbeddingProviderModelManager(models.Manager):

@@ -5,6 +5,7 @@ from datetime import datetime
 
 from django.utils.text import slugify
 
+from apps.chat.schemas import ModerationSkipReason
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.decorators import silence_exceptions
 from apps.utils.sunset import HttpSunset
@@ -413,4 +414,29 @@ def http_sunset_notification(spec: HttpSunset, team, experiments: list, mileston
         permissions=list(spec.audience_permissions),
         links={**{e.name: e.get_absolute_url() for e in experiments}, "Migration guide": spec.successor_url},
         once_per_event_type=True,
+    )
+
+
+_MODERATION_SKIP_REASONS: dict[ModerationSkipReason, str] = {
+    "rate_limited": "the moderation provider's rate limit was reached",
+    "error": "the moderation provider returned an error",
+    "timeout": "no moderation result arrived in time",
+}
+
+
+@silence_exceptions(logger, log_message="Failed to create moderation skipped notification")
+def moderation_skipped_notification(experiment, session: ExperimentSession, reason: ModerationSkipReason) -> None:
+    """Notify a team that a participant's message was answered without moderation."""
+    create_notification(
+        title="Moderation skipped",
+        message=(
+            f"A message to '{experiment.name}' was answered without moderation because "
+            f"{_MODERATION_SKIP_REASONS[reason]}."
+        ),
+        level=LevelChoices.WARNING,
+        team=experiment.team,
+        slug="moderation-skipped",
+        event_data={"bot_id": experiment.id, "reason": reason},
+        permissions=["experiments.change_experiment", "experiments.change_participant"],
+        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )
