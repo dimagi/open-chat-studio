@@ -203,7 +203,7 @@ jobs:
             Read the pull request with `gh pr view` and `gh pr diff`. Write the final output,
             and nothing else, to ${{ runner.temp }}/merge-risk.md.
           claude_args: |
-            --allowedTools "Skill,Read,Grep,Glob,Write,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(git log:*),Bash(git show:*)"
+            --allowedTools "Skill,Read,Grep,Glob,Write,Bash(gh pr view:*),Bash(gh pr diff:*)"
 
       - name: Post the assessment
         if: steps.claude.outputs.conclusion == 'success'
