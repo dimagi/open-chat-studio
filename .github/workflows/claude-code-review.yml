@@ -6,6 +6,12 @@
 #
 # Requirements: ANTHROPIC_API_KEY secret
 # Skipped for forks and Dependabot. A new push cancels the running review.
+#
+# The `merge-risk` job posts an advisory risk assessment as one sticky issue comment,
+# updated on each push. Nothing gates on it and it never sets a `risk:*` label; those
+# come only from the deterministic `pr_risk_label.yml`. It posts an issue comment rather
+# than a review comment so the finding count is unaffected. Its skill is read from the
+# default branch, so it has to be merged before it takes effect.
 
 name: Claude Code Review
 
@@ -149,6 +155,88 @@ jobs:
             | wc -l | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "The review added $count inline comment(s) on this push." >> "$GITHUB_STEP_SUMMARY"
+
+  merge-risk:
+    # Advisory only: nothing gates on it, and the `risk:*` labels stay with
+    # `pr_risk_label.yml`. Skipped for forks (no OIDC token), Dependabot and drafts.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+      && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A failed assessment must not turn the PR red.
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # The skill comes from the default branch, so a PR cannot edit the rubric it is
+      # assessed by. The PR itself is read through `gh`, never checked out.
+      - name: Check out the skill from the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .claude/skills/merge-risk
+          sparse-checkout-cone-mode: false
+
+      # The model gets read-only tools and writes its answer to a file; the comment is
+      # posted by a later step, so PR content steering the model cannot reach a write API.
+      - name: Assess merge risk
+        id: claude
+        uses: anthropics/claude-code-action@v1.0.234
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            /merge-risk ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            Read the pull request with `gh pr view` and `gh pr diff`. Write the final output,
+            and nothing else, to ${{ runner.temp }}/merge-risk.md.
+          claude_args: |
+            --allowedTools "Skill,Read,Grep,Glob,Write,Bash(gh pr view:*),Bash(gh pr diff:*)"
+
+      - name: Post the assessment
+        if: steps.claude.outputs.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/merge-risk.md"
+          if [[ ! -s "$file" ]] || ! head -n1 "$file" | grep -qE '^\*\*Merge risk: (low|medium|high)\*\*$'; then
+            echo "::warning::The assessment is missing or not in the expected format; nothing posted."
+            exit 0
+          fi
+          marker='<!-- merge-risk -->'
+          {
+            echo "$marker"
+            head -c 60000 "$file"
+            echo
+            echo
+            echo "_Advisory assessment of ${SHA:0:7}, made by a model from the PR text and diff. It does not set the \`risk:*\` label and does not gate merging._"
+          } > "$RUNNER_TEMP/comment.md"
+
+          # An issue comment, not a review comment: the `verdict` job counts review comments.
+          id=$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate --slurp \
+            | jq -r --arg m "$marker" \
+              'add // [] | map(select(.user.login == "github-actions[bot]" and (.body | startswith($m)))) | first | .id // empty')
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" --silent
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@"$RUNNER_TEMP/comment.md" --silent
+          fi
 
   verdict:
     name: Automated review verdict
