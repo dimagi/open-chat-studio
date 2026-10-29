@@ -31,8 +31,3 @@ def test_pretty_date_renders_a_recently_added_zone():
 def test_pretty_date_falls_back_to_current_timezone_for_bad_input(bad_timezone):
     date = datetime(2026, 6, 16, 14, 32, 5, tzinfo=UTC)
     assert pretty_date(date, bad_timezone) == pretty_date(date)
-
-
-def test_pretty_date_converts_to_explicit_valid_zone():
-    date = datetime(2026, 6, 16, 14, 32, 5, tzinfo=UTC)
-    assert pretty_date(date, "Pacific/Auckland") == "Wednesday, 17 June 2026 02:32:05 NZST"

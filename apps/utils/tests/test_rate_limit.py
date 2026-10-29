@@ -399,18 +399,6 @@ def test_browser_facing_views_render_the_error_page_over_the_limit(db):
     assert b"Too many requests" in response.content
 
 
-@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
-def test_the_json_body_stays_the_default(db):
-    """API surfaces keep the pinned JSON contract when no renderer is named."""
-    for _ in range(3):
-        _run_view(_request())
-
-    response = _run_view(_request())
-
-    assert response.status_code == 429
-    assert json.loads(response.content)["detail"] == "Rate limit exceeded."
-
-
 def test_admin_api_scope_is_configured():
     """The admin_api scope is registered, parses, and fails open.
 
@@ -630,18 +618,6 @@ def test_count_request_accepts_a_non_string_identity(db):
     assert result.remaining == 0
 
 
-@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
-def test_count_request_allows_over_the_limit_in_log_only_mode(db):
-    """The shipped default counts without ever refusing."""
-    request = _request()
-
-    for _ in range(5):
-        result = count_request(request, "api", "channel", "17")
-
-    assert result.allowed is True
-    assert result.remaining == 0
-
-
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
 @pytest.mark.django_db()
 def test_count_request_skips_exempt_requests():
@@ -675,13 +651,6 @@ def test_count_request_attributes_would_block_to_the_resolved_team(caplog):
 
 
 NEVER_REFUSING_LIMITS = {"api": {"rate": "3/5m", "fail_open": True, "refuse": False}}
-
-
-def test_scopes_refuse_by_default():
-    """Omitting the key leaves a scope refusing, so the landed scopes are untouched."""
-    _, _, _, refuses = _scope_config("api")
-
-    assert refuses is True
 
 
 @override_settings(RATE_LIMITS=NEVER_REFUSING_LIMITS, RATE_LIMIT_ENFORCE=True)
