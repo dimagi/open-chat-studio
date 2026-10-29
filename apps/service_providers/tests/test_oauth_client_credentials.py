@@ -255,8 +255,10 @@ def test_token_request_http_error_raises(team, httpx_mock):
     provider = _make_provider(team)
     httpx_mock.add_response(url=TOKEN_URL, status_code=401, json={"error": "invalid_client"})
 
-    with pytest.raises(OAuthTokenError, match="Failed to fetch OAuth token"):
+    with pytest.raises(OAuthTokenError) as exc_info:
         OAuthTokenManager(provider).get_valid_access_token()
+    assert str(exc_info.value) == "OAuth token request failed (401): invalid_client"
+    assert exc_info.value.error_code == "invalid_client"
 
 
 @pytest.mark.django_db()

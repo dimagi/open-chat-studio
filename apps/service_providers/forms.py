@@ -567,11 +567,21 @@ class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
     )
     additional_searchable_fields = ["client_id"]
 
-    client_id = forms.CharField(label=_("Client ID"))
-    client_secret = forms.CharField(label=_("Client Secret"))
-    authorize_url = forms.URLField(label=_("Authorization URL"), validators=[URLValidator(schemes=["https"])])
-    token_url = forms.URLField(label=_("Token URL"), validators=[URLValidator(schemes=["https"])])
-    scope = forms.CharField(label=_("Scope"), required=False)
+    client_id = forms.CharField(label=_("Client ID"), help_text=_("The client identifier from your OAuth provider."))
+    client_secret = forms.CharField(
+        label=_("Client Secret"), help_text=_("The client secret from your OAuth provider.")
+    )
+    authorize_url = forms.URLField(
+        label=_("Authorization URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The provider endpoint where users authorize access."),
+    )
+    token_url = forms.URLField(
+        label=_("Token URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The provider endpoint used to exchange codes and refresh tokens."),
+    )
+    scope = forms.CharField(label=_("Scope"), required=False, help_text=_("Space separated list of scopes."))
     authorization_params = forms.JSONField(
         label=_("Additional Authorization Request Parameters"),
         required=False,
@@ -585,6 +595,7 @@ class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
             ("client_secret_post", _("Request Body (client_secret_post)")),
         ],
         initial="client_secret_basic",
+        help_text=_("How client credentials are sent to the token endpoint."),
     )
 
     def clean(self):

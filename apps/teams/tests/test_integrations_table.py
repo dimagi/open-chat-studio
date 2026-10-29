@@ -7,7 +7,8 @@ from django.utils import timezone
 from waffle.testutils import override_flag
 
 from apps.mcp_integrations.models import McpServer
-from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.auth_service.oauth import _config_fingerprint
+from apps.service_providers.models import AuthProviderType, LlmProviderTypes
 from apps.service_providers.utils import get_enabled_providers
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.views.integrations_views import (
@@ -16,6 +17,7 @@ from apps.teams.views.integrations_views import (
     get_visible_categories,
 )
 from apps.utils.factories.service_provider_factories import (
+    AuthProviderFactory,
     LlmProviderFactory,
     VoiceProviderFactory,
 )
@@ -271,3 +273,40 @@ def test_integrations_table_says_when_there_was_no_model_to_check_against(client
     assert "No models" in content
     assert "Not checked" not in content
     assert "Checked 3\xa0days ago" in content
+
+
+@pytest.mark.django_db()
+def test_oauth_authorization_code_rows_carry_their_verification_provider(team, request_for):
+    provider = AuthProviderFactory(
+        team=team,
+        type=AuthProviderType.oauth_authorization_code,
+        config={},
+    )
+    rows = _rows(request=request_for(UserFactory()), team=team)
+    row = next(row for row in rows if row["pk"] == provider.pk and row["provider_type"] == "auth")
+    assert row["verifiable_provider"] == provider
+
+
+@pytest.mark.django_db()
+def test_integrations_table_shows_oauth_as_verified_after_connection(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    provider = AuthProviderFactory(
+        team=team,
+        type=AuthProviderType.oauth_authorization_code,
+        config={},
+    )
+    provider._auth_data = {
+        "access_token": "oauth-access-token",
+        "config_fingerprint": _config_fingerprint(provider.config),
+    }
+    provider.extra_data = {
+        "verified_credentials": True,
+        "credentials_checked_at": timezone.now().isoformat(),
+    }
+    provider.save()
+    client.force_login(admin)
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+    content = response.content.decode()
+    assert "Verified" in content
+    assert provider.name in content

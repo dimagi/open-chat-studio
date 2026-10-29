@@ -6,7 +6,7 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.mcp_integrations.models import McpServer
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import AuthProvider, AuthProviderType, LlmProvider
 from apps.service_providers.utils import (
     ServiceProvider,
     get_available_subtypes,
@@ -38,9 +38,13 @@ _CATEGORY_ICONS = {
 }
 
 
-def _verifiable(provider) -> LlmProvider | None:
-    """The provider if it is an LLM provider whose credentials can be checked, otherwise None."""
-    return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
+def _verifiable(provider) -> LlmProvider | AuthProvider | None:
+    """The provider when the shared integrations table can display its verification state."""
+    if isinstance(provider, LlmProvider) and provider.supports_connection_test:
+        return provider
+    if isinstance(provider, AuthProvider) and provider.type_enum == AuthProviderType.oauth_authorization_code:
+        return provider
+    return None
 
 
 def get_integration_rows(request, team, *, providers: list[ServiceProvider]) -> list[dict]:

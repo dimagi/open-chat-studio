@@ -363,7 +363,7 @@ def main(input, **kwargs):
         result = _run_code_node(code)
         assert result.update["messages"][-1] == "recovered"
 
-    @patch("apps.utils.restricted_http.validate_user_input_url")
+    @patch("apps.pipelines.nodes.restricted_http.validate_user_input_url")
     def test_oauth_authorization_code_auth_provider(self, mock_validate, httpx_mock):
         team = TeamFactory.create()
         provider = AuthProviderFactory.create(

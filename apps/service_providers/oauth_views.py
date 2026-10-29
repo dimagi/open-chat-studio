@@ -1,3 +1,4 @@
+import re
 import secrets
 
 import httpx
@@ -8,12 +9,14 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from oauthlib.oauth2 import WebApplicationClient
 
 from apps.service_providers.auth_service.oauth import (
     OAuthTokenError,
     TokenEndpointAuthMethod,
+    _authorization_code_config_changed,
     _config_fingerprint,
     _parse_token_response,
     _post_token_request,
@@ -22,6 +25,7 @@ from apps.service_providers.auth_service.oauth import (
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.teams.decorators import login_and_team_required
+from apps.teams.utils import current_team
 from apps.web.meta import absolute_url
 
 _OAUTH_STATE_SALT = "service-providers-oauth-state"
@@ -69,11 +73,6 @@ def _get_provider(payload):
     )
 
 
-def _user_can_change_provider(provider, user):
-    membership = provider.team.membership_set.filter(user=user).first()
-    return membership is not None and membership.has_perm("service_providers.change_authprovider")
-
-
 def _provider_edit_url(provider):
     return reverse(
         "service_providers:edit", kwargs={"team_slug": provider.team.slug, "provider_type": "auth", "pk": provider.pk}
@@ -105,14 +104,64 @@ def _exchange_code(request, provider, code, verifier):
 
 def _persist_token(provider, token):
     provider._auth_data = {**token, "config_fingerprint": _config_fingerprint(provider.config)}
-    provider.save(update_fields=["_auth_data"])
+    provider.extra_data = {
+        **(provider.extra_data or {}),
+        "verified_credentials": True,
+        "verification_error": "",
+        "credentials_checked_at": timezone.now().isoformat(),
+    }
+    provider.save(update_fields=["_auth_data", "extra_data"])
+
+
+def _safe_oauth_error(error_code, error_description, provider, request):
+    code = error_code if isinstance(error_code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", error_code) else ""
+    description = error_description if isinstance(error_description, str) else ""
+    description = "".join(char for char in description if char.isprintable())[:500]
+    sensitive_values = {
+        provider.config.get("client_secret", ""),
+        provider._auth_data.get("access_token", ""),
+        provider._auth_data.get("refresh_token", ""),
+        request.GET.get("code", ""),
+    }
+    for value in sorted((value for value in sensitive_values if value), key=len, reverse=True):
+        description = description.replace(value, "[redacted]")
+        code = code.replace(value, "[redacted]")
+    description = re.sub(
+        r"(?i)\b(?:client_secret|access_token|refresh_token|authorization_code|authorization|x-api-key)\b"
+        r"\s*[:=]\s*(?:bearer\s+)?[^\s,;]+",
+        "[redacted credential]",
+        description,
+    )
+    description = re.sub(
+        r"(?i)(?:request[_ -]?headers|headers)\s*[:=]\s*(?:\{[^}]*\}|\[[^\]]*\]|[^\s]+)",
+        "[redacted headers]",
+        description,
+    )
+    description = re.sub(
+        r"(?i)(?:['\"]?(?:authorization|proxy-authorization|x-api-key|cookie|set-cookie)['\"]?\s*:\s*)['\"]?[^,\r\n]+",
+        "[redacted header]",
+        description,
+    )
+    description = re.sub(
+        r"(?i)([?&](?:client_secret|access_token|refresh_token|authorization_code|code|authorization)=)[^&#\s]+",
+        r"\1[redacted]",
+        description,
+    )
+    parts = [part for part in (code, description) if part]
+    return (
+        _("OAuth authorization failed: %(details)s") % {"details": "; ".join(parts)}
+        if parts
+        else _("OAuth authorization failed. Connect the provider again to retry.")
+    )
+
+
+def is_reconnect_required(provider):
+    return bool(provider._auth_data.get("reconnect_required") or _authorization_code_config_changed(provider))
 
 
 @login_and_team_required
 @permission_required("service_providers.change_authprovider", raise_exception=True)
 def oauth_connect(request, team_slug: str, pk: int):
-    if request.team.slug != team_slug:
-        raise PermissionDenied
     provider = get_object_or_404(
         AuthProvider, team=request.team, pk=pk, type=AuthProviderType.oauth_authorization_code.value
     )
@@ -155,20 +204,32 @@ def oauth_callback(request):
     except (signing.BadSignature, KeyError, TypeError):
         return HttpResponseBadRequest("Invalid or expired OAuth state")
     provider = _get_provider(payload)
-    if not _user_can_change_provider(provider, request.user):
-        raise PermissionDenied
-    target = _provider_edit_url(provider)
-    if request.GET.get("error"):
-        messages.error(request, _("OAuth authorization was denied. Connect the provider again to retry."))
+    with current_team(provider.team):
+        if not request.user.has_perm("service_providers.change_authprovider"):
+            raise PermissionDenied
+        target = _provider_edit_url(provider)
+        if request.GET.get("error"):
+            messages.error(
+                request,
+                _safe_oauth_error(
+                    request.GET.get("error"),
+                    request.GET.get("error_description"),
+                    provider,
+                    request,
+                ),
+            )
+            return redirect(target)
+        code = request.GET.get("code")
+        if not code:
+            return HttpResponseBadRequest("OAuth callback did not contain an authorization code")
+        try:
+            token = _exchange_code(request, provider, code, pending["verifier"])
+        except OAuthTokenError as exc:
+            messages.error(
+                request,
+                _safe_oauth_error(exc.error_code, exc.error_description, provider, request),
+            )
+            return redirect(target)
+        _persist_token(provider, token)
+        messages.success(request, _("OAuth provider connected."))
         return redirect(target)
-    code = request.GET.get("code")
-    if not code:
-        return HttpResponseBadRequest("OAuth callback did not contain an authorization code")
-    try:
-        token = _exchange_code(request, provider, code, pending["verifier"])
-    except OAuthTokenError as exc:
-        messages.error(request, str(exc))
-        return redirect(target)
-    _persist_token(provider, token)
-    messages.success(request, _("OAuth provider connected."))
-    return redirect(target)

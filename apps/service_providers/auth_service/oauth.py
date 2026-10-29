@@ -28,8 +28,10 @@ DEFAULT_TOKEN_TTL_SECONDS = 3600
 _FINGERPRINTED_CONFIG_FIELDS = (
     "client_id",
     "client_secret",
+    "authorize_url",
     "token_url",
     "scope",
+    "authorization_params",
     "token_endpoint_auth_method",
 )
 

@@ -5,6 +5,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from django.contrib.auth.models import PermissionsMixin
+from django.contrib.messages import get_messages
 from django.urls import NoReverseMatch, reverse
 
 from apps.service_providers.auth_service.main import BearerTokenAuthService
@@ -18,6 +20,7 @@ from apps.service_providers.auth_service.oauth import (
     build_pkce_pair,
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
+from apps.teams.utils import get_current_team
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
@@ -52,6 +55,13 @@ def test_authorization_code_form_and_secret_obfuscation(team_with_users):
         ("client_secret_basic", "HTTP Basic"),
         ("client_secret_post", "Request Body (client_secret_post)"),
     }
+    assert "Space separated list of scopes" in form.fields["scope"].help_text
+    assert form.fields["client_id"].help_text
+    assert form.fields["client_secret"].help_text
+    assert form.fields["authorize_url"].help_text
+    assert form.fields["token_url"].help_text
+    assert form.fields["token_endpoint_auth_method"].help_text
+    assert form.fields["authorization_params"].help_text
     invalid = form_cls(team_with_users, data={**CONFIG, "authorize_url": "http://bad.test/auth"})
     assert not invalid.is_valid()
     assert "authorize_url" in invalid.errors
@@ -226,6 +236,9 @@ def test_callback_exchanges_code_and_persists_tokens(client, team_with_users):
     assert saved.config == original_config
     assert saved._auth_data["access_token"] == "access"
     assert saved._auth_data["refresh_token"] == "refresh"
+    assert saved.credentials_verified
+    assert saved.verification_state == "verified"
+    assert saved.credentials_checked_at is not None
 
 
 @pytest.mark.django_db()
@@ -403,3 +416,132 @@ def test_refresh_request_contains_expected_field_names(httpx_mock):
     request = httpx_mock.get_request()
     fields = {part.split("=", 1)[0] for part in request.content.decode().split("&")}
     assert {"grant_type", "refresh_token", "client_id", "client_secret"} <= fields
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("client_id", "new-client"),
+        ("client_secret", "new-secret"),
+        ("authorize_url", "https://auth.example.test/new-authorize"),
+        ("token_url", "https://auth.example.test/new-token"),
+        ("scope", "read admin"),
+        ("authorization_params", {"access_type": "online"}),
+        ("token_endpoint_auth_method", "client_secret_post"),
+    ],
+)
+def test_authorization_code_config_changes_require_reconnect(team, field, value):
+    provider = make_provider(team)
+    provider._auth_data = {
+        "access_token": "old-access",
+        "refresh_token": "old-refresh",
+        "token_type": "Bearer",
+        "expires_at": time.time() + 3600,
+        "config_fingerprint": _config_fingerprint(provider.config),
+    }
+    provider.extra_data = {"verified_credentials": True}
+    provider.config = {**provider.config, field: value}
+    provider.save()
+    assert provider.verification_state == "failed"
+    assert not provider.credentials_verified
+    with pytest.raises(OAuthReconnectRequired, match="configuration changed"):
+        OAuthTokenManager(provider).get_valid_access_token()
+    provider.refresh_from_db()
+    assert provider._auth_data["reconnect_required"] is True
+
+
+@pytest.mark.django_db()
+def test_create_form_shows_public_callback_uri(client, team_with_users):
+    client.force_login(team_with_users.members.first())
+    url = reverse(
+        "service_providers:new",
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "provider_type": "auth",
+            "subtype": "oauth_authorization_code",
+        },
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b"Callback URI (register this with your provider)" in response.content
+    assert b"/service_providers/auth/oauth/callback/" in response.content
+
+
+@pytest.mark.django_db()
+def test_callback_preserves_safe_oauth_error_and_redacts_credentials(client, team_with_users):
+    provider = make_provider(team_with_users)
+    provider._auth_data = {
+        "access_token": "access-token-secret",
+        "refresh_token": "refresh-token-secret",
+    }
+    provider.save(update_fields=["_auth_data"])
+    state = _connect(client, team_with_users, provider)
+    description = (
+        "Requested scope is invalid; client_secret=secret access_token=access-token-secret "
+        "refresh_token=refresh-token-secret authorization_code=authorization-code"
+        "request_headers={'Authorization': 'Bearer header-secret', 'X-API-Key': 'header-key'}"
+    )
+    response = client.get(
+        reverse("service_providers_oauth_callback"),
+        {
+            "state": state,
+            "error": "invalid_scope",
+            "error_description": description,
+            "code": "authorization-code",
+        },
+    )
+    assert response.status_code == 302
+    message = " ".join(str(item) for item in get_messages(response.wsgi_request))
+    assert "invalid_scope" in message
+    assert "Requested scope is invalid" in message
+    for credential in (
+        "secret",
+        "access-token-secret",
+        "refresh-token-secret",
+        "authorization-code",
+        "header-secret",
+        "header-key",
+    ):
+        assert credential not in message
+
+
+@pytest.mark.django_db()
+def test_callback_permission_check_runs_in_provider_team_context(client, team_with_users):
+    provider = make_provider(team_with_users)
+    state = _connect(client, team_with_users, provider)
+    observed_teams = []
+
+    def has_team_permission(user, permission, obj=None):
+        observed_teams.append(get_current_team())
+        return permission == "service_providers.change_authprovider" and get_current_team() == provider.team
+
+    with patch.object(PermissionsMixin, "has_perm", autospec=True, side_effect=has_team_permission):
+        response = client.get(
+            reverse("service_providers_oauth_callback"),
+            {"state": state, "error": "access_denied"},
+        )
+    assert response.status_code == 302
+    assert observed_teams == [provider.team]
+
+
+@pytest.mark.django_db()
+def test_edit_form_shows_reconnect_when_oauth_config_changes(client, team_with_users):
+    provider = make_provider(team_with_users)
+    provider._auth_data = {
+        "access_token": "old-access",
+        "refresh_token": "old-refresh",
+        "token_type": "Bearer",
+        "expires_at": time.time() + 3600,
+        "config_fingerprint": _config_fingerprint(provider.config),
+    }
+    provider.config = {**provider.config, "scope": "read admin"}
+    provider.save()
+    client.force_login(team_with_users.members.first())
+    url = reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": provider.pk},
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b"Status: reconnect required" in response.content
