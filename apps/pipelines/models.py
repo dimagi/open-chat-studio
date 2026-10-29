@@ -385,7 +385,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # to_flow_node reads each node's resource relations — prefetch rather than query per row.
         for version_node in version.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
             flow_node = version_node.to_flow_node()
-            flow_node.data.params = version_node.node_type.working_params(flow_node.data.params)
             for spec in version_node.node_type.versioned_param_specs:
                 spec.revert_referenced_record(version_node, flow_node.data.params)
             node_data[version_node.flow_id] = flow_node
@@ -637,7 +636,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 new_version.params["name"] = new_flow_id
 
         if not is_copy:
-            new_version.params = self.node_type.params_for_version(new_version.params)
             for spec in self.node_type.versioned_param_specs:
                 spec.version_referenced_record(new_version.params)
 
@@ -773,7 +771,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
         param_versions = []
-        for name, value in self.node_type.params_for_version(self.params).items():
+        for name, value in self.params.items():
             display_formatter = None
             if spec := specs_by_param.get(name):
                 # Load the referenced record(s) for display

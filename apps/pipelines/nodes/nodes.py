@@ -740,10 +740,14 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             keep_when_hidden=True,
         ),
     )
-    prompt_template_version: str | None = Field(
-        default=None,
-        description="The version of the standard prompt a published version uses, set when the version is created.",
-        json_schema_extra=UiSchema(widget=Widgets.none, api_exclude=True),
+    prompt_template_version: str = Field(
+        default=router_prompts.LATEST_ROUTER_PROMPT_VERSION,
+        description=(
+            "The version of the standard prompt this router uses in `standard` and `standard_with_context` "
+            "modes. New routers get the latest version. A router keeps its version until it is changed, so "
+            "a newer standard prompt never changes how an existing router routes."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NODE,
@@ -782,10 +786,12 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             return {**data, "prompt_mode": RouterPromptMode.CUSTOM}
         return data
 
-    @field_validator("prompt_template_version")
+    @field_validator("prompt_template_version", mode="before")
     @classmethod
     def ensure_prompt_template_version_exists(cls, value):
-        if value is not None and value not in router_prompts.ROUTER_PROMPT_TEMPLATES:
+        if not value:
+            return router_prompts.LATEST_ROUTER_PROMPT_VERSION
+        if value not in router_prompts.ROUTER_PROMPT_TEMPLATES:
             raise PydanticCustomError(
                 "invalid_prompt_template_version",
                 "Unknown router prompt template version: {version}",
@@ -812,18 +818,6 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
                 e.error_dict[field][0].message,  # ty: ignore[not-subscriptable]
                 {"field": field},
             ) from None
-
-    @classmethod
-    def params_for_version(cls, params: dict) -> dict:
-        """Pins the standard prompt's current version, so a published version keeps the prompt it was tested with."""
-        if params.get("prompt_mode") in (None, "", RouterPromptMode.CUSTOM) or params.get("prompt_template_version"):
-            return params
-        return {**params, "prompt_template_version": router_prompts.LATEST_ROUTER_PROMPT_VERSION}
-
-    @classmethod
-    def working_params(cls, params: dict) -> dict:
-        """Drops the pinned version: a working router always uses the latest standard prompt."""
-        return {name: value for name, value in params.items() if name != "prompt_template_version"}
 
     def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
@@ -884,8 +878,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         if self.prompt_mode == RouterPromptMode.CUSTOM:
             return f"{self.prompt}\nThe default routing destination is: {default_keyword}"
         context = self.custom_context if self.prompt_mode == RouterPromptMode.STANDARD_WITH_CONTEXT else ""
-        version = self.prompt_template_version or router_prompts.LATEST_ROUTER_PROMPT_VERSION
-        return router_prompts.render_router_prompt(version, context, default_keyword or "")
+        return router_prompts.render_router_prompt(self.prompt_template_version, context, default_keyword or "")
 
     def _format_routes(self) -> str:
         """One `- KEYWORD: description` line per route; a route with no description is the bare keyword."""

@@ -312,16 +312,6 @@ class BasePipelineNode(BaseModel, ABC):
             state["node_source"] = source_node_id
         return state
 
-    @classmethod
-    def params_for_version(cls, params: dict) -> dict:
-        """The params a published version of this node stores, given the working node's."""
-        return params
-
-    @classmethod
-    def working_params(cls, params: dict) -> dict:
-        """The params a working node stores when it is restored from a published version's."""
-        return params
-
     @property
     def repo(self) -> "ORMRepository":
         """Access the pipeline repository. Always available during _process()."""

@@ -163,6 +163,13 @@ class RouterNodeParams(_HistoryParams, _RouterParams):
         allow_blank=True,
         help_text="Instructions added to the standard prompt when ``prompt_mode`` is ``standard_with_context``.",
     )
+    prompt_template_version = serializers.CharField(
+        required=False,
+        help_text=(
+            "Version of the standard prompt the router uses in the standard modes. New routers get the "
+            "latest version; set the latest version to upgrade a router."
+        ),
+    )
     prompt = serializers.CharField(
         required=False, help_text="Prompt steering the LLM router's choice, used when ``prompt_mode`` is ``custom``."
     )

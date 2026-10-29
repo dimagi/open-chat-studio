@@ -755,30 +755,50 @@ function KeyValuePairsWidget(props: WidgetParams) {
  * Chooses how an LLM Router's prompt is built, and previews the standard prompt. A router saved
  * before prompt modes existed has no `prompt_mode` and reads as custom, as on the server, so the
  * stored value is read here rather than the schema default the caller substitutes for a missing one.
+ *
+ * A router keeps the standard prompt version it is pinned to. When a newer one exists, the widget
+ * previews both and offers to switch.
  */
 export function RouterPromptModeWidget(props: WidgetParams) {
   const modalId = useId();
+  const setNode = usePipelineStore((state) => state.setNode);
+  const {routerPromptTemplates} = getCachedData();
+  const latest = routerPromptTemplates.latest;
   const mode = String(props.nodeParams.prompt_mode || "custom");
   const isCustom = mode === "custom";
+  const version = String(props.nodeParams.prompt_template_version || latest);
+  const isOutdated = !isCustom && version !== latest;
 
-  const preview = () => {
-    const {routerPromptTemplates} = getCachedData();
-    const version = String(props.nodeParams.prompt_template_version || routerPromptTemplates.latest);
+  const setParams = (update: (params: NodeParams) => void) =>
+    setNode(props.nodeId, (old) => produce(old, (next) => update(next.data.params)));
+
+  const changeMode = (event: ChangeEvent<HTMLSelectElement>) => {
+    const newMode = event.target.value;
+    setParams((params) => {
+      params.prompt_mode = newMode;
+      if (newMode !== "custom" && !params.prompt_template_version) {
+        params.prompt_template_version = latest;
+      }
+    });
+  };
+
+  const preview = (templateVersion: string) => {
     const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.map(String) : [];
-    return renderRouterPromptPreview(routerPromptTemplates.templates[version] ?? "", {
+    return renderRouterPromptPreview(routerPromptTemplates.templates[templateVersion] ?? "", {
       keywords,
       routeDescriptions: (props.nodeParams.route_descriptions || {}) as Record<string, string>,
       customContext: mode === "standard_with_context" ? concatenate(props.nodeParams.custom_context) : "",
       defaultRoute: keywords[Number(props.nodeParams.default_keyword_index ?? 0)] ?? "",
     });
   };
+  const previewClassName = "whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case";
 
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
       <select
         className="select appearance-none w-full nodrag"
         name={props.name}
-        onChange={props.updateParamValue}
+        onChange={changeMode}
         value={mode}
         disabled={props.readOnly}
       >
@@ -786,11 +806,23 @@ export function RouterPromptModeWidget(props: WidgetParams) {
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
       </select>
-      {isCustom ? (
-        <small className="text-warning normal-case">
-          A custom prompt does not get improvements made to the standard prompt.
-        </small>
-      ) : (
+      {isOutdated && (
+        <div className="flex flex-wrap items-center gap-2 text-sm normal-case">
+          <span>A newer standard prompt is available ({version} → {latest}).</span>
+          {!props.readOnly && (
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={() => setParams((params) => {
+                params.prompt_template_version = latest;
+              })}
+            >
+              Switch to latest
+            </button>
+          )}
+        </div>
+      )}
+      {!isCustom && (
         <button
           type="button"
           className="btn btn-xs btn-ghost self-start"
@@ -806,7 +838,14 @@ export function RouterPromptModeWidget(props: WidgetParams) {
               <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
             </form>
             <h4 className="font-bold text-lg mb-2">Generated prompt</h4>
-            <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case">{preview()}</pre>
+            {isOutdated && <h5 className="font-semibold mb-1 normal-case">Current ({version})</h5>}
+            <pre className={previewClassName}>{preview(version)}</pre>
+            {isOutdated && (
+              <>
+                <h5 className="font-semibold mt-3 mb-1 normal-case">Latest ({latest})</h5>
+                <pre className={previewClassName}>{preview(latest)}</pre>
+              </>
+            )}
           </div>
           <form method="dialog" className="modal-backdrop">
             <button type="submit">close</button>

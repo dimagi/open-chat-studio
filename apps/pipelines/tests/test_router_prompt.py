@@ -7,7 +7,6 @@ import pytest
 from pydantic import Field, create_model
 from pydantic import ValidationError as PydanticValidationError
 
-from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import RouterNode
@@ -149,50 +148,40 @@ class TestValidation:
                 _router(prompt_mode=prompt_mode, prompt="")
 
 
-class TestParamsForVersion:
+@pytest.mark.django_db()
+class TestTemplateVersion:
     @pytest.mark.parametrize(
         ("params", "expected_version"),
         [
-            pytest.param({"prompt_mode": "standard"}, LATEST_ROUTER_PROMPT_VERSION, id="standard-is-pinned"),
-            pytest.param(
-                {"prompt_mode": "standard_with_context"}, LATEST_ROUTER_PROMPT_VERSION, id="context-is-pinned"
-            ),
-            pytest.param({"prompt_mode": "standard", "prompt_template_version": "v0"}, "v0", id="pin-is-kept"),
-            pytest.param({"prompt_mode": "custom"}, None, id="custom-is-not-pinned"),
-            pytest.param({}, None, id="no-mode-is-not-pinned"),
+            pytest.param({}, LATEST_ROUTER_PROMPT_VERSION, id="new-router-uses-latest"),
+            pytest.param({"prompt_template_version": None}, LATEST_ROUTER_PROMPT_VERSION, id="null-uses-latest"),
+            pytest.param({"prompt_template_version": "v0"}, "v0", id="pinned-version-kept"),
         ],
     )
-    def test_router(self, params, expected_version):
-        pinned = NodeType("RouterNode").params_for_version(params)
+    def test_a_router_is_pinned_to_a_template_version(self, params, expected_version):
+        with mock.patch.dict("apps.pipelines.nodes.router_prompts.ROUTER_PROMPT_TEMPLATES", {"v0": "{routes}"}):
+            router = _router(prompt_mode="standard", **params)
 
-        assert pinned.get("prompt_template_version") == expected_version
-
-    def test_other_types_are_unchanged(self):
-        params = {"prompt": "Hi"}
-
-        assert NodeType("LLMResponseWithPrompt").params_for_version(params) == params
-
-    def test_working_params_drop_the_pin(self):
-        params = {"prompt_mode": "standard", "prompt_template_version": "v0"}
-
-        assert NodeType("RouterNode").working_params(params) == {"prompt_mode": "standard"}
+        assert router.prompt_template_version == expected_version
 
 
 @pytest.mark.django_db()
 class TestPipelineVersions:
+    TEMPLATES = {"v1": "Old {routes}", "v2": "New {routes}"}
+
     @pytest.fixture()
     def router_node(self):
-        return NodeFactory.create(
-            type="RouterNode", pipeline=PipelineFactory.create(), params={"name": "r", "prompt_mode": "standard"}
-        )
+        params = {"name": "r", "prompt_mode": "standard", "prompt_template_version": "v1"}
+        return NodeFactory.create(type="RouterNode", pipeline=PipelineFactory.create(), params=params)
 
-    def test_a_version_pins_the_template_and_the_working_node_stays_unpinned(self, router_node):
-        version = router_node.pipeline.create_new_version()
+    def test_a_version_keeps_the_working_nodes_template_after_a_newer_one_is_released(self, router_node):
+        with (
+            mock.patch.dict("apps.pipelines.nodes.router_prompts.ROUTER_PROMPT_TEMPLATES", self.TEMPLATES),
+            mock.patch("apps.pipelines.nodes.router_prompts.LATEST_ROUTER_PROMPT_VERSION", "v2"),
+        ):
+            version = router_node.pipeline.create_new_version()
 
-        router_node.refresh_from_db()
-        assert "prompt_template_version" not in router_node.params
-        version_node = version.node_set.get(type="RouterNode")
-        assert version_node.params["prompt_template_version"] == LATEST_ROUTER_PROMPT_VERSION
+        assert version.node_set.get(type="RouterNode").params["prompt_template_version"] == "v1"
 
     def test_the_working_node_reports_no_change_against_its_version(self, router_node):
         router_node.pipeline.create_new_version()
@@ -200,18 +189,19 @@ class TestPipelineVersions:
         router_node.refresh_from_db()
         assert not router_node.compare_with_latest()
 
-    def test_a_newer_template_is_an_unpublished_change(self, router_node):
+    def test_switching_template_version_is_an_unpublished_change(self, router_node):
         router_node.pipeline.create_new_version()
 
         router_node.refresh_from_db()
-        with mock.patch("apps.pipelines.nodes.router_prompts.LATEST_ROUTER_PROMPT_VERSION", "v2"):
-            assert router_node.compare_with_latest()
+        router_node.params["prompt_template_version"] = "v2"
+        assert router_node.compare_with_latest()
 
-    def test_reverting_to_a_version_unpins_the_working_node(self, router_node):
+    def test_reverting_to_a_version_restores_its_template_version(self, router_node):
         pipeline = router_node.pipeline
         version = pipeline.create_new_version()
+        router_node.params["prompt_template_version"] = "v2"
+        router_node.save()
 
         pipeline.revert_to_version(version)
 
-        working = pipeline.node_set.get(type="RouterNode")
-        assert "prompt_template_version" not in working.params
+        assert pipeline.node_set.get(type="RouterNode").params["prompt_template_version"] == "v1"

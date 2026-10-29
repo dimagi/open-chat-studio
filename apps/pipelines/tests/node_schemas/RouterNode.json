@@ -168,12 +168,11 @@
       "ui:widget": "text_editor_widget"
     },
     "prompt_template_version": {
-      "api:exclude": true,
-      "default": null,
-      "description": "The version of the standard prompt a published version uses, set when the version is created.",
+      "default": "v1",
+      "description": "The version of the standard prompt this router uses in `standard` and `standard_with_context` modes. New routers get the latest version. A router keeps its version until it is changed, so a newer standard prompt never changes how an existing router routes.",
       "title": "Prompt Template Version",
-      "ui:widget": "none",
-      "type": "string"
+      "type": "string",
+      "ui:widget": "none"
     },
     "route_descriptions": {
       "additionalProperties": {

@@ -432,11 +432,10 @@ describe('RouterPromptModeWidget', () => {
     );
   };
 
-  it('reads a router without a prompt_mode as custom and warns about it', () => {
-    const {getByRole, getByText, queryByText} = renderWidget(routes);
+  it('reads a router without a prompt_mode as custom, with no preview', () => {
+    const {getByRole, queryByText} = renderWidget(routes);
 
     expect(getByRole('combobox')).toHaveValue('custom');
-    expect(getByText(/does not get improvements made to the standard prompt/)).toBeInTheDocument();
     expect(queryByText(/Preview generated prompt/)).not.toBeInTheDocument();
   });
 
@@ -449,10 +448,81 @@ describe('RouterPromptModeWidget', () => {
     expect(container.querySelector('pre')?.textContent).toBe(expected);
   });
 
-  it('previews the pinned version of a published router', () => {
+  it('previews the router\'s pinned version', () => {
     const {container} = renderWidget({...routes, prompt_mode: 'standard', prompt_template_version: 'v1'});
 
     expect(container.querySelector('pre')?.textContent).toBe('Old - BILLING: Payments\n- SUPPORT');
+  });
+
+  describe('on the stored node', () => {
+    const seedRouter = (params: Record<string, unknown>) =>
+      usePipelineStore.setState({
+        readOnly: false,
+        nodes: [{
+          id: 'node-1', type: 'pipelineNode', position: {x: 0, y: 0},
+          data: {type: 'RouterNode', label: '', params: {...routes, ...params}},
+        }] as never,
+      });
+    const storedParams = () => usePipelineStore.getState().nodes[0].data.params;
+
+    function Harness() {
+      const params = usePipelineStore((state) => state.nodes[0].data.params);
+      const Widget = getWidget('router_prompt_mode', schema);
+      return (
+        <Widget {...baseProps} nodeId="node-1" name="prompt_mode" label="Prompt Mode" schema={schema}
+          nodeParams={params} paramValue={String(params.prompt_mode ?? '')} />
+      );
+    }
+
+    it('pins the latest version when a custom router switches to a standard mode', () => {
+      seedRouter({prompt_mode: 'custom'});
+      const {getByRole} = render(<Harness />);
+
+      fireEvent.change(getByRole('combobox'), {target: {value: 'standard'}});
+
+      expect(storedParams()).toMatchObject({prompt_mode: 'standard', prompt_template_version: 'v2'});
+    });
+
+    it('keeps the pinned version when the mode changes', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
+      const {getByRole} = render(<Harness />);
+
+      fireEvent.change(getByRole('combobox'), {target: {value: 'standard_with_context'}});
+
+      expect(storedParams()).toMatchObject({prompt_mode: 'standard_with_context', prompt_template_version: 'v1'});
+    });
+
+    it('offers to switch a router on an older version to the latest', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
+      const {getByRole, getByText, queryByText} = render(<Harness />);
+
+      expect(getByText(/A newer standard prompt is available/)).toBeInTheDocument();
+      fireEvent.click(getByRole('button', {name: 'Switch to latest'}));
+
+      expect(storedParams().prompt_template_version).toBe('v2');
+      expect(queryByText(/A newer standard prompt is available/)).not.toBeInTheDocument();
+    });
+
+    it('previews both versions of a router on an older version', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
+      const {container} = render(<Harness />);
+
+      const previews = Array.from(container.querySelectorAll('pre')).map((pre) => pre.textContent);
+      expect(previews).toEqual([
+        'Old - BILLING: Payments\n- SUPPORT',
+        'Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT',
+      ]);
+    });
+
+    it.each([
+      ['custom', {prompt_mode: 'custom', prompt_template_version: 'v1'}],
+      ['on the latest version', {prompt_mode: 'standard', prompt_template_version: 'v2'}],
+    ])('does not offer an upgrade when %s', (_name, params) => {
+      seedRouter(params);
+      const {queryByText} = render(<Harness />);
+
+      expect(queryByText(/A newer standard prompt is available/)).not.toBeInTheDocument();
+    });
   });
 });
 
