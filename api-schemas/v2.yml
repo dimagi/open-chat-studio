@@ -530,6 +530,7 @@ paths:
                     prompt_mode: standard_with_context
                     custom_context: A request to change an existing booking is a reschedule,
                       not a new booking.
+                    prompt_template_version: v1
                     prompt: |-
                       Route on what {participant_data} is asking for.
 
@@ -553,7 +554,8 @@ paths:
                 summary: 'RouterNode: `keywords[i]` routes to handle `output_i`; keywords
                   are uppercased on save. The standard prompt lists each keyword with
                   its `route_descriptions` entry; `custom_context` adds to it, and
-                  `prompt` is used only when `prompt_mode` is `custom`.'
+                  `prompt` is used only when `prompt_mode` is `custom`. `prompt_template_version`
+                  picks the standard prompt version; omit it for the latest.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -4765,6 +4767,11 @@ components:
           type: string
           description: Instructions added to the standard prompt when ``prompt_mode``
             is ``standard_with_context``.
+        prompt_template_version:
+          type: string
+          description: Version of the standard prompt the router uses in the standard
+            modes. New routers get the latest version; set the latest version to upgrade
+            a router.
         prompt:
           type: string
           description: Prompt steering the LLM router's choice, used when ``prompt_mode``
