@@ -86,10 +86,10 @@
                   <span x-text="filter.selectedValues.length ? getSelectedDisplayText(filter, 80) : 'Select'"></span>
                   <i class="fa-solid fa-caret-down fa-sm shrink-0"></i>
                 </div>
-                <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
+                <div x-show="filter.showOptions" @click.outside="filter.showOptions = false" @scroll="loadMoreOptions($event, index)" class="absolute z-50 mt-1 bg-base-100 rounded-lg max-h-64 overflow-y-auto w-48 border border-base-300" style="z-index: 9999 !important;">
                   <div class="sticky top-0 bg-base-100 border-b p-2 z-1">
                     <div class="relative">
-                      <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
+                      <input type="text" x-model="filter.searchQuery" @input="filterDropdownOptions(index, $el)" placeholder="Search..." class="input input-sm w-full pl-8 focus:outline-hidden focus:border-primary">
                     </div>
                   </div>
                   <div x-show="filter.column === 'tags'" class="border-b p-2 bg-base-50">
@@ -119,6 +119,9 @@
                     </template>
                     <div x-show="filter.filteredOptions && filter.filteredOptions.length === 0" class="px-4 py-2 text-sm text-gray-500 italic">
                       No matching options
+                    </div>
+                    <div x-show="filter.optionsLoadingMore" class="px-4 py-2 text-sm text-gray-500 italic">
+                      Loading...
                     </div>
                   </div>
                 </div>
