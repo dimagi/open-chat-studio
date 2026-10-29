@@ -1586,6 +1586,7 @@ export function TextEditorWidget(props: WidgetParams) {
   const promptText = concatenate(props.paramValue);
   // `custom_context` shares this editor but is only part of the router's prompt, so the routes
   // nudge and prompt improvement apply to a node's whole `prompt` alone.
+  // NOTE: relies on the literal field name `custom_context` matching apps/pipelines/nodes/nodes.py.
   const isWholePrompt = props.name !== "custom_context";
   const routesWarning = isRouter && isWholePrompt
     && !promptText.includes("{routes}") && !promptText.includes("{routes_list}")
