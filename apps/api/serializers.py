@@ -263,10 +263,8 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(MessageSerializer(many=True))
     def get_messages(self, instance):
-        chat = instance.chat
-        messages = list(reversed(list(chat.message_iterator())))
-        ChatMessage.prefetch_attached_files(chat, messages)
-        return MessageSerializer(messages, many=True, context=self.context).data
+        messages = list(instance.chat.message_iterator())
+        return MessageSerializer(reversed(messages), many=True, context=self.context).data
 
     @extend_schema_field(SessionUsageSerializer)
     def get_usage(self, instance):

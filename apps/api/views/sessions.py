@@ -167,6 +167,13 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         kwargs.setdefault("context", self.get_serializer_context())
         return serializer_class(*args, **kwargs)
 
+    def get_object(self):
+        session = super().get_object()
+        if self.action == "retrieve":
+            chat = session.chat
+            ChatMessage.prefetch_attached_files(chat=chat, messages=chat._prefetched_messages)
+        return session
+
     def get_queryset(self):
         queryset = ExperimentSession.objects.filter(team=self.request.team).select_related(
             "team", "experiment", "participant"
