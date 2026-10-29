@@ -199,9 +199,9 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                     queryset=ParticipantData.objects.only("id", "participant_id", "experiment_id", "data"),
                     to_attr="_prefetched_participant_data",
                 ),
-                # Messages (with their tags) are only serialized on the detail endpoint. Ordering
-                # here lets the serializer read them from the prefetch cache instead of running a
-                # new query (plus one tag query per message) via `Chat.message_iterator`.
+                # Messages (with their tags) are only serialized on the detail endpoint.
+                # `Chat.message_iterator` reads `_prefetched_messages` (which must be ordered by
+                # `created_at`) instead of running a new query plus one tag query per message.
                 Prefetch(
                     "chat__messages",
                     queryset=ChatMessage.objects.order_by("created_at").prefetch_related("tags"),

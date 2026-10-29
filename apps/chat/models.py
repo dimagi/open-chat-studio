@@ -95,11 +95,22 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         return messages_from_dict(list(reversed(messages)))
 
     def message_iterator(self, with_summaries=True, exclude_message_id=None):
-        queryset = self.messages.order_by("-created_at")
-        if exclude_message_id:
-            queryset = queryset.exclude(id=exclude_message_id)
+        """Yields the chat's messages newest first, each followed by its summary message (if any).
 
-        for message in queryset.iterator(100):
+        If the messages were prefetched into ``_prefetched_messages`` (ordered by ``created_at``,
+        e.g. by ``ExperimentSessionViewSet``), those are used instead of querying the database,
+        so any relations prefetched with them (such as tags) are preserved.
+        """
+        prefetched = getattr(self, "_prefetched_messages", None)
+        if prefetched is not None:
+            messages = (message for message in reversed(prefetched) if message.id != exclude_message_id)
+        else:
+            queryset = self.messages.order_by("-created_at")
+            if exclude_message_id:
+                queryset = queryset.exclude(id=exclude_message_id)
+            messages = queryset.iterator(100)
+
+        for message in messages:
             yield message
             if with_summaries and message.summary:
                 yield message.get_summary_message()
