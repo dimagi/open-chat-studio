@@ -214,11 +214,11 @@ export function renderRouterPromptPreview(
     defaultRoute: string;
   },
 ): string {
-  const routeNames = keywords.filter(Boolean);
+  const routeNames = keywords;
   const routes = routeNames.map((keyword) => {
     const description = (routeDescriptions[keyword] || "").trim();
-    return description ? `- ${keyword}: ${description}` : `- ${keyword}`;
-  }).join("\n");
+    return keyword ? (description ? `- ${keyword}: ${description}` : `- ${keyword}`) : null;
+  }).filter((line): line is string => line !== null).join("\n");
   const routeVariables = {routes, routes_list: routeNames.join(", ")};
   const context = fillPromptVariables(customContext.trim(), routeVariables);
   const contextSection = context ? `\nAdditional context:\n${context}\n` : "";
