@@ -454,6 +454,14 @@ describe('RouterPromptModeWidget', () => {
     expect(container.querySelector('pre')?.textContent).toBe('Old - BILLING: Payments\n- SUPPORT');
   });
 
+  it('says the preview is unavailable for a version it has no template for, and still previews the latest', () => {
+    const {container, getByText} = renderWidget({...routes, prompt_mode: 'standard', prompt_template_version: 'v9'});
+
+    expect(getByText('Preview unavailable for version v9.')).toBeInTheDocument();
+    const previews = Array.from(container.querySelectorAll('pre')).map((pre) => pre.textContent);
+    expect(previews).toEqual(['Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT']);
+  });
+
   describe('on the stored node', () => {
     const seedRouter = (params: Record<string, unknown>) =>
       usePipelineStore.setState({

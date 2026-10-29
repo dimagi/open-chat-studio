@@ -1,5 +1,23 @@
 import {beforeAll, describe, expect, it} from 'vitest';
 import {getCachedData, renderRouterPromptPreview} from './utils';
+import {readFileSync} from 'node:fs';
+
+// Shared with the router's own tests in apps/pipelines/tests/test_router_prompt.py, so the preview
+// fails CI when it stops matching the prompt the router sends. The path is from the repo root, where vitest runs.
+const previewCases = JSON.parse(
+  readFileSync('apps/pipelines/tests/data/router_prompt_preview_cases.json', 'utf8'),
+) as {
+  template: string;
+  cases: Array<{
+    id: string;
+    keywords: string[];
+    route_descriptions: Record<string, string>;
+    default_keyword_index: number;
+    prompt_mode: string;
+    custom_context: string;
+    expected: string;
+  }>;
+};
 
 beforeAll(() => {
   const setScript = (id: string, data: unknown) => {
@@ -68,5 +86,18 @@ describe('renderRouterPromptPreview', () => {
 
     expect(preview).toContain('- BILLING: Costs $& fees');
     expect(preview).toContain("Refunds over $' go to billing.");
+  });
+});
+
+describe('renderRouterPromptPreview matches the router', () => {
+  it.each(previewCases.cases.map((testCase) => [testCase.id, testCase] as const))('%s', (_id, testCase) => {
+    const preview = renderRouterPromptPreview(previewCases.template, {
+      keywords: testCase.keywords,
+      routeDescriptions: testCase.route_descriptions,
+      customContext: testCase.prompt_mode === 'standard_with_context' ? testCase.custom_context : '',
+      defaultRoute: testCase.keywords[testCase.default_keyword_index],
+    });
+
+    expect(preview).toBe(testCase.expected);
   });
 });

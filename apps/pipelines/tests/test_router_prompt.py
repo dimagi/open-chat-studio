@@ -1,5 +1,8 @@
 """The LLM Router's prompt modes and the standard prompt template (#2688)."""
 
+import json
+from pathlib import Path
+from string import Formatter
 from typing import Literal
 from unittest import mock
 
@@ -10,12 +13,20 @@ from pydantic import ValidationError as PydanticValidationError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import RouterNode
-from apps.pipelines.nodes.router_prompts import LATEST_ROUTER_PROMPT_VERSION, render_router_prompt
+from apps.pipelines.nodes.router_prompts import (
+    LATEST_ROUTER_PROMPT_VERSION,
+    ROUTER_PROMPT_TEMPLATES,
+    render_router_prompt,
+)
 from apps.pipelines.repository import ORMRepository
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.tests.langchain import build_fake_llm_echo_service
+
+# Shared with `renderRouterPromptPreview`'s tests in assets/javascript/apps/pipeline/utils.test.tsx,
+# so the builder's preview fails CI when it stops matching the prompt the router sends.
+PREVIEW_CASES = json.loads((Path(__file__).parent / "data" / "router_prompt_preview_cases.json").read_text())
 
 
 def _router(**params) -> RouterNode:
@@ -205,3 +216,32 @@ class TestPipelineVersions:
         pipeline.revert_to_version(version)
 
         assert pipeline.node_set.get(type="RouterNode").params["prompt_template_version"] == "v1"
+
+
+@pytest.mark.django_db()
+class TestPreviewContract:
+    @pytest.mark.parametrize("case", [pytest.param(case, id=case["id"]) for case in PREVIEW_CASES["cases"]])
+    def test_the_router_sends_the_prompt_the_builder_previews(self, case):
+        templates = {"contract": PREVIEW_CASES["template"]}
+        with mock.patch.dict("apps.pipelines.nodes.router_prompts.ROUTER_PROMPT_TEMPLATES", templates):
+            router = RouterNode(
+                node_id="router",
+                django_node=None,
+                name="router",
+                llm_provider_id=LlmProviderFactory.create().id,
+                llm_provider_model_id=LlmProviderModelFactory.create().id,
+                prompt_template_version="contract",
+                **{name: case[name] for name in ("keywords", "route_descriptions", "default_keyword_index")},
+                **{name: case[name] for name in ("prompt_mode", "custom_context")},
+            )
+            prompt = _system_prompt(router)
+
+        assert prompt == case["expected"]
+
+    @pytest.mark.parametrize("version", ROUTER_PROMPT_TEMPLATES)
+    def test_every_template_uses_only_placeholders_the_preview_fills(self, version):
+        assert _placeholders(ROUTER_PROMPT_TEMPLATES[version]) <= _placeholders(PREVIEW_CASES["template"])
+
+
+def _placeholders(template: str) -> set[str]:
+    return {name for _, name, _, _ in Formatter().parse(template) if name is not None}

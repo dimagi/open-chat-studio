@@ -783,15 +783,19 @@ export function RouterPromptModeWidget(props: WidgetParams) {
   };
 
   const preview = (templateVersion: string) => {
+    const template = routerPromptTemplates.templates[templateVersion];
+    if (template === undefined) {
+      return <p className="text-warning normal-case">{`Preview unavailable for version ${templateVersion}.`}</p>;
+    }
     const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.map(String) : [];
-    return renderRouterPromptPreview(routerPromptTemplates.templates[templateVersion] ?? "", {
+    const prompt = renderRouterPromptPreview(template, {
       keywords,
       routeDescriptions: (props.nodeParams.route_descriptions || {}) as Record<string, string>,
       customContext: mode === "standard_with_context" ? concatenate(props.nodeParams.custom_context) : "",
       defaultRoute: keywords[Number(props.nodeParams.default_keyword_index ?? 0)] ?? "",
     });
+    return <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case">{prompt}</pre>;
   };
-  const previewClassName = "whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case";
 
   return (
     <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
@@ -839,11 +843,11 @@ export function RouterPromptModeWidget(props: WidgetParams) {
             </form>
             <h4 className="font-bold text-lg mb-2">Generated prompt</h4>
             {isOutdated && <h5 className="font-semibold mb-1 normal-case">Current ({version})</h5>}
-            <pre className={previewClassName}>{preview(version)}</pre>
+            {preview(version)}
             {isOutdated && (
               <>
                 <h5 className="font-semibold mt-3 mb-1 normal-case">Latest ({latest})</h5>
-                <pre className={previewClassName}>{preview(latest)}</pre>
+                {preview(latest)}
               </>
             )}
           </div>
