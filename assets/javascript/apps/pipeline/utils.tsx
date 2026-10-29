@@ -221,7 +221,8 @@ export function renderRouterPromptPreview(
   const routeVariables = {routes, routes_list: routeNames.join(", ")};
   const context = fillPromptVariables(customContext.trim(), routeVariables);
   const contextSection = context ? `\nAdditional context:\n${context}\n` : "";
-  return fillPromptVariables(template, {...routeVariables, default_route: defaultRoute, custom_context: contextSection});
+  const escapedDefaultRoute = defaultRoute.replace(/\{/g, "{{").replace(/\}/g, "}}");
+  return fillPromptVariables(template, {...routeVariables, default_route: escapedDefaultRoute, custom_context: contextSection});
 }
 
 /** Fills `{name}` variables in one pass, as Python's `str.format` does: `{{` and `}}` are literal braces. */
