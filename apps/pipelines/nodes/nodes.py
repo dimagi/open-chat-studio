@@ -717,7 +717,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             widget=Widgets.text_editor,
             options_source=OptionsSource.router_prompt_variables,
             visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.STANDARD_WITH_CONTEXT.value),
-            keep_when_hidden=True,
+            keep_value_when_hidden=True,
         ),
     )
     prompt: str = Field(
@@ -737,7 +737,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
                 operator="not_in",
                 value=[RouterPromptMode.STANDARD.value, RouterPromptMode.STANDARD_WITH_CONTEXT.value],
             ),
-            keep_when_hidden=True,
+            keep_value_when_hidden=True,
         ),
     )
     prompt_template_version: str = Field(

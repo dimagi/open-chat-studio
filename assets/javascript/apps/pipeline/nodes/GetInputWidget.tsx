@@ -48,7 +48,7 @@ type VisibleWhenWrapperProps = {
   fieldName: string;
   nodeId: string;
   schemaDefault: unknown;
-  keepWhenHidden?: boolean;
+  keepValueWhenHidden?: boolean;
   onHide?: () => void;
   onShow?: () => void;
   children: React.ReactNode;
@@ -63,6 +63,9 @@ type VisibleWhenWrapperProps = {
  * The optional `onHide` callback overrides the default reset behaviour, which
  * is useful for sub-schema widgets (e.g. ModelParametersWidget) that store
  * their values at a nested path rather than directly in node.data.params.
+ *
+ * `keepValueWhenHidden` skips the clearing and `onHide`, so the stored value survives being hidden.
+ * The field is still not rendered while it is hidden.
  */
 export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   visibleWhen,
@@ -70,7 +73,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   fieldName,
   nodeId,
   schemaDefault,
-  keepWhenHidden = false,
+  keepValueWhenHidden = false,
   onHide,
   onShow,
   children,
@@ -98,7 +101,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
     // 1. The field is initially hidden on mount (prevVisibleRef.current === undefined)
     // 2. The field transitions from visible to hidden (prevVisibleRef.current === true)
     const wasVisibleOrUnmounted = prevVisibleRef.current === undefined || prevVisibleRef.current === true;
-    if (wasVisibleOrUnmounted && !isVisible && !keepWhenHidden) {
+    if (wasVisibleOrUnmounted && !isVisible && !keepValueWhenHidden) {
       if (onHide) {
         onHide();
       } else {
@@ -116,7 +119,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
       }
     }
     prevVisibleRef.current = isVisible;
-  }, [isVisible, fieldIdentity, keepWhenHidden, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
+  }, [isVisible, fieldIdentity, keepValueWhenHidden, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
 
   if (!isVisible) return <></>;
   return <>{children}</>;
@@ -317,7 +320,7 @@ export const getInputWidget = (
       fieldName={params.name}
       nodeId={params.id}
       schemaDefault={widgetSchema.default}
-      keepWhenHidden={widgetSchema["ui:keepWhenHidden"]}
+      keepValueWhenHidden={widgetSchema["ui:keepValueWhenHidden"]}
       onHide={onHide}
       onShow={onShow}
     >

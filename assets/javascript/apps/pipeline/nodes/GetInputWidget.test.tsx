@@ -95,7 +95,7 @@ describe('VisibleWhenWrapper', () => {
   it.each([
     ['clears', false, 1],
     ['keeps', true, 0],
-  ])('%s a hidden field when keepWhenHidden is %s', (_verb, keepWhenHidden, clears) => {
+  ])('%s a hidden field when keepValueWhenHidden is %s', (_verb, keepValueWhenHidden, clears) => {
     const onHide = vi.fn();
 
     render(
@@ -105,7 +105,7 @@ describe('VisibleWhenWrapper', () => {
         fieldName="field"
         nodeId="node-1"
         schemaDefault={null}
-        keepWhenHidden={keepWhenHidden}
+        keepValueWhenHidden={keepValueWhenHidden}
         onHide={onHide}
       >
         <span>content</span>

@@ -534,7 +534,7 @@ _UI_SCHEMA_KEYS = {
     "flag_required": "ui:flagRequired",
     "rows": "ui:rows",
     "default_on_show": "ui:onShowDefault",
-    "keep_when_hidden": "ui:keepWhenHidden",
+    "keep_value_when_hidden": "ui:keepValueWhenHidden",
 }
 
 
@@ -558,7 +558,7 @@ class UiSchema(BaseModel):
 
     # The frontend clears a field when `visible_when` hides it. Set this to keep the value instead,
     # for a field the node ignores while it is hidden, so that showing it again restores what was typed.
-    keep_when_hidden: bool | None = None
+    keep_value_when_hidden: bool | None = None
 
     # When set, the frontend will populate this field with this value when the field
     # transitions from hidden to visible and its current value is null/undefined.
