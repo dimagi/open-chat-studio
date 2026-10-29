@@ -104,6 +104,7 @@ class OAuthTokenManager:
     def _refetch_with_lock(self) -> str:
         """Fetch a fresh token under a row lock and re-check after waiting."""
         model = type(self.provider)
+        reconnect_error = None
         with transaction.atomic():
             provider = model.objects.select_for_update().get(pk=self.provider.pk)
             if _token_is_valid(provider._auth_data, provider.config):
@@ -111,12 +112,18 @@ class OAuthTokenManager:
             else:
                 try:
                     token = self._get_fresh_token(provider)
-                except OAuthReconnectRequired:
-                    if provider.type == "oauth_authorization_code":
-                        self._persist_reconnect_required(provider)
-                    raise
-                self._persist_token(provider, token)
-            self.provider._auth_data = token
+                except OAuthReconnectRequired as exc:
+                    if provider.type != "oauth_authorization_code":
+                        raise
+                    self._persist_reconnect_required(provider)
+                    self.provider._auth_data = provider._auth_data
+                    reconnect_error = exc
+                else:
+                    self._persist_token(provider, token)
+            if reconnect_error is None:
+                self.provider._auth_data = token
+        if reconnect_error is not None:
+            raise reconnect_error
         return token["access_token"]
 
 

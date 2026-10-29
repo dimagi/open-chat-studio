@@ -97,8 +97,6 @@ def _exchange_code(request, provider, code, verifier):
         if method == TokenEndpointAuthMethod.CLIENT_SECRET_BASIC
         else {}
     )
-    if method == TokenEndpointAuthMethod.CLIENT_SECRET_POST:
-        body += "&client_secret=" + provider.config["client_secret"]
     return _parse_token_response(client, _post_token_request(url, body, kwargs), url)
 
 
