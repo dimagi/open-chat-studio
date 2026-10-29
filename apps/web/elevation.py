@@ -13,10 +13,10 @@ from django.contrib import messages
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.teams.models import Team
 from apps.utils.rate_limit import forwarded_client_ip
+from apps.utils.redirects import safe_redirect_url
 from apps.web.models import SuperuserElevation
 
 logger = logging.getLogger("ocs.audit")
@@ -287,13 +287,6 @@ def _now() -> int:
 
 def _is_stale(state: dict) -> bool:
     return _now() - state.get("at", 0) > STASH_MAX_AGE
-
-
-def safe_redirect_url(url: str) -> str:
-    """Where to send the user once they are done here, falling back to the site root."""
-    if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts=None):
-        return "/"
-    return url
 
 
 def requires_elevation(grant, superuser_only: bool = False):

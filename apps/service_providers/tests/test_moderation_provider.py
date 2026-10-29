@@ -29,11 +29,6 @@ def _auth_error(error_cls=openai.AuthenticationError, status_code=401):
 
 
 @pytest.fixture()
-def admin(team_with_users):
-    return team_with_users.members.first()
-
-
-@pytest.fixture()
 def admin_client(client, admin):
     client.force_login(admin)
     return client
@@ -125,6 +120,16 @@ def test_provider_builds_openai_service():
     assert service.openai_api_base is None
     assert service.openai_organization == "org-1"
     assert service.timeout is not None
+
+
+@pytest.mark.django_db()
+def test_provider_passes_service_kwargs():
+    provider = ModerationProviderFactory.create(config={"openai_api_key": "sk-1"})
+
+    service = provider.get_moderation_service(timeout=3, max_retries=0)
+
+    assert service.timeout == 3
+    assert service.max_retries == 0
 
 
 def _urls(team, provider=None):

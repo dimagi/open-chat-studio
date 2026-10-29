@@ -2387,6 +2387,7 @@ components:
           readOnly: true
         is_authoritative:
           type: boolean
+          default: false
         authoritative_set_at:
           type: string
           format: date-time
@@ -6199,6 +6200,7 @@ components:
           description: The language code this voice is for
           maxLength: 32
         gender:
+          default: ''
           description: |-
             The gender of this voice
 
@@ -6231,7 +6233,6 @@ components:
           nullable: true
       required:
       - created_at
-      - gender
       - id
       - is_global
       - language
@@ -6354,10 +6355,6 @@ components:
           type: boolean
           description: When set, every member of this team must enrol in two-factor
             authentication.
-        auto_block_enabled:
-          type: boolean
-          description: When set, participants who reach the strike limit are blocked
-            automatically.
         created_by:
           type: integer
           readOnly: true

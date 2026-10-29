@@ -23,6 +23,7 @@ class TestConsentFlowStage:
     def _make_message(self, content):
         message = MagicMock()
         message.content = content
+        message.is_flagged = False
         return message
 
     def _make_experiment(self, consent_enabled=True, consent_form_id=1, seed_message=None):

@@ -1,3 +1,5 @@
+from django.contrib.auth.models import Group
+
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import (
@@ -5,7 +7,7 @@ from apps.utils.factories.service_provider_factories import (
     LlmProviderModelFactory,
     VoiceProviderFactory,
 )
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 
 
 def make_team_with_resources():
@@ -20,3 +22,8 @@ def make_team_with_resources():
         team=team, name="Policy docs", is_index=False, llm_provider=None, embedding_provider_model=None
     )
     return team
+
+
+def member_with_groups(*, team, group_names: list[str]):
+    """A new member of `team` in the named permission groups; returns the user."""
+    return MembershipFactory.create(team=team, groups=lambda: list(Group.objects.filter(name__in=group_names))).user

@@ -146,7 +146,8 @@ class TestApiEndpoint:
             content_type="application/json",
         )
         assert response.status_code == 400
-        assert response.json() == {"messages": [{"timestamp": ["This field may not be null."]}]}
+        # DRF 3.18 reports errors from a nested list serializer keyed by item index, not as a list.
+        assert response.json() == {"messages": {"0": {"timestamp": ["This field may not be null."]}}}
 
     @patch("apps.channels.views.tasks.handle_commcare_connect_message")
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")

@@ -472,6 +472,33 @@ class TestErrorSpanAndFallback:
         assert result == str(error)
         assert not [r for r in caplog.records if r.levelname == "ERROR"]
 
+    @pytest.mark.parametrize(
+        ("error", "expected_log"),
+        [
+            pytest.param(
+                UserActionableError("not supported"),
+                ("INFO", "EventBot could not phrase a UserActionableError; replying with its text", False),
+                id="user_actionable_error",
+            ),
+            pytest.param(
+                RuntimeError("boom"),
+                ("ERROR", "Failed to generate error message via EventBot, falling back to default", True),
+                id="other_error",
+            ),
+        ],
+    )
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_eventbot_failure_log(self, mock_trace_info, mock_event_bot_cls, caplog, error, expected_log):
+        """`expected_log` is the (level, message, has traceback) of the one record logged."""
+        mock_event_bot_cls.return_value.get_user_message.side_effect = RuntimeError("EventBot down")
+
+        with caplog.at_level("INFO", logger="ocs.channels"):
+            _pipeline()._generate_error_message(make_context(), error)
+
+        records = [r for r in caplog.records if r.name == "ocs.channels"]
+        assert [(r.levelname, r.getMessage(), r.exc_info is not None) for r in records] == [expected_log]
+
     @patch("apps.channels.pipeline.EventBot")
     @patch("apps.channels.pipeline.TraceInfo")
     def test_eventbot_empty_reply_on_a_user_actionable_error_replies_with_its_text(

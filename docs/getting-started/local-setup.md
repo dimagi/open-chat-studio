@@ -143,6 +143,10 @@ inv celery --queues=background
 inv celery --queues=evaluations
 ```
 
+Abuse detection needs `inv celery --threads`. The chat task waits for a
+separate `moderate_message` task, and the default single-process worker cannot run that task until
+the wait has timed out, so every message is recorded as not moderated (`timeout`).
+
 ---
 
 Next: [Development Workflow](dev-workflow.md)

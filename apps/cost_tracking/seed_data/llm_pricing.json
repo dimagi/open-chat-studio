@@ -2174,5 +2174,49 @@
         "unit_price": "0.0001"
       }
     ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-6.1-terra",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.005"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00005"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00125"
+      }
+    ]
+  },
+  {
+    "provider_type": "azure",
+    "model_name": "gpt-6.1-terra",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.005"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00005"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00125"
+      }
+    ]
   }
 ]
