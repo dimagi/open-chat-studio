@@ -66,6 +66,8 @@ type VisibleWhenWrapperProps = {
  *
  * `keepValueWhenHidden` skips the clearing and `onHide`, so the stored value survives being hidden.
  * The field is still not rendered while it is hidden.
+ * Passing both `onHide` and `keepValueWhenHidden={true}` is not supported: `onHide` will simply never
+ * fire in that case, so avoid combining them on the same field.
  */
 export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   visibleWhen,
