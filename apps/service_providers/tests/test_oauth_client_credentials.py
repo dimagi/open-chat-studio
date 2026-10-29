@@ -7,6 +7,7 @@ from apps.service_providers.auth_service.main import BearerTokenAuthService
 from apps.service_providers.auth_service.oauth import (
     DEFAULT_TOKEN_TTL_SECONDS,
     EXPIRY_SKEW_SECONDS,
+    OAuthReconnectRequired,
     OAuthTokenError,
     OAuthTokenManager,
     _config_fingerprint,
@@ -39,6 +40,30 @@ def _allow_token_url():
     """Bypass the SSRF guard's DNS resolution for the placeholder token host."""
     with patch("apps.service_providers.auth_service.oauth.validate_user_input_url"):
         yield
+
+
+@pytest.mark.django_db()
+def test_reconnect_exception_does_not_write_code_reconnect_state(team):
+    provider = _make_provider(team)
+    config = provider.config
+    provider._auth_data = {
+        "access_token": "old-access",
+        "expires_at": time.time() - 1,
+        "config_fingerprint": _config_fingerprint(config),
+    }
+    provider.save(update_fields=["_auth_data"])
+
+    with (
+        patch(
+            "apps.service_providers.auth_service.oauth._fetch_client_credentials_token",
+            side_effect=OAuthReconnectRequired("reconnect"),
+        ),
+        pytest.raises(OAuthReconnectRequired, match="reconnect"),
+    ):
+        OAuthTokenManager(provider).get_valid_access_token()
+
+    provider.refresh_from_db()
+    assert "reconnect_required" not in provider._auth_data
 
 
 # --- Form validation ---
