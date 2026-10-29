@@ -48,6 +48,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
         # Token limits are the total context window Microsoft publishes for the deployment, not the
         # separate input-only figure it also lists.
+        Model("gpt-6.1-terra", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6.1-sol", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
         Model("gpt-6-sol", 1050000, parameters=GPT6SolParameters),
