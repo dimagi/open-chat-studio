@@ -5,6 +5,8 @@ filled at run time like any other router prompt. ``{custom_context}`` and ``{def
 first, by ``render_router_prompt``. Never edit a released version; add a new one and make it the latest.
 """
 
+import re
+
 ROUTER_PROMPT_TEMPLATES: dict[str, str] = {
     "v1": (
         "You are a routing assistant. Read the user's latest message, using the conversation so far for "
@@ -23,21 +25,25 @@ ROUTER_PROMPT_TEMPLATES: dict[str, str] = {
 
 LATEST_ROUTER_PROMPT_VERSION = "v1"
 
+_PLACEHOLDERS = re.compile(r"\{(custom_context|default_route)\}")
+
 
 def render_router_prompt(version: str, custom_context: str, default_route: str) -> str:
     """The prompt template for ``version`` with the context and default route filled in.
 
     The context is the user's own prompt text and is inserted as written, so its variables are filled
     at run time. The default route is a keyword, which is not a template, so its braces are escaped.
+
+    The builder previews the prompt with ``renderRouterPromptPreview``; both are tested against the cases
+    in ``apps/pipelines/tests/data/router_prompt_preview_cases.json``.
     """
     context = custom_context.strip()
-    context_section = f"\nAdditional context:\n{context}\n" if context else ""
-    escaped_route = default_route.replace("{", "{{").replace("}", "}}")
-    return (
-        ROUTER_PROMPT_TEMPLATES[version]
-        .replace("{default_route}", escaped_route)
-        .replace("{custom_context}", context_section)
-    )
+    values = {
+        "custom_context": f"\nAdditional context:\n{context}\n" if context else "",
+        "default_route": default_route.replace("{", "{{").replace("}", "}}"),
+    }
+    # One pass, so a value is never scanned for placeholders after it is inserted.
+    return _PLACEHOLDERS.sub(lambda match: values[match.group(1)], ROUTER_PROMPT_TEMPLATES[version])
 
 
 def router_prompt_templates_data() -> dict:

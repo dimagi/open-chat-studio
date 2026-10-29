@@ -827,34 +827,34 @@ export function RouterPromptModeWidget(props: WidgetParams) {
         </div>
       )}
       {!isCustom && (
-        <button
-          type="button"
-          className="btn btn-xs btn-ghost self-start"
-          onClick={() => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()}
-        >
-          <i className="fa-solid fa-eye"></i> Preview generated prompt
-        </button>
-      )}
-      {!isCustom && (
-        <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
-          <div className="modal-box max-w-3xl">
-            <form method="dialog">
-              <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        <>
+          <button
+            type="button"
+            className="btn btn-xs btn-ghost self-start"
+            onClick={() => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()}
+          >
+            <i className="fa-solid fa-eye"></i> Preview generated prompt
+          </button>
+          <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+            <div className="modal-box max-w-3xl">
+              <form method="dialog">
+                <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+              </form>
+              <h4 className="font-bold text-lg mb-2">Generated prompt</h4>
+              {isOutdated && <h5 className="font-semibold mb-1 normal-case">Current ({version})</h5>}
+              {preview(version)}
+              {isOutdated && (
+                <>
+                  <h5 className="font-semibold mt-3 mb-1 normal-case">Latest ({latest})</h5>
+                  {preview(latest)}
+                </>
+              )}
+            </div>
+            <form method="dialog" className="modal-backdrop">
+              <button type="submit">close</button>
             </form>
-            <h4 className="font-bold text-lg mb-2">Generated prompt</h4>
-            {isOutdated && <h5 className="font-semibold mb-1 normal-case">Current ({version})</h5>}
-            {preview(version)}
-            {isOutdated && (
-              <>
-                <h5 className="font-semibold mt-3 mb-1 normal-case">Latest ({latest})</h5>
-                {preview(latest)}
-              </>
-            )}
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button type="submit">close</button>
-          </form>
-        </dialog>
+          </dialog>
+        </>
       )}
     </InputField>
   );

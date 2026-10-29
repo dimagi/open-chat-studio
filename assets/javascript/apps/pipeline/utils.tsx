@@ -202,7 +202,8 @@ export function getEdgeId(
 /**
  * The standard router prompt as the router would send it, for the builder's preview. Mirrors
  * `render_router_prompt` and `RouterNode._format_routes` on the server; variables only known at run
- * time, such as `{participant_data}`, are left as written.
+ * time, such as `{participant_data}`, are left as written. Both sides are tested against the cases in
+ * `apps/pipelines/tests/data/router_prompt_preview_cases.json`.
  */
 export function renderRouterPromptPreview(
   template: string,

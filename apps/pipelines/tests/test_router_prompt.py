@@ -76,6 +76,12 @@ class TestRenderRouterPrompt:
 
         assert "choose {ODD}." in template.format(routes="- {ODD}")
 
+    def test_a_placeholder_in_the_default_route_is_not_filled(self):
+        template = render_router_prompt(LATEST_ROUTER_PROMPT_VERSION, "Refunds are billing.", "{custom_context}")
+
+        assert "choose {custom_context}." in template.format(routes="")
+        assert template.count("Refunds are billing.") == 1
+
 
 @pytest.mark.django_db()
 class TestSystemPrompt:
@@ -240,8 +246,26 @@ class TestPreviewContract:
 
     @pytest.mark.parametrize("version", ROUTER_PROMPT_TEMPLATES)
     def test_every_template_uses_only_placeholders_the_preview_fills(self, version):
-        assert _placeholders(ROUTER_PROMPT_TEMPLATES[version]) <= _placeholders(PREVIEW_CASES["template"])
+        # The preview fills plain `{name}` fields only, so a template may not use format specs or conversions.
+        assert _fields(ROUTER_PROMPT_TEMPLATES[version]) <= _fields(PREVIEW_CASES["template"])
+
+    @pytest.mark.parametrize(
+        "custom_context",
+        [
+            pytest.param("{routes:>10}", id="format-spec"),
+            pytest.param("{routes!r}", id="conversion"),
+            pytest.param("{0}", id="positional"),
+            pytest.param("{}", id="auto-numbered"),
+            pytest.param("{routes[0]}", id="index"),
+            pytest.param("{routes_list.upper}", id="attribute"),
+        ],
+    )
+    def test_context_cannot_use_format_syntax_the_preview_does_not_fill(self, custom_context):
+        """The preview fills `{routes}` and `{routes_list}` only as plain fields, and leaves run-time data
+        such as `{participant_data.plan}` as written."""
+        with pytest.raises(PydanticValidationError):
+            _router(prompt_mode="standard_with_context", custom_context=custom_context)
 
 
-def _placeholders(template: str) -> set[str]:
-    return {name for _, name, _, _ in Formatter().parse(template) if name is not None}
+def _fields(template: str) -> set[tuple[str, str | None, str | None]]:
+    return {(name, spec, conversion) for _, name, spec, conversion in Formatter().parse(template) if name is not None}
