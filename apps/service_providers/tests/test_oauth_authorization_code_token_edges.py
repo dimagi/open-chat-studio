@@ -8,11 +8,11 @@ from apps.service_providers.auth_service.oauth import (
     OAuthReconnectRequired,
     OAuthTokenError,
     OAuthTokenManager,
-    _config_fingerprint,
     _is_expired,
-    _parse_token_response,
-    _post_token_request,
     _refresh_authorization_code_token,
+    config_fingerprint,
+    parse_token_response,
+    post_token_request,
 )
 from apps.service_providers.models import AuthProvider
 from apps.service_providers.tests.oauth_authorization_code_test_utils import CONFIG, make_provider
@@ -30,7 +30,7 @@ def test_missing_expiry_is_treated_as_expired():
 
 def test_authorization_code_token_without_expiry_is_non_expiring():
     client = BackendApplicationClient(client_id="client")
-    token = _parse_token_response(client, '{"access_token":"github-token"}', CONFIG["token_url"])
+    token = parse_token_response(client, '{"access_token":"github-token"}', CONFIG["token_url"])
     assert token["expires_at"] is None
 
 
@@ -41,7 +41,7 @@ def test_refresh_without_rotation_preserves_refresh_token(team, httpx_mock):
         "access_token": "old",
         "refresh_token": "refresh-old",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     httpx_mock.add_response(
@@ -66,12 +66,12 @@ def test_config_change_detected_after_refresh_lock_requires_reconnect(team):
         "access_token": "old",
         "refresh_token": "old-refresh",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     with (
         patch(
-            "apps.service_providers.auth_service.oauth._authorization_code_config_changed",
+            "apps.service_providers.auth_service.oauth.authorization_code_config_changed",
             side_effect=[False, True],
         ),
         pytest.raises(OAuthReconnectRequired, match="configuration changed"),
@@ -92,7 +92,7 @@ def test_config_change_detected_after_refresh_lock_requires_reconnect(team):
 def test_token_endpoint_structured_error_is_retained(httpx_mock, payload, error_code, error_description):
     httpx_mock.add_response(url=CONFIG["token_url"], status_code=400, json=payload)
     with pytest.raises(OAuthTokenError) as exc_info:
-        _post_token_request(CONFIG["token_url"], "grant_type=refresh_token", {})
+        post_token_request(CONFIG["token_url"], "grant_type=refresh_token", {})
     assert exc_info.value.error_code == error_code
     assert exc_info.value.error_description == error_description
     assert "grant_type" not in str(exc_info.value)
@@ -114,7 +114,7 @@ def test_http_error_without_oauth_object_uses_generic_message(httpx_mock, body, 
         headers={"Content-Type": content_type},
     )
     with pytest.raises(OAuthTokenError) as exc_info:
-        _post_token_request(CONFIG["token_url"], "grant_type=refresh_token", {})
+        post_token_request(CONFIG["token_url"], "grant_type=refresh_token", {})
     assert "Failed to fetch OAuth token" in str(exc_info.value)
     assert exc_info.value.error_code is None
     assert exc_info.value.error_description is None

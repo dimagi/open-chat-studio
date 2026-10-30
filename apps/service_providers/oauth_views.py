@@ -1,5 +1,6 @@
 import re
 import secrets
+from datetime import timedelta
 
 import httpx
 from django.contrib import messages
@@ -10,18 +11,21 @@ from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django.utils.html import escape
 from django.utils.translation import gettext as _
 from oauthlib.oauth2 import WebApplicationClient
 
 from apps.service_providers.auth_service.oauth import (
     OAuthTokenError,
     TokenEndpointAuthMethod,
-    _authorization_code_config_changed,
-    _config_fingerprint,
-    _parse_token_response,
-    _post_token_request,
-    _validate_token_url,
+    authorization_code_config_changed,
     build_pkce_pair,
+    config_fingerprint,
+    parse_token_response,
+    post_token_request,
+    validate_authorization_params,
+    validate_token_url,
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.teams.decorators import login_and_team_required
@@ -30,14 +34,6 @@ from apps.web.meta import absolute_url
 
 _OAUTH_STATE_SALT = "service-providers-oauth-state"
 _OAUTH_STATE_MAX_AGE = 600
-_RESERVED_AUTHORIZATION_PARAMS = {
-    "client_id",
-    "redirect_uri",
-    "response_type",
-    "state",
-    "code_challenge",
-    "code_challenge_method",
-}
 
 
 def _oauth_redirect_uri(request):
@@ -80,7 +76,7 @@ def _provider_edit_url(provider):
 
 
 def _exchange_code(request, provider, code, verifier):
-    _validate_token_url(provider.config["token_url"])
+    validate_token_url(provider.config["token_url"])
     client = WebApplicationClient(provider.config["client_id"])
     url, _headers, body = client.prepare_token_request(
         provider.config["token_url"],
@@ -97,11 +93,11 @@ def _exchange_code(request, provider, code, verifier):
         if method == TokenEndpointAuthMethod.CLIENT_SECRET_BASIC
         else {}
     )
-    return _parse_token_response(client, _post_token_request(url, body, kwargs), url)
+    return parse_token_response(client, post_token_request(url, body, kwargs), url)
 
 
 def _persist_token(provider, token):
-    provider._auth_data = {**token, "config_fingerprint": _config_fingerprint(provider.config)}
+    provider._auth_data = {**token, "config_fingerprint": config_fingerprint(provider.config)}
     provider.extra_data = {
         **(provider.extra_data or {}),
         "verified_credentials": True,
@@ -146,15 +142,16 @@ def _safe_oauth_error(error_code, error_description, provider, request):
         description,
     )
     parts = [part for part in (code, description) if part]
-    return (
+    message = (
         _("OAuth authorization failed: %(details)s") % {"details": "; ".join(parts)}
         if parts
         else _("OAuth authorization failed. Connect the provider again to retry.")
     )
+    return escape(message)
 
 
 def is_reconnect_required(provider):
-    return bool(provider._auth_data.get("reconnect_required") or _authorization_code_config_changed(provider))
+    return bool(provider._auth_data.get("reconnect_required") or authorization_code_config_changed(provider))
 
 
 @login_and_team_required
@@ -163,12 +160,26 @@ def oauth_connect(request, team_slug: str, pk: int):
     provider = get_object_or_404(
         AuthProvider, team=request.team, pk=pk, type=AuthProviderType.oauth_authorization_code.value
     )
+    try:
+        extra_params = validate_authorization_params(provider.config.get("authorization_params") or {})
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect(_provider_edit_url(provider))
     verifier, challenge = build_pkce_pair()
     nonce = secrets.token_urlsafe(24)
     payload = {"provider_id": provider.pk, "team_id": provider.team_id, "user_id": request.user.pk, "nonce": nonce}
     state = signing.dumps(payload, salt=_OAUTH_STATE_SALT)
     pending = request.session.get("oauth_pending", {})
+    now = timezone.now()
+    pending = {
+        key: item
+        for key, item in pending.items()
+        if (created_at := parse_datetime(item.get("created_at", "")))
+        and timezone.is_aware(created_at)
+        and now - created_at <= timedelta(seconds=_OAUTH_STATE_MAX_AGE)
+    }
     pending[nonce] = {
+        "created_at": now.isoformat(),
         "verifier": verifier,
         "provider_id": provider.pk,
         "team_id": provider.team_id,
@@ -176,13 +187,8 @@ def oauth_connect(request, team_slug: str, pk: int):
     }
     request.session["oauth_pending"] = pending
     request.session.modified = True
-    _validate_token_url(provider.config["authorize_url"])
+    validate_token_url(provider.config["authorize_url"])
     client = WebApplicationClient(provider.config["client_id"])
-    extra_params = {
-        key: value
-        for key, value in (provider.config.get("authorization_params") or {}).items()
-        if key not in _RESERVED_AUTHORIZATION_PARAMS
-    }
     url = client.prepare_request_uri(
         provider.config["authorize_url"],
         redirect_uri=_oauth_redirect_uri(request),

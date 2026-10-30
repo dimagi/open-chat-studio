@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("service_providers", "0087_alter_authprovider_type"),
-        ("service_providers", "0097_auto_model_sync_20261027"),
+        ("service_providers", "0098_auto_model_sync_20261029"),
     ]
 
     operations = [

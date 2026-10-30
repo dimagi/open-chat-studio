@@ -14,9 +14,9 @@ from apps.service_providers.auth_service.oauth import (
     OAuthReconnectRequired,
     OAuthTokenError,
     OAuthTokenManager,
-    _config_fingerprint,
     _refresh_authorization_code_token,
     build_pkce_pair,
+    config_fingerprint,
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.service_providers.tests.oauth_authorization_code_test_utils import CONFIG, connect, make_provider
@@ -64,7 +64,7 @@ def test_authorization_code_provider_returns_bearer_service(team):
         "access_token": "access",
         "token_type": "Bearer",
         "expires_at": time.time() + 3600,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     service = provider.get_auth_service()
@@ -79,7 +79,7 @@ def test_refresh_rotates_token(team):
         "access_token": "old",
         "refresh_token": "refresh-old",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     refreshed = {
@@ -103,7 +103,7 @@ def test_invalid_refresh_requires_reconnect(team):
         "access_token": "old",
         "refresh_token": "revoked",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     with patch(
@@ -130,7 +130,7 @@ def test_connect_is_team_scoped_and_generates_pkce_redirect(client, team_with_us
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
-    with patch("apps.service_providers.oauth_views._validate_token_url"):
+    with patch("apps.service_providers.oauth_views.validate_token_url"):
         response = client.get(url)
     assert response.status_code == 302
     query = parse_qs(urlparse(response["Location"]).query)
@@ -194,7 +194,7 @@ def test_authorization_code_refresh_is_single_request_under_row_lock(team):
         "access_token": "old",
         "refresh_token": "refresh",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     stale_copy = AuthProvider.objects.get(pk=provider.pk)
@@ -219,7 +219,7 @@ def test_custom_action_uses_authorization_code_bearer_service(team):
         "access_token": "action-token",
         "token_type": "Bearer",
         "expires_at": time.time() + 3600,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     action = CustomActionFactory.create(team=team, auth_provider=provider)
@@ -233,7 +233,7 @@ def test_non_expiring_authorization_code_token_is_reused(team):
         "access_token": "github-token",
         "token_type": "Bearer",
         "expires_at": None,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     with patch("apps.service_providers.auth_service.oauth._refresh_authorization_code_token") as refresh:
@@ -244,7 +244,7 @@ def test_non_expiring_authorization_code_token_is_reused(team):
 def test_refresh_invalid_grant_requires_reconnect():
     config = {**CONFIG}
     with patch(
-        "apps.service_providers.auth_service.oauth._post_token_request",
+        "apps.service_providers.auth_service.oauth.post_token_request",
         return_value='{"error":"invalid_grant","error_description":"revoked"}',
     ):
         with pytest.raises(OAuthReconnectRequired):
@@ -252,7 +252,7 @@ def test_refresh_invalid_grant_requires_reconnect():
 
 
 def test_refresh_transport_error_is_not_reconnect():
-    with patch("apps.service_providers.auth_service.oauth._post_token_request", side_effect=OAuthTokenError("timeout")):
+    with patch("apps.service_providers.auth_service.oauth.post_token_request", side_effect=OAuthTokenError("timeout")):
         with pytest.raises(OAuthTokenError) as error:
             _refresh_authorization_code_token(CONFIG, {"refresh_token": "refresh"})
     assert not isinstance(error.value, OAuthReconnectRequired)
@@ -265,7 +265,7 @@ def test_config_change_requires_reconnect_before_refresh(team):
         "access_token": "old",
         "refresh_token": "old-refresh",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
     provider.config = {**provider.config, "token_url": "https://new.example.test/token"}
@@ -294,25 +294,22 @@ def test_google_preset_and_custom_authorization_params_are_saved(team):
 
 
 @pytest.mark.django_db()
-def test_connect_includes_custom_params_but_protects_protocol_params(client, team_with_users):
+def test_connect_includes_valid_custom_authorization_params(client, team_with_users):
     provider = make_provider(
         team_with_users,
         authorization_params={
             "audience": "docs",
             "access_type": "offline",
-            "state": "attacker",
-            "client_id": "attacker",
         },
     )
     client.force_login(team_with_users.members.first())
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
-    with patch("apps.service_providers.oauth_views._validate_token_url"):
+    with patch("apps.service_providers.oauth_views.validate_token_url"):
         response = client.get(url)
     query = parse_qs(urlparse(response["Location"]).query)
     assert query["audience"] == ["docs"]
     assert query["access_type"] == ["offline"]
     assert query["client_id"] == ["client"]
-    assert query["state"] != ["attacker"]
     assert query["response_type"] == ["code"]
 
 
@@ -322,7 +319,7 @@ def test_refresh_request_contains_expected_field_names(httpx_mock):
         status_code=400,
         json={"error": "invalid_request", "error_description": "bad request"},
     )
-    with patch("apps.service_providers.auth_service.oauth._validate_token_url"), pytest.raises(OAuthTokenError):
+    with patch("apps.service_providers.auth_service.oauth.validate_token_url"), pytest.raises(OAuthTokenError):
         _refresh_authorization_code_token(
             {**CONFIG, "token_endpoint_auth_method": "client_secret_post"},
             {"refresh_token": "refresh"},
@@ -352,7 +349,7 @@ def test_authorization_code_config_changes_require_reconnect(team, field, value)
         "refresh_token": "old-refresh",
         "token_type": "Bearer",
         "expires_at": time.time() + 3600,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.extra_data = {"verified_credentials": True}
     provider.config = {**provider.config, field: value}
@@ -380,6 +377,7 @@ def test_create_form_shows_public_callback_uri(client, team_with_users):
     assert response.status_code == 200
     assert b"Callback URI (register this with your provider)" in response.content
     assert b"/service_providers/auth/oauth/callback/" in response.content
+    assert b'id="id_authorization_params"' in response.content
 
 
 @pytest.mark.django_db()
@@ -447,7 +445,7 @@ def test_edit_form_shows_reconnect_when_oauth_config_changes(client, team_with_u
         "refresh_token": "old-refresh",
         "token_type": "Bearer",
         "expires_at": time.time() + 3600,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.config = {**provider.config, "scope": "read admin"}
     provider.save()
@@ -459,3 +457,49 @@ def test_edit_form_shows_reconnect_when_oauth_config_changes(client, team_with_u
     response = client.get(url)
     assert response.status_code == 200
     assert b"Status: reconnect required" in response.content
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        [],
+        "foo",
+        42,
+        True,
+        {"scope": "admin"},
+        {"state": "attacker"},
+        {"client_id": "attacker"},
+        {"redirect_uri": "https://attacker.example/callback"},
+        {"response_type": "token"},
+        {"code_challenge": "attacker"},
+        {"code_challenge_method": "plain"},
+    ],
+)
+def test_authorization_params_reject_non_objects_and_reserved_protocol_fields(team_with_users, params):
+    form_cls = AuthProviderType.oauth_authorization_code.form_cls
+    form = form_cls(team_with_users, data={**CONFIG, "authorization_params": params})
+    assert not form.is_valid()
+    assert "authorization_params" in form.errors
+
+
+def test_empty_authorization_params_normalize_to_empty_object(team_with_users):
+    form_cls = AuthProviderType.oauth_authorization_code.form_cls
+    form = form_cls(team_with_users, data={**CONFIG, "authorization_params": ""})
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["authorization_params"] == {}
+
+
+@pytest.mark.django_db()
+def test_connect_rejects_invalid_saved_authorization_params(client, team_with_users):
+    provider = make_provider(team_with_users, authorization_params={"scope": "admin"})
+    client.force_login(team_with_users.members.first())
+    response = client.get(
+        reverse(
+            "service_providers:oauth_connect",
+            kwargs={"team_slug": provider.team.slug, "pk": provider.pk},
+        )
+    )
+    assert response.status_code == 302
+    assert "cannot override reserved OAuth fields" in " ".join(
+        str(item) for item in get_messages(response.wsgi_request)
+    )

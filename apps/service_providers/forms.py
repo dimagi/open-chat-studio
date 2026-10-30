@@ -10,6 +10,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.auth_service.oauth import AUTHORIZATION_PARAM_RESERVED_KEYS
 from apps.service_providers.exceptions import provider_error_message
 from apps.service_providers.llm_service.error_classification import provider_error_types
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -597,6 +598,19 @@ class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
         initial="client_secret_basic",
         help_text=_("How client credentials are sent to the token endpoint."),
     )
+
+    def clean_authorization_params(self):
+        params = self.cleaned_data.get("authorization_params")
+        raw_value = self.data.get(self.add_prefix("authorization_params"))
+        if params is None and raw_value in (None, ""):
+            return {}
+        if not isinstance(params, dict):
+            raise forms.ValidationError(_("Authorization parameters must be a JSON object."))
+        reserved = AUTHORIZATION_PARAM_RESERVED_KEYS.intersection(params)
+        if reserved:
+            keys = ", ".join(sorted(reserved))
+            raise forms.ValidationError(_("Reserved OAuth parameters cannot be overridden: %(keys)s.") % {"keys": keys})
+        return params
 
     def clean(self):
         cleaned = super().clean()

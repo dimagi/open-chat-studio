@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest.mock import patch
 from urllib.parse import parse_qs
 
@@ -5,6 +6,7 @@ import pytest
 from django.contrib.auth.models import PermissionsMixin
 from django.contrib.messages import get_messages
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.service_providers.auth_service.oauth import OAuthTokenError
 from apps.service_providers.models import AuthProvider
@@ -18,9 +20,9 @@ def test_callback_exchanges_code_and_persists_tokens(client, team_with_users, au
     original_config = provider.config.copy()
     state = connect(client, team_with_users, provider)
     with (
-        patch("apps.service_providers.oauth_views._validate_token_url"),
+        patch("apps.service_providers.oauth_views.validate_token_url"),
         patch(
-            "apps.service_providers.oauth_views._post_token_request",
+            "apps.service_providers.oauth_views.post_token_request",
             return_value='{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600}',
         ) as exchange,
     ):
@@ -90,3 +92,101 @@ def test_callback_exchange_failure_is_safe_and_redirects(client, team_with_users
     assert "access-token-secret" not in message
     assert "refresh-token-secret" not in message
     assert "authorization-code" not in message
+
+
+@pytest.mark.django_db()
+def test_callback_escapes_html_in_provider_error(client, team_with_users):
+    provider = make_provider(team_with_users)
+    state = connect(client, team_with_users, provider)
+    response = client.get(
+        reverse("service_providers_oauth_callback"),
+        {
+            "state": state,
+            "error": "invalid_scope",
+            "error_description": "<img src=x onerror=alert(1)> <script>alert(1)</script>",
+        },
+    )
+    message = " ".join(str(item) for item in get_messages(response.wsgi_request))
+    assert "invalid_scope" in message
+    assert "&lt;img" in message
+    assert "&lt;script&gt;" in message
+    assert "<img" not in message
+    assert "<script>" not in message
+
+
+@pytest.mark.django_db()
+def test_connect_prunes_stale_pending_oauth_entries_and_keeps_recent_ones(client, team_with_users):
+    provider = make_provider(team_with_users)
+    client.force_login(team_with_users.members.first())
+    session = client.session
+    now = timezone.now()
+    session["oauth_pending"] = {
+        "stale": {
+            "created_at": (now - timedelta(seconds=601)).isoformat(),
+            "verifier": "old-verifier",
+            "provider_id": provider.pk,
+            "team_id": provider.team_id,
+            "user_id": team_with_users.members.first().pk,
+        },
+        "recent": {
+            "created_at": (now - timedelta(seconds=10)).isoformat(),
+            "verifier": "recent-verifier",
+            "provider_id": provider.pk,
+            "team_id": provider.team_id,
+            "user_id": team_with_users.members.first().pk,
+        },
+    }
+    session.save()
+    with patch("apps.service_providers.oauth_views.validate_token_url"):
+        response = client.get(
+            reverse(
+                "service_providers:oauth_connect",
+                kwargs={"team_slug": provider.team.slug, "pk": provider.pk},
+            )
+        )
+    assert response.status_code == 302
+    pending = client.session["oauth_pending"]
+    assert "stale" not in pending
+    assert "recent" in pending
+    newly_created = set(pending) - {"recent"}
+    assert len(newly_created) == 1
+    entry = pending[newly_created.pop()]
+    assert entry["created_at"]
+    assert entry["verifier"]
+
+
+@pytest.mark.django_db()
+def test_oauth_pending_state_is_consumed_and_replay_rejected(client, team_with_users):
+    provider = make_provider(team_with_users)
+    state = connect(client, team_with_users, provider)
+    response = client.get(
+        reverse("service_providers_oauth_callback"),
+        {"state": state, "error": "access_denied"},
+    )
+    assert response.status_code == 302
+    replay = client.get(
+        reverse("service_providers_oauth_callback"),
+        {"state": state, "error": "access_denied"},
+    )
+    assert replay.status_code == 400
+
+
+@pytest.mark.django_db()
+def test_callback_escapes_html_in_token_endpoint_error(client, team_with_users):
+    provider = make_provider(team_with_users)
+    state = connect(client, team_with_users, provider)
+    endpoint_error = OAuthTokenError(
+        "OAuth token request failed",
+        error_code="invalid_scope",
+        error_description="<img src=x onerror=alert(1)>",
+    )
+    with patch("apps.service_providers.oauth_views._exchange_code", side_effect=endpoint_error):
+        response = client.get(
+            reverse("service_providers_oauth_callback"),
+            {"state": state, "code": "authorization-code"},
+        )
+    message = " ".join(str(item) for item in get_messages(response.wsgi_request))
+    assert response.status_code == 302
+    assert "invalid_scope" in message
+    assert "&lt;img" in message
+    assert "<img" not in message

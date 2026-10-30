@@ -25,7 +25,7 @@ DEFAULT_TOKEN_TTL_SECONDS = 3600
 
 # Config fields the token depends on. A change to any of them invalidates the
 # cached token so the next request refetches under the new config.
-_FINGERPRINTED_CONFIG_FIELDS = (
+FINGERPRINTED_CONFIG_FIELDS = (
     "client_id",
     "client_secret",
     "authorize_url",
@@ -69,7 +69,7 @@ class OAuthTokenManager:
         token = self.provider._auth_data
         if _token_is_valid(token, self.provider.config):
             return token["access_token"]
-        if _authorization_code_config_changed(self.provider):
+        if authorization_code_config_changed(self.provider):
             self._mark_reconnect_required()
             raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
         return self._refetch_with_lock()
@@ -88,14 +88,14 @@ class OAuthTokenManager:
 
     @staticmethod
     def _persist_token(provider, token) -> None:
-        token["config_fingerprint"] = _config_fingerprint(provider.config)
+        token["config_fingerprint"] = config_fingerprint(provider.config)
         token.pop("reconnect_required", None)
         provider._auth_data = token
         provider.save(update_fields=["_auth_data"])
 
     @staticmethod
     def _get_fresh_token(provider) -> dict:
-        if _authorization_code_config_changed(provider):
+        if authorization_code_config_changed(provider):
             raise OAuthReconnectRequired("OAuth configuration changed; connect the provider again")
         if provider.type == "oauth_authorization_code":
             return _refresh_authorization_code_token(provider.config, provider._auth_data)
@@ -129,24 +129,24 @@ class OAuthTokenManager:
         return token["access_token"]
 
 
-def _authorization_code_config_changed(provider) -> bool:
+def authorization_code_config_changed(provider) -> bool:
     if provider.type != "oauth_authorization_code":
         return False
     fingerprint = provider._auth_data.get("config_fingerprint")
-    return bool(fingerprint) and fingerprint != _config_fingerprint(provider.config)
+    return bool(fingerprint) and fingerprint != config_fingerprint(provider.config)
 
 
 def _token_is_valid(token: dict, config: dict) -> bool:
     """A cached token is usable while it is unexpired and was issued under the current config."""
     if not token:
         return False
-    if token.get("config_fingerprint") != _config_fingerprint(config):
+    if token.get("config_fingerprint") != config_fingerprint(config):
         return False
     return not _is_expired(token)
 
 
-def _config_fingerprint(config: dict) -> str:
-    relevant = {field: config.get(field) for field in _FINGERPRINTED_CONFIG_FIELDS}
+def config_fingerprint(config: dict) -> str:
+    relevant = {field: config.get(field) for field in FINGERPRINTED_CONFIG_FIELDS}
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()
 
 
@@ -163,7 +163,7 @@ def _fetch_client_credentials_token(config: dict) -> dict:
     """Perform the client-credentials token request and return the token dict."""
     token_url = config["token_url"]
     scope = config.get("scope") or None
-    _validate_token_url(token_url)
+    validate_token_url(token_url)
 
     # The scope is set on the request body only, not on the client. A server may
     # grant a different scope than requested (RFC 6749 §3.3); if the client held a
@@ -171,8 +171,8 @@ def _fetch_client_credentials_token(config: dict) -> dict:
     # the granted scope, so we let it differ silently.
     client = BackendApplicationClient(client_id=config["client_id"])
     body, request_kwargs = _prepare_token_request(client, config, scope)
-    response_text = _post_token_request(token_url, body, request_kwargs)
-    return _parse_token_response(client, response_text, token_url, default_ttl=DEFAULT_TOKEN_TTL_SECONDS)
+    response_text = post_token_request(token_url, body, request_kwargs)
+    return parse_token_response(client, response_text, token_url, default_ttl=DEFAULT_TOKEN_TTL_SECONDS)
 
 
 def build_pkce_pair() -> tuple[str, str]:
@@ -185,7 +185,7 @@ def _refresh_authorization_code_token(config: dict, old_token: dict) -> dict:
     refresh_token = old_token.get("refresh_token")
     if not refresh_token:
         raise OAuthReconnectRequired("OAuth authorization must be connected again")
-    _validate_token_url(config["token_url"])
+    validate_token_url(config["token_url"])
     client = WebApplicationClient(client_id=config["client_id"])
     method = config.get("token_endpoint_auth_method", TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
     body = client.prepare_refresh_body(
@@ -201,9 +201,7 @@ def _refresh_authorization_code_token(config: dict, old_token: dict) -> dict:
         else {"auth": httpx.BasicAuth(config["client_id"], config["client_secret"])}
     )
     try:
-        token = _parse_token_response(
-            client, _post_token_request(config["token_url"], body, kwargs), config["token_url"]
-        )
+        token = parse_token_response(client, post_token_request(config["token_url"], body, kwargs), config["token_url"])
     except OAuthTokenError as exc:
         if exc.error_code == "invalid_grant":
             raise OAuthReconnectRequired(str(exc)) from exc
@@ -212,7 +210,7 @@ def _refresh_authorization_code_token(config: dict, old_token: dict) -> dict:
     return token
 
 
-def _validate_token_url(token_url: str) -> None:
+def validate_token_url(token_url: str) -> None:
     """Guard the outbound request against SSRF.
 
     The token endpoint is admin-supplied config and carries the client secret, so
@@ -234,7 +232,7 @@ def _prepare_token_request(client: BackendApplicationClient, config: dict, scope
     return body, {"auth": httpx.BasicAuth(config["client_id"], config["client_secret"])}
 
 
-def _post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
+def post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
     """POST the token request, returning the response body text."""
     try:
         response = httpx.post(
@@ -275,7 +273,7 @@ def _extract_oauth_error(response: httpx.Response) -> tuple[str | None, str | No
     )
 
 
-def _parse_token_response(
+def parse_token_response(
     client: BackendApplicationClient, response_text: str, token_url: str, default_ttl: int | None = None
 ) -> dict:
     """Parse the token response and normalise it to the fields we persist."""
@@ -302,3 +300,26 @@ def _parse_token_response(
     else:
         result["expires_at"] = None
     return result
+
+
+AUTHORIZATION_PARAM_RESERVED_KEYS = frozenset(
+    {
+        "client_id",
+        "redirect_uri",
+        "response_type",
+        "scope",
+        "state",
+        "code_challenge",
+        "code_challenge_method",
+    }
+)
+
+
+def validate_authorization_params(params):
+    if not isinstance(params, dict):
+        raise ValueError("Authorization parameters must be a JSON object.")
+    reserved = AUTHORIZATION_PARAM_RESERVED_KEYS.intersection(params)
+    if reserved:
+        keys = ", ".join(sorted(reserved))
+        raise ValueError(f"Authorization parameters cannot override reserved OAuth fields: {keys}.")
+    return params

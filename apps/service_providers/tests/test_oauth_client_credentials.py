@@ -10,7 +10,7 @@ from apps.service_providers.auth_service.oauth import (
     OAuthReconnectRequired,
     OAuthTokenError,
     OAuthTokenManager,
-    _config_fingerprint,
+    config_fingerprint,
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
@@ -49,7 +49,7 @@ def test_reconnect_exception_does_not_write_code_reconnect_state(team):
     provider._auth_data = {
         "access_token": "old-access",
         "expires_at": time.time() - 1,
-        "config_fingerprint": _config_fingerprint(config),
+        "config_fingerprint": config_fingerprint(config),
     }
     provider.save(update_fields=["_auth_data"])
 
@@ -157,7 +157,7 @@ def test_valid_token_is_not_refetched(team):
         "access_token": "still-good",
         "token_type": "Bearer",
         "expires_at": time.time() + 3600,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
 
@@ -175,7 +175,7 @@ def test_config_change_invalidates_cached_token(team):
         "access_token": "old-scope-token",
         "token_type": "Bearer",
         "expires_at": time.time() + 3600,
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.save(update_fields=["_auth_data"])
 

@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
-from apps.service_providers.auth_service.oauth import OAuthTokenManager, _authorization_code_config_changed
+from apps.service_providers.auth_service.oauth import OAuthTokenManager, authorization_code_config_changed
 from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.service_providers.minimax import build_minimax_synthetic_voices
 from apps.service_providers.moderation_service import ModerationService, OpenAIModerationService
@@ -906,13 +906,13 @@ class AuthProvider(BaseTeamModel):
             and (self.extra_data or {}).get("verified_credentials") is True
             and bool(self._auth_data.get("access_token"))
             and not self._auth_data.get("reconnect_required")
-            and not _authorization_code_config_changed(self)
+            and not authorization_code_config_changed(self)
         )
 
     @property
     def verification_error(self) -> str:
         if self.type_enum == AuthProviderType.oauth_authorization_code:
-            if _authorization_code_config_changed(self):
+            if authorization_code_config_changed(self):
                 return "OAuth configuration changed; connect the provider again."
             if self._auth_data.get("reconnect_required"):
                 return "The OAuth connection needs to be renewed; connect the provider again."

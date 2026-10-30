@@ -9,7 +9,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
 from apps.pipelines.repository import InMemoryPipelineRepository
-from apps.service_providers.auth_service.oauth import _config_fingerprint
+from apps.service_providers.auth_service.oauth import config_fingerprint
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -383,7 +383,7 @@ def main(input, **kwargs):
             "access_token": "pipeline-token",
             "token_type": "Bearer",
             "expires_at": time.time() + 3600,
-            "config_fingerprint": _config_fingerprint(provider.config),
+            "config_fingerprint": config_fingerprint(provider.config),
         }
         provider.save(update_fields=["_auth_data"])
         session = MagicMock(team=team)

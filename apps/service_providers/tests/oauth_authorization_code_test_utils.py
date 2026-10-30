@@ -25,7 +25,7 @@ def make_provider(team, **overrides):
 def connect(client, team, provider):
     client.force_login(team.members.first())
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team.slug, "pk": provider.pk})
-    with patch("apps.service_providers.oauth_views._validate_token_url"):
+    with patch("apps.service_providers.oauth_views.validate_token_url"):
         response = client.get(url)
     query = parse_qs(urlparse(response["Location"]).query)
     return query["state"][0]

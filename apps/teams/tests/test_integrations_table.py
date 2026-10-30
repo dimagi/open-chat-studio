@@ -7,7 +7,7 @@ from django.utils import timezone
 from waffle.testutils import override_flag
 
 from apps.mcp_integrations.models import McpServer
-from apps.service_providers.auth_service.oauth import _config_fingerprint
+from apps.service_providers.auth_service.oauth import config_fingerprint
 from apps.service_providers.models import AuthProviderType, LlmProviderTypes
 from apps.service_providers.utils import get_enabled_providers
 from apps.teams.backends import add_user_to_team, make_user_team_owner
@@ -298,7 +298,7 @@ def test_integrations_table_shows_oauth_as_verified_after_connection(client, tea
     )
     provider._auth_data = {
         "access_token": "oauth-access-token",
-        "config_fingerprint": _config_fingerprint(provider.config),
+        "config_fingerprint": config_fingerprint(provider.config),
     }
     provider.extra_data = {
         "verified_credentials": True,
