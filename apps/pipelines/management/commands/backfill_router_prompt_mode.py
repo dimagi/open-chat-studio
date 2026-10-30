@@ -25,12 +25,13 @@ class Command(IdempotentCommand):
 
         updated = 0
         batch = []
-        for node in routers.only("id", "params").iterator(chunk_size=BATCH_SIZE):
-            node.params["prompt_mode"] = RouterPromptMode.CUSTOM.value
-            batch.append(node)
-            if len(batch) >= BATCH_SIZE:
-                updated += self._save(batch)
-                batch = []
+node_ids = list(routers.values_list("id", flat=True))
+for start in range(0, len(node_ids), BATCH_SIZE):
+    chunk_ids = node_ids[start : start + BATCH_SIZE]
+    batch = list(Node.objects.get_all().filter(id__in=chunk_ids).only("id", "params"))
+    for node in batch:
+        node.params["prompt_mode"] = RouterPromptMode.CUSTOM.value
+    if batch:
         updated += self._save(batch)
 
         self.stdout.write(self.style.SUCCESS(f"Done. Backfilled {updated} router nodes"))
