@@ -40,6 +40,10 @@ beforeAll(() => {
     tool_config: {},
   });
   setScript('default-values', {});
+  setScript('router-prompt-templates', {
+    latest: 'v2',
+    templates: {v1: 'Old {routes}', v2: 'Routes:\n{routes}\n{custom_context}Default: {default_route}'},
+  });
   setScript('node-schemas', []);
   setScript('flags-enabled', []);
   setScript('llm-model-params', {});
@@ -403,6 +407,129 @@ describe('KeywordsWidget route descriptions', () => {
     const {queryByLabelText} = render(<Harness nodeSchema={staticRouterSchema} />);
 
     expect(queryByLabelText('Description for Output Keyword 1')).not.toBeInTheDocument();
+  });
+});
+
+describe('RouterPromptModeWidget', () => {
+  const schema = {
+    type: 'string',
+    enum: ['standard', 'custom'],
+    'ui:enumLabels': ['Standard', 'Custom (Advanced)'],
+  } as unknown as PropertySchema;
+  const routes = {
+    name: 'router',
+    keywords: ['BILLING', 'SUPPORT'],
+    route_descriptions: {BILLING: 'Payments'},
+    default_keyword_index: 1,
+  };
+
+  const renderWidget = (nodeParams: Record<string, unknown>) => {
+    const Widget = getWidget('router_prompt_mode', schema);
+    return render(
+      <Widget {...baseProps} name="prompt_mode" label="Prompt Mode" schema={schema} nodeParams={nodeParams as never}
+        paramValue={String(nodeParams.prompt_mode ?? 'standard')} />
+    );
+  };
+
+  it('reads a router without a prompt_mode as custom, with no preview', () => {
+    const {getByRole, queryByText} = renderWidget(routes);
+
+    expect(getByRole('combobox')).toHaveValue('custom');
+    expect(queryByText(/Preview generated prompt/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['with', 'Refunds are billing.', 'Routes:\n- BILLING: Payments\n- SUPPORT\n\nAdditional context:\nRefunds are billing.\nDefault: SUPPORT'],
+    ['without', '', 'Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT'],
+  ])('previews the latest standard prompt %s context', (_label, customContext, expected) => {
+    const {container} = renderWidget({...routes, custom_context: customContext, prompt_mode: 'standard'});
+
+    expect(container.querySelector('pre')?.textContent).toBe(expected);
+  });
+
+  it('previews the router\'s pinned version', () => {
+    const {container} = renderWidget({...routes, prompt_mode: 'standard', prompt_template_version: 'v1'});
+
+    expect(container.querySelector('pre')?.textContent).toBe('Old - BILLING: Payments\n- SUPPORT');
+  });
+
+  it('says the preview is unavailable for a version it has no template for, and still previews the latest', () => {
+    const {container, getByText} = renderWidget({...routes, prompt_mode: 'standard', prompt_template_version: 'v9'});
+
+    expect(getByText('Preview unavailable for version v9.')).toBeInTheDocument();
+    const previews = Array.from(container.querySelectorAll('pre')).map((pre) => pre.textContent);
+    expect(previews).toEqual(['Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT']);
+  });
+
+  describe('on the stored node', () => {
+    const seedRouter = (params: Record<string, unknown>) =>
+      usePipelineStore.setState({
+        readOnly: false,
+        nodes: [{
+          id: 'node-1', type: 'pipelineNode', position: {x: 0, y: 0},
+          data: {type: 'RouterNode', label: '', params: {...routes, ...params}},
+        }] as never,
+      });
+    const storedParams = () => usePipelineStore.getState().nodes[0].data.params;
+
+    function Harness() {
+      const params = usePipelineStore((state) => state.nodes[0].data.params);
+      const Widget = getWidget('router_prompt_mode', schema);
+      return (
+        <Widget {...baseProps} nodeId="node-1" name="prompt_mode" label="Prompt Mode" schema={schema}
+          nodeParams={params} paramValue={String(params.prompt_mode ?? '')} />
+      );
+    }
+
+    it('pins the latest version when a custom router switches to standard', () => {
+      seedRouter({prompt_mode: 'custom'});
+      const {getByRole} = render(<Harness />);
+
+      fireEvent.change(getByRole('combobox'), {target: {value: 'standard'}});
+
+      expect(storedParams()).toMatchObject({prompt_mode: 'standard', prompt_template_version: 'v2'});
+    });
+
+    it('keeps the pinned version when the mode changes', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
+      const {getByRole} = render(<Harness />);
+
+      fireEvent.change(getByRole('combobox'), {target: {value: 'custom'}});
+
+      expect(storedParams()).toMatchObject({prompt_mode: 'custom', prompt_template_version: 'v1'});
+    });
+
+    it('offers to switch a router on an older version to the latest', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
+      const {getByRole, getByText, queryByText} = render(<Harness />);
+
+      expect(getByText(/A newer standard prompt is available/)).toBeInTheDocument();
+      fireEvent.click(getByRole('button', {name: 'Switch to latest'}));
+
+      expect(storedParams().prompt_template_version).toBe('v2');
+      expect(queryByText(/A newer standard prompt is available/)).not.toBeInTheDocument();
+    });
+
+    it('previews both versions of a router on an older version', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
+      const {container} = render(<Harness />);
+
+      const previews = Array.from(container.querySelectorAll('pre')).map((pre) => pre.textContent);
+      expect(previews).toEqual([
+        'Old - BILLING: Payments\n- SUPPORT',
+        'Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT',
+      ]);
+    });
+
+    it.each([
+      ['custom', {prompt_mode: 'custom', prompt_template_version: 'v1'}],
+      ['on the latest version', {prompt_mode: 'standard', prompt_template_version: 'v2'}],
+    ])('does not offer an upgrade when %s', (_name, params) => {
+      seedRouter(params);
+      const {queryByText} = render(<Harness />);
+
+      expect(queryByText(/A newer standard prompt is available/)).not.toBeInTheDocument();
+    });
   });
 });
 

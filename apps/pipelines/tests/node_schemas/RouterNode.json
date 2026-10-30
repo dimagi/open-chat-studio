@@ -119,14 +119,57 @@
       "type": "boolean",
       "ui:widget": "toggle"
     },
+    "prompt_mode": {
+      "enum": [
+        "standard",
+        "custom"
+      ],
+      "title": "Prompt Mode",
+      "type": "string",
+      "default": "standard",
+      "description": "How the router's prompt is built. `standard` builds it from the routes, their `route_descriptions` and `custom_context`; `custom` sends `prompt` instead. A router saved without this setting reads as `custom`.",
+      "ui:enumLabels": [
+        "Standard",
+        "Custom (Advanced)"
+      ],
+      "ui:widget": "router_prompt_mode"
+    },
+    "custom_context": {
+      "default": "",
+      "description": "Instructions added to the standard prompt in `standard` mode, such as which route to prefer in a borderline case. Left out of the prompt when blank. Takes the same template variables as `prompt`.",
+      "title": "Additional Context",
+      "type": "string",
+      "ui:keepValueWhenHidden": true,
+      "ui:optionsSource": "router_prompt_variables",
+      "ui:visibleWhen": {
+        "field": "prompt_mode",
+        "operator": "==",
+        "value": "standard"
+      },
+      "ui:widget": "text_editor_widget"
+    },
     "prompt": {
       "default": "You are an extremely helpful router",
-      "description": "Instructions telling the LLM how to choose between `keywords`. The model is constrained to return one of them, so describe when each applies rather than asking for free text. The only template variables available are `{participant_data}`, `{temp_state}`, `{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone.",
-      "minLength": 1,
+      "description": "Instructions telling the LLM how to choose between `keywords`, used in `custom` mode. The model is constrained to return one of them, so describe when each applies rather than asking for free text. The only template variables available are `{participant_data}`, `{temp_state}`, `{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone.",
       "title": "Prompt",
       "type": "string",
+      "ui:keepValueWhenHidden": true,
       "ui:optionsSource": "router_prompt_variables",
+      "ui:visibleWhen": {
+        "field": "prompt_mode",
+        "operator": "not_in",
+        "value": [
+          "standard"
+        ]
+      },
       "ui:widget": "text_editor_widget"
+    },
+    "prompt_template_version": {
+      "default": "v1",
+      "description": "The version of the standard prompt this router uses in `standard` mode. New routers get the latest version. A router keeps its version until it is changed, so a newer standard prompt never changes how an existing router routes.",
+      "title": "Prompt Template Version",
+      "type": "string",
+      "ui:widget": "none"
     },
     "route_descriptions": {
       "additionalProperties": {
@@ -156,6 +199,8 @@
     "llm_provider_id",
     "llm_temperature",
     "history_type",
+    "prompt_mode",
+    "custom_context",
     "prompt",
     "keywords",
     "tag_output_message"

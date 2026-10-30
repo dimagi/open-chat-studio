@@ -141,3 +141,13 @@ describe("TextEditorWidget routes nudge", () => {
     expect(screen.queryByText(nudge)).toBeNull();
   });
 });
+
+describe('TextEditorWidget on a router\'s custom_context', () => {
+  it('shows no routes nudge and offers no prompt help', () => {
+    const contextProps = {...props({name: 'n', prompt: 'You are a router'}, routerSchema), name: 'custom_context'};
+    render(<TextEditorWidget {...contextProps} paramValue="Refunds are billing." />);
+
+    expect(screen.queryByText(/Add \{routes\} to the prompt/)).toBeNull();
+    expect(screen.queryByText('Help')).toBeNull();
+  });
+});

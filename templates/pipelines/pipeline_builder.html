@@ -29,6 +29,7 @@
 {% block page_js %}
   {{ parameter_values|json_script:"parameter-values" }}
   {{ default_values|json_script:"default-values" }}
+  {{ router_prompt_templates|json_script:"router-prompt-templates" }}
   {{ node_schemas|json_script:"node-schemas" }}
   {{ flags_enabled|json_script:"flags-enabled" }}
   {{ allow_edit_name|json_script:"allow-edit-name" }}

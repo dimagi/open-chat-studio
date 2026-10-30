@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from apps.pipelines.models import Node
+from apps.pipelines.nodes.router_prompts import LATEST_ROUTER_PROMPT_VERSION
 
 from .conftest import add_edge, add_llm_node, boundary_node, inspect_url, nodes_url, stored_node_params
 
@@ -140,6 +141,22 @@ class TestDefaultsAndLabel:
         assert node.params["max_history_length"] == 10
         assert node.params["name"] == node_id
         assert response.json()["node"]["label"] == "LLM"
+
+    @pytest.mark.parametrize(
+        ("supplied", "expected_version"),
+        [
+            pytest.param({}, LATEST_ROUTER_PROMPT_VERSION, id="latest-by-default"),
+            pytest.param({"prompt_template_version": "v0"}, "v0", id="earlier-version-kept"),
+        ],
+    )
+    def test_a_new_router_pins_a_standard_prompt_version(self, client, chatbot, supplied, expected_version):
+        with patch.dict("apps.pipelines.nodes.router_prompts.ROUTER_PROMPT_TEMPLATES", {"v0": "{routes}"}):
+            response = client.post(nodes_url(chatbot), {"type": "RouterNode", "params": supplied}, format="json")
+
+        assert response.status_code == 201, response.content
+        params = Node.objects.get(pipeline=chatbot.pipeline, flow_id=response.json()["node"]["node_id"]).params
+        assert params["prompt_mode"] == "standard"
+        assert params["prompt_template_version"] == expected_version
 
     def test_create_takes_a_label_and_a_name_over_the_defaults(self, client, chatbot):
         response = client.post(

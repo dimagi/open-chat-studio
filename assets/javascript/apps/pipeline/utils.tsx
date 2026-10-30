@@ -30,11 +30,18 @@ export function nodeBorderClass(nodeErrors : boolean, selected : boolean, nodeWa
   return classNames(selected ? "border-primary" : "", "border py-2 shadow-md rounded-xl border-2")
 }
 
+/** The standard router prompt's versions, for the builder's preview. */
+export interface RouterPromptTemplates {
+  latest: string;
+  templates: Record<string, string>;
+}
+
 const localCache = {
   loaded: false,
   nodeSchemas: null as unknown as Map<string, JsonSchema>,
   parameterValues: null as unknown as NodeParameterValues,
   defaultValues: null as unknown as Record<string, unknown>,
+  routerPromptTemplates: null as unknown as RouterPromptTemplates,
   flagsEnabled: null as unknown as Array<string>,
   modelParams: null as unknown as Record<string, string>,
   modelParamSchemas: null as unknown as Record<string, JsonSchema>,
@@ -44,6 +51,11 @@ export const getCachedData: () => typeof localCache = () => {
   if (!localCache.loaded) {
     localCache.parameterValues = JSON.parse(document.getElementById("parameter-values")?.textContent || "{}");
     localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
+    const routerPromptTemplatesRaw = document.getElementById("router-prompt-templates")?.textContent;
+    if (!routerPromptTemplatesRaw) {
+      console.error("router-prompt-templates script tag missing; router prompt preview will be unavailable");
+    }
+    localCache.routerPromptTemplates = JSON.parse(routerPromptTemplatesRaw || '{"latest": "", "templates": {}}');
     const schemas = JSON.parse(document.getElementById("node-schemas")?.textContent || "[]");
     localCache.nodeSchemas = new Map(schemas.map((schema: JsonSchema) => [schema.title, schema]));
     localCache.flagsEnabled = JSON.parse(document.getElementById("flags-enabled")?.textContent || "[]");
@@ -187,4 +199,40 @@ export function getEdgeId(
     targetHandle: targetHandle ?? null,
   };
   return addEdge(connection, [])[0].id;
+}
+
+/**
+ * The standard router prompt as the router would send it, for the builder's preview. Mirrors
+ * `render_router_prompt` and `RouterNode._format_routes` on the server; variables only known at run
+ * time, such as `{participant_data}`, are left as written. Both sides are tested against the cases in
+ * `apps/pipelines/tests/data/router_prompt_preview_cases.json`.
+ */
+export function renderRouterPromptPreview(
+  template: string,
+  {keywords, routeDescriptions, customContext, defaultRoute}: {
+    keywords: string[];
+    routeDescriptions: Record<string, string>;
+    customContext: string;
+    defaultRoute: string;
+  },
+): string {
+  const routeNames = keywords.filter(Boolean);
+  const routes = routeNames.map((keyword) => {
+    const description = (routeDescriptions[keyword] || "").trim();
+    return description ? `- ${keyword}: ${description}` : `- ${keyword}`;
+  }).join("\n");
+  const routeVariables = {routes, routes_list: routeNames.join(", ")};
+  const context = fillPromptVariables(customContext.trim(), routeVariables);
+  const contextSection = context ? `\nAdditional context:\n${context}\n` : "";
+  const escapedDefaultRoute = defaultRoute.replace(/\{/g, "{{").replace(/\}/g, "}}");
+  return fillPromptVariables(template, {...routeVariables, default_route: escapedDefaultRoute, custom_context: contextSection});
+}
+
+/** Fills `{name}` variables in one pass, as Python's `str.format` does: `{{` and `}}` are literal braces. */
+function fillPromptVariables(text: string, values: Record<string, string>): string {
+  return text.replace(/\{\{|\}\}|\{(\w+)\}/g, (token, name?: string) => {
+    if (token === "{{") return "{";
+    if (token === "}}") return "}";
+    return name !== undefined && Object.hasOwn(values, name) ? values[name] : token;
+  });
 }
