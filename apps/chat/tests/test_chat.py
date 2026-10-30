@@ -1,4 +1,5 @@
 import pytest
+from django.db.models import Prefetch
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
@@ -86,3 +87,22 @@ def test_message_iterator_exclude_message_id(chat):
     assert msg1 in messages_without_msg3
     assert msg2 in messages_without_msg3
     assert msg3 not in messages_without_msg3
+
+
+def test_message_iterator_uses_prefetched_messages(chat, django_assert_num_queries):
+    ChatMessage.objects.create(chat=chat, content="Second", summary="Summary of second")
+    third = ChatMessage.objects.create(chat=chat, content="Third")
+    chat = Chat.objects.prefetch_related(
+        Prefetch("messages", queryset=ChatMessage.objects.order_by("created_at"), to_attr="_prefetched_messages")
+    ).get(id=chat.id)
+    expected = list(Chat.objects.get(id=chat.id).message_iterator())
+    expected_without_third = list(Chat.objects.get(id=chat.id).message_iterator(exclude_message_id=third.id))
+
+    with django_assert_num_queries(0):
+        messages = list(chat.message_iterator())
+        messages_without_third = list(chat.message_iterator(exclude_message_id=third.id))
+
+    assert [(m.content, m.message_type) for m in messages] == [(m.content, m.message_type) for m in expected]
+    assert [m.content for m in messages] == ["Third", "Second", "Summary of second", "Hello"]
+    assert [m.content for m in messages_without_third] == [m.content for m in expected_without_third]
+    assert third not in messages_without_third
