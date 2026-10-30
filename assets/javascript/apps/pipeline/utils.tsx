@@ -51,11 +51,11 @@ export const getCachedData: () => typeof localCache = () => {
   if (!localCache.loaded) {
     localCache.parameterValues = JSON.parse(document.getElementById("parameter-values")?.textContent || "{}");
     localCache.defaultValues = JSON.parse(document.getElementById("default-values")?.textContent || "{}");
-const routerPromptTemplatesRaw = document.getElementById("router-prompt-templates")?.textContent;
-if (!routerPromptTemplatesRaw) {
-  console.error("router-prompt-templates script tag missing; router prompt preview will be unavailable");
-}
-localCache.routerPromptTemplates = JSON.parse(routerPromptTemplatesRaw || '{"latest": "", "templates": {}}');
+    const routerPromptTemplatesRaw = document.getElementById("router-prompt-templates")?.textContent;
+    if (!routerPromptTemplatesRaw) {
+      console.error("router-prompt-templates script tag missing; router prompt preview will be unavailable");
+    }
+    localCache.routerPromptTemplates = JSON.parse(routerPromptTemplatesRaw || '{"latest": "", "templates": {}}');
     const schemas = JSON.parse(document.getElementById("node-schemas")?.textContent || "[]");
     localCache.nodeSchemas = new Map(schemas.map((schema: JsonSchema) => [schema.title, schema]));
     localCache.flagsEnabled = JSON.parse(document.getElementById("flags-enabled")?.textContent || "[]");
