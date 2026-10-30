@@ -527,7 +527,7 @@ paths:
                     llm_provider_model_id: 12
                     llm_model_parameters:
                       temperature: 0.0
-                    prompt_mode: standard_with_context
+                    prompt_mode: standard
                     custom_context: A request to change an existing booking is a reschedule,
                       not a new booking.
                     prompt_template_version: v1
@@ -4760,17 +4760,16 @@ components:
           description: Tag the output message with the selected route.
         prompt_mode:
           type: string
-          description: 'How the router''s prompt is built: ``standard`` from the routes
-            and their descriptions, ``standard_with_context`` the same plus ``custom_context``,
-            or ``custom`` from ``prompt``.'
+          description: 'How the router''s prompt is built: ``standard`` from the routes,
+            their descriptions and ``custom_context``, or ``custom`` from ``prompt``.'
         custom_context:
           type: string
           description: Instructions added to the standard prompt when ``prompt_mode``
-            is ``standard_with_context``.
+            is ``standard``; left out when blank.
         prompt_template_version:
           type: string
-          description: Version of the standard prompt the router uses in the standard
-            modes. New routers get the latest version; set the latest version to upgrade
+          description: Version of the standard prompt the router uses in ``standard``
+            mode. New routers get the latest version; set the latest version to upgrade
             a router.
         prompt:
           type: string

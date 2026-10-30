@@ -21,10 +21,12 @@ class Command(IdempotentCommand):
         )
         if dry_run:
             self.stdout.write(f"Would backfill prompt_mode on {routers.count()} router nodes")
-            return None
+            return
 
         updated = 0
         batch = []
+
+
 node_ids = list(routers.values_list("id", flat=True))
 for start in range(0, len(node_ids), BATCH_SIZE):
     chunk_ids = node_ids[start : start + BATCH_SIZE]
