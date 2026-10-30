@@ -114,4 +114,28 @@ describe('VisibleWhenWrapper', () => {
 
     expect(onHide).toHaveBeenCalledTimes(clears);
   });
+
+  it.each([
+    ['warns', true, 1],
+    ['does not warn', false, 0],
+  ])('%s that onHide is ignored when keepValueWhenHidden is %s', (_verb, keepValueWhenHidden, warnings) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <VisibleWhenWrapper
+        visibleWhen={{field: 'toggle', value: true}}
+        nodeParams={{name: 'x', toggle: true}}
+        fieldName="field"
+        nodeId="node-1"
+        schemaDefault={null}
+        keepValueWhenHidden={keepValueWhenHidden}
+        onHide={vi.fn()}
+      >
+        <span>content</span>
+      </VisibleWhenWrapper>,
+    );
+
+    expect(warn).toHaveBeenCalledTimes(warnings);
+    warn.mockRestore();
+  });
 });

@@ -64,9 +64,10 @@ type VisibleWhenWrapperProps = {
  * is useful for sub-schema widgets (e.g. ModelParametersWidget) that store
  * their values at a nested path rather than directly in node.data.params.
  *
-if (keepValueWhenHidden && onHide && process.env.NODE_ENV !== "production") {
-  console.warn(`VisibleWhenWrapper: onHide is ignored for "${fieldName}" because keepValueWhenHidden is set.`);
-}
+ * `keepValueWhenHidden` skips the clearing and `onHide`, so the stored value survives being hidden.
+ * The field is still not rendered while it is hidden. Passing both `onHide` and `keepValueWhenHidden`
+ * is not supported: `onHide` never fires, and a warning is logged.
+ */
 export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   visibleWhen,
   nodeParams,
@@ -90,6 +91,13 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   // (or hidden-to-visible populate) silently never runs.
   const fieldIdentity = `${nodeId}:${fieldName}`;
   const prevFieldIdentityRef = useRef(fieldIdentity);
+  const ignoresOnHide = keepValueWhenHidden && onHide !== undefined;
+
+  useEffect(() => {
+    if (ignoresOnHide) {
+      console.warn(`VisibleWhenWrapper: onHide is ignored for "${fieldName}" because keepValueWhenHidden is set.`);
+    }
+  }, [ignoresOnHide, fieldName]);
 
   useEffect(() => {
     if (prevFieldIdentityRef.current !== fieldIdentity) {

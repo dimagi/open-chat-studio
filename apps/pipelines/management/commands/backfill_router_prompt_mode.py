@@ -20,8 +20,10 @@ class Command(IdempotentCommand):
             .filter(Q(params__prompt_mode__isnull=True) | Q(params__prompt_mode=None) | Q(params__prompt_mode=""))
         )
         if dry_run:
-            self.stdout.write(f"Would backfill prompt_mode on {routers.count()} router nodes")
-            return routers.count()
+            router_count = routers.count()
+            self.stdout.write(f"Would backfill prompt_mode on {router_count} router nodes")
+            return router_count
+
         updated = 0
         node_ids = list(routers.values_list("id", flat=True))
         for start in range(0, len(node_ids), BATCH_SIZE):
