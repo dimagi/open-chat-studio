@@ -11,6 +11,7 @@ from apps.pipelines.models import PipelineChatHistoryModes, PipelineChatHistoryT
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.history_middleware import MaxHistoryLengthHistoryMiddleware
 from apps.pipelines.nodes.mixins import (
+    OutputMessageTagMixin,
     SummarizeHistoryMiddleware,
     TruncateTokensHistoryMiddleware,
 )
@@ -677,3 +678,12 @@ def test_missing_node_input_error_sends_state_to_sentry_only():
     name, sentry_context = set_context.call_args.args
     assert name == "Node input"
     assert sentry_context["state_outputs"] == {"secret-node": {"output_list": ["secret"]}}
+
+
+def test_message_tag_accepts_tag_name_max_length():
+    assert OutputMessageTagMixin(tag="x" * 100).tag == "x" * 100
+
+
+def test_message_tag_rejects_tag_longer_than_tag_name():
+    with pytest.raises(ValidationError, match="at most 100 characters"):
+        OutputMessageTagMixin(tag="x" * 101)

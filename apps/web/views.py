@@ -14,6 +14,7 @@ from health_check.views import HealthCheckView
 from apps.teams.decorators import TeamAccessDenied, check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
 from apps.teams.roles import is_member
+from apps.utils.redirects import safe_redirect_url
 from apps.web.elevation import (
     TOO_MANY_ELEVATIONS_MESSAGE,
     Elevation,
@@ -22,7 +23,6 @@ from apps.web.elevation import (
     InvalidGrant,
     acquire_redirect,
     release,
-    safe_redirect_url,
     start_elevation,
 )
 from apps.web.health_checks import CHECK_SUBSETS

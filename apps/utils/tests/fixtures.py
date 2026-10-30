@@ -57,3 +57,9 @@ def connect_request_headers():
 @pytest.fixture()
 def team_with_resources(db):
     return make_team_with_resources()
+
+
+@pytest.fixture()
+def admin(team_with_users):
+    """The owner of `team_with_users`."""
+    return next(membership.user for membership in team_with_users.membership_set.all() if membership.is_team_admin())

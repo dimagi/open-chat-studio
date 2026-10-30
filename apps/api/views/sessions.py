@@ -16,6 +16,7 @@ from apps.api.serializers import (
     ExperimentSessionCreateSerializer,
     ExperimentSessionSerializer,
 )
+from apps.chat.models import ChatMessage
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -166,6 +167,13 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         kwargs.setdefault("context", self.get_serializer_context())
         return serializer_class(*args, **kwargs)
 
+    def get_object(self):
+        session = super().get_object()
+        if self.action == "retrieve":
+            chat = session.chat
+            ChatMessage.prefetch_attached_files(chat=chat, messages=chat._prefetched_messages)
+        return session
+
     def get_queryset(self):
         queryset = ExperimentSession.objects.filter(team=self.request.team).select_related(
             "team", "experiment", "participant"
@@ -198,8 +206,16 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                     queryset=ParticipantData.objects.only("id", "participant_id", "experiment_id", "data"),
                     to_attr="_prefetched_participant_data",
                 ),
+                # Messages (with their tags) are only serialized on the detail endpoint.
+                # `Chat.message_iterator` reads `_prefetched_messages` (which must be ordered by
+                # `created_at`) instead of running a new query plus one tag query per message.
+                Prefetch(
+                    "chat__messages",
+                    queryset=ChatMessage.objects.order_by("created_at").prefetch_related("tags"),
+                    to_attr="_prefetched_messages",
+                ),
             )
-        queryset = queryset.prefetch_related("chat__tags", "chat__messages__tags")
+        queryset = queryset.prefetch_related("chat__tags")
         if tags_query_param := self.request.query_params.get("tags"):
             queryset = queryset.filter(chat__tags__name__in=tags_query_param.split(","))
         if experiment_id := self.request.query_params.get("experiment"):

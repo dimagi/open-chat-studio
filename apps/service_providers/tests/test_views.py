@@ -26,6 +26,7 @@ from apps.service_providers.models import (
 )
 from apps.service_providers.utils import ServiceProvider
 from apps.service_providers.views import _format_context
+from apps.teams.backends import CHAT_VIEWER_GROUP
 from apps.teams.flags import Flags
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import NodeFactory
@@ -38,6 +39,7 @@ from apps.utils.factories.service_provider_factories import (
     TraceProviderFactory,
     VoiceProviderFactory,
 )
+from apps.utils.tests.team_helpers import member_with_groups
 
 pytestmark = pytest.mark.usefixtures("abuse_detection_flag_on")
 
@@ -1060,3 +1062,22 @@ class TestWhatsappTestFormAvailability:
             response = authed_client.post(_whatsapp_url("whatsapp_refresh", meta_provider))
 
         assert response.context["template_ok"] is True
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("method", [pytest.param("get", id="get"), pytest.param("post", id="post")])
+@pytest.mark.parametrize("is_edit", [pytest.param(False, id="create"), pytest.param(True, id="edit")])
+def test_provider_form_requires_provider_permission(client, team_with_users, method, is_edit):
+    """A team member without the provider's add/change permission cannot open or submit the form."""
+    user = member_with_groups(team=team_with_users, group_names=[CHAT_VIEWER_GROUP])
+    client.force_login(user)
+    if is_edit:
+        provider = LlmProviderFactory.create(team=team_with_users, name="Before")
+        url = reverse("service_providers:edit", args=[team_with_users.slug, "llm", provider.pk])
+    else:
+        url = reverse("service_providers:new", args=[team_with_users.slug, "llm", "openai"])
+
+    response = getattr(client, method)(url, {"name": "After", "openai_api_key": "sk-test"})
+
+    assert response.status_code == 403
+    assert not LlmProvider.objects.filter(team=team_with_users, name="After").exists()
