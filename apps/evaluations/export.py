@@ -23,6 +23,7 @@ from django.db.models import F, OuterRef, QuerySet
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.errors import ERROR_KEY, GENERATION_ERROR_KEY
+from apps.utils.csv_export import neutralize_csv_formula
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationResult, Evaluator
@@ -243,11 +244,11 @@ def write_evaluation_csv(writer, rows: Iterable[dict]) -> None:
             return
 
         ordered_headers = order_evaluation_headers(headers)
-        writer.writerow(ordered_headers)
+        writer.writerow([neutralize_csv_formula(header) for header in ordered_headers])
         spool.seek(0)
         for line in spool:
             row = json.loads(line)
-            writer.writerow([row.get(header, "") for header in ordered_headers])
+            writer.writerow([neutralize_csv_formula(row.get(header, "")) for header in ordered_headers])
 
 
 def export_evaluation_csv_to_tempfile(rows: Iterable[dict]) -> "tempfile.SpooledTemporaryFile[bytes]":

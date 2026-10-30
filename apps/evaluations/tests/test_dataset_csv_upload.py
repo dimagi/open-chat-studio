@@ -358,6 +358,70 @@ class TestCSVUploadCreate:
         assert messages[1].input["content"] == "Valid"
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_csv_dataset_creation_restores_an_apostrophe_before_a_formula_character_in_any_csv(
+        self, client_with_user, team_with_users
+    ):
+        csv_content = (
+            "input_content,output_content,context.offset,participant_data.handle,session_state.note\n"
+            "'=SUM(A1),'-answer,'-5,'@someone,'+1\n"
+        )
+        file_instance = File.create(
+            filename="exported.csv",
+            file_obj=SimpleUploadedFile("exported.csv", csv_content.encode(), content_type="text/csv"),
+            team_id=team_with_users.id,
+            purpose=FilePurpose.EVALUATION_DATASET,
+        )
+        column_mapping = {
+            "input": "input_content",
+            "output": "output_content",
+            "context": {"offset": "context.offset"},
+            "participant_data": {"handle": "participant_data.handle"},
+            "session_state": {"note": "session_state.note"},
+        }
+        form_data = {
+            "name": "Re-imported Export",
+            "mode": "csv",
+            "evaluation_mode": "message",
+            "csv_file_id": str(file_instance.id),
+            "column_mapping": json.dumps(column_mapping),
+            "populate_history": False,
+        }
+
+        response = client_with_user.post(reverse("evaluations:dataset_new", args=[team_with_users.slug]), form_data)
+
+        assert response.status_code == 302
+        message = EvaluationDataset.objects.get(name="Re-imported Export", team=team_with_users).messages.get()
+        assert message.input["content"] == "=SUM(A1)"
+        assert message.output["content"] == "-answer"
+        assert message.context == {"offset": "-5"}
+        assert message.participant_data == {"handle": "@someone"}
+        assert message.session_state == {"note": "+1"}
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    def test_csv_dataset_creation_keeps_an_apostrophe_before_plain_text(self, client_with_user, team_with_users):
+        csv_content = "input_content,output_content\n'hello,answer\n"
+        file_instance = File.create(
+            filename="hand-made.csv",
+            file_obj=SimpleUploadedFile("hand-made.csv", csv_content.encode(), content_type="text/csv"),
+            team_id=team_with_users.id,
+            purpose=FilePurpose.EVALUATION_DATASET,
+        )
+        form_data = {
+            "name": "Hand-made",
+            "mode": "csv",
+            "evaluation_mode": "message",
+            "csv_file_id": str(file_instance.id),
+            "column_mapping": json.dumps({"input": "input_content", "output": "output_content"}),
+            "populate_history": False,
+        }
+
+        response = client_with_user.post(reverse("evaluations:dataset_new", args=[team_with_users.slug]), form_data)
+
+        assert response.status_code == 302
+        message = EvaluationDataset.objects.get(name="Hand-made", team=team_with_users).messages.get()
+        assert message.input["content"] == "'hello"
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_csv_dataset_creation_with_generated_history(self, client_with_user, team_with_users):
         """Test creating dataset from CSV using a history column."""
         csv_content = (
@@ -587,6 +651,16 @@ class TestCSVUploadEdit:
         assert stats["created_count"] == 1
         assert stats["updated_count"] == 0
         assert len(stats["error_messages"]) == 0
+
+    def test_csv_upload_new_row_restores_an_apostrophe_before_a_formula_character(self, dataset):
+        rows = [{"id": "", "input_content": "'-5", "output_content": "answer"}]
+
+        stats = process_csv_rows(
+            dataset, rows, ["id", "input_content", "output_content"], MockProgressRecorder(), dataset.team
+        )
+
+        assert stats == {"updated_count": 0, "created_count": 1, "error_messages": []}
+        assert dataset.messages.order_by("-id").first().input["content"] == "-5"
 
     def test_csv_upload_updates_row(self, dataset):
         mock_progress_recorder = MockProgressRecorder()
@@ -870,6 +944,49 @@ class TestCSVUploadEdit:
         assert message.input["content"] == "Complex data"
         assert message.participant_data == {"preferences": nested_preferences}
         assert message.session_state == {"workflow": nested_workflow}
+
+    def test_downloaded_csv_uploads_back_without_the_formula_guard(self, dataset, client_with_user):
+        message = EvaluationMessage.objects.create(
+            input=EvaluationMessageContent(content="=SUM(A1:A2)", role="human").model_dump(),
+            output=EvaluationMessageContent(content="-negative answer", role="ai").model_dump(),
+            context={"offset": "-5", "tag": "@home", "range": [-1, 1]},
+            participant_data={"note": "+note"},
+            session_state={"step": "-step"},
+            history=[],
+        )
+        dataset.messages.add(message)
+        download = client_with_user.get(reverse("evaluations:dataset_download", args=[dataset.team.slug, dataset.id]))
+        reader = csv.DictReader(StringIO(download.content.decode("utf-8")))
+        rows = [row for row in reader if row["id"] == str(message.id)]
+
+        stats = process_csv_rows(dataset, rows, list(reader.fieldnames), MockProgressRecorder(), dataset.team)
+
+        message.refresh_from_db()
+        assert message.input["content"] == "=SUM(A1:A2)"
+        assert message.output["content"] == "-negative answer"
+        assert message.context == {"offset": "-5", "tag": "@home", "range": [-1, 1]}
+        assert message.participant_data == {"note": "+note"}
+        assert message.session_state == {"step": "-step"}
+        assert stats == {"updated_count": 0, "created_count": 0, "error_messages": []}
+
+    def test_downloaded_csv_uploads_back_apostrophe_prefixed_values_unchanged(self, dataset, client_with_user):
+        message = EvaluationMessage.objects.create(
+            input=EvaluationMessageContent(content="'=typed", role="human").model_dump(),
+            output=EvaluationMessageContent(content="answer", role="ai").model_dump(),
+            context={"dash": "'-"},
+            history=[],
+        )
+        dataset.messages.add(message)
+        download = client_with_user.get(reverse("evaluations:dataset_download", args=[dataset.team.slug, dataset.id]))
+        reader = csv.DictReader(StringIO(download.content.decode("utf-8")))
+        rows = [row for row in reader if row["id"] == str(message.id)]
+
+        stats = process_csv_rows(dataset, rows, list(reader.fieldnames), MockProgressRecorder(), dataset.team)
+
+        message.refresh_from_db()
+        assert message.input["content"] == "'=typed"
+        assert message.context == {"dash": "'-"}
+        assert stats == {"updated_count": 0, "created_count": 0, "error_messages": []}
 
 
 @pytest.mark.django_db()

@@ -248,3 +248,28 @@ def test_download_dataset_csv_with_participant_data_and_session_state(client, te
         "notifications": {"email": True, "sms": False},
     }
     assert json.loads(row5["session_state.workflow"]) == {"steps": ["start", "middle", "end"], "current": 1}
+
+
+@pytest.mark.django_db()
+def test_download_dataset_csv_neutralizes_spreadsheet_formulas(client, team_with_users):
+    dataset = EvaluationDataset.objects.create(name="Formula Dataset", team=team_with_users)
+    message = EvaluationMessageFactory.create(
+        input=EvaluationMessageContent(content="=cmd|' /C calc'!A0", role="human").model_dump(),
+        output=EvaluationMessageContent(content="plain answer", role="ai").model_dump(),
+        context={"offset": -5},
+        participant_data={"handle": "@someone"},
+        session_state={"note": "+1"},
+        history=[],
+    )
+    dataset.messages.add(message)
+    client.force_login(team_with_users.members.first())
+
+    response = client.get(reverse("evaluations:dataset_download", args=[team_with_users.slug, dataset.id]))
+
+    row = next(csv.DictReader(io.StringIO(response.content.decode("utf-8"))))
+    assert row["id"] == str(message.id)
+    assert row["input_content"] == "'=cmd|' /C calc'!A0"
+    assert row["output_content"] == "plain answer"
+    assert row["context.offset"] == "'-5"
+    assert row["participant_data.handle"] == "'@someone"
+    assert row["session_state.note"] == "'+1"

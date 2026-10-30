@@ -70,6 +70,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.csv_export import neutralize_csv_formula
 from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
@@ -597,6 +598,36 @@ def parse_csv_columns(request, team_slug: str):
         return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
 
 
+def _serialize_value(value):
+    """Serialize a value to string, converting dicts/lists to JSON."""
+    if isinstance(value, dict | list):
+        return json.dumps(value)
+    return str(value) if value is not None else ""
+
+
+def _dataset_csv_row(message, context_keys, participant_data_keys, session_state_keys):
+    """Build one formula-guarded CSV row for a dataset message."""
+    values = [
+        message.input.get("content", ""),
+        message.output.get("content", ""),
+    ]
+
+    for key in context_keys:
+        value = message.context.get(key, "") if message.context else ""
+        values.append(_serialize_value(value))
+
+    for key in participant_data_keys:
+        value = message.participant_data.get(key, "") if message.participant_data else ""
+        values.append(_serialize_value(value))
+
+    for key in session_state_keys:
+        value = message.session_state.get(key, "") if message.session_state else ""
+        values.append(_serialize_value(value))
+
+    values.append(message.full_history)
+    return [message.id, *(neutralize_csv_formula(value) for value in values)]
+
+
 @login_and_team_required
 def download_dataset_csv(request, team_slug: str, pk: int):
     """Download dataset as CSV with expanded context and metadata columns."""
@@ -634,33 +665,8 @@ def download_dataset_csv(request, team_slug: str, pk: int):
 
     writer.writerow(headers)
 
-    def _serialize_value(value):
-        """Serialize a value to string, converting dicts/lists to JSON."""
-        if isinstance(value, dict | list):
-            return json.dumps(value)
-        return str(value) if value is not None else ""
-
     for message in messages:
-        row = [
-            message.id,
-            message.input.get("content", ""),
-            message.output.get("content", ""),
-        ]
-
-        for key in context_keys:
-            value = message.context.get(key, "") if message.context else ""
-            row.append(_serialize_value(value))
-
-        for key in participant_data_keys:
-            value = message.participant_data.get(key, "") if message.participant_data else ""
-            row.append(_serialize_value(value))
-
-        for key in session_state_keys:
-            value = message.session_state.get(key, "") if message.session_state else ""
-            row.append(_serialize_value(value))
-
-        row.append(message.full_history)
-        writer.writerow(row)
+        writer.writerow(_dataset_csv_row(message, context_keys, participant_data_keys, session_state_keys))
 
     return response
 
