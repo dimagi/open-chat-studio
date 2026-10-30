@@ -1589,8 +1589,7 @@ export function TextEditorWidget(props: WidgetParams) {
   // NOTE: relies on the literal field name `custom_context` matching apps/pipelines/nodes/nodes.py.
   // TODO: derive from a schema-level flag (e.g. ui:isSupplementalPrompt) instead of a hardcoded
   // field name, so a rename of RouterNode.custom_context can't silently break this.
-  const CUSTOM_CONTEXT_FIELD_NAME = "custom_context";
-  const isWholePrompt = props.name !== CUSTOM_CONTEXT_FIELD_NAME;
+  const isWholePrompt = !props.schema["ui:isSupplementalPrompt"];
   const routesWarning = isRouter && isWholePrompt
     && !promptText.includes("{routes}") && !promptText.includes("{routes_list}")
     ? "Add {routes} to the prompt to give the router each route and its description."
