@@ -38,6 +38,8 @@ from apps.service_providers.forms import (
 )
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
+    AuthProvider,
+    AuthProviderType,
     EmbeddingProviderModel,
     LlmProvider,
     LlmProviderModel,
@@ -54,6 +56,7 @@ from ..generics.chips import Chip
 from ..generics.referenced_objects import render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
+from .oauth_views import _oauth_redirect_uri, is_reconnect_required
 from .usages import get_provider_usages
 from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms, is_provider_enabled
 
@@ -403,6 +406,18 @@ class CreateServiceProvider(
                 "service_providers:whatsapp_status",
                 kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
+        if subtype == AuthProviderType.oauth_authorization_code:
+            ctx["oauth_redirect_uri"] = _oauth_redirect_uri(self.request)
+            if isinstance(instance, AuthProvider):
+                ctx["oauth_status"] = (
+                    "reconnect required"
+                    if is_reconnect_required(instance)
+                    else ("connected" if instance._auth_data.get("access_token") else "not connected")
+                )
+                ctx["oauth_connect_url"] = reverse(
+                    "service_providers:oauth_connect",
+                    kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
+                )
         if self.provider_type == ServiceProvider.llm:
             ctx["can_verify_credentials"] = bool(instance) and _can_verify_credentials(self.provider_type, subtype)
             ctx["new_model_form"] = LlmProviderModelForm(self.request.team)

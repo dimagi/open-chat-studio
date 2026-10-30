@@ -10,6 +10,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.auth_service.oauth import AUTHORIZATION_PARAM_RESERVED_KEYS
 from apps.service_providers.exceptions import provider_error_message
 from apps.service_providers.llm_service.error_classification import provider_error_types
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -547,6 +548,82 @@ class OAuthClientCredentialsConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
         initial="client_secret_basic",
         help_text=_("How the client credentials are sent to the token endpoint."),
     )
+
+
+class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    custom_template = "service_providers/oauth_authorization_code_config_form.html"
+    obfuscate_fields = ["client_secret"]
+
+    provider_preset = forms.ChoiceField(
+        label=_("Provider preset"),
+        choices=[
+            ("custom", _("Custom")),
+            ("github", _("GitHub")),
+            ("google", _("Google")),
+            ("microsoft", _("Microsoft")),
+        ],
+        initial="custom",
+        required=False,
+        help_text=_("Presets only fill the fields below; all values remain editable."),
+    )
+    additional_searchable_fields = ["client_id"]
+
+    client_id = forms.CharField(label=_("Client ID"), help_text=_("The client identifier from your OAuth provider."))
+    client_secret = forms.CharField(
+        label=_("Client Secret"), help_text=_("The client secret from your OAuth provider.")
+    )
+    authorize_url = forms.URLField(
+        label=_("Authorization URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The provider endpoint where users authorize access."),
+    )
+    token_url = forms.URLField(
+        label=_("Token URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The provider endpoint used to exchange codes and refresh tokens."),
+    )
+    scope = forms.CharField(label=_("Scope"), required=False, help_text=_("Space separated list of scopes."))
+    authorization_params = forms.JSONField(
+        label=_("Additional Authorization Request Parameters"),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=_('Optional JSON object, for example: {"access_type": "offline"}.'),
+    )
+    token_endpoint_auth_method = forms.ChoiceField(
+        label=_("Token Endpoint Authentication"),
+        choices=[
+            ("client_secret_basic", _("HTTP Basic")),
+            ("client_secret_post", _("Request Body (client_secret_post)")),
+        ],
+        initial="client_secret_basic",
+        help_text=_("How client credentials are sent to the token endpoint."),
+    )
+
+    def clean_authorization_params(self):
+        params = self.cleaned_data.get("authorization_params")
+        raw_value = self.data.get(self.add_prefix("authorization_params"))
+        if params is None and raw_value in (None, ""):
+            return {}
+        if not isinstance(params, dict):
+            raise forms.ValidationError(_("Authorization parameters must be a JSON object."))
+        reserved = AUTHORIZATION_PARAM_RESERVED_KEYS.intersection(params)
+        if reserved:
+            keys = ", ".join(sorted(reserved))
+            raise forms.ValidationError(_("Reserved OAuth parameters cannot be overridden: %(keys)s.") % {"keys": keys})
+        return params
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("provider_preset") == "google" and not cleaned.get("authorization_params"):
+            cleaned["authorization_params"] = {"access_type": "offline", "prompt": "consent"}
+        return cleaned
+
+    def save(self, instance):
+        self.cleaned_data.pop("provider_preset", None)
+        params = self.cleaned_data.pop("authorization_params", None)
+        if params:
+            self.cleaned_data["authorization_params"] = params
+        return super().save(instance)
 
 
 class SlackMessagingConfigForm(ProviderTypeConfigForm):

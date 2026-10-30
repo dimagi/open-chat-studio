@@ -2691,6 +2691,7 @@ components:
         name:
           type: string
           maxLength: 255
+        extra_data: {}
       required:
       - config
       - created_at
@@ -2705,6 +2706,7 @@ components:
       - bearer
       - commcare
       - oauth_client_credentials
+      - oauth_authorization_code
       type: string
       description: |-
         * `basic` - Basic
@@ -2712,6 +2714,7 @@ components:
         * `bearer` - Bearer Auth
         * `commcare` - CommCare
         * `oauth_client_credentials` - OAuth (Client Credentials)
+        * `oauth_authorization_code` - OAuth (Authorization Code)
     AuthProviderList:
       type: object
       properties:
