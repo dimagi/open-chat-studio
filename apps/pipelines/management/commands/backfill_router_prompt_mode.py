@@ -24,7 +24,6 @@ class Command(IdempotentCommand):
             return
 
         updated = 0
-        batch = []
 
 
 node_ids = list(routers.values_list("id", flat=True))
