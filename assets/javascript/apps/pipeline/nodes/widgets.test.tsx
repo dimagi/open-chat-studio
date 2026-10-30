@@ -413,15 +413,14 @@ describe('KeywordsWidget route descriptions', () => {
 describe('RouterPromptModeWidget', () => {
   const schema = {
     type: 'string',
-    enum: ['standard', 'standard_with_context', 'custom'],
-    'ui:enumLabels': ['Standard', 'Standard + Context', 'Custom (Advanced)'],
+    enum: ['standard', 'custom'],
+    'ui:enumLabels': ['Standard', 'Custom (Advanced)'],
   } as unknown as PropertySchema;
   const routes = {
     name: 'router',
     keywords: ['BILLING', 'SUPPORT'],
     route_descriptions: {BILLING: 'Payments'},
     default_keyword_index: 1,
-    custom_context: 'Refunds are billing.',
   };
 
   const renderWidget = (nodeParams: Record<string, unknown>) => {
@@ -440,10 +439,10 @@ describe('RouterPromptModeWidget', () => {
   });
 
   it.each([
-    ['standard', 'Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT'],
-    ['standard_with_context', 'Routes:\n- BILLING: Payments\n- SUPPORT\n\nAdditional context:\nRefunds are billing.\nDefault: SUPPORT'],
-  ])('previews the latest standard prompt in %s mode', (mode, expected) => {
-    const {container} = renderWidget({...routes, prompt_mode: mode});
+    ['with', 'Refunds are billing.', 'Routes:\n- BILLING: Payments\n- SUPPORT\n\nAdditional context:\nRefunds are billing.\nDefault: SUPPORT'],
+    ['without', '', 'Routes:\n- BILLING: Payments\n- SUPPORT\nDefault: SUPPORT'],
+  ])('previews the latest standard prompt %s context', (_label, customContext, expected) => {
+    const {container} = renderWidget({...routes, custom_context: customContext, prompt_mode: 'standard'});
 
     expect(container.querySelector('pre')?.textContent).toBe(expected);
   });
@@ -482,7 +481,7 @@ describe('RouterPromptModeWidget', () => {
       );
     }
 
-    it('pins the latest version when a custom router switches to a standard mode', () => {
+    it('pins the latest version when a custom router switches to standard', () => {
       seedRouter({prompt_mode: 'custom'});
       const {getByRole} = render(<Harness />);
 
@@ -495,9 +494,9 @@ describe('RouterPromptModeWidget', () => {
       seedRouter({prompt_mode: 'standard', prompt_template_version: 'v1'});
       const {getByRole} = render(<Harness />);
 
-      fireEvent.change(getByRole('combobox'), {target: {value: 'standard_with_context'}});
+      fireEvent.change(getByRole('combobox'), {target: {value: 'custom'}});
 
-      expect(storedParams()).toMatchObject({prompt_mode: 'standard_with_context', prompt_template_version: 'v1'});
+      expect(storedParams()).toMatchObject({prompt_mode: 'custom', prompt_template_version: 'v1'});
     });
 
     it('offers to switch a router on an older version to the latest', () => {

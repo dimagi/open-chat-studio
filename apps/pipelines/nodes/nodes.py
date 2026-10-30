@@ -672,7 +672,6 @@ class BooleanNode(RouteTagMixin, PipelineRouterNode):
 
 class RouterPromptMode(TextChoices):
     STANDARD = "standard", "Standard"
-    STANDARD_WITH_CONTEXT = "standard_with_context", "Standard + Context"
     CUSTOM = "custom", "Custom (Advanced)"
 
 
@@ -700,9 +699,9 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         RouterPromptMode.STANDARD,
         title="Prompt Mode",
         description=(
-            "How the router's prompt is built. `standard` builds it from the routes and their "
-            "`route_descriptions`; `standard_with_context` adds `custom_context` to that; `custom` sends "
-            "`prompt` instead. A router saved without this setting reads as `custom`."
+            "How the router's prompt is built. `standard` builds it from the routes, their "
+            "`route_descriptions` and `custom_context`; `custom` sends `prompt` instead. A router saved "
+            "without this setting reads as `custom`."
         ),
         json_schema_extra=UiSchema(widget=Widgets.router_prompt_mode, enum_labels=RouterPromptMode.labels),
     )
@@ -710,13 +709,14 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         default="",
         title="Additional Context",
         description=(
-            "Instructions added to the standard prompt in `standard_with_context` mode, such as which "
-            "route to prefer in a borderline case. Takes the same template variables as `prompt`."
+            "Instructions added to the standard prompt in `standard` mode, such as which route to prefer "
+            "in a borderline case. Left out of the prompt when blank. Takes the same template variables "
+            "as `prompt`."
         ),
         json_schema_extra=UiSchema(
             widget=Widgets.text_editor,
             options_source=OptionsSource.router_prompt_variables,
-            visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.STANDARD_WITH_CONTEXT.value),
+            visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.STANDARD.value),
             keep_value_when_hidden=True,
         ),
     )
@@ -732,20 +732,16 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         json_schema_extra=UiSchema(
             widget=Widgets.text_editor,
             options_source=OptionsSource.router_prompt_variables,
-            visible_when=VisibleWhen(
-                field="prompt_mode",
-                operator="not_in",
-                value=[RouterPromptMode.STANDARD.value, RouterPromptMode.STANDARD_WITH_CONTEXT.value],
-            ),
+            visible_when=VisibleWhen(field="prompt_mode", operator="not_in", value=[RouterPromptMode.STANDARD.value]),
             keep_value_when_hidden=True,
         ),
     )
     prompt_template_version: str = Field(
         default=router_prompts.LATEST_ROUTER_PROMPT_VERSION,
         description=(
-            "The version of the standard prompt this router uses in `standard` and `standard_with_context` "
-            "modes. New routers get the latest version. A router keeps its version until it is changed, so "
-            "a newer standard prompt never changes how an existing router routes."
+            "The version of the standard prompt this router uses in `standard` mode. New routers get the "
+            "latest version. A router keeps its version until it is changed, so a newer standard prompt "
+            "never changes how an existing router routes."
         ),
         json_schema_extra=UiSchema(widget=Widgets.none),
     )
@@ -805,7 +801,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             if not self.prompt:
                 raise PydanticCustomError("invalid_prompt", "Prompt cannot be empty", {"field": "prompt"})
             self._check_template_variables("prompt", self.prompt)
-        elif self.prompt_mode == RouterPromptMode.STANDARD_WITH_CONTEXT:
+        else:
             self._check_template_variables("custom_context", self.custom_context)
         return self
 
@@ -877,8 +873,9 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     def _system_prompt_template(self, default_keyword: str | None) -> str:
         if self.prompt_mode == RouterPromptMode.CUSTOM:
             return f"{self.prompt}\nThe default routing destination is: {default_keyword}"
-        context = self.custom_context if self.prompt_mode == RouterPromptMode.STANDARD_WITH_CONTEXT else ""
-        return router_prompts.render_router_prompt(self.prompt_template_version, context, default_keyword or "")
+        return router_prompts.render_router_prompt(
+            self.prompt_template_version, self.custom_context, default_keyword or ""
+        )
 
     def _format_routes(self) -> str:
         """One `- KEYWORD: description` line per route; a route with no description is the bare keyword."""

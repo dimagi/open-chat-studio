@@ -11,10 +11,10 @@ ROUTER_PROMPT_TEMPLATES: dict[str, str] = {
     "v1": (
         "You are a routing assistant. Read the user's latest message, using the conversation so far for "
         "context, and choose the one route that best fits what the user wants.\n"
+        "{custom_context}"
         "\n"
         "Available routes:\n"
         "{routes}\n"
-        "{custom_context}"
         "\n"
         "Rules:\n"
         "- Choose exactly one of the routes above.\n"

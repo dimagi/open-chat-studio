@@ -59,7 +59,7 @@ FULL_PARAMS: dict[str, dict] = {
         "llm_provider_id": 4,
         "llm_provider_model_id": 12,
         "llm_model_parameters": {"temperature": 0.0},
-        "prompt_mode": "standard_with_context",
+        "prompt_mode": "standard",
         "custom_context": "A request to change an existing booking is a reschedule, not a new booking.",
         "prompt_template_version": "v1",
         "prompt": "Route on what {participant_data} is asking for.\n\nRoutes:\n{routes}",

@@ -94,7 +94,7 @@ describe('renderRouterPromptPreview matches the router', () => {
     const preview = renderRouterPromptPreview(previewCases.template, {
       keywords: testCase.keywords,
       routeDescriptions: testCase.route_descriptions,
-      customContext: testCase.prompt_mode === 'standard_with_context' ? testCase.custom_context : '',
+      customContext: testCase.custom_context,
       defaultRoute: testCase.keywords[testCase.default_keyword_index],
     });
 

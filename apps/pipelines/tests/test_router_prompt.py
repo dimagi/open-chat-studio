@@ -65,6 +65,11 @@ class TestRenderRouterPrompt:
         assert "Refunds are billing." in template
         assert "choose BILLING." in template
 
+    def test_the_context_comes_before_the_routes(self):
+        template = render_router_prompt(LATEST_ROUTER_PROMPT_VERSION, "Refunds are billing.", "BILLING")
+
+        assert template.index("Additional context:\nRefunds are billing.") < template.index("Available routes:")
+
     def test_leaves_out_an_empty_context(self):
         template = render_router_prompt(LATEST_ROUTER_PROMPT_VERSION, "  ", "BILLING")
 
@@ -86,15 +91,16 @@ class TestRenderRouterPrompt:
 @pytest.mark.django_db()
 class TestSystemPrompt:
     def test_standard_builds_the_prompt_from_the_routes(self):
-        prompt = _system_prompt(_router(prompt_mode="standard", prompt="Ignored prompt", custom_context="Ignored"))
+        prompt = _system_prompt(_router(prompt_mode="standard", prompt="Ignored prompt"))
 
         assert prompt.startswith("You are a routing assistant.")
         assert "- BILLING: Payments and invoices\n- SUPPORT" in prompt
         assert "choose BILLING." in prompt
         assert "Ignored" not in prompt
+        assert "Additional context" not in prompt
 
-    def test_standard_with_context_adds_the_context(self):
-        router = _router(prompt_mode="standard_with_context", custom_context="Refunds count as {routes_list}.")
+    def test_standard_adds_the_context(self):
+        router = _router(prompt_mode="standard", custom_context="Refunds count as {routes_list}.")
 
         prompt = _system_prompt(router)
 
@@ -109,7 +115,7 @@ class TestSystemPrompt:
         ],
     )
     def test_custom_sends_the_users_prompt(self, params):
-        prompt = _system_prompt(_router(prompt="Pick a route.", **params))
+        prompt = _system_prompt(_router(prompt="Pick a route.", custom_context="Ignored", **params))
 
         assert prompt == "Pick a route.\nThe default routing destination is: BILLING"
 
@@ -133,13 +139,9 @@ class TestValidation:
             pytest.param({"prompt_mode": "custom", "prompt": "{unknown}"}, False, id="custom-checks-prompt"),
             pytest.param({"prompt_mode": "standard", "prompt": "{unknown}"}, True, id="standard-ignores-prompt"),
             pytest.param(
-                {"prompt_mode": "standard_with_context", "custom_context": "{unknown}"},
-                False,
-                id="context-mode-checks-context",
+                {"prompt_mode": "standard", "custom_context": "{unknown}"}, False, id="standard-checks-context"
             ),
-            pytest.param(
-                {"prompt_mode": "standard", "custom_context": "{unknown}"}, True, id="standard-ignores-context"
-            ),
+            pytest.param({"prompt_mode": "custom", "custom_context": "{unknown}"}, True, id="custom-ignores-context"),
         ],
     )
     def test_only_the_text_the_mode_uses_is_validated(self, params, is_valid):
@@ -154,7 +156,6 @@ class TestValidation:
         [
             pytest.param("custom", False, id="custom-requires-prompt"),
             pytest.param("standard", True, id="standard-allows-empty-prompt"),
-            pytest.param("standard_with_context", True, id="context-mode-allows-empty-prompt"),
         ],
     )
     def test_an_empty_prompt_is_rejected_only_in_custom_mode(self, prompt_mode, is_valid):
@@ -237,8 +238,11 @@ class TestPreviewContract:
                 llm_provider_id=LlmProviderFactory.create().id,
                 llm_provider_model_id=LlmProviderModelFactory.create().id,
                 prompt_template_version="contract",
-                **{name: case[name] for name in ("keywords", "route_descriptions", "default_keyword_index")},
-                **{name: case[name] for name in ("prompt_mode", "custom_context")},
+                prompt_mode="standard",
+                **{
+                    name: case[name]
+                    for name in ("keywords", "route_descriptions", "default_keyword_index", "custom_context")
+                },
             )
             prompt = _system_prompt(router)
 
@@ -264,7 +268,7 @@ class TestPreviewContract:
         """The preview fills `{routes}` and `{routes_list}` only as plain fields, and leaves run-time data
         such as `{participant_data.plan}` as written."""
         with pytest.raises(PydanticValidationError):
-            _router(prompt_mode="standard_with_context", custom_context=custom_context)
+            _router(prompt_mode="standard", custom_context=custom_context)
 
 
 def _fields(template: str) -> set[tuple[str, str | None, str | None]]:

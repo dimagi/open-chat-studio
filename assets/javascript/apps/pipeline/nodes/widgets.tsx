@@ -791,7 +791,7 @@ export function RouterPromptModeWidget(props: WidgetParams) {
     const prompt = renderRouterPromptPreview(template, {
       keywords,
       routeDescriptions: (props.nodeParams.route_descriptions || {}) as Record<string, string>,
-      customContext: mode === "standard_with_context" ? concatenate(props.nodeParams.custom_context) : "",
+      customContext: concatenate(props.nodeParams.custom_context),
       defaultRoute: keywords[Number(props.nodeParams.default_keyword_index ?? 0)] ?? "",
     });
     return <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case">{prompt}</pre>;

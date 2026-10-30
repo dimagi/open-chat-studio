@@ -2,12 +2,11 @@
   "template": "Routes:\n{routes}\nNames: {routes_list}\n{custom_context}Default: {default_route}",
   "cases": [
     {
-      "id": "standard-mode-ignores-context",
+      "id": "routes-without-descriptions",
       "keywords": ["BILLING", "SUPPORT", "SALES"],
       "route_descriptions": {"BILLING": "Payments and invoices", "SUPPORT": "   "},
       "default_keyword_index": 1,
-      "prompt_mode": "standard",
-      "custom_context": "Ignored in standard mode.",
+      "custom_context": "",
       "expected": "Routes:\n- BILLING: Payments and invoices\n- SUPPORT\n- SALES\nNames: BILLING, SUPPORT, SALES\nDefault: SUPPORT"
     },
     {
@@ -15,7 +14,6 @@
       "keywords": ["BILLING", "SUPPORT"],
       "route_descriptions": {"BILLING": "Payments"},
       "default_keyword_index": 0,
-      "prompt_mode": "standard_with_context",
       "custom_context": "  Prefer {routes_list} when unsure.\nRoutes again:\n{routes}  ",
       "expected": "Routes:\n- BILLING: Payments\n- SUPPORT\nNames: BILLING, SUPPORT\n\nAdditional context:\nPrefer BILLING, SUPPORT when unsure.\nRoutes again:\n- BILLING: Payments\n- SUPPORT\nDefault: BILLING"
     },
@@ -24,7 +22,6 @@
       "keywords": ["BILLING", "SUPPORT"],
       "route_descriptions": {"BILLING": "Payments"},
       "default_keyword_index": 0,
-      "prompt_mode": "standard_with_context",
       "custom_context": "Write {{routes_list}} literally.",
       "expected": "Routes:\n- BILLING: Payments\n- SUPPORT\nNames: BILLING, SUPPORT\n\nAdditional context:\nWrite {routes_list} literally.\nDefault: BILLING"
     },
@@ -33,7 +30,6 @@
       "keywords": ["BILLING", "SUPPORT"],
       "route_descriptions": {"BILLING": "Uses {curly} braces"},
       "default_keyword_index": 0,
-      "prompt_mode": "standard",
       "custom_context": "",
       "expected": "Routes:\n- BILLING: Uses {curly} braces\n- SUPPORT\nNames: BILLING, SUPPORT\nDefault: BILLING"
     },
@@ -42,7 +38,6 @@
       "keywords": ["BILLING", "SUPPORT"],
       "route_descriptions": {"BILLING": "Costs $& fees"},
       "default_keyword_index": 0,
-      "prompt_mode": "standard_with_context",
       "custom_context": "Refunds over $' go to billing.",
       "expected": "Routes:\n- BILLING: Costs $& fees\n- SUPPORT\nNames: BILLING, SUPPORT\n\nAdditional context:\nRefunds over $' go to billing.\nDefault: BILLING"
     },
@@ -51,7 +46,6 @@
       "keywords": ["BILLING", "SUPPORT"],
       "route_descriptions": {"BILLING": "Payments"},
       "default_keyword_index": 0,
-      "prompt_mode": "standard_with_context",
       "custom_context": "   ",
       "expected": "Routes:\n- BILLING: Payments\n- SUPPORT\nNames: BILLING, SUPPORT\nDefault: BILLING"
     }

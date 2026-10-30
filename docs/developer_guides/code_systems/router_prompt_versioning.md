@@ -12,13 +12,12 @@ This builds on [object versioning](versioning.md).
 
 | Mode | Prompt sent to the model |
 |------|--------------------------|
-| `standard` | The router's pinned template, filled with the routes and their descriptions. |
-| `standard_with_context` | The same, plus the user's `custom_context` under "Additional context". |
+| `standard` | The router's pinned template, filled with the routes and their descriptions, plus the user's `custom_context` under "Additional context" when it is not blank. |
 | `custom` | The user's `prompt`, followed by the default route. The template is not used. |
 
 A router saved before prompt modes existed has no `prompt_mode`. The node reads it as `custom` (`read_a_router_without_a_mode_as_custom`), so it keeps sending the prompt it was written with. New routers default to `standard`.
 
-Validation follows the mode: `prompt` is checked only in `custom`, and `custom_context` only in `standard_with_context`. The text a mode does not use is kept, so switching back restores it, but it is never validated or sent.
+Validation follows the mode: `prompt` is checked only in `custom`, and `custom_context` only in `standard`. The text a mode does not use is kept, so switching back restores it, but it is never validated or sent.
 
 ---
 
@@ -44,7 +43,7 @@ A template is filled in two steps:
 - It defaults to `LATEST_ROUTER_PROMPT_VERSION`, so a router created in the builder or through the API is pinned to the latest version.
 - A missing or empty value is read as the latest version (`ensure_prompt_template_version_exists`). This covers routers saved before the param existed.
 - An unknown version fails validation.
-- In the builder, switching a router from `custom` to a standard mode pins it to the latest version if it has none (`RouterPromptModeWidget`). The builder stores params as it sends them, so the widget sets the version rather than relying on the backend default.
+- In the builder, switching a router from `custom` to `standard` pins it to the latest version if it has none (`RouterPromptModeWidget`). The builder stores params as it sends them, so the widget sets the version rather than relying on the backend default.
 - API clients can set it, to upgrade a router or to keep an earlier version.
 
 Because the version is stored on the working node, versioning needs no special handling. Creating a version copies it, reverting restores it, and version comparison shows a change to it like any other param. A router behaves the same in the working version the user tests and in the version they publish.
@@ -53,7 +52,7 @@ Because the version is stored on the working node, versioning needs no special h
 
 ## Upgrading a router
 
-When a router in a standard mode is pinned below the latest version, the builder shows "A newer standard prompt is available" with a **Switch to latest** button. The "Preview generated prompt" dialog then shows the prompt for both the pinned version and the latest, so the user can compare them before switching.
+When a `standard` router is pinned below the latest version, the builder shows "A newer standard prompt is available" with a **Switch to latest** button. The "Preview generated prompt" dialog then shows the prompt for both the pinned version and the latest, so the user can compare them before switching.
 
 Switching only changes the working version. Published versions keep their template until the user publishes again.
 

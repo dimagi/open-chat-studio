@@ -154,19 +154,21 @@ class RouterNodeParams(_HistoryParams, _RouterParams):
     prompt_mode = serializers.CharField(
         required=False,
         help_text=(
-            "How the router's prompt is built: ``standard`` from the routes and their descriptions, "
-            "``standard_with_context`` the same plus ``custom_context``, or ``custom`` from ``prompt``."
+            "How the router's prompt is built: ``standard`` from the routes, their descriptions and "
+            "``custom_context``, or ``custom`` from ``prompt``."
         ),
     )
     custom_context = serializers.CharField(
         required=False,
         allow_blank=True,
-        help_text="Instructions added to the standard prompt when ``prompt_mode`` is ``standard_with_context``.",
+        help_text=(
+            "Instructions added to the standard prompt when ``prompt_mode`` is ``standard``; left out when blank."
+        ),
     )
     prompt_template_version = serializers.CharField(
         required=False,
         help_text=(
-            "Version of the standard prompt the router uses in the standard modes. New routers get the "
+            "Version of the standard prompt the router uses in ``standard`` mode. New routers get the "
             "latest version; set the latest version to upgrade a router."
         ),
     )
