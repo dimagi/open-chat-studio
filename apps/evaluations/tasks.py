@@ -3,7 +3,7 @@ import csv
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from io import StringIO
 
@@ -37,6 +37,7 @@ from apps.evaluations.export import (
     export_evaluation_csv_to_tempfile,
     iter_evaluation_table_rows,
 )
+from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import (
     NON_TERMINAL_RUN_STATUSES,
     DatasetCreationStatus,
@@ -58,6 +59,7 @@ from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_trace
 from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.pipelines.graph import PipelineGraph
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
@@ -150,6 +152,7 @@ class BotGeneration:
     session_id: int | None
     response: str = ""
     error: Exception | None = None
+    record: GenerationRecord = field(default_factory=GenerationRecord)
 
 
 def _run_evaluator_on_message(
@@ -168,7 +171,9 @@ def _run_evaluator_on_message(
     generation_fields = generation_error_fields(generation.error) if generation.error else {}
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
-        output = evaluator.run(message, generation.response, usage_context=usage_context).model_dump()
+        output = evaluator.run(
+            message, generation.response, usage_context=usage_context, generation=generation.record
+        ).model_dump()
     except Exception as e:
         if isinstance(e, NoStructuredOutputError):
             logger.warning(
@@ -730,6 +735,7 @@ def run_bot_generation(
 
         participant_data = message.participant_data | {}
         participant_data = session.participant.global_data | participant_data
+        node_names = _pipeline_node_names(experiment)
 
         # Call the bot with the evaluation message and session
         reply = handle_evaluation_message(
@@ -743,12 +749,26 @@ def run_bot_generation(
         response_content = reply.message.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        return BotGeneration(session_id=session.id, response=response_content, error=reply.error)
+        return BotGeneration(
+            session_id=session.id,
+            response=response_content,
+            error=reply.error,
+            record=GenerationRecord.from_run(
+                reply.pipeline_state, reply.participant_data_diff, reply.spans, node_names=node_names
+            ),
+        )
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
         return BotGeneration(session_id=session.id, error=e)
+
+
+def _pipeline_node_names(experiment: Experiment) -> dict[str, str]:
+    """Each node id in the experiment's pipeline mapped to the node's name."""
+    if experiment.pipeline is None:
+        return {}
+    return PipelineGraph.build_from_pipeline(experiment.pipeline).node_id_to_name_mapping
 
 
 def _create_message_history(chat: Chat, history: list[dict]) -> None:

@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
 
     from apps.evaluations.evaluators import EvaluatorResult
+    from apps.evaluations.generation import GenerationRecord
     from apps.evaluations.usage import EvaluatorUsageContext
 
 # Messages written per transaction by EvaluationDataset.add_messages_stream. Bounds both the
@@ -217,9 +218,10 @@ class Evaluator(BaseTeamModel):
         generated_response: str,
         *,
         usage_context: EvaluatorUsageContext | None = None,
+        generation: GenerationRecord | None = None,
     ) -> EvaluatorResult:
         return self.evaluator(**self.get_evaluator_params()).run(
-            message, generated_response, usage_context=usage_context
+            message, generated_response, usage_context=usage_context, generation=generation
         )
 
     def get_absolute_url(self):

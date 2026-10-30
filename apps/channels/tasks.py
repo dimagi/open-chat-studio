@@ -168,9 +168,10 @@ def handle_evaluation_message(
 ) -> EvaluationReply:
     """Synchronously handles the message coming from evaluations.
 
-    `usage_tracer` is the only tracer an eval run gets: it bills the LLM calls without
-    leaving a trace behind (see `UsageOnlyTracer`). Optional so a caller with nothing to
-    bill to can omit it; every evaluation run supplies one.
+    `usage_tracer` is the tracer that bills the LLM calls without leaving a trace behind
+    (see `UsageOnlyTracer`). Optional so a caller with nothing to bill to can omit it;
+    every evaluation run supplies one. The channel attaches its own capture tracer, whose
+    spans come back on the reply.
     """
     message = BaseMessage(participant_id=session.participant.identifier, message_text=message_text)
     channel = EvaluationChannel(

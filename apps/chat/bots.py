@@ -52,6 +52,17 @@ def get_bot(session: ExperimentSession, experiment: Experiment, trace_service, d
     raise NotImplementedError("Only pipeline chatbots are supported")
 
 
+def _changed_participant_data(input_state, output) -> dict | None:
+    out_pd = output.get("participant_data", None)
+    if out_pd is None or out_pd == input_state.get("participant_data"):
+        return None
+    return out_pd
+
+
+def _participant_data_diff(input_state, participant_data: dict) -> list:
+    return list(dictdiffer.diff(input_state.get("participant_data", {}), participant_data))
+
+
 class PipelineBot:
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, disable_reminder_tools=False):
         self.team = experiment.team
@@ -205,20 +216,26 @@ class PipelineBot:
 
     def _persist_pipeline_state(self, input_state, output):
         """Persist pipeline state changes (participant data, session state, tags) to the database."""
+        self._persist_session_tags(output)
+        self._persist_participant_data(input_state, output)
+        self._persist_session_state(input_state, output)
 
+    def _persist_session_tags(self, output):
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
 
-        out_pd = output.get("participant_data", None)
-        if out_pd is not None and out_pd != input_state.get("participant_data"):
-            if self.trace_service:
-                diff = list(dictdiffer.diff(input_state.get("participant_data", {}), out_pd))
-                self.trace_service.set_participant_data_diff(diff)
-            self.participant_data.data = out_pd
-            self.participant_data.save(update_fields=["data"])
-            self.session.participant.update_name_from_data(out_pd)
+    def _persist_participant_data(self, input_state, output):
+        out_pd = _changed_participant_data(input_state, output)
+        if out_pd is None:
+            return
+        if self.trace_service:
+            self.trace_service.set_participant_data_diff(_participant_data_diff(input_state, out_pd))
+        self.participant_data.data = out_pd
+        self.participant_data.save(update_fields=["data"])
+        self.session.participant.update_name_from_data(out_pd)
 
+    def _persist_session_state(self, input_state, output):
         out_session_state = output.get("session_state", None)
         if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
@@ -267,10 +284,25 @@ class EvalsBot(PipelineBot):
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, participant_data: dict):
         super().__init__(session, experiment, trace_service, False)
         self._participant_data = participant_data
+        self.pipeline_output: dict | None = None
+        self.participant_data_diff: list = []
 
     def _update_state_with_participant_data(self, state):
         state["participant_data"] = self._participant_data
         return state
+
+    def _persist_pipeline_state(self, input_state, output):
+        self.pipeline_output = output
+        super()._persist_pipeline_state(input_state, output)
+
+    def _persist_participant_data(self, input_state, output):
+        """Record the diff only: the row is the team-wide evaluations participant's, and a name key would rename it."""
+        out_pd = _changed_participant_data(input_state, output)
+        if out_pd is None:
+            return
+        self.participant_data_diff = _participant_data_diff(input_state, out_pd)
+        if self.trace_service:
+            self.trace_service.set_participant_data_diff(self.participant_data_diff)
 
 
 class PipelineTestBot:
