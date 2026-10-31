@@ -1570,6 +1570,18 @@
       "reasoning": true
     }
   },
+  "openai/gpt-6-rosalind": {
+    "first_seen": "2026-10-31",
+    "verdict": "rejected",
+    "reason": "Life-sciences model restricted to approved organizations; not on OpenAI's public model list.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "openai/gpt-audio": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
