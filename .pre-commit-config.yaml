@@ -44,7 +44,7 @@ repos:
       - id: eslint
         # Keep these in sync with the matching devDependencies in package.json.
         additional_dependencies:
-          - eslint@10.11.0
+          - eslint@10.13.0
           - '@eslint/js@10.0.1'
           - typescript-eslint@8.70.1
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
