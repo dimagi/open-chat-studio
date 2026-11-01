@@ -1,6 +1,9 @@
 # Slack Integration on Localhost
 
-This guide helps you set up Slack integration with your development environment using a local server exposed via ngrok.
+This guide helps you set up Slack integration with your environment using a local server exposed via ngrok.
+
+Slack can be used as an OCS messaging provider so that participants can interact with the chatbot directly from Slack.
+In addition it can be used to deliver [OCS notifications](https://docs.openchatstudio.com/concepts/notifications/) to a team's Slack channel.
 
 ## 1. Create a Slack App
 
@@ -87,17 +90,24 @@ CSRF_TRUSTED_ORIGINS = ["https://<your-ngrok-subdomain>.ngrok.io"]
 
 ## 9. Configure Messaging Provider in Open Chat Studio
 
-1. Go to **Team Settings → Messaging Providers**.
-2. Click **Add**, and select **Slack** as the provider type.
+1. Go to **Team Settings → Integrations**.
+2. Click **Add integration**, expand **Messaging**, and select **Slack**.
 3. Click **Connect Slack** — you'll be redirected to Slack's authorization screen.
+
+See the user guide on [Messaging Providers](https://docs.openchatstudio.com/concepts/team/messaging_providers/).
 
 ## 10. Authorize in Slack
 
-- Slack may auto-select a workspace. If the correct workspace isn't shown, open the link in **Incognito mode** or **clear cookies**.
+- Slack may auto-select a workspace.
+If the correct workspace isn't shown, open the link in **Incognito mode** or **clear cookies**.
 - You'll be redirected to your **ngrok URL** (not `localhost`).
 - Log back into Open Chat Studio if prompted.
-- Navigate again to **Team Settings → Messaging Providers** and complete the Slack setup.
+- Navigate again to **Team Settings → Integrations** and complete the Slack setup.
 
 ## ✅ Done!
 
 Your Slack app is now integrated with your local development environment!
+
+This integration now enables 2 features in OCS:
+1. OCS Admin users can now [deploy your chatbot to Slack](https://docs.openchatstudio.com/how-to/channels/deploy_slack_channel/)
+2. OCS Admin users can setup [notifications to be sent to Slack](https://docs.openchatstudio.com/how-to/send_notifications_to_slack/)
