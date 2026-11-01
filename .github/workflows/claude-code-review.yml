@@ -128,7 +128,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude
-        uses: anthropics/claude-code-action@v1.0.234
+        uses: anthropics/claude-code-action@v1.0.262
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_bots: "sentry[bot],ocs-agent[bot]"
@@ -192,7 +192,7 @@ jobs:
       # posted by a later step, so PR content steering the model cannot reach a write API.
       - name: Assess merge risk
         id: claude
-        uses: anthropics/claude-code-action@v1.0.234
+        uses: anthropics/claude-code-action@v1.0.262
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
