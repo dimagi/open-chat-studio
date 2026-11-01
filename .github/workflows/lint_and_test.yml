@@ -433,7 +433,7 @@ jobs:
         run: pnpm e2e
       - name: Upload Playwright results
         if: failure()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: playwright-results
           path: |
