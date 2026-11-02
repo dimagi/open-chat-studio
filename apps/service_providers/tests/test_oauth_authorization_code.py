@@ -131,7 +131,7 @@ def test_connect_is_team_scoped_and_generates_pkce_redirect(client, team_with_us
     client.force_login(user)
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
     with patch("apps.service_providers.oauth_views.validate_token_url"):
-        response = client.get(url)
+        response = client.post(url)
     assert response.status_code == 302
     query = parse_qs(urlparse(response["Location"]).query)
     assert query["client_id"] == ["client"]
@@ -149,7 +149,7 @@ def test_connect_rejects_provider_from_another_team(client, team_with_users, tea
     provider = make_provider(team)
     client.force_login(team_with_users.members.first())
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
-    response = client.get(url)
+    response = client.post(url)
     assert response.status_code in (403, 404)
 
 
@@ -305,7 +305,7 @@ def test_connect_includes_valid_custom_authorization_params(client, team_with_us
     client.force_login(team_with_users.members.first())
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
     with patch("apps.service_providers.oauth_views.validate_token_url"):
-        response = client.get(url)
+        response = client.post(url)
     query = parse_qs(urlparse(response["Location"]).query)
     assert query["audience"] == ["docs"]
     assert query["access_type"] == ["offline"]
@@ -373,7 +373,7 @@ def test_create_form_shows_public_callback_uri(client, team_with_users):
             "subtype": "oauth_authorization_code",
         },
     )
-    response = client.get(url)
+    response = client.post(url)
     assert response.status_code == 200
     assert b"Callback URI (register this with your provider)" in response.content
     assert b"/service_providers/auth/oauth/callback/" in response.content
@@ -454,7 +454,7 @@ def test_edit_form_shows_reconnect_when_oauth_config_changes(client, team_with_u
         "service_providers:edit",
         kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": provider.pk},
     )
-    response = client.get(url)
+    response = client.post(url)
     assert response.status_code == 200
     assert b"Status: reconnect required" in response.content
 
@@ -493,7 +493,7 @@ def test_empty_authorization_params_normalize_to_empty_object(team_with_users):
 def test_connect_rejects_invalid_saved_authorization_params(client, team_with_users):
     provider = make_provider(team_with_users, authorization_params={"scope": "admin"})
     client.force_login(team_with_users.members.first())
-    response = client.get(
+    response = client.post(
         reverse(
             "service_providers:oauth_connect",
             kwargs={"team_slug": provider.team.slug, "pk": provider.pk},
@@ -503,3 +503,34 @@ def test_connect_rejects_invalid_saved_authorization_params(client, team_with_us
     assert "cannot override reserved OAuth fields" in " ".join(
         str(item) for item in get_messages(response.wsgi_request)
     )
+
+
+@pytest.mark.parametrize(
+    ("changes", "valid"),
+    [
+        pytest.param({}, True, id="urls-unchanged"),
+        pytest.param({"token_url": "https://other.example.test/token"}, False, id="token-url-changed"),
+        pytest.param({"authorize_url": "https://other.example.test/auth"}, False, id="authorize-url-changed"),
+        pytest.param(
+            {"token_url": "https://other.example.test/token", "client_secret": "new-secret"},
+            True,
+            id="secret-reentered",
+        ),
+        pytest.param({"scope": "read"}, True, id="scope-changed"),
+    ],
+)
+def test_changing_oauth_urls_requires_secret_reentry(team_with_users, changes, valid):
+    form_cls = AuthProviderType.oauth_authorization_code.form_cls
+    masked = form_cls(team_with_users, initial=CONFIG).initial["client_secret"]
+    form = form_cls(team_with_users, initial=CONFIG, data={**CONFIG, "client_secret": masked, **changes})
+    assert form.is_valid() is valid
+    if not valid:
+        assert "client_secret" in form.errors
+
+
+@pytest.mark.django_db()
+def test_connect_requires_post(client, team_with_users):
+    provider = make_provider(team_with_users)
+    client.force_login(team_with_users.members.first())
+    url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
+    assert client.get(url).status_code == 405

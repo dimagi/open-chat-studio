@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import escape
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_POST
 from oauthlib.oauth2 import WebApplicationClient
 
 from apps.service_providers.auth_service.oauth import (
@@ -96,13 +97,15 @@ def _exchange_code(request, provider, code, verifier):
     return parse_token_response(client, post_token_request(url, body, kwargs), url)
 
 
-def _persist_token(provider, token):
+def _persist_token(provider, token, user):
     provider._auth_data = {**token, "config_fingerprint": config_fingerprint(provider.config)}
     provider.extra_data = {
         **(provider.extra_data or {}),
         "verified_credentials": True,
         "verification_error": "",
         "credentials_checked_at": timezone.now().isoformat(),
+        "connected_by": user.get_full_name() or user.email,
+        "connected_at": timezone.now().isoformat(),
     }
     provider.save(update_fields=["_auth_data", "extra_data"])
 
@@ -154,6 +157,7 @@ def is_reconnect_required(provider):
     return bool(provider._auth_data.get("reconnect_required") or authorization_code_config_changed(provider))
 
 
+@require_POST
 @login_and_team_required
 @permission_required("service_providers.change_authprovider", raise_exception=True)
 def oauth_connect(request, team_slug: str, pk: int):
@@ -234,6 +238,6 @@ def oauth_callback(request):
                 _safe_oauth_error(exc.error_code, exc.error_description, provider, request),
             )
             return redirect(target)
-        _persist_token(provider, token)
+        _persist_token(provider, token, request.user)
         messages.success(request, _("OAuth provider connected."))
         return redirect(target)

@@ -414,6 +414,7 @@ class CreateServiceProvider(
                     if is_reconnect_required(instance)
                     else ("connected" if instance._auth_data.get("access_token") else "not connected")
                 )
+                ctx["oauth_connected_by"] = (instance.extra_data or {}).get("connected_by")
                 ctx["oauth_connect_url"] = reverse(
                     "service_providers:oauth_connect",
                     kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},

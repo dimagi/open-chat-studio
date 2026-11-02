@@ -138,7 +138,7 @@ def test_connect_prunes_stale_pending_oauth_entries_and_keeps_recent_ones(client
     }
     session.save()
     with patch("apps.service_providers.oauth_views.validate_token_url"):
-        response = client.get(
+        response = client.post(
             reverse(
                 "service_providers:oauth_connect",
                 kwargs={"team_slug": provider.team.slug, "pk": provider.pk},
@@ -190,3 +190,20 @@ def test_callback_escapes_html_in_token_endpoint_error(client, team_with_users):
     assert "invalid_scope" in message
     assert "&lt;img" in message
     assert "<img" not in message
+
+
+@pytest.mark.django_db()
+def test_callback_records_who_connected(client, team_with_users):
+    provider = make_provider(team_with_users)
+    state = connect(client, team_with_users, provider)
+    with (
+        patch("apps.service_providers.oauth_views.validate_token_url"),
+        patch(
+            "apps.service_providers.oauth_views.post_token_request",
+            return_value='{"access_token":"access","token_type":"Bearer","expires_in":3600}',
+        ),
+    ):
+        client.get(reverse("service_providers_oauth_callback"), {"state": state, "code": "authorization-code"})
+    saved = AuthProvider.objects.get(pk=provider.pk)
+    assert saved.extra_data["connected_by"] == team_with_users.members.first().email
+    assert saved.extra_data["connected_at"]
