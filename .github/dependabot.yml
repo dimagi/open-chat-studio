@@ -20,6 +20,12 @@ updates:
       semver-major-days: 14
       semver-minor-days: 7
       semver-patch-days: 3
+    ignore:
+      # Babel 7 and 8 packages cannot be mixed, so a major bump of one
+      # @babel/* package on its own never works. Babel 8 has to be a manual
+      # migration of all of them together.
+      - dependency-name: "@babel/*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "npm"
     directory: "/components/chat_widget"
     open-pull-requests-limit: 5
@@ -30,6 +36,15 @@ updates:
       semver-major-days: 14
       semver-minor-days: 7
       semver-patch-days: 3
+    ignore:
+      # Stencil 4's integrated test runner only supports Jest 29. Remove once
+      # the Stencil 5 migration (#3954) moves the spec tests off Jest.
+      - dependency-name: "jest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jest-cli"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/jest"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "uv"
     directory: "/"
     open-pull-requests-limit: 5
