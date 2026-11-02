@@ -373,7 +373,7 @@ def test_create_form_shows_public_callback_uri(client, team_with_users):
             "subtype": "oauth_authorization_code",
         },
     )
-    response = client.post(url)
+    response = client.get(url)
     assert response.status_code == 200
     assert b"Callback URI (register this with your provider)" in response.content
     assert b"/service_providers/auth/oauth/callback/" in response.content
@@ -454,7 +454,7 @@ def test_edit_form_shows_reconnect_when_oauth_config_changes(client, team_with_u
         "service_providers:edit",
         kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": provider.pk},
     )
-    response = client.post(url)
+    response = client.get(url)
     assert response.status_code == 200
     assert b"Status: reconnect required" in response.content
 
