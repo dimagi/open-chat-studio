@@ -22,6 +22,9 @@
     "src"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.test-helpers.ts"
   ]
 }

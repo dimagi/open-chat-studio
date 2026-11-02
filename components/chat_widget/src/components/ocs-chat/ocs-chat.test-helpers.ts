@@ -20,12 +20,11 @@ export interface SpecPage {
   waitForChanges: () => Promise<void>;
 }
 
-// Lets Stencil's requestAnimationFrame-batched render cycle finish.
-async function waitForChanges(): Promise<void> {
+// Lets Stencil's requestAnimationFrame-batched render cycle finish for `root`.
+async function waitForChanges(root: (HTMLElement & { componentOnReady?: () => Promise<unknown> }) | null): Promise<void> {
   for (let i = 0; i < 2; i++) {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   }
-  const root = document.body.firstElementChild as (HTMLElement & { componentOnReady?: () => Promise<unknown> }) | null;
   await root?.componentOnReady?.();
 }
 
@@ -35,7 +34,7 @@ async function waitForChanges(): Promise<void> {
 export async function newSpecPage({ html }: { components?: unknown[]; html: string }): Promise<SpecPage> {
   document.body.innerHTML = html;
   const root = document.body.firstElementChild as SpecPage['root'];
-  return { root, rootInstance: root, body: document.body, doc: document, waitForChanges };
+  return { root, rootInstance: root, body: document.body, doc: document, waitForChanges: () => waitForChanges(root) };
 }
 
 // Tests spy on the widget's ChatSessionService instance rather than mocking the module.
@@ -47,7 +46,7 @@ export function stubChatService(page: SpecPage, stubs: ChatServiceStubs): void {
 }
 
 // Helper to create fetch mock with configurable session ID
-export function setupFetchMock(sessionId = 'test-session-id', taskId = 'test-task-id') {
+export function setupFetchMock(sessionId = 'test-session-id', taskId = 'test-task-id'): Mock {
   return vi.fn().mockImplementation((url: string) => {
     if (url.includes('/api/chat/start/')) {
       return Promise.resolve({
