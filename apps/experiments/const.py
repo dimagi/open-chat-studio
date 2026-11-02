@@ -10,7 +10,7 @@ EMBED_FLOW_SUCCESSOR_URL = "https://docs.openchatstudio.com/chat_widget/"
 # Replaced by the public link channel.
 # Tracking issue: https://github.com/dimagi/open-chat-studio/issues/4209
 LEGACY_WEB_CHAT_SUNSET_AT = datetime(2026, 12, 7, tzinfo=UTC)
-LEGACY_WEB_CHAT_SUCCESSOR_URL = "https://docs.openchatstudio.com/how-to/deploy_public_link_channel/"
+LEGACY_WEB_CHAT_SUCCESSOR_URL = "https://docs.openchatstudio.com/how-to/channels/deploy_public_link_channel/"
 
 DEFAULT_CONSENT_TEXT = """
 Welcome to this chatbot built on Open Chat Studio!
