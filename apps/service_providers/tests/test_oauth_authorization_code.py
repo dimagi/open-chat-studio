@@ -529,8 +529,14 @@ def test_changing_oauth_urls_requires_secret_reentry(team_with_users, changes, v
 
 
 @pytest.mark.django_db()
-def test_connect_requires_post(client, team_with_users):
+def test_connect_get_redirects_to_provider_page_without_starting_flow(client, team_with_users):
     provider = make_provider(team_with_users)
     client.force_login(team_with_users.members.first())
     url = reverse("service_providers:oauth_connect", kwargs={"team_slug": team_with_users.slug, "pk": provider.pk})
-    assert client.get(url).status_code == 405
+    response = client.get(url)
+    assert response.status_code == 302
+    assert response["Location"] == reverse(
+        "service_providers:edit",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": provider.pk},
+    )
+    assert "oauth_pending" not in client.session

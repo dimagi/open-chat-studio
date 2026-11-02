@@ -14,7 +14,6 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import escape
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_POST
 from oauthlib.oauth2 import WebApplicationClient
 
 from apps.service_providers.auth_service.oauth import (
@@ -157,13 +156,14 @@ def is_reconnect_required(provider):
     return bool(provider._auth_data.get("reconnect_required") or authorization_code_config_changed(provider))
 
 
-@require_POST
 @login_and_team_required
 @permission_required("service_providers.change_authprovider", raise_exception=True)
 def oauth_connect(request, team_slug: str, pk: int):
     provider = get_object_or_404(
         AuthProvider, team=request.team, pk=pk, type=AuthProviderType.oauth_authorization_code.value
     )
+    if request.method != "POST":
+        return redirect(_provider_edit_url(provider))
     try:
         extra_params = validate_authorization_params(provider.config.get("authorization_params") or {})
     except ValueError as exc:
