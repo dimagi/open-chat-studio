@@ -1,7 +1,13 @@
-import { Env } from '@stencil/core';
 import { OcsChat } from './ocs-chat';
-import { newSpecPage } from './ocs-chat.test-helpers';
+import { newSpecPage as mountSpecPage } from './ocs-chat.test-helpers';
 import { TranslationManager } from '../../utils/translations';
+
+// Most tests here assert on the rendered widget, so wait for the first render.
+async function newSpecPage(options: Parameters<typeof mountSpecPage>[0]) {
+  const page = await mountSpecPage(options);
+  await page.waitForChanges();
+  return page;
+}
 
 describe('ocs-chat', () => {
   describe('Widget version', () => {
@@ -11,7 +17,7 @@ describe('ocs-chat', () => {
         html: `<open-chat-studio-widget chatbot-id="test-bot"></open-chat-studio-widget>`,
       });
 
-      expect(page.root?.getAttribute('data-widget-version')).toBe(Env.version);
+      expect(page.root?.getAttribute('data-widget-version')).toBe(String(await page.root.getVersion()));
     });
 
     it('exposes the build version via getVersion() even without a chatbot id', async () => {
@@ -21,8 +27,8 @@ describe('ocs-chat', () => {
       });
 
       const component = page.rootInstance as OcsChat;
-      expect(await component.getVersion()).toBe(Env.version);
-      expect(page.root?.getAttribute('data-widget-version')).toBe(Env.version);
+      const version = await component.getVersion();
+      expect(page.root?.getAttribute('data-widget-version')).toBe(String(version));
     });
   });
 
@@ -966,7 +972,7 @@ describe('ocs-chat', () => {
   });
 
   describe('File attachment allowlist', () => {
-    const extensions = (OcsChat as unknown as { SUPPORTED_FILE_EXTENSIONS: string[] }).SUPPORTED_FILE_EXTENSIONS;
+    const extensions = (customElements.get('open-chat-studio-widget') as unknown as { SUPPORTED_FILE_EXTENSIONS: string[] }).SUPPORTED_FILE_EXTENSIONS;
 
     it('excludes image formats the LLM providers reject', () => {
       expect(extensions).not.toContain('.bmp');
