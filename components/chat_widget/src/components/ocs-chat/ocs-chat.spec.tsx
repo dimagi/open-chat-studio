@@ -1,6 +1,6 @@
-import { newSpecPage } from '@stencil/core/testing';
 import { Env } from '@stencil/core';
 import { OcsChat } from './ocs-chat';
+import { newSpecPage } from './ocs-chat.test-helpers';
 import { TranslationManager } from '../../utils/translations';
 
 describe('ocs-chat', () => {
@@ -638,11 +638,11 @@ describe('ocs-chat', () => {
       page.root!.addEventListener('ocs:message:sent', () => order.push('sent'));
 
       (component as any).chatService = {
-        sendMessage: jest.fn().mockResolvedValue({ status: 'processing', task_id: 'task-1' }),
-        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
-        stopMessagePolling: jest.fn(),
-        startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
-        setSessionToken: jest.fn(),
+        sendMessage: vi.fn().mockResolvedValue({ status: 'processing', task_id: 'task-1' }),
+        pollTask: vi.fn().mockReturnValue({ cancel: vi.fn() }),
+        stopMessagePolling: vi.fn(),
+        startMessagePolling: vi.fn().mockReturnValue({ stop: vi.fn() }),
+        setSessionToken: vi.fn(),
       };
 
       await (component as any).sendMessage('hello');
@@ -666,11 +666,11 @@ describe('ocs-chat', () => {
       });
 
       (component as any).chatService = {
-        sendMessage: jest.fn().mockResolvedValue({ status: 'processing', task_id: 't1' }),
-        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
-        stopMessagePolling: jest.fn(),
-        startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
-        setSessionToken: jest.fn(),
+        sendMessage: vi.fn().mockResolvedValue({ status: 'processing', task_id: 't1' }),
+        pollTask: vi.fn().mockReturnValue({ cancel: vi.fn() }),
+        stopMessagePolling: vi.fn(),
+        startMessagePolling: vi.fn().mockReturnValue({ stop: vi.fn() }),
+        setSessionToken: vi.fn(),
       };
 
       await (component as any).sendMessage('test message');
@@ -695,14 +695,14 @@ describe('ocs-chat', () => {
 
       let capturedRequestBody: any = null;
       (component as any).chatService = {
-        sendMessage: jest.fn().mockImplementation((_: string, body: unknown) => {
+        sendMessage: vi.fn().mockImplementation((_: string, body: unknown) => {
           capturedRequestBody = body;
           return Promise.resolve({ status: 'processing', task_id: 't1' });
         }),
-        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
-        stopMessagePolling: jest.fn(),
-        startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
-        setSessionToken: jest.fn(),
+        pollTask: vi.fn().mockReturnValue({ cancel: vi.fn() }),
+        stopMessagePolling: vi.fn(),
+        startMessagePolling: vi.fn().mockReturnValue({ stop: vi.fn() }),
+        setSessionToken: vi.fn(),
       };
 
       await (component as any).sendMessage('hello');
@@ -726,14 +726,14 @@ describe('ocs-chat', () => {
 
       let capturedCallbacks: any = null;
       (component as any).chatService = {
-        sendMessage: jest.fn(),
-        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
-        stopMessagePolling: jest.fn(),
-        startMessagePolling: jest.fn().mockImplementation((_sessionId: string, callbacks: any) => {
+        sendMessage: vi.fn(),
+        pollTask: vi.fn().mockReturnValue({ cancel: vi.fn() }),
+        stopMessagePolling: vi.fn(),
+        startMessagePolling: vi.fn().mockImplementation((_sessionId: string, callbacks: any) => {
           capturedCallbacks = callbacks;
-          return { stop: jest.fn() };
+          return { stop: vi.fn() };
         }),
-        setSessionToken: jest.fn(),
+        setSessionToken: vi.fn(),
       };
 
       // Trigger startMessagePolling by calling the private method directly
@@ -764,7 +764,7 @@ describe('ocs-chat', () => {
 
       const component = page.rootInstance as OcsChat;
       component.activeSessionId = 'ending-session';
-      (component as any).chatService = { stopMessagePolling: jest.fn() };
+      (component as any).chatService = { stopMessagePolling: vi.fn() };
 
       let detail: any = null;
       page.root!.addEventListener('ocs:session:ended', (e: Event) => {
@@ -844,7 +844,7 @@ describe('ocs-chat', () => {
       });
       const component = page.rootInstance as OcsChat;
       component.activeSessionId = 'test-session';
-      const startSession = jest.fn();
+      const startSession = vi.fn();
       (component as any).startSession = startSession;
 
       await (component as any).sendMessage('hello');

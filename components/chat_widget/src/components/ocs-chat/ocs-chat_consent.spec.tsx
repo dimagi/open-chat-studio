@@ -1,7 +1,7 @@
-import { newSpecPage, SpecPage } from '@stencil/core/testing';
+import type { Mock } from 'vitest';
 import { OcsChat } from './ocs-chat';
-import { installWebCrypto, stubChatService } from './ocs-chat.test-helpers';
-import { ConsentRequiredError } from '../../services/chat-session-service';
+import { installWebCrypto, stubChatService, newSpecPage, SpecPage } from './ocs-chat.test-helpers';
+import { ConsentRequiredError, SessionAccessError } from '../../services/chat-session-service';
 
 const consentBlock = { required: true, form_version_id: 7, text: '<p>Please <strong>agree</strong></p>' };
 const consented = { required: false, form_version_id: 7, text: null };
@@ -21,16 +21,16 @@ function startResponse(consent = consentBlock) {
 }
 
 function processing() {
-  return jest.fn().mockResolvedValue({ task_id: 't', status: 'processing' });
+  return vi.fn().mockResolvedValue({ task_id: 't', status: 'processing' });
 }
 
-function stubService(page: SpecPage, overrides: Record<string, jest.Mock> = {}) {
+function stubService(page: SpecPage, overrides: Record<string, Mock> = {}) {
   stubChatService(page, {
-    startSession: jest.fn(() => startResponse()),
-    recordConsent: jest.fn().mockResolvedValue(undefined),
-    sendMessage: jest.fn(),
-    startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
-    pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
+    startSession: vi.fn(() => startResponse()),
+    recordConsent: vi.fn().mockResolvedValue(undefined),
+    sendMessage: vi.fn(),
+    startMessagePolling: vi.fn().mockReturnValue({ stop: vi.fn() }),
+    pollTask: vi.fn().mockReturnValue({ cancel: vi.fn() }),
     ...overrides,
   });
 }
@@ -68,12 +68,12 @@ describe('consent memory', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('remembers an accepted form version under the persistence store', async () => {
     const page = await mountWidget('persistent-session="true"');
-    const recordConsent = jest.fn().mockResolvedValue(undefined);
+    const recordConsent = vi.fn().mockResolvedValue(undefined);
     stubService(page, { recordConsent, sendMessage: processing() });
 
     await page.rootInstance['sendMessage']('hello');
@@ -88,7 +88,7 @@ describe('consent memory', () => {
   it('posts consent silently when the stored form version matches', async () => {
     const page = await mountWidget('persistent-session="true"');
     window.localStorage.setItem('ocs-chat-consent-bot', '7');
-    const recordConsent = jest.fn().mockResolvedValue(undefined);
+    const recordConsent = vi.fn().mockResolvedValue(undefined);
     const sendMessage = processing();
     stubService(page, { recordConsent, sendMessage });
 
@@ -103,7 +103,7 @@ describe('consent memory', () => {
   it('re-prompts when the stored form version is stale', async () => {
     const page = await mountWidget('persistent-session="true"');
     window.localStorage.setItem('ocs-chat-consent-bot', '6');
-    const sendMessage = jest.fn();
+    const sendMessage = vi.fn();
     stubService(page, { sendMessage });
 
     await page.rootInstance['sendMessage']('hello');
@@ -118,7 +118,7 @@ describe('consent memory', () => {
     window.localStorage.setItem('ocs-chat-consent-bot', '7');
     const current = { ...consentBlock, form_version_id: 8 };
     stubService(page, {
-      recordConsent: jest.fn().mockRejectedValue(new ConsentRequiredError(current, 'The consent form has changed')),
+      recordConsent: vi.fn().mockRejectedValue(new ConsentRequiredError(current, 'The consent form has changed')),
     });
 
     await page.rootInstance['sendMessage']('hello');
@@ -132,7 +132,7 @@ describe('consent memory', () => {
   it('asks on every visit when persistence is off', async () => {
     const page = await mountWidget('persistent-session="false"');
     window.localStorage.setItem('ocs-chat-consent-bot', '7');
-    const sendMessage = jest.fn();
+    const sendMessage = vi.fn();
     stubService(page, { sendMessage });
 
     await page.rootInstance['sendMessage']('hello');
@@ -159,8 +159,8 @@ describe('consent memory', () => {
   it('falls back to asking when a silent consent post fails, without retrying or reporting', async () => {
     const page = await mountWidget('persistent-session="true"');
     window.localStorage.setItem('ocs-chat-consent-bot', '7');
-    const recordConsent = jest.fn().mockRejectedValue(new Error('boom'));
-    const startMessagePolling = jest.fn().mockReturnValue({ stop: jest.fn() });
+    const recordConsent = vi.fn().mockRejectedValue(new Error('boom'));
+    const startMessagePolling = vi.fn().mockReturnValue({ stop: vi.fn() });
     stubService(page, { recordConsent, startMessagePolling });
 
     await page.rootInstance['sendMessage']('hello');
@@ -176,9 +176,9 @@ describe('consent memory', () => {
 
   it('takes a consent block delivered by polling', async () => {
     const page = await mountWidget('persistent-session="true"');
-    const startMessagePolling = jest.fn().mockReturnValue({ stop: jest.fn() });
+    const startMessagePolling = vi.fn().mockReturnValue({ stop: vi.fn() });
     stubService(page, {
-      startSession: jest.fn(() => startResponse(consented)),
+      startSession: vi.fn(() => startResponse(consented)),
       sendMessage: processing(),
       startMessagePolling,
     });
@@ -200,12 +200,12 @@ describe('hold and release', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('holds the first message and shows the panel when consent is required', async () => {
     const page = await mountWidget();
-    const sendMessage = jest.fn();
+    const sendMessage = vi.fn();
     stubService(page, { sendMessage });
 
     await page.rootInstance['sendMessage']('hello');
@@ -219,7 +219,7 @@ describe('hold and release', () => {
 
   it('accepting posts consent, then sends the held message', async () => {
     const page = await mountWidget();
-    const recordConsent = jest.fn().mockResolvedValue(undefined);
+    const recordConsent = vi.fn().mockResolvedValue(undefined);
     const sendMessage = processing();
     stubService(page, { recordConsent, sendMessage });
 
@@ -258,7 +258,7 @@ describe('hold and release', () => {
     const page = await mountWidget('persistent-session="true"');
     window.localStorage.setItem('ocs-chat-consent-bot', '7');
     let releasePost: () => void;
-    const recordConsent = jest.fn(() => new Promise<void>(resolve => (releasePost = resolve)));
+    const recordConsent = vi.fn(() => new Promise<void>(resolve => (releasePost = resolve)));
     const sendMessage = processing();
     stubService(page, { recordConsent, sendMessage });
     page.rootInstance['activeSessionId'] = 'session-1';
@@ -283,7 +283,7 @@ describe('hold and release', () => {
   it('disables the agree button while the acceptance is in flight', async () => {
     const page = await mountWidget();
     let releasePost: () => void;
-    const recordConsent = jest.fn(() => new Promise<void>(resolve => (releasePost = resolve)));
+    const recordConsent = vi.fn(() => new Promise<void>(resolve => (releasePost = resolve)));
     stubService(page, { recordConsent, sendMessage: processing() });
 
     await page.rootInstance['sendMessage']('hello');
@@ -299,8 +299,8 @@ describe('hold and release', () => {
 
   it('a consent refusal on send re-opens the panel without discarding the session', async () => {
     const page = await mountWidget();
-    const sendMessage = jest.fn().mockRejectedValueOnce(new ConsentRequiredError(consentBlock, 'Consent is required'));
-    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage });
+    const sendMessage = vi.fn().mockRejectedValueOnce(new ConsentRequiredError(consentBlock, 'Consent is required'));
+    stubService(page, { startSession: vi.fn(() => startResponse(consented)), sendMessage });
 
     await page.rootInstance['sendMessage']('hello');
     await settle(page);
@@ -313,11 +313,11 @@ describe('hold and release', () => {
 
   it('a consent refusal on upload holds the message and keeps the files', async () => {
     const page = await mountWidget('allow-attachments="true"');
-    const sendMessage = jest.fn();
-    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage });
+    const sendMessage = vi.fn();
+    stubService(page, { startSession: vi.fn(() => startResponse(consented)), sendMessage });
     const file = new File(['hello'], 'a.txt', { type: 'text/plain' });
     page.rootInstance['selectedFiles'] = [{ file }];
-    jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({
+    vi.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({
       selectedFiles: [{ file }],
       uploadedIds: [],
       errorMessage: 'Consent is required',
@@ -336,11 +336,11 @@ describe('hold and release', () => {
 
   it('does not send the message when an upload refusal names consent but carries no block', async () => {
     const page = await mountWidget('allow-attachments="true"');
-    const sendMessage = jest.fn().mockResolvedValue({ task_id: 't', status: 'processing' });
-    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage });
+    const sendMessage = vi.fn().mockResolvedValue({ task_id: 't', status: 'processing' });
+    stubService(page, { startSession: vi.fn(() => startResponse(consented)), sendMessage });
     page.rootInstance['selectedFiles'] = [{ file: new File(['hello'], 'a.txt', { type: 'text/plain' }) }];
     // The real attachment manager, driven by a refusal whose body has no consent block.
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 403,
       json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required' }),
@@ -354,11 +354,11 @@ describe('hold and release', () => {
 
   it('keeps an earlier message with the same text when an upload is refused for consent', async () => {
     const page = await mountWidget('allow-attachments="true"');
-    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage: processing() });
+    stubService(page, { startSession: vi.fn(() => startResponse(consented)), sendMessage: processing() });
     page.rootInstance['messages'] = [{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hello', attachments: [] }];
     const file = new File(['hello'], 'a.txt', { type: 'text/plain' });
     page.rootInstance['selectedFiles'] = [{ file }];
-    jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({
+    vi.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({
       selectedFiles: [{ file }],
       uploadedIds: [],
       errorMessage: 'Consent is required',
@@ -374,8 +374,7 @@ describe('hold and release', () => {
 
   it('returns the composer when the session is rejected while the panel is open', async () => {
     const page = await mountWidget();
-    const { SessionAccessError } = jest.requireActual('../../services/chat-session-service');
-    stubService(page, { recordConsent: jest.fn().mockRejectedValue(new SessionAccessError(403, 'session_expired', 'Session has expired')) });
+    stubService(page, { recordConsent: vi.fn().mockRejectedValue(new SessionAccessError(403, 'session_expired', 'Session has expired')) });
 
     await page.rootInstance['sendMessage']('hello');
     await settle(page);
@@ -394,8 +393,7 @@ describe('hold and release', () => {
       html: `<open-chat-studio-widget chatbot-id="bot" api-base-url="http://x" visible="true" session-id="host-session" session-token="host-tok"></open-chat-studio-widget>`,
     });
     await page.waitForChanges();
-    const { SessionAccessError } = jest.requireActual('../../services/chat-session-service');
-    stubService(page, { recordConsent: jest.fn().mockRejectedValue(new SessionAccessError(403, 'session_token_required', 'Session token required')) });
+    stubService(page, { recordConsent: vi.fn().mockRejectedValue(new SessionAccessError(403, 'session_token_required', 'Session token required')) });
 
     // A bound session never starts one, so polling is what hands it the consent block.
     page.rootInstance['activeSessionId'] = 'host-session';
@@ -427,12 +425,12 @@ describe('hold and release', () => {
 
   it('keeps uploaded attachments for the retry when the send is refused for consent', async () => {
     const page = await mountWidget('allow-attachments="true"');
-    const sendMessage = jest.fn().mockRejectedValueOnce(new ConsentRequiredError(consentBlock, 'Consent is required')).mockResolvedValue({ task_id: 't', status: 'processing' });
-    stubService(page, { startSession: jest.fn(() => startResponse(consented)), sendMessage });
+    const sendMessage = vi.fn().mockRejectedValueOnce(new ConsentRequiredError(consentBlock, 'Consent is required')).mockResolvedValue({ task_id: 't', status: 'processing' });
+    stubService(page, { startSession: vi.fn(() => startResponse(consented)), sendMessage });
     const file = new File(['hello'], 'a.txt', { type: 'text/plain' });
     const uploaded = { id: 42, name: 'a.txt', size: 5, content_type: 'text/plain' };
     page.rootInstance['selectedFiles'] = [{ file }];
-    jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({ selectedFiles: [{ file, uploaded }], uploadedIds: [42] });
+    vi.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockResolvedValue({ selectedFiles: [{ file, uploaded }], uploadedIds: [42] });
 
     await page.rootInstance['sendMessage']('hello');
     await settle(page);
@@ -445,7 +443,7 @@ describe('hold and release', () => {
   it('releases the held message when a poll reports consent is no longer required', async () => {
     const page = await mountWidget();
     const sendMessage = processing();
-    const startMessagePolling = jest.fn().mockReturnValue({ stop: jest.fn() });
+    const startMessagePolling = vi.fn().mockReturnValue({ stop: vi.fn() });
     stubService(page, { sendMessage, startMessagePolling });
 
     await page.rootInstance['sendMessage']('hello');

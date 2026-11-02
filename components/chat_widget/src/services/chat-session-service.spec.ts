@@ -1,3 +1,4 @@
+import type { Mock, MockInstance } from 'vitest';
 import { ChatSessionService, SessionAccessError, ChatAuthError, ConsentRequiredError } from './chat-session-service';
 
 function progressMessage(content: string) {
@@ -67,15 +68,15 @@ describe('ChatSessionService.pollTask', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should call onProgress with message content when status is processing', async () => {
-    const onMessage = jest.fn();
-    const onProgress = jest.fn();
+    const onMessage = vi.fn();
+    const onProgress = vi.fn();
 
     let pollCount = 0;
-    jest.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
+    vi.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
       pollCount++;
       if (pollCount === 1) {
         return progressMessage('Searching...');
@@ -98,11 +99,11 @@ describe('ChatSessionService.pollTask', () => {
   });
 
   it('should not call onProgress when processing response has no message', async () => {
-    const onMessage = jest.fn();
-    const onProgress = jest.fn();
+    const onMessage = vi.fn();
+    const onProgress = vi.fn();
 
     let pollCount = 0;
-    jest.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
+    vi.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
       pollCount++;
       if (pollCount === 1) {
         return { status: 'processing' };
@@ -123,11 +124,11 @@ describe('ChatSessionService.pollTask', () => {
   });
 
   it('should call onProgress multiple times as progress updates arrive', async () => {
-    const onMessage = jest.fn();
-    const onProgress = jest.fn();
+    const onMessage = vi.fn();
+    const onProgress = vi.fn();
 
     let pollCount = 0;
-    jest.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
+    vi.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
       pollCount++;
       if (pollCount === 1) {
         return progressMessage('Step 1');
@@ -153,11 +154,11 @@ describe('ChatSessionService.pollTask', () => {
   });
 
   it('should not call onProgress when processing message has empty content', async () => {
-    const onMessage = jest.fn();
-    const onProgress = jest.fn();
+    const onMessage = vi.fn();
+    const onProgress = vi.fn();
 
     let pollCount = 0;
-    jest.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
+    vi.spyOn(service, 'pollTaskOnce').mockImplementation(async () => {
       pollCount++;
       if (pollCount === 1) {
         return progressMessage('');
@@ -198,11 +199,11 @@ describe('ChatSessionService.fetchAllMessages', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('returns messages from a single page', async () => {
-    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue({
+    const fetchMock = vi.spyOn(service, 'fetchMessages').mockResolvedValue({
       messages: [historyMessage('a', '2026-01-01T00:00:01Z')],
       has_more: false,
       session_status: 'active',
@@ -216,7 +217,7 @@ describe('ChatSessionService.fetchAllMessages', () => {
   });
 
   it('pages through history until has_more is false', async () => {
-    const fetchMock = jest
+    const fetchMock = vi
       .spyOn(service, 'fetchMessages')
       .mockResolvedValueOnce({
         messages: [historyMessage('a', '2026-01-01T00:00:01Z'), historyMessage('b', '2026-01-01T00:00:02Z')],
@@ -237,7 +238,7 @@ describe('ChatSessionService.fetchAllMessages', () => {
   });
 
   it('stops paging if the server keeps reporting has_more with empty pages', async () => {
-    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue({
+    const fetchMock = vi.spyOn(service, 'fetchMessages').mockResolvedValue({
       messages: [],
       has_more: true,
       session_status: 'active',
@@ -250,10 +251,10 @@ describe('ChatSessionService.fetchAllMessages', () => {
   });
 
   it('stops paging at the safety cap and warns about truncation', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const maxPages = (ChatSessionService as any).MAX_HISTORY_PAGES as number;
     let page = 0;
-    const fetchMock = jest.spyOn(service, 'fetchMessages').mockImplementation(async () => {
+    const fetchMock = vi.spyOn(service, 'fetchMessages').mockImplementation(async () => {
       page += 1;
       return {
         messages: [historyMessage(`m${page}`, `2026-01-01T00:00:${String(page).padStart(2, '0')}Z`)],
@@ -283,7 +284,7 @@ describe('ChatSessionService.startMessagePolling', () => {
 
   afterEach(() => {
     service.stopMessagePolling();
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function pollResponse(messages: string[], sessionStatus: 'active' | 'ended' = 'active') {
@@ -300,12 +301,12 @@ describe('ChatSessionService.startMessagePolling', () => {
   }
 
   it('keeps polling while the session is active', async () => {
-    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([]));
-    const onSessionEnded = jest.fn();
+    const fetchMock = vi.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([]));
+    const onSessionEnded = vi.fn();
 
     service.startMessagePolling('session-1', {
       getSince: () => undefined,
-      onMessages: jest.fn(),
+      onMessages: vi.fn(),
       onSessionEnded,
     });
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -315,9 +316,9 @@ describe('ChatSessionService.startMessagePolling', () => {
   });
 
   it('delivers final messages, stops polling, and reports an ended session', async () => {
-    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse(['goodbye'], 'ended'));
-    const onMessages = jest.fn();
-    const onSessionEnded = jest.fn();
+    const fetchMock = vi.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse(['goodbye'], 'ended'));
+    const onMessages = vi.fn();
+    const onSessionEnded = vi.fn();
 
     service.startMessagePolling('session-1', {
       getSince: () => undefined,
@@ -334,10 +335,10 @@ describe('ChatSessionService.startMessagePolling', () => {
 
   it('hands the consent block to onConsent on every poll', async () => {
     const consentBlock = { required: true, form_version_id: 7, text: '<p>Please agree</p>' };
-    jest.spyOn(service, 'fetchMessages').mockResolvedValue({ ...pollResponse([]), consent: consentBlock });
-    const onConsent = jest.fn();
+    vi.spyOn(service, 'fetchMessages').mockResolvedValue({ ...pollResponse([]), consent: consentBlock });
+    const onConsent = vi.fn();
 
-    service.startMessagePolling('session-1', { getSince: () => undefined, onMessages: jest.fn(), onConsent });
+    service.startMessagePolling('session-1', { getSince: () => undefined, onMessages: vi.fn(), onConsent });
     await new Promise(resolve => setTimeout(resolve, 50));
 
     expect(onConsent).toHaveBeenCalledWith(consentBlock);
@@ -345,11 +346,11 @@ describe('ChatSessionService.startMessagePolling', () => {
   });
 
   it('does not throw when an ended session is reported without an onSessionEnded callback', async () => {
-    const fetchMock = jest.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([], 'ended'));
+    const fetchMock = vi.spyOn(service, 'fetchMessages').mockResolvedValue(pollResponse([], 'ended'));
 
     service.startMessagePolling('session-1', {
       getSince: () => undefined,
-      onMessages: jest.fn(),
+      onMessages: vi.fn(),
     });
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -359,7 +360,7 @@ describe('ChatSessionService.startMessagePolling', () => {
 
 describe('ChatSessionService session tokens', () => {
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function jsonResponse(body: unknown, init: { ok?: boolean; status?: number; statusText?: string } = {}) {
@@ -377,7 +378,7 @@ describe('ChatSessionService session tokens', () => {
 
   it('captures the session token from the start response', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ session_id: 's1', session_token: 'tok-123', chatbot: {}, participant: {} }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ session_id: 's1', session_token: 'tok-123', chatbot: {}, participant: {} }));
 
     const data = await service.startSession({ chatbot_id: 'c1' });
 
@@ -387,7 +388,7 @@ describe('ChatSessionService session tokens', () => {
   it('sends X-Session-Token on message requests once a token is set', async () => {
     const service = makeService();
     service.setSessionToken('tok-123');
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ task_id: 't1', status: 'processing' }));
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ task_id: 't1', status: 'processing' }));
 
     await service.sendMessage('s1', { message: 'hi' });
 
@@ -397,7 +398,7 @@ describe('ChatSessionService session tokens', () => {
 
   it('omits X-Session-Token when no token is set', async () => {
     const service = makeService();
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ messages: [], has_more: false, session_status: 'active' }));
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ messages: [], has_more: false, session_status: 'active' }));
 
     await service.fetchMessages('s1');
 
@@ -407,7 +408,7 @@ describe('ChatSessionService session tokens', () => {
 
   it('throws SessionAccessError with the server code on 403', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Session has expired', code: 'session_expired' }, { ok: false, status: 403, statusText: 'Forbidden' }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Session has expired', code: 'session_expired' }, { ok: false, status: 403, statusText: 'Forbidden' }));
 
     await expect(service.fetchMessages('s1')).rejects.toBeInstanceOf(SessionAccessError);
     await expect(service.fetchMessages('s1')).rejects.toMatchObject({ status: 403, code: 'session_expired' });
@@ -415,7 +416,7 @@ describe('ChatSessionService session tokens', () => {
 
   it('throws a plain Error on non-403 failures', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({}, { ok: false, status: 500, statusText: 'Server Error' }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({}, { ok: false, status: 500, statusText: 'Server Error' }));
 
     const error = await service.fetchMessages('s1').catch(e => e);
     expect(error).toBeInstanceOf(Error);
@@ -424,14 +425,14 @@ describe('ChatSessionService session tokens', () => {
 
   it('surfaces the JSON error message on a non-403 failure', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Server exploded' }, { ok: false, status: 500, statusText: 'Server Error' }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Server exploded' }, { ok: false, status: 500, statusText: 'Server Error' }));
 
     await expect(service.fetchMessages('s1')).rejects.toThrow('Server exploded');
   });
 
   it('falls back to statusText when the error body is not JSON', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
       statusText: 'Server Error',
@@ -446,7 +447,7 @@ describe('ChatSessionService.downloadAttachment', () => {
   const downloadUrl = 'https://example.com/api/chat/s1/files/7/content/';
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function makeService() {
@@ -457,7 +458,7 @@ describe('ChatSessionService.downloadAttachment', () => {
     const service = makeService();
     service.setSessionToken('tok-123');
     const blob = { size: 3 } as Blob;
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(blob) } as unknown as Response);
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(blob) } as unknown as Response);
 
     await expect(service.downloadAttachment('s1', downloadUrl)).resolves.toBe(blob);
 
@@ -471,7 +472,7 @@ describe('ChatSessionService.downloadAttachment', () => {
 
   it('rejects when the server refuses the file', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 404,
       statusText: 'Not Found',
@@ -488,7 +489,7 @@ describe('ChatSessionService.downloadAttachment', () => {
   ])('refuses a URL on %s without sending the session headers', async (_name, url) => {
     const service = makeService();
     service.setSessionToken('tok-123');
-    const fetchMock = jest.spyOn(global, 'fetch');
+    const fetchMock = vi.spyOn(global, 'fetch');
 
     await expect(service.downloadAttachment('s1', url)).rejects.toThrow('Failed to download file: URL is not on the API origin');
     expect(fetchMock).not.toHaveBeenCalled();
@@ -497,7 +498,7 @@ describe('ChatSessionService.downloadAttachment', () => {
 
 describe('ChatSessionService consent', () => {
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   const consentBlock = { required: true, form_version_id: 7, text: '<p>Please agree</p>' };
@@ -517,11 +518,9 @@ describe('ChatSessionService consent', () => {
 
   it('raises ConsentRequiredError, not SessionAccessError, on 403 consent_required', async () => {
     const service = makeService();
-    jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(
-        jsonResponse({ error: 'Consent is required before chatting', code: 'consent_required', consent: consentBlock }, { ok: false, status: 403, statusText: 'Forbidden' }),
-      );
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse({ error: 'Consent is required before chatting', code: 'consent_required', consent: consentBlock }, { ok: false, status: 403, statusText: 'Forbidden' }),
+    );
 
     const failure = service.sendMessage('s1', { message: 'hi' });
     await expect(failure).rejects.toBeInstanceOf(ConsentRequiredError);
@@ -531,18 +530,16 @@ describe('ChatSessionService consent', () => {
 
   it('still raises SessionAccessError for other 403 codes', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Session has expired', code: 'session_expired' }, { ok: false, status: 403, statusText: 'Forbidden' }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ error: 'Session has expired', code: 'session_expired' }, { ok: false, status: 403, statusText: 'Forbidden' }));
 
     await expect(service.sendMessage('s1', { message: 'hi' })).rejects.toBeInstanceOf(SessionAccessError);
   });
 
   it('raises a plain Error that does not mention the block on 403 participant_blocked', async () => {
     const service = makeService();
-    jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(
-        jsonResponse({ code: 'participant_blocked', error: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
-      );
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse({ code: 'participant_blocked', error: 'You have been blocked from using this chatbot.' }, { ok: false, status: 403, statusText: 'Forbidden' }),
+    );
 
     const error = await service.sendMessage('s1', { message: 'hi' }).catch(e => e);
     expect(error).toBeInstanceOf(Error);
@@ -552,7 +549,7 @@ describe('ChatSessionService consent', () => {
 
   it('posts the accepted form version and resolves on 204', async () => {
     const service = makeService();
-    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       status: 204,
       headers: new Headers(),
@@ -570,9 +567,9 @@ describe('ChatSessionService consent', () => {
   it('raises ConsentRequiredError with the current form on 409 consent_stale', async () => {
     const service = makeService();
     const current = { ...consentBlock, form_version_id: 8 };
-    jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(jsonResponse({ error: 'The consent form has changed', code: 'consent_stale', consent: current }, { ok: false, status: 409, statusText: 'Conflict' }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse({ error: 'The consent form has changed', code: 'consent_stale', consent: current }, { ok: false, status: 409, statusText: 'Conflict' }),
+    );
 
     const failure = service.recordConsent('s1', 7);
     await expect(failure).rejects.toBeInstanceOf(ConsentRequiredError);
@@ -582,16 +579,16 @@ describe('ChatSessionService consent', () => {
 
 describe('ChatSessionService deprecation headers', () => {
   const DOCS_URL = 'https://docs.openchatstudio.com/chat_widget/';
-  let warnSpy: jest.SpyInstance;
-  let errorSpy: jest.SpyInstance;
+  let warnSpy: MockInstance;
+  let errorSpy: MockInstance;
 
   beforeEach(() => {
-    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function response(headers: Record<string, string>, body: unknown = { messages: [], has_more: false, session_status: 'active' }) {
@@ -616,7 +613,7 @@ describe('ChatSessionService deprecation headers', () => {
 
   it('does not log when the response carries no deprecation header', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(response({}));
+    vi.spyOn(global, 'fetch').mockResolvedValue(response({}));
 
     await service.fetchMessages('s1');
 
@@ -626,7 +623,7 @@ describe('ChatSessionService deprecation headers', () => {
 
   it('warns when deprecated and the sunset date is in the future', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT')));
+    vi.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT')));
 
     await service.fetchMessages('s1');
 
@@ -640,7 +637,7 @@ describe('ChatSessionService deprecation headers', () => {
 
   it('errors when the sunset date has already passed', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Sat, 01 Jan 2000 00:00:00 GMT')));
+    vi.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Sat, 01 Jan 2000 00:00:00 GMT')));
 
     await service.fetchMessages('s1');
 
@@ -653,7 +650,7 @@ describe('ChatSessionService deprecation headers', () => {
 
   it('logs only once across repeated polls at the same level', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT')));
+    vi.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT')));
 
     await service.fetchMessages('s1');
     await service.fetchMessages('s1');
@@ -665,8 +662,8 @@ describe('ChatSessionService deprecation headers', () => {
   it('escalates from warning to error when the sunset date passes mid-session', async () => {
     const service = makeService();
     const sunsetMs = Date.parse('Wed, 01 Jan 2025 00:00:00 GMT');
-    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2025 00:00:00 GMT')));
-    const nowSpy = jest.spyOn(Date, 'now');
+    vi.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2025 00:00:00 GMT')));
+    const nowSpy = vi.spyOn(Date, 'now');
 
     nowSpy.mockReturnValue(sunsetMs - 1000);
     await service.fetchMessages('s1');
@@ -680,7 +677,7 @@ describe('ChatSessionService deprecation headers', () => {
 
   it('detects the headers on the session-start response too', async () => {
     const service = makeService();
-    jest.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT'), { session_id: 's1', chatbot: {}, participant: {} }));
+    vi.spyOn(global, 'fetch').mockResolvedValue(response(sunsetHeaders('Wed, 01 Jan 2099 00:00:00 GMT'), { session_id: 's1', chatbot: {}, participant: {} }));
 
     await service.startSession({ chatbot_id: 'c1' });
 
@@ -690,7 +687,7 @@ describe('ChatSessionService deprecation headers', () => {
 
 describe('ChatSessionService auth token', () => {
   const startUrl = 'https://example.com/api/chat/start/';
-  let fetchMock: jest.Mock;
+  let fetchMock: Mock;
 
   function okResponse() {
     return {
@@ -725,7 +722,7 @@ describe('ChatSessionService auth token', () => {
   }
 
   beforeEach(() => {
-    fetchMock = jest.fn().mockResolvedValue(okResponse());
+    fetchMock = vi.fn().mockResolvedValue(okResponse());
     global.fetch = fetchMock as unknown as typeof fetch;
   });
 
@@ -752,7 +749,7 @@ describe('ChatSessionService auth token', () => {
   it('asks the provider afresh for every session start', async () => {
     // No stored token: a credential the service held onto would go stale without
     // anything noticing.
-    const provider = jest.fn().mockResolvedValueOnce('tok-1').mockResolvedValueOnce('tok-2');
+    const provider = vi.fn().mockResolvedValueOnce('tok-1').mockResolvedValueOnce('tok-2');
     const svc = service({ authTokenProvider: provider });
 
     await svc.startSession({});
@@ -778,7 +775,7 @@ describe('ChatSessionService auth token', () => {
   });
 
   it('passes forceRefresh false on the first ask', async () => {
-    const provider = jest.fn().mockResolvedValue('tok-fresh');
+    const provider = vi.fn().mockResolvedValue('tok-fresh');
     await service({ authTokenProvider: provider }).startSession({});
 
     expect(provider).toHaveBeenCalledWith({ forceRefresh: false });
@@ -792,7 +789,7 @@ describe('ChatSessionService auth token', () => {
 
   it('retries once with forceRefresh when the first token is rejected', async () => {
     fetchMock.mockResolvedValueOnce(deniedResponse()).mockResolvedValueOnce(okResponse());
-    const provider = jest.fn().mockResolvedValueOnce('tok-cached').mockResolvedValueOnce('tok-fresh');
+    const provider = vi.fn().mockResolvedValueOnce('tok-cached').mockResolvedValueOnce('tok-fresh');
 
     const result = await service({ authTokenProvider: provider }).startSession({});
 
@@ -804,7 +801,7 @@ describe('ChatSessionService auth token', () => {
 
   it('gives up after one retry rather than looping', async () => {
     fetchMock.mockResolvedValue(deniedResponse());
-    const provider = jest.fn().mockResolvedValueOnce('tok-cached').mockResolvedValueOnce('tok-fresh');
+    const provider = vi.fn().mockResolvedValueOnce('tok-cached').mockResolvedValueOnce('tok-fresh');
 
     await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toThrow(ChatAuthError);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -813,7 +810,7 @@ describe('ChatSessionService auth token', () => {
 
   it('does not resend a token the refresh did not change', async () => {
     fetchMock.mockResolvedValue(deniedResponse());
-    const provider = jest.fn().mockResolvedValue('tok-rejected');
+    const provider = vi.fn().mockResolvedValue('tok-rejected');
 
     await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toThrow(ChatAuthError);
     expect(provider).toHaveBeenCalledTimes(2);
@@ -826,7 +823,7 @@ describe('ChatSessionService auth token', () => {
     // The provider was not ready when the user first sent, so the request went out
     // without a credential; the refresh is what makes it recoverable.
     fetchMock.mockResolvedValueOnce(deniedResponse()).mockResolvedValueOnce(okResponse());
-    const provider = jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce('tok-ready');
+    const provider = vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce('tok-ready');
 
     await service({ authTokenProvider: provider }).startSession({});
 
@@ -863,9 +860,9 @@ describe('ChatSessionService auth token', () => {
   });
 
   it('reports a provider that throws as an auth failure rather than a generic error', async () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const thrown = new Error('mint endpoint down for tok-secret');
-    const provider = jest.fn().mockRejectedValue(thrown);
+    const provider = vi.fn().mockRejectedValue(thrown);
 
     await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toMatchObject({
       name: 'ChatAuthError',
@@ -912,7 +909,7 @@ describe('ChatSessionService auth token', () => {
 describe('ChatSessionService session token renewal', () => {
   const messageUrl = 'https://example.com/api/chat/s-1/message/';
   const renewUrl = 'https://example.com/api/chat/s-1/token/';
-  let fetchMock: jest.Mock;
+  let fetchMock: Mock;
   let now: number;
   let expiredRefusals: number;
 
@@ -958,15 +955,15 @@ describe('ChatSessionService session token renewal', () => {
 
   beforeEach(() => {
     now = Date.now();
-    jest.spyOn(Date, 'now').mockReturnValue(now);
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expiredRefusals = 0;
-    fetchMock = jest.fn((url: string) => Promise.resolve(router(url)));
+    fetchMock = vi.fn((url: string) => Promise.resolve(router(url)));
     global.fetch = fetchMock as unknown as typeof fetch;
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('leaves a token with time left alone', async () => {
@@ -989,7 +986,7 @@ describe('ChatSessionService session token renewal', () => {
   });
 
   it('reports the renewed token so the host can persist it', async () => {
-    const onSessionTokenRenewed = jest.fn();
+    const onSessionTokenRenewed = vi.fn();
     await service({ sessionTokenExpiresAt: secondsFromNow(30), onSessionTokenRenewed }).sendMessage('s-1', { message: 'hi' });
 
     expect(onSessionTokenRenewed).toHaveBeenCalledWith('sess-new', secondsFromNow(3600));
@@ -1059,7 +1056,7 @@ describe('ChatSessionService session token renewal', () => {
 
   it('surfaces the original refusal when renewal itself is refused', async () => {
     expiredRefusals = 1;
-    const provider = jest.fn(() => 'bearer-1');
+    const provider = vi.fn(() => 'bearer-1');
     fetchMock.mockImplementation((url: string) =>
       Promise.resolve(url.includes('/token/') ? response(401, { error: 'Authentication required', code: 'chat_access_denied' }) : router(url)),
     );
@@ -1099,7 +1096,7 @@ describe('ChatSessionService session token renewal', () => {
       }
       return Promise.resolve(router(url));
     });
-    const onSessionTokenRenewed = jest.fn();
+    const onSessionTokenRenewed = vi.fn();
     const svc = service({ sessionTokenExpiresAt: secondsFromNow(30), onSessionTokenRenewed });
 
     const pending = svc.sendMessage('s-1', { message: 'hi' });
@@ -1152,7 +1149,7 @@ describe('ChatSessionService session token renewal', () => {
     await svc.sendMessage('s-1', { message: 'again' });
     expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl]);
 
-    (Date.now as jest.Mock).mockReturnValue(now + 30_000);
+    (Date.now as Mock).mockReturnValue(now + 30_000);
     await svc.sendMessage('s-1', { message: 'later' });
     expect(urlsCalled()).toEqual([renewUrl, messageUrl, messageUrl, renewUrl, messageUrl]);
   });

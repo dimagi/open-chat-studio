@@ -1,5 +1,6 @@
-import { newSpecPage, SpecPage } from '@stencil/core/testing';
+import type { Mock } from 'vitest';
 import { OcsChat } from './ocs-chat';
+import { newSpecPage, SpecPage } from './ocs-chat.test-helpers';
 
 /**
  * These drive the real ChatSessionService and assert on the requests it makes,
@@ -7,7 +8,7 @@ import { OcsChat } from './ocs-chat';
  * mock of the service that could drift from it.
  */
 describe('ocs-chat auth token provider', () => {
-  let fetchMock: jest.Mock;
+  let fetchMock: Mock;
   let startDenied: boolean;
   let renewDenied: boolean;
   /** Uploads refused with `session_expired` before one is accepted. */
@@ -65,7 +66,7 @@ describe('ocs-chat auth token provider', () => {
   }
 
   function storedValue(key: string): string | undefined {
-    const writes = (window.localStorage.setItem as jest.Mock).mock.calls.filter(([k]) => k === key);
+    const writes = (window.localStorage.setItem as Mock).mock.calls.filter(([k]) => k === key);
     return writes.at(-1)?.[1];
   }
 
@@ -85,10 +86,10 @@ describe('ocs-chat auth token provider', () => {
     renewDenied = false;
     uploadRefusals = 0;
     tokenLifetimeSeconds = 3600;
-    fetchMock = jest.fn((url: string) => Promise.resolve(router(url)));
+    fetchMock = vi.fn((url: string) => Promise.resolve(router(url)));
     global.fetch = fetchMock as unknown as typeof fetch;
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn(), clear: jest.fn() },
+      value: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
       writable: true,
     });
     // Participant id generation needs it, and the spec environment has no crypto.
@@ -105,7 +106,7 @@ describe('ocs-chat auth token provider', () => {
   }
 
   it('sends the provider token as a bearer credential', async () => {
-    const provider = jest.fn().mockResolvedValue('tok-abc');
+    const provider = vi.fn().mockResolvedValue('tok-abc');
     const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
     await installProvider(page, provider);
     await send(page);
@@ -176,7 +177,7 @@ describe('ocs-chat auth token provider', () => {
 
   it('retries once through the provider when the first token is refused', async () => {
     startDenied = true;
-    const provider = jest.fn(async ({ forceRefresh }: { forceRefresh: boolean }) => {
+    const provider = vi.fn(async ({ forceRefresh }: { forceRefresh: boolean }) => {
       if (forceRefresh) {
         startDenied = false;
         return 'tok-fresh';
@@ -199,7 +200,7 @@ describe('ocs-chat auth token provider', () => {
     // credential is checked again rather than passed once.
     let sessionExpired = false;
     renewDenied = true;
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     fetchMock.mockImplementation((url: string) => {
       if (sessionExpired && !url.includes('/api/chat/start/') && !url.includes('/token/')) {
         return Promise.resolve(jsonResponse(403, { error: 'Session expired', code: 'session_expired' }));
@@ -207,7 +208,7 @@ describe('ocs-chat auth token provider', () => {
       return Promise.resolve(router(url));
     });
 
-    const provider = jest.fn().mockResolvedValue('tok-1');
+    const provider = vi.fn().mockResolvedValue('tok-1');
     const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
     await installProvider(page, provider);
     await send(page);
@@ -230,7 +231,7 @@ describe('ocs-chat auth token provider', () => {
 
   it('renews the session token through the provider before it expires', async () => {
     tokenLifetimeSeconds = 30;
-    const provider = jest.fn().mockResolvedValue('tok-abc');
+    const provider = vi.fn().mockResolvedValue('tok-abc');
     const page = await widget('<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>');
     await installProvider(page, provider);
     await send(page);
@@ -292,7 +293,7 @@ describe('ocs-chat auth token provider', () => {
 
     expect(headersOf('/token/')['Authorization']).toBe('Bearer tok-secret');
 
-    const setItem = window.localStorage.setItem as jest.Mock;
+    const setItem = window.localStorage.setItem as Mock;
     expect(setItem).toHaveBeenCalled();
     const written = setItem.mock.calls.map(([key, value]) => `${key}=${value}`).join('\n');
     expect(written).not.toContain('tok-secret');

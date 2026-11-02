@@ -10,12 +10,12 @@ function makeFile(name = 'a.txt') {
 
 describe('FileAttachmentManager upload transport', () => {
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('sends through the provided transport with the upload url and form data', async () => {
     const manager = makeManager();
-    const send = jest.fn().mockResolvedValue({
+    const send = vi.fn().mockResolvedValue({
       ok: true,
       status: 201,
       json: () => Promise.resolve({ files: [{ id: 1, name: 'a.txt', size: 5, content_type: 'text/plain' }] }),
@@ -34,7 +34,7 @@ describe('FileAttachmentManager upload transport', () => {
 
   it('flags tokenRejected on a 403 upload response', async () => {
     const manager = makeManager();
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 403,
       json: () => Promise.resolve({ error: 'Session token required', code: 'session_token_required' }),
@@ -53,7 +53,7 @@ describe('FileAttachmentManager upload transport', () => {
   it('reports a consent refusal without treating it as a token rejection', async () => {
     const manager = makeManager();
     const consentBlock = { required: true, form_version_id: 7, text: '<p>Please agree</p>' };
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 403,
       json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required', consent: consentBlock }),
@@ -72,7 +72,7 @@ describe('FileAttachmentManager upload transport', () => {
 
   it('treats a consent refusal with no block as an ordinary upload failure', async () => {
     const manager = makeManager();
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 403,
       json: () => Promise.resolve({ error: 'Consent is required', code: 'consent_required' }),
@@ -92,7 +92,7 @@ describe('FileAttachmentManager upload transport', () => {
 
   it('treats a participant_blocked refusal as a generic upload failure', async () => {
     const manager = makeManager();
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 403,
       json: () => Promise.resolve({ error: 'You have been blocked from using this chatbot.', code: 'participant_blocked' }),
@@ -111,7 +111,7 @@ describe('FileAttachmentManager upload transport', () => {
 
   it('posts with fetch and no auth headers when no transport is provided', async () => {
     const manager = makeManager();
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       status: 201,
       json: () => Promise.resolve({ files: [{ id: 1, name: 'a.txt', size: 5, content_type: 'text/plain' }] }),
@@ -129,7 +129,7 @@ describe('FileAttachmentManager upload transport', () => {
 
   it('does not flag tokenRejected on a non-403 failure', async () => {
     const manager = makeManager();
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ error: 'boom' }),

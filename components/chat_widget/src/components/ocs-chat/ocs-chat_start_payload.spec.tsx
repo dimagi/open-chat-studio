@@ -1,30 +1,29 @@
-import { newSpecPage } from '@stencil/core/testing';
 import { OcsChat } from './ocs-chat';
-import { installWebCrypto, setupFetchMock, stubChatService } from './ocs-chat.test-helpers';
+import { installWebCrypto, setupFetchMock, stubChatService, newSpecPage } from './ocs-chat.test-helpers';
 
 // Matches the `ocs:` visitor id prefix followed by a v4 UUID.
 const UUID_RE = /^ocs:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-const mockStartSession = jest.fn();
-const mockSendMessage = jest.fn();
-const mockPollTask = jest.fn();
-const mockStartMessagePolling = jest.fn();
+const mockStartSession = vi.fn();
+const mockSendMessage = vi.fn();
+const mockPollTask = vi.fn();
+const mockStartMessagePolling = vi.fn();
 
 describe('ocs-chat visitor id', () => {
   let store: Record<string, string>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     installWebCrypto();
     store = {};
     Object.defineProperty(window, 'localStorage', {
       value: {
-        getItem: jest.fn((k: string) => store[k] ?? null),
-        setItem: jest.fn((k: string, v: string) => {
+        getItem: vi.fn((k: string) => store[k] ?? null),
+        setItem: vi.fn((k: string, v: string) => {
           store[k] = v;
         }),
-        removeItem: jest.fn(),
-        clear: jest.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
       },
       writable: true,
     });
@@ -71,12 +70,12 @@ describe('ocs-chat visitor id', () => {
 
 describe('ocs-chat start payload timezone', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     installWebCrypto();
     mockStartSession.mockResolvedValue({ session_id: 'tz-session' });
     mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn(), clear: jest.fn() },
+      value: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
       writable: true,
     });
     global.fetch = setupFetchMock('tz-session');
@@ -84,7 +83,7 @@ describe('ocs-chat start payload timezone', () => {
 
   afterEach(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   async function newStartedPage() {
@@ -103,14 +102,14 @@ describe('ocs-chat start payload timezone', () => {
   }
 
   it('sends the device time zone on start', async () => {
-    jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'Africa/Johannesburg' } as Intl.ResolvedDateTimeFormatOptions);
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'Africa/Johannesburg' } as Intl.ResolvedDateTimeFormatOptions);
     await newStartedPage();
 
     expect(mockStartSession).toHaveBeenCalledWith(expect.objectContaining({ timezone: 'Africa/Johannesburg' }));
   });
 
   it('omits the time zone when the browser cannot resolve one', async () => {
-    jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({} as Intl.ResolvedDateTimeFormatOptions);
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({} as Intl.ResolvedDateTimeFormatOptions);
     await newStartedPage();
 
     expect(mockStartSession.mock.calls[0][0]).not.toHaveProperty('timezone');

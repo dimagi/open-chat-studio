@@ -1,38 +1,23 @@
-import { newSpecPage } from '@stencil/core/testing';
+import type { Mock } from 'vitest';
 import { OcsChat } from './ocs-chat';
 import { SessionAccessError } from '../../services/chat-session-service';
-import { setupFetchMock, stubChatService } from './ocs-chat.test-helpers';
+import { setupFetchMock, stubChatService, newSpecPage } from './ocs-chat.test-helpers';
 
 // Matches the `ocs:` visitor id prefix followed by a v4 UUID.
 const UUID_RE = /^ocs:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-// Create mock functions at the module level
-const mockStartSession = jest.fn();
-const mockSendMessage = jest.fn();
-const mockPollTask = jest.fn();
-const mockStartMessagePolling = jest.fn();
-const mockStopMessagePolling = jest.fn();
-const mockFetchAllMessages = jest.fn();
-// Mock the ChatSessionService module
-jest.mock('../../services/chat-session-service', () => {
-  const actual = jest.requireActual('../../services/chat-session-service');
-  return {
-    ...actual,
-    ChatSessionService: jest.fn().mockImplementation(() => ({
-      startSession: mockStartSession,
-      sendMessage: mockSendMessage,
-      pollTask: mockPollTask,
-      startMessagePolling: mockStartMessagePolling,
-      stopMessagePolling: mockStopMessagePolling,
-      fetchAllMessages: mockFetchAllMessages,
-    })),
-  };
-});
+// Stubs installed on the widget's service instance
+const mockStartSession = vi.fn();
+const mockSendMessage = vi.fn();
+const mockPollTask = vi.fn();
+const mockStartMessagePolling = vi.fn();
+const mockStopMessagePolling = vi.fn();
+const mockFetchAllMessages = vi.fn();
 
 describe('ocs-chat session creation', () => {
   beforeEach(() => {
     // Clear all mocks before each test
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Setup default mock implementations
     mockStartSession.mockResolvedValue({
@@ -45,11 +30,11 @@ describe('ocs-chat session creation', () => {
     });
 
     mockPollTask.mockReturnValue({
-      cancel: jest.fn(),
+      cancel: vi.fn(),
     });
 
     mockStartMessagePolling.mockReturnValue({
-      stop: jest.fn(),
+      stop: vi.fn(),
     });
 
     // Mock fetch API using helper
@@ -57,10 +42,10 @@ describe('ocs-chat session creation', () => {
 
     // Mock localStorage
     const localStorageMock = {
-      getItem: jest.fn(),
-      setItem: jest.fn(),
-      removeItem: jest.fn(),
-      clear: jest.fn(),
+      getItem: vi.fn(),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
     };
     Object.defineProperty(window, 'localStorage', {
       value: localStorageMock,
@@ -71,7 +56,7 @@ describe('ocs-chat session creation', () => {
     // Mock crypto.getRandomValues for user ID generation
     Object.defineProperty(window, 'crypto', {
       value: {
-        getRandomValues: jest.fn((arr: Uint8Array) => {
+        getRandomValues: vi.fn((arr: Uint8Array) => {
           for (let i = 0; i < arr.length; i++) {
             arr[i] = Math.floor(Math.random() * 256);
           }
@@ -85,7 +70,7 @@ describe('ocs-chat session creation', () => {
   afterEach(async () => {
     // Small delay to allow any pending promises to resolve
     await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should not automatically start a session when component loads', async () => {
@@ -139,7 +124,7 @@ describe('ocs-chat session creation', () => {
 
     // Verify fetch was called to start a session
     expect(global.fetch).toHaveBeenCalled();
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls;
+    const fetchCalls = (global.fetch as Mock).mock.calls;
     const startSessionCall = fetchCalls.find(call => call[0].includes('/api/chat/start/'));
     expect(startSessionCall).toBeDefined();
 
@@ -165,7 +150,7 @@ describe('ocs-chat session creation', () => {
     ];
 
     // Mock localStorage to return existing session data
-    (window.localStorage.getItem as jest.Mock) = jest.fn((key: string) => {
+    (window.localStorage.getItem as Mock) = vi.fn((key: string) => {
       if (key === 'ocs-chat-session-test-bot') {
         return existingSessionId;
       }
@@ -190,7 +175,7 @@ describe('ocs-chat session creation', () => {
     expect(page.rootInstance.messages).toEqual(existingMessages);
 
     // Verify no fetch call was made to start a new session
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls;
+    const fetchCalls = (global.fetch as Mock).mock.calls;
     const startSessionCall = fetchCalls.find(call => call[0] && call[0].includes('/api/chat/start/'));
     expect(startSessionCall).toBeUndefined();
   });
@@ -210,12 +195,12 @@ describe('ocs-chat session creation', () => {
     expect(page.rootInstance.activeSessionId).toBe('test-session-id');
 
     // Now send a second message - should use existing session
-    jest.clearAllMocks(); // Clear previous fetch calls
+    vi.clearAllMocks(); // Clear previous fetch calls
     await page.rootInstance.sendMessage('Message 2');
     await page.waitForChanges();
 
     // Verify no new session start was made for the second message
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls;
+    const fetchCalls = (global.fetch as Mock).mock.calls;
     const startSessionCalls = fetchCalls.filter(call => call[0] && call[0].includes('/api/chat/start/'));
     expect(startSessionCalls.length).toBe(0);
 
@@ -287,7 +272,7 @@ describe('ocs-chat session creation', () => {
     expect(userMessage.content).toBe('Question 1');
 
     // Verify fetch was called
-    const fetchCalls = (global.fetch as jest.Mock).mock.calls;
+    const fetchCalls = (global.fetch as Mock).mock.calls;
     const startSessionCall = fetchCalls.find(call => call[0] && call[0].includes('/api/chat/start/'));
     expect(startSessionCall).toBeDefined();
   });
@@ -315,13 +300,13 @@ describe('ocs-chat session creation', () => {
 
 describe('ocs-chat progress message during polling', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     const localStorageMock = {
-      getItem: jest.fn(),
-      setItem: jest.fn(),
-      removeItem: jest.fn(),
-      clear: jest.fn(),
+      getItem: vi.fn(),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
     };
     Object.defineProperty(window, 'localStorage', {
       value: localStorageMock,
@@ -331,7 +316,7 @@ describe('ocs-chat progress message during polling', () => {
 
   afterEach(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should display progress message in typing indicator when set', async () => {
@@ -437,12 +422,12 @@ describe('ocs-chat progress message during polling', () => {
 
 describe('ocs-chat localStorage blocked (SecurityError)', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockStartSession.mockResolvedValue({ session_id: 'test-session-id' });
     mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'test-task-id' });
-    mockPollTask.mockReturnValue({ cancel: jest.fn() });
-    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    mockPollTask.mockReturnValue({ cancel: vi.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: vi.fn() });
 
     global.fetch = setupFetchMock();
 
@@ -450,10 +435,10 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
       throw new DOMException('The operation is insecure.', 'SecurityError');
     };
     const localStorageMock = {
-      getItem: jest.fn(throwSecurityError),
-      setItem: jest.fn(throwSecurityError),
-      removeItem: jest.fn(throwSecurityError),
-      clear: jest.fn(throwSecurityError),
+      getItem: vi.fn(throwSecurityError),
+      setItem: vi.fn(throwSecurityError),
+      removeItem: vi.fn(throwSecurityError),
+      clear: vi.fn(throwSecurityError),
     };
     Object.defineProperty(window, 'localStorage', {
       value: localStorageMock,
@@ -462,7 +447,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
 
     Object.defineProperty(window, 'crypto', {
       value: {
-        getRandomValues: jest.fn((arr: Uint8Array) => {
+        getRandomValues: vi.fn((arr: Uint8Array) => {
           for (let i = 0; i < arr.length; i++) {
             arr[i] = Math.floor(Math.random() * 256);
           }
@@ -475,7 +460,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
 
   afterEach(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('starts a session successfully when localStorage throws on read and write', async () => {
@@ -519,11 +504,11 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
 
 describe('ocs-chat storage getter blocked', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockStartSession.mockResolvedValue({ session_id: 'test-session-id' });
     mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'test-task-id' });
-    mockPollTask.mockReturnValue({ cancel: jest.fn() });
-    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    mockPollTask.mockReturnValue({ cancel: vi.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: vi.fn() });
     global.fetch = setupFetchMock();
 
     Object.defineProperty(window, 'localStorage', {
@@ -535,13 +520,13 @@ describe('ocs-chat storage getter blocked', () => {
 
     Object.defineProperty(window, 'crypto', {
       value: {
-        getRandomValues: jest.fn((arr: Uint8Array) => {
+        getRandomValues: vi.fn((arr: Uint8Array) => {
           for (let i = 0; i < arr.length; i++) {
             arr[i] = Math.floor(Math.random() * 256);
           }
           return arr;
         }),
-        randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000000'),
+        randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000000'),
       },
       writable: true,
     });
@@ -553,13 +538,13 @@ describe('ocs-chat storage getter blocked', () => {
       configurable: true,
       writable: true,
       value: {
-        getItem: jest.fn(),
-        setItem: jest.fn(),
-        removeItem: jest.fn(),
-        clear: jest.fn(),
+        getItem: vi.fn(),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
       },
     });
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('renders when the localStorage getter itself throws', async () => {
@@ -603,25 +588,25 @@ describe('ocs-chat storage getter blocked', () => {
 });
 
 describe('ocs-chat persistent-session modes', () => {
-  let localStorageMock: Record<string, jest.Mock>;
-  let sessionStorageMock: Record<string, jest.Mock>;
+  let localStorageMock: Record<string, Mock>;
+  let sessionStorageMock: Record<string, Mock>;
 
-  function storageMock(): Record<string, jest.Mock> {
+  function storageMock(): Record<string, Mock> {
     const store: Record<string, string> = {};
     return {
-      getItem: jest.fn((key: string) => (key in store ? store[key] : null)),
-      setItem: jest.fn((key: string, value: string) => {
+      getItem: vi.fn((key: string) => (key in store ? store[key] : null)),
+      setItem: vi.fn((key: string, value: string) => {
         store[key] = value;
       }),
-      removeItem: jest.fn((key: string) => {
+      removeItem: vi.fn((key: string) => {
         delete store[key];
       }),
-      clear: jest.fn(),
+      clear: vi.fn(),
     };
   }
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockStartSession.mockResolvedValue({ session_id: 'tab-session' });
     mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
     localStorageMock = storageMock();
@@ -691,7 +676,7 @@ describe('ocs-chat persistent-session modes', () => {
 
     expect(page.rootInstance.activeSessionId).toBe('stored-tab-session');
     expect(page.rootInstance.messages).toHaveLength(1);
-    const startCalls = (global.fetch as jest.Mock).mock.calls.filter(call => String(call[0]).includes('/api/chat/start/'));
+    const startCalls = (global.fetch as Mock).mock.calls.filter(call => String(call[0]).includes('/api/chat/start/'));
     expect(startCalls).toHaveLength(0);
   });
 
@@ -763,26 +748,26 @@ describe('ocs-chat bound session (session-id prop)', () => {
   ];
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockStartSession.mockResolvedValue({ session_id: 'unexpected-new-session' });
     mockSendMessage.mockResolvedValue({ status: 'processing', task_id: 'test-task-id' });
-    mockPollTask.mockReturnValue({ cancel: jest.fn() });
-    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    mockPollTask.mockReturnValue({ cancel: vi.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: vi.fn() });
     mockFetchAllMessages.mockResolvedValue(history);
     global.fetch = setupFetchMock();
 
     // localStorage holds a DIFFERENT persisted session to prove the prop wins
     const localStorageMock = {
-      getItem: jest.fn((key: string) => {
+      getItem: vi.fn((key: string) => {
         if (key === 'ocs-chat-session-test-bot') return 'stale-local-session';
         if (key === 'ocs-chat-messages-test-bot') return JSON.stringify([]);
         if (key === 'ocs-chat-activity-test-bot') return new Date().toISOString();
         return null;
       }),
-      setItem: jest.fn(),
-      removeItem: jest.fn(),
-      clear: jest.fn(),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
     };
     Object.defineProperty(window, 'localStorage', {
       value: localStorageMock,
@@ -791,7 +776,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
 
     Object.defineProperty(window, 'crypto', {
       value: {
-        getRandomValues: jest.fn((arr: Uint8Array) => {
+        getRandomValues: vi.fn((arr: Uint8Array) => {
           for (let i = 0; i < arr.length; i++) {
             arr[i] = Math.floor(Math.random() * 256);
           }
@@ -804,7 +789,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
 
   afterEach(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   async function newBoundPage() {
@@ -849,7 +834,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
     await page.rootInstance.sendMessage('New message');
     await page.waitForChanges();
 
-    const setItemKeys = (window.localStorage.setItem as jest.Mock).mock.calls.map(call => call[0]);
+    const setItemKeys = (window.localStorage.setItem as Mock).mock.calls.map(call => call[0]);
     expect(setItemKeys).not.toContain('ocs-chat-session-test-bot');
     expect(setItemKeys).not.toContain('ocs-chat-messages-test-bot');
     expect(setItemKeys).not.toContain('ocs-chat-activity-test-bot');
@@ -866,7 +851,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
     page.rootInstance.visible = false;
     await page.waitForChanges();
 
-    const setItemKeys = (window.localStorage.setItem as jest.Mock).mock.calls.map(call => call[0]);
+    const setItemKeys = (window.localStorage.setItem as Mock).mock.calls.map(call => call[0]);
     expect(setItemKeys).not.toContain('ocs-chat-visible-test-bot');
   });
 
@@ -982,14 +967,12 @@ describe('ocs-chat bound session (session-id prop)', () => {
 });
 
 describe('ocs-chat session tokens', () => {
-  // NOTE: the module-level jest.mock('../../services/chat-session-service') factory at
-  // the top of this file is inert under Stencil's jest preset (the factory never runs),
-  // so the real ChatSessionService is always instantiated. These tests therefore observe
-  // behaviour through the real service instance + the fetch/localStorage mocks, matching
-  // the pattern used by the 'bound session' suite above.
+  // The widget instantiates the real ChatSessionService, so these tests observe behaviour
+  // through the real service instance + the fetch/localStorage mocks, matching the pattern
+  // used by the 'bound session' suite above.
   function tokenFetchMock() {
     const sessionToken = 'tok-1';
-    return jest.fn().mockImplementation((url: string) => {
+    return vi.fn().mockImplementation((url: string) => {
       if (url.includes('/api/chat/start/')) {
         return Promise.resolve({
           ok: true,
@@ -1007,36 +990,36 @@ describe('ocs-chat session tokens', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockSendMessage.mockResolvedValue({ status: 'processing', task_id: 'test-task-id' });
-    mockPollTask.mockReturnValue({ cancel: jest.fn() });
-    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    mockPollTask.mockReturnValue({ cancel: vi.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: vi.fn() });
     mockFetchAllMessages.mockResolvedValue([]);
     global.fetch = tokenFetchMock();
 
     const store: Record<string, string> = {};
     Object.defineProperty(window, 'localStorage', {
       value: {
-        getItem: jest.fn((k: string) => (k in store ? store[k] : null)),
-        setItem: jest.fn((k: string, v: string) => {
+        getItem: vi.fn((k: string) => (k in store ? store[k] : null)),
+        setItem: vi.fn((k: string, v: string) => {
           store[k] = v;
         }),
-        removeItem: jest.fn((k: string) => {
+        removeItem: vi.fn((k: string) => {
           delete store[k];
         }),
-        clear: jest.fn(),
+        clear: vi.fn(),
       },
       writable: true,
     });
     Object.defineProperty(window, 'crypto', {
-      value: { getRandomValues: jest.fn((arr: Uint8Array) => arr) },
+      value: { getRandomValues: vi.fn((arr: Uint8Array) => arr) },
       writable: true,
     });
   });
 
   afterEach(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('requests a token on start and stores it on the service', async () => {
@@ -1047,14 +1030,14 @@ describe('ocs-chat session tokens', () => {
     await page.waitForChanges();
 
     const svc = page.rootInstance['getChatService']();
-    const setSessionTokenSpy = jest.spyOn(svc, 'setSessionToken');
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+    const setSessionTokenSpy = vi.spyOn(svc, 'setSessionToken');
+    vi.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    vi.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
 
     await page.rootInstance.sendMessage('Hello');
     await page.waitForChanges();
 
-    const startCall = (global.fetch as jest.Mock).mock.calls.find(call => call[0].includes('/api/chat/start/'));
+    const startCall = (global.fetch as Mock).mock.calls.find(call => call[0].includes('/api/chat/start/'));
     expect(startCall).toBeDefined();
     expect(setSessionTokenSpy).toHaveBeenCalledWith('tok-1', '2030-01-01T00:00:00Z');
     expect(window.localStorage.setItem).toHaveBeenCalledWith('ocs-chat-token-test-bot', 'tok-1');
@@ -1062,7 +1045,7 @@ describe('ocs-chat session tokens', () => {
   });
 
   it('restores a persisted token for an unbound session on load', async () => {
-    (window.localStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+    (window.localStorage.getItem as Mock).mockImplementation((key: string) => {
       if (key === 'ocs-chat-session-test-bot') return 'stored-session';
       if (key === 'ocs-chat-messages-test-bot') return JSON.stringify([]);
       if (key === 'ocs-chat-token-test-bot') return 'stored-tok';
@@ -1109,7 +1092,7 @@ describe('ocs-chat session tokens', () => {
     expect(page.rootInstance.activeSessionId).toBe('test-session-id');
 
     const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'sendMessage').mockRejectedValueOnce(new SessionAccessError(403, 'session_expired', 'Session has expired'));
+    vi.spyOn(svc, 'sendMessage').mockRejectedValueOnce(new SessionAccessError(403, 'session_expired', 'Session has expired'));
 
     await page.rootInstance.sendMessage('again');
     await page.waitForChanges();
@@ -1145,7 +1128,7 @@ describe('ocs-chat session tokens', () => {
     });
 
     const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'fetchAllMessages').mockRejectedValue(new SessionAccessError(403, 'session_token_invalid', 'Invalid session token'));
+    vi.spyOn(svc, 'fetchAllMessages').mockRejectedValue(new SessionAccessError(403, 'session_token_invalid', 'Invalid session token'));
 
     // Trigger history load for the bound session.
     await page.rootInstance['loadBoundSessionHistory']();

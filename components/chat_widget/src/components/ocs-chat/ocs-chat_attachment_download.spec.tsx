@@ -1,6 +1,6 @@
-import { newSpecPage, SpecPage } from '@stencil/core/testing';
+import type { Mock } from 'vitest';
 import { OcsChat } from './ocs-chat';
-import { stubChatService } from './ocs-chat.test-helpers';
+import { stubChatService, newSpecPage, SpecPage } from './ocs-chat.test-helpers';
 import type { ChatAttachment } from '../../services/chat-session-service';
 
 const DOWNLOAD_URL = 'https://example.com/api/chat/session-1/files/7/content/';
@@ -20,25 +20,25 @@ async function renderWithAttachment(attachment: ChatAttachment): Promise<SpecPag
 const downloadButton = (page: SpecPage) => page.root?.shadowRoot?.querySelector('button.message-attachment-link') as HTMLButtonElement | null;
 
 describe('ocs-chat attachment download', () => {
-  let createObjectURL: jest.Mock;
-  let revokeObjectURL: jest.Mock;
+  let createObjectURL: Mock;
+  let revokeObjectURL: Mock;
   let clickedLinks: HTMLAnchorElement[];
 
   beforeEach(() => {
-    createObjectURL = jest.fn(() => 'blob:file-1');
-    revokeObjectURL = jest.fn();
+    createObjectURL = vi.fn(() => 'blob:file-1');
+    revokeObjectURL = vi.fn();
     Object.assign(URL, { createObjectURL, revokeObjectURL });
     clickedLinks = [];
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   function captureDownloadLinks(page: SpecPage) {
     const body = page.doc.body;
     const appendChild = body.appendChild.bind(body);
-    jest.spyOn(body, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
+    vi.spyOn(body, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
       const link = node as unknown as HTMLAnchorElement;
       link.click = () => {
         clickedLinks.push(link);
@@ -65,7 +65,7 @@ describe('ocs-chat attachment download', () => {
   it('downloads the file through the chat service and saves it under the attachment name', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
     const blob = { size: 3 } as Blob;
-    const downloadAttachment = jest.fn().mockResolvedValue(blob);
+    const downloadAttachment = vi.fn().mockResolvedValue(blob);
     stubChatService(page, { downloadAttachment });
     captureDownloadLinks(page);
 
@@ -85,8 +85,8 @@ describe('ocs-chat attachment download', () => {
 
   it('reports a failed download in the chat without ending the session', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
-    stubChatService(page, { downloadAttachment: jest.fn().mockRejectedValue(new Error('Failed to download file: Not Found')) });
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    stubChatService(page, { downloadAttachment: vi.fn().mockRejectedValue(new Error('Failed to download file: Not Found')) });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     downloadButton(page)?.click();
     await page.waitForChanges();
@@ -106,13 +106,13 @@ describe('ocs-chat attachment download', () => {
     component.messages = [{ ...component.messages[0], created_at: serverMessageAt }];
     let getSince: (() => string | undefined) | undefined;
     stubChatService(page, {
-      downloadAttachment: jest.fn().mockRejectedValue(new Error('Failed to download file: Not Found')),
-      startMessagePolling: jest.fn((_sessionId, callbacks) => {
+      downloadAttachment: vi.fn().mockRejectedValue(new Error('Failed to download file: Not Found')),
+      startMessagePolling: vi.fn((_sessionId, callbacks) => {
         getSince = callbacks.getSince;
-        return { stop: jest.fn() };
+        return { stop: vi.fn() };
       }),
     });
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     downloadButton(page)?.click();
     await page.waitForChanges();
@@ -132,9 +132,9 @@ describe('ocs-chat attachment download', () => {
     component.messages = [{ ...component.messages[0], created_at: '2025-12-31T00:00:00.000Z' }, optimistic];
     let onMessages: ((messages: (typeof server)[]) => void) | undefined;
     stubChatService(page, {
-      startMessagePolling: jest.fn((_sessionId, callbacks) => {
+      startMessagePolling: vi.fn((_sessionId, callbacks) => {
         onMessages = callbacks.onMessages;
-        return { stop: jest.fn() };
+        return { stop: vi.fn() };
       }),
     });
 
@@ -165,9 +165,9 @@ describe('ocs-chat attachment download', () => {
     const component = page.rootInstance as OcsChat;
     let rejectDownload: (error: Error) => void = () => undefined;
     stubChatService(page, {
-      downloadAttachment: jest.fn(() => new Promise<Blob>((_resolve, reject) => (rejectDownload = reject))),
+      downloadAttachment: vi.fn(() => new Promise<Blob>((_resolve, reject) => (rejectDownload = reject))),
     });
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     downloadButton(page)?.click();
     await page.waitForChanges();
@@ -180,7 +180,7 @@ describe('ocs-chat attachment download', () => {
 
   it('ignores a second click while the file is downloading', async () => {
     const page = await renderWithAttachment({ name: 'report.pdf', content_type: 'application/pdf', size: 3, download_url: DOWNLOAD_URL });
-    const downloadAttachment = jest.fn(() => new Promise<Blob>(() => undefined));
+    const downloadAttachment = vi.fn(() => new Promise<Blob>(() => undefined));
     stubChatService(page, { downloadAttachment });
 
     downloadButton(page)?.click();

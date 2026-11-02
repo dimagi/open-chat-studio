@@ -1,32 +1,32 @@
-import { newSpecPage } from '@stencil/core/testing';
+import type { Mock } from 'vitest';
 import { OcsChat } from './ocs-chat';
-import { installWebCrypto, setupFetchMock, stubChatService } from './ocs-chat.test-helpers';
+import { installWebCrypto, setupFetchMock, stubChatService, newSpecPage } from './ocs-chat.test-helpers';
 
-const mockStartSession = jest.fn();
-const mockSendMessage = jest.fn();
-const mockPollTask = jest.fn();
-const mockStartMessagePolling = jest.fn();
-const mockFetchAllMessages = jest.fn();
+const mockStartSession = vi.fn();
+const mockSendMessage = vi.fn();
+const mockPollTask = vi.fn();
+const mockStartMessagePolling = vi.fn();
+const mockFetchAllMessages = vi.fn();
 
 describe('ocs-chat kiosk restart after session end', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     installWebCrypto();
     mockStartSession.mockResolvedValue({ session_id: 'kiosk-session' });
     mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
-    mockPollTask.mockReturnValue({ cancel: jest.fn() });
-    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    mockPollTask.mockReturnValue({ cancel: vi.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: vi.fn() });
     const store: Record<string, string> = {};
     Object.defineProperty(window, 'localStorage', {
       value: {
-        getItem: jest.fn((k: string) => store[k] ?? null),
-        setItem: jest.fn((k: string, v: string) => {
+        getItem: vi.fn((k: string) => store[k] ?? null),
+        setItem: vi.fn((k: string, v: string) => {
           store[k] = v;
         }),
-        removeItem: jest.fn((k: string) => {
+        removeItem: vi.fn((k: string) => {
           delete store[k];
         }),
-        clear: jest.fn(),
+        clear: vi.fn(),
       },
       writable: true,
     });
@@ -127,7 +127,7 @@ describe('ocs-chat kiosk restart after session end', () => {
     button.click();
     await new Promise(resolve => setTimeout(resolve, 0));
     await page.waitForChanges();
-    (window.localStorage.setItem as jest.Mock).mockClear();
+    (window.localStorage.setItem as Mock).mockClear();
     return { page, messageCallbacks, taskCallbacks };
   }
 
