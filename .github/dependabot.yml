@@ -20,6 +20,16 @@ updates:
       semver-major-days: 14
       semver-minor-days: 7
       semver-patch-days: 3
+    # One PR for the packages the mirrors-eslint pre-commit hook pins, so the
+    # sync-eslint-pins workflow rewrites those pins once per run.
+    groups:
+      eslint:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "typescript-eslint"
+          - "@typescript-eslint/*"
+          - "eslint-plugin-*"
   - package-ecosystem: "npm"
     directory: "/components/chat_widget"
     open-pull-requests-limit: 5
@@ -57,3 +67,11 @@ updates:
       interval: "monthly"
     cooldown:
       default-days: 7
+    # The eslint hook is pinned to pnpm-lock.yaml (scripts/check_eslint_versions.py).
+    # The npm ecosystem bumps it and .github/workflows/sync-eslint-pins.yml rewrites
+    # the hook's pins on that PR.
+    ignore:
+      - dependency-name: "https://github.com/pre-commit/mirrors-eslint"
+      - dependency-name: "eslint"
+      - dependency-name: "@eslint/js"
+      - dependency-name: "typescript-eslint"
