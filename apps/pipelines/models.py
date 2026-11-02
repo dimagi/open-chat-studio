@@ -9,6 +9,7 @@ from uuid import uuid4
 import pydantic
 from django.db import DatabaseError, models, transaction
 from django.urls import reverse
+from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from apps.chat.models import ChatMessageType
@@ -174,6 +175,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
+        content_nodes = {}
         for flow_id, node in node_data.items():
             if flow_id in membership_only:
                 continue
@@ -181,18 +183,60 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 # The key is the flow_id the content is written under, so a mismatch would
                 # silently store this node's content on a different row.
                 raise ValueError(f"node_data key {flow_id!r} does not match node id {node.id!r}")
+            content_nodes[flow_id] = node
+        if not content_nodes:
+            return
+
+        # Load every row being written in one locked query (with the relations the resource
+        # sync reads) rather than an update_or_create round trip per node.
+        existing_by_flow_id = {
+            existing.flow_id: existing
+            for existing in Node.objects.select_for_update()
+            .filter(pipeline=self, flow_id__in=content_nodes)
+            .prefetch_related("collection_indexes", "custom_action_operations")
+        }
+
+        now = timezone.now()
+        update_fields = {"type", "params", "label", "updated_at"}
+        to_update = []
+        needs_resource_sync = []
+        for flow_id, node in content_nodes.items():
             content = node.data
-            created_node, _ = Node.objects.update_or_create(
-                pipeline=self,
-                flow_id=flow_id,
-                defaults={
-                    "type": content.type,
-                    "params": content.params,
-                    "label": content.label,
-                    **node_position_fields(node.position),
-                },
-            )
-            created_node.update_from_params()
+            position = node_position_fields(node.position)
+            existing = existing_by_flow_id.get(flow_id)
+            if existing is None:
+                created_node = Node.objects.create(
+                    pipeline=self,
+                    flow_id=flow_id,
+                    type=content.type,
+                    params=content.params,
+                    label=content.label,
+                    **position,
+                )
+                needs_resource_sync.append(created_node)
+                continue
+
+            resources_changed = existing.type != content.type or existing.params != content.params
+            existing.type = content.type
+            existing.params = content.params
+            existing.label = content.label
+            for field_name, value in position.items():
+                setattr(existing, field_name, value)
+                update_fields.add(field_name)
+            existing.updated_at = now
+            to_update.append(existing)
+            if resources_changed:
+                needs_resource_sync.append(existing)
+
+        if to_update:
+            # Position columns are only in update_fields when some node supplied a position; nodes
+            # that didn't keep their loaded values, so writing them back is a no-op.
+            Node.objects.bulk_update(to_update, sorted(update_fields))
+
+        # The FK/M2M/custom-action mirror only depends on type and params, so a move or relabel
+        # (the common autosave case) skips it entirely.
+        for node_to_sync in needs_resource_sync:
+            node_to_sync.update_from_params()
 
     def clear_node_caches(self) -> None:
         """Re-read the ``Node`` rows and drop the ``flow_data`` built from the stale ones.
@@ -751,6 +795,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
         # than blowing up the id__in query.
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
+        # Skip the write when the linked rows already match (read off the prefetch cache when the
+        # caller prefetched ``collection_indexes``); a set() would only diff to a no-op anyway.
+        if set(index_ids) == {index.id for index in self.collection_indexes.all()}:
+            return
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
     def archive(self):
