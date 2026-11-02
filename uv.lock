@@ -2448,16 +2448,16 @@ wheels = [
 
 [[package]]
 name = "langchain-voyageai"
-version = "0.4.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
     { name = "pydantic" },
     { name = "voyageai" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/0b/67b1c254700ad29b5ada8bf0505bf9746ce5cb7883536f5c53d2e526af62/langchain_voyageai-0.4.0.tar.gz", hash = "sha256:07cc420bdb07b9ac9d6a5e6264860a0b395e233f9e1260a065d9ba0baad594ec", size = 14285, upload-time = "2026-06-29T16:55:48.064Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/21/b24ec7cb5d6f8f87b01abfcf183f88365e55ab6a18bf1a50c7467185e3f6/langchain_voyageai-0.4.1.tar.gz", hash = "sha256:294293b35f6973a965b521e51a1d1423d467921fc74ccfac2568ca92775201d1", size = 14678, upload-time = "2026-08-14T16:29:09.907Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/a9/b5b55e15d90e9f69988985fecda31e124c9aa12d8d445662dfd392cf5d9a/langchain_voyageai-0.4.0-py3-none-any.whl", hash = "sha256:a327299f736e66693dfdd2e327987baa1ff517708166e182166e0612a610597e", size = 7430, upload-time = "2026-06-29T16:55:47.181Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/8f/7155079af6e924acd17238a14b6cd07e357eca27c55981628ec5065e2e87/langchain_voyageai-0.4.1-py3-none-any.whl", hash = "sha256:3a9c22da5f2e4a48ad2c7108f01d221a6660438d8cfcd587f073d96610d19f8c", size = 7485, upload-time = "2026-08-14T16:29:08.965Z" },
 ]
 
 [[package]]
