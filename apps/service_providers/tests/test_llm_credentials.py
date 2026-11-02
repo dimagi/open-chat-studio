@@ -25,6 +25,7 @@ _PROVIDER_VARS = [
     "GROQ_API_KEY",
     "PERPLEXITY_API_KEY",
     "OPENROUTER_API_KEY",
+    "CHEAPER_INFERENCE_API_KEY",
     "MINIMAX_API_KEY",
     "LITELLM_API_KEY",
     "LITELLM_API_BASE",
@@ -143,6 +144,13 @@ def test_openrouter_minimal_config(clean_env):
     creds = get_provider_credentials_for_type(LlmProviderTypes.openrouter)
     assert creds is not None
     assert creds.config == {"openai_api_key": "or-test"}
+
+
+def test_cheaperinference_minimal_config(clean_env):
+    clean_env.setenv("CHEAPER_INFERENCE_API_KEY", "ci-test")
+    creds = get_provider_credentials_for_type(LlmProviderTypes.cheaperinference)
+    assert creds is not None
+    assert creds.config == {"openai_api_key": "ci-test"}
 
 
 def test_returns_one_entry_per_configured_provider(clean_env):

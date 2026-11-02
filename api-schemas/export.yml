@@ -5005,6 +5005,7 @@ components:
       - groq
       - perplexity
       - openrouter
+      - cheaperinference
       - deepseek
       - minimax
       - litellm
@@ -5019,6 +5020,7 @@ components:
         * `groq` - Groq
         * `perplexity` - Perplexity
         * `openrouter` - OpenRouter
+        * `cheaperinference` - Cheaper Inference
         * `deepseek` - DeepSeek
         * `minimax` - MiniMax
         * `litellm` - LiteLLM

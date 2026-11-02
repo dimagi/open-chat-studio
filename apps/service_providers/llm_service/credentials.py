@@ -132,6 +132,13 @@ def _openrouter() -> ProviderCredentials | None:
     )
 
 
+def _cheaperinference() -> ProviderCredentials | None:
+    api_key = os.environ.get("CHEAPER_INFERENCE_API_KEY")
+    if not api_key:
+        return None
+    return ProviderCredentials(LlmProviderTypes.cheaperinference, "Cheaper Inference", {"openai_api_key": api_key})
+
+
 def _minimax() -> ProviderCredentials | None:
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
@@ -161,6 +168,7 @@ _LOADERS: list[Callable[[], ProviderCredentials | None]] = [
     _groq,
     _perplexity,
     _openrouter,
+    _cheaperinference,
     _minimax,
     _litellm,
 ]

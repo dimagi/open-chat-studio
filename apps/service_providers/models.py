@@ -87,6 +87,11 @@ class LlmProviderTypes(LlmProviderType, Enum):
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     openrouter = "openrouter", _("OpenRouter"), {"openai_api_base": "https://openrouter.ai/api/v1"}
+    cheaperinference = (
+        "cheaperinference",
+        _("Cheaper Inference"),
+        {"openai_api_base": "https://api.cheaperinference.com/v1"},
+    )
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
     minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
     litellm = "litellm", _("LiteLLM")
@@ -137,6 +142,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 | LlmProviderTypes.perplexity
                 | LlmProviderTypes.minimax
                 | LlmProviderTypes.openrouter
+                | LlmProviderTypes.cheaperinference
             ):
                 return forms.OpenAIGenericConfigForm
             case LlmProviderTypes.litellm:
@@ -176,7 +182,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.AzureLlmService(**config)
             case LlmProviderTypes.anthropic:
                 return llm_service.AnthropicLlmService(**config)
-            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
+            case (
+                LlmProviderTypes.groq
+                | LlmProviderTypes.perplexity
+                | LlmProviderTypes.minimax
+                | LlmProviderTypes.cheaperinference
+            ):
                 return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.openrouter:
                 return llm_service.OpenRouterLlmService(**config)

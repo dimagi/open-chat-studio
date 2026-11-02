@@ -68,6 +68,7 @@ def test_openai_service_uses_responses_api():
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
         (LlmProviderTypes.minimax, {"openai_api_key": "test"}),
+        (LlmProviderTypes.cheaperinference, {"openai_api_key": "test"}),
         (LlmProviderTypes.litellm, {"openai_api_key": "test", "openai_api_base": "https://proxy.example.com/v1"}),
     ],
 )
@@ -89,6 +90,19 @@ def test_minimax_is_openai_compatible_chat_provider():
     service = LlmProviderTypes.minimax.get_llm_service({"openai_api_key": "test"})
     assert isinstance(service, OpenAIGenericService)
     assert service._type == "minimax"
+    assert service._use_responses_api is False
+
+
+def test_cheaperinference_is_openai_compatible_chat_provider():
+    """Cheaper Inference exposes an OpenAI-compatible chat endpoint, so it is routed through
+    OpenAIGenericService (like Groq/Perplexity/MiniMax) with the Cheaper Inference base URL
+    and must not use the OpenAI-specific Responses API."""
+    assert (
+        LlmProviderTypes.cheaperinference.additional_config["openai_api_base"] == "https://api.cheaperinference.com/v1"
+    )
+    service = LlmProviderTypes.cheaperinference.get_llm_service({"openai_api_key": "test"})
+    assert isinstance(service, OpenAIGenericService)
+    assert service._type == "cheaperinference"
     assert service._use_responses_api is False
 
 
@@ -157,6 +171,9 @@ def test_voyage_ai_service_returns_local_index_manager():
         pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
         pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
         pytest.param(LlmProviderTypes.minimax, {"openai_api_key": "test"}, "minimax", id="minimax"),
+        pytest.param(
+            LlmProviderTypes.cheaperinference, {"openai_api_key": "test"}, "cheaperinference", id="cheaperinference"
+        ),
         pytest.param(
             LlmProviderTypes.litellm,
             {"openai_api_key": "test", "openai_api_base": "https://proxy.example.com/v1"},
