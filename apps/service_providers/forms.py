@@ -612,7 +612,17 @@ class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
             raise forms.ValidationError(_("Reserved OAuth parameters cannot be overridden: %(keys)s.") % {"keys": keys})
         return params
 
+    def _check_secret_reentered_on_url_change(self):
+        """The stored secret is sent to ``token_url``, so it can't be reused with a different endpoint."""
+        if not self.initial_raw or self.cleaned_data.get("client_secret") != self.initial.get("client_secret"):
+            return
+        if any(self.cleaned_data.get(name) != self.initial_raw.get(name) for name in ("authorize_url", "token_url")):
+            self.add_error(
+                "client_secret", _("Re-enter the client secret when changing the authorization or token URL.")
+            )
+
     def clean(self):
+        self._check_secret_reentered_on_url_change()
         cleaned = super().clean()
         if cleaned.get("provider_preset") == "google" and not cleaned.get("authorization_params"):
             cleaned["authorization_params"] = {"access_type": "offline", "prompt": "consent"}

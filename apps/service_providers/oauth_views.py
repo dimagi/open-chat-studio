@@ -96,13 +96,15 @@ def _exchange_code(request, provider, code, verifier):
     return parse_token_response(client, post_token_request(url, body, kwargs), url)
 
 
-def _persist_token(provider, token):
+def _persist_token(provider, token, user):
     provider._auth_data = {**token, "config_fingerprint": config_fingerprint(provider.config)}
     provider.extra_data = {
         **(provider.extra_data or {}),
         "verified_credentials": True,
         "verification_error": "",
         "credentials_checked_at": timezone.now().isoformat(),
+        "connected_by": user.get_full_name() or user.email,
+        "connected_at": timezone.now().isoformat(),
     }
     provider.save(update_fields=["_auth_data", "extra_data"])
 
@@ -160,6 +162,8 @@ def oauth_connect(request, team_slug: str, pk: int):
     provider = get_object_or_404(
         AuthProvider, team=request.team, pk=pk, type=AuthProviderType.oauth_authorization_code.value
     )
+    if request.method != "POST":
+        return redirect(_provider_edit_url(provider))
     try:
         extra_params = validate_authorization_params(provider.config.get("authorization_params") or {})
     except ValueError as exc:
@@ -234,6 +238,6 @@ def oauth_callback(request):
                 _safe_oauth_error(exc.error_code, exc.error_description, provider, request),
             )
             return redirect(target)
-        _persist_token(provider, token)
+        _persist_token(provider, token, request.user)
         messages.success(request, _("OAuth provider connected."))
         return redirect(target)
