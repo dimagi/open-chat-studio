@@ -53,7 +53,7 @@ function setOrRemoveItem(storage: Storage, key: string, value?: string): void {
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
-  shadow: true,
+  encapsulation: { type: 'shadow' },
 })
 export class OcsChat {
   private static readonly TASK_POLLING_MAX_ATTEMPTS = 120;

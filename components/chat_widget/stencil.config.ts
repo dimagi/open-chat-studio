@@ -51,18 +51,19 @@ export const config: Config = {
   },
   outputTargets: [
     {
-      type: 'dist',
-      esmLoaderPath: '../loader',
+      type: 'loader-bundle',
+      // Keeps the CDN entry point at dist/open-chat-studio-widget/open-chat-studio-widget.esm.js,
+      // the path embed snippets and apps/channels/widget_versions.py reference.
+      dir: 'dist',
     },
     {
-      type: 'dist-custom-elements',
+      type: 'standalone',
     },
     {
       type: 'docs-readme',
     },
     {
       type: 'www',
-      serviceWorker: null, // disable service workers
     },
   ],
   testing: {
