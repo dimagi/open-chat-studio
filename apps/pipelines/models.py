@@ -9,7 +9,6 @@ from uuid import uuid4
 import pydantic
 from django.db import DatabaseError, models, transaction
 from django.urls import reverse
-from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from apps.chat.models import ChatMessageType
@@ -30,9 +29,9 @@ from apps.pipelines.flow import (
     FlowNode,
     FlowNodeData,
     FlowWithoutNodes,
-    node_position_fields,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
+from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -175,68 +174,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        content_nodes = {}
-        for flow_id, node in node_data.items():
-            if flow_id in membership_only:
-                continue
-            if node.id != flow_id:
-                # The key is the flow_id the content is written under, so a mismatch would
-                # silently store this node's content on a different row.
-                raise ValueError(f"node_data key {flow_id!r} does not match node id {node.id!r}")
-            content_nodes[flow_id] = node
-        if not content_nodes:
-            return
-
-        # Load every row being written in one locked query (with the relations the resource
-        # sync reads) rather than an update_or_create round trip per node.
-        existing_by_flow_id = {
-            existing.flow_id: existing
-            for existing in Node.objects.select_for_update()
-            .filter(pipeline=self, flow_id__in=content_nodes)
-            .prefetch_related("collection_indexes", "custom_action_operations")
-        }
-
-        now = timezone.now()
-        update_fields = {"type", "params", "label", "updated_at"}
-        to_update = []
-        needs_resource_sync = []
-        for flow_id, node in content_nodes.items():
-            content = node.data
-            position = node_position_fields(node.position)
-            existing = existing_by_flow_id.get(flow_id)
-            if existing is None:
-                created_node = Node.objects.create(
-                    pipeline=self,
-                    flow_id=flow_id,
-                    type=content.type,
-                    params=content.params,
-                    label=content.label,
-                    **position,
-                )
-                needs_resource_sync.append(created_node)
-                continue
-
-            resources_changed = existing.type != content.type or existing.params != content.params
-            existing.type = content.type
-            existing.params = content.params
-            existing.label = content.label
-            for field_name, value in position.items():
-                setattr(existing, field_name, value)
-                update_fields.add(field_name)
-            existing.updated_at = now
-            to_update.append(existing)
-            if resources_changed:
-                needs_resource_sync.append(existing)
-
-        if to_update:
-            # Position columns are only in update_fields when some node supplied a position; nodes
-            # that didn't keep their loaded values, so writing them back is a no-op.
-            Node.objects.bulk_update(to_update, sorted(update_fields))
-
-        # The FK/M2M/custom-action mirror only depends on type and params, so a move or relabel
-        # (the common autosave case) skips it entirely.
-        for node_to_sync in needs_resource_sync:
-            node_to_sync.update_from_params()
+        # Batched: one locked load and one bulk_update for all content nodes (see node_writes).
+        write_content_nodes(self, content_nodes_from_data(node_data, membership_only))
 
     def clear_node_caches(self) -> None:
         """Re-read the ``Node`` rows and drop the ``flow_data`` built from the stale ones.
@@ -773,8 +712,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         M2M below and the ``backfill_node_fks`` command. Versions may point at a since-deleted
         resource, but they're never re-synced. Only saves when a scalar FK changed.
         """
-        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
-
         params = self.params or {}
         update_fields = []
         for field_name in self.resource_fk_fields():
@@ -788,6 +725,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 update_fields.append(f"{field_name}_id")
         if update_fields:
             self.save(update_fields=update_fields)
+        self._sync_collection_indexes(params)
+
+    def _sync_collection_indexes(self, params: dict):
+        """Mirror ``params["collection_index_ids"]`` onto the ``collection_indexes`` M2M."""
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
 
         raw_index_ids = params.get("collection_index_ids") or []
         if not isinstance(raw_index_ids, list | tuple | set):
