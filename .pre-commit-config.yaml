@@ -42,7 +42,8 @@ repos:
     rev: 'v10.11.0'
     hooks:
       - id: eslint
-        # Keep these in sync with the matching devDependencies in package.json.
+        # Pinned to the versions pnpm-lock.yaml resolves. Dependabot bumps package.json only;
+        # sync-eslint-pins.yml (or `python scripts/check_eslint_versions.py --fix`) updates these.
         additional_dependencies:
           - eslint@10.11.0
           - '@eslint/js@10.0.1'
@@ -84,8 +85,7 @@ repos:
         fail_fast: true
       - id: eslint-versions-in-sync
         name: eslint pins in .pre-commit-config.yaml must match pnpm-lock.yaml
-        # package.json and .pre-commit-config.yaml are bumped by different
-        # Dependabot ecosystems, so they drift apart silently.
+        # package.json and .pre-commit-config.yaml can drift apart silently; --fix repairs it.
         entry: python scripts/check_eslint_versions.py
         language: python
         additional_dependencies: [pyyaml]

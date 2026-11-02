@@ -3,7 +3,7 @@
 Keep the eslint toolchain pinned identically in both places that run it.
 
 ESLint has two entry points in this repo and they are versioned by different
-ecosystems, so Dependabot updates them independently and they drift:
+ecosystems, so they can drift apart:
 
 * ``package.json`` -> ``pnpm-lock.yaml`` — what ``pnpm run lint`` and the editor use.
 * ``.pre-commit-config.yaml`` — the ``mirrors-eslint`` hook's ``rev`` plus its
@@ -24,10 +24,17 @@ Checks:
 * every pinned package is still a devDependency at all (catches a package dropped
   from package.json but left behind in the hook);
 * the repo ``rev`` matches the pinned ``eslint`` version.
+
+Dependabot only bumps the npm side (the pre-commit ecosystem ignores these hooks, see
+``.github/dependabot.yml``). With ``--fix`` the hook's pins and ``rev`` are first rewritten
+to the lockfile-resolved versions, then the checks above run; the ``sync-eslint-pins``
+workflow does this on Dependabot's npm PRs.
 """
 
 from __future__ import annotations
 
+import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -42,6 +49,9 @@ HOOK_ID = "eslint"
 # The lockfile importer for the root package.json. Nested packages (e.g.
 # components/chat_widget) have their own importers and their own lockfiles.
 ROOT_IMPORTER = "."
+
+PIN_LINE = re.compile(r"(?P<head>\s*-\s*['\"]?)(?P<name>.+?)@(?P<version>[^'\"\s#]+)(?P<tail>['\"]?\s*(?:#.*)?\r?\n?)$")
+REV_LINE = re.compile(r"(?P<head>\s*rev:\s*['\"]?v?)(?P<version>[^'\"\s#]+)")
 
 
 def split_pin(pin: str) -> tuple[str, str]:
@@ -87,7 +97,43 @@ def load_resolved_versions() -> dict[str, str]:
     return resolved
 
 
-def main() -> int:
+def fix_hook_pins(config_text: str, resolved: dict[str, str]) -> str:
+    """Rewrite the mirrors-eslint pins in ``config_text`` to the lockfile-resolved versions.
+
+    Edits the text in place so comments and quoting survive. Pins for packages absent
+    from the lockfile are left alone for the check to report.
+    """
+    lines = config_text.splitlines(keepends=True)
+    start = next((i for i, line in enumerate(lines) if f"repo: {ESLINT_MIRROR}" in line), None)
+    if start is None:
+        return config_text
+    end = next((i for i in range(start + 1, len(lines)) if re.match(r"\s*- repo:", lines[i])), len(lines))
+
+    for i in range(start, end):
+        if pin := PIN_LINE.match(lines[i]):
+            if pin["name"] in resolved:
+                lines[i] = f"{pin['head']}{pin['name']}@{resolved[pin['name']]}{pin['tail']}"
+        elif "eslint" in resolved and (rev := REV_LINE.match(lines[i])):
+            lines[i] = f"{rev['head']}{resolved['eslint']}{lines[i][rev.end() :]}"
+    return "".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Check the pre-commit eslint pins against pnpm-lock.yaml.")
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help=f"rewrite the pins in {PRE_COMMIT_CONFIG.name} to the versions {PNPM_LOCK.name} resolves",
+    )
+    args = parser.parse_args(argv)
+
+    if args.fix:
+        original = PRE_COMMIT_CONFIG.read_text(encoding="utf-8")
+        fixed = fix_hook_pins(original, load_resolved_versions())
+        if fixed != original:
+            PRE_COMMIT_CONFIG.write_text(fixed, encoding="utf-8")
+            print(f"updated eslint pins in {PRE_COMMIT_CONFIG.name}")
+
     rev, pins = load_hook_pins()
     resolved = load_resolved_versions()
 
@@ -112,8 +158,8 @@ def main() -> int:
                 f"{name}: {PRE_COMMIT_CONFIG.name} pins {version} but {PNPM_LOCK.name} resolves {resolved[name]}"
             )
 
-    # The mirror's rev tracks the eslint release it wraps, so `rev: v10.8.0` must
-    # agree with `eslint@10.8.0`; otherwise the hook runs a different binary than
+    # The mirror's rev tracks the eslint release it wraps, so ``rev: v10.8.0`` must
+    # agree with ``eslint@10.8.0``; otherwise the hook runs a different binary than
     # the one its own dependency list claims.
     if eslint_pin is None:
         failures.append(f"eslint: not pinned in {PRE_COMMIT_CONFIG.name} additional_dependencies")
@@ -125,8 +171,8 @@ def main() -> int:
             print(f"FAIL {failure}")
         print(
             f"\n{len(failures)} eslint version mismatch(es) between {PRE_COMMIT_CONFIG.name} and {PNPM_LOCK.name}."
-            f"\nUpdate the `additional_dependencies` pins (and `rev`) to match the lockfile, or run"
-            "\n`pnpm install` if package.json is the side that moved."
+            "\nRun `python scripts/check_eslint_versions.py --fix` to update the pins (and `rev`) to match the"
+            "\nlockfile, or run `pnpm install` if package.json is the side that moved."
         )
         return 1
 
