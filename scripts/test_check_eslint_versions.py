@@ -111,6 +111,19 @@ class TestFixHookPins:
         fixed = fix_hook_pins(PRE_COMMIT_CONFIG, resolved)
         assert "- '@eslint/js@10.0.1'" in fixed
 
+    @pytest.mark.parametrize(
+        ("rev_line", "expected"),
+        [
+            pytest.param("rev: '10.11.0'", "rev: '10.13.0'", id="no-v-prefix-quoted"),
+            pytest.param("rev: 10.11.0", "rev: 10.13.0", id="no-v-prefix-unquoted"),
+            pytest.param('rev: "v10.11.0"  # pinned', 'rev: "v10.13.0"  # pinned', id="v-prefix-double-quoted-comment"),
+        ],
+    )
+    def test_rev_formats_keep_their_style(self, rev_line, expected):
+        config = PRE_COMMIT_CONFIG.replace("rev: 'v10.11.0'", rev_line, 1)
+        resolved = {"eslint": "10.13.0", "@eslint/js": "10.0.1", "typescript-eslint": "8.70.1"}
+        assert expected in fix_hook_pins(config, resolved)
+
     def test_no_eslint_mirror_is_unchanged(self):
         config = "repos:\n  - repo: https://example.com/x\n    rev: v1\n"
         assert fix_hook_pins(config, {"eslint": "10.13.0"}) == config

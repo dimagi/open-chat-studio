@@ -118,25 +118,8 @@ def fix_hook_pins(config_text: str, resolved: dict[str, str]) -> str:
     return "".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check the pre-commit eslint pins against pnpm-lock.yaml.")
-    parser.add_argument(
-        "--fix",
-        action="store_true",
-        help=f"rewrite the pins in {PRE_COMMIT_CONFIG.name} to the versions {PNPM_LOCK.name} resolves",
-    )
-    args = parser.parse_args(argv)
-
-    if args.fix:
-        original = PRE_COMMIT_CONFIG.read_text(encoding="utf-8")
-        fixed = fix_hook_pins(original, load_resolved_versions())
-        if fixed != original:
-            PRE_COMMIT_CONFIG.write_text(fixed, encoding="utf-8")
-            print(f"updated eslint pins in {PRE_COMMIT_CONFIG.name}")
-
-    rev, pins = load_hook_pins()
-    resolved = load_resolved_versions()
-
+def find_mismatches(rev: str, pins: list[str], resolved: dict[str, str]) -> list[str]:
+    """Return a message for every hook pin that disagrees with the lockfile."""
     failures = []
     eslint_pin = None
 
@@ -146,14 +129,12 @@ def main(argv: list[str] | None = None) -> int:
             eslint_pin = version
         if not version:
             failures.append(f"{name}: pinned without a version in {PRE_COMMIT_CONFIG.name} (use `{name}@<version>`)")
-            continue
-        if name not in resolved:
+        elif name not in resolved:
             failures.append(
                 f"{name}: pinned at {version} in {PRE_COMMIT_CONFIG.name} but absent from package.json "
                 f"— drop the pin, or add the package back"
             )
-            continue
-        if resolved[name] != version:
+        elif resolved[name] != version:
             failures.append(
                 f"{name}: {PRE_COMMIT_CONFIG.name} pins {version} but {PNPM_LOCK.name} resolves {resolved[name]}"
             )
@@ -165,6 +146,32 @@ def main(argv: list[str] | None = None) -> int:
         failures.append(f"eslint: not pinned in {PRE_COMMIT_CONFIG.name} additional_dependencies")
     elif rev.lstrip("v") != eslint_pin:
         failures.append(f"eslint: hook rev is {rev} but additional_dependencies pins eslint@{eslint_pin}")
+    return failures
+
+
+def apply_fix() -> None:
+    """Rewrite the pre-commit config's eslint pins in place to match the lockfile."""
+    original = PRE_COMMIT_CONFIG.read_text(encoding="utf-8")
+    fixed = fix_hook_pins(original, load_resolved_versions())
+    if fixed != original:
+        PRE_COMMIT_CONFIG.write_text(fixed, encoding="utf-8")
+        print(f"updated eslint pins in {PRE_COMMIT_CONFIG.name}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Check the pre-commit eslint pins against pnpm-lock.yaml.")
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help=f"rewrite the pins in {PRE_COMMIT_CONFIG.name} to the versions {PNPM_LOCK.name} resolves",
+    )
+    args = parser.parse_args(argv)
+
+    if args.fix:
+        apply_fix()
+
+    rev, pins = load_hook_pins()
+    failures = find_mismatches(rev, pins, load_resolved_versions())
 
     if failures:
         for failure in failures:
