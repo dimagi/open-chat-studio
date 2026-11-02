@@ -1,9 +1,13 @@
 # Slack Integration on Localhost
 
-This guide helps you set up Slack integration with your environment using a local server exposed via [ngrok](https://ngrok.com/).
+This guide is for developers running Open Chat Studio (OCS) locally. It walks through creating a Slack app and connecting it to your local OCS server, which you expose with [ngrok](https://ngrok.com/), so that you can use and test the Slack integration.
 
 Slack can be used as an OCS messaging provider so that participants can interact with the chatbot directly from Slack.
 In addition it can be used to deliver [OCS notifications](https://docs.openchatstudio.com/concepts/notifications/) to a team's Slack channel.
+
+!!! note
+
+    Slack's app settings screens change often. If a screen doesn't match the steps below, check Slack's guide, [Creating an app from app settings](https://docs.slack.dev/app-management/quickstart-app-settings).
 
 ## 1. Create a Slack app
 
@@ -21,8 +25,8 @@ In addition it can be used to deliver [OCS notifications](https://docs.openchats
 
 ## 3. Install the app to your workspace
 
-- Navigate to **Install App** in the left sidebar.
-- Click **Install to Workspace** and authorize.
+1. Navigate to **Install App** in the left sidebar.
+2. Click **Install to Workspace** and authorize.
 
 ## 4. Update environment variables
 
@@ -74,7 +78,7 @@ In addition it can be used to deliver [OCS notifications](https://docs.openchats
 4. Under **Subscribe to Bot Events**, add:
    - `message.channels`
    - `message.im`
-   - Click **Save Changes**.
+5. Click **Save Changes**.
 
 ## 8. Update local Django settings
 
@@ -94,15 +98,15 @@ CSRF_TRUSTED_ORIGINS = ["https://<your-ngrok-subdomain>.ngrok.io"]
 2. Click **Add integration**, expand **Messaging**, and select **Slack**.
 3. Click **Connect Slack** — you'll be redirected to Slack's authorization screen.
 
-See the user guide on [Messaging Providers](https://docs.openchatstudio.com/concepts/team/messaging_providers/).
+See the user guide on [OCS Messaging Providers](https://docs.openchatstudio.com/concepts/team/messaging_providers/).
 
 ## 10. Authorize in Slack
 
-- Slack may auto-select a workspace.
+1. Slack may auto-select a workspace.
   If the correct workspace isn't shown, open the link in **Incognito mode** or **clear cookies**.
-- You'll be redirected to your **ngrok URL** (not `localhost`).
-- Log back into Open Chat Studio if prompted.
-- Navigate again to **Team Settings → Integrations** and complete the Slack setup.
+2. You'll be redirected to your **ngrok URL** (not `localhost`).
+3. Log back into Open Chat Studio if prompted.
+4. Navigate again to **Team Settings → Integrations** and complete the Slack setup.
 
 ## What this enables
 
