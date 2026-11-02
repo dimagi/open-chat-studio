@@ -33,7 +33,10 @@ async function waitForChanges(root: (HTMLElement & { componentOnReady?: () => Pr
 // deferred start-up work; call `waitForChanges()` to let rendering settle.
 export async function newSpecPage({ html }: { components?: unknown[]; html: string }): Promise<SpecPage> {
   document.body.innerHTML = html;
-  const root = document.body.firstElementChild as SpecPage['root'];
+  const root = document.body.firstElementChild as SpecPage['root'] | null;
+  if (!root) {
+    throw new Error('newSpecPage: the html produced no root element');
+  }
   return { root, rootInstance: root, body: document.body, doc: document, waitForChanges: () => waitForChanges(root) };
 }
 
