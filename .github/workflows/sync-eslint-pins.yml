@@ -24,7 +24,8 @@ concurrency:
 jobs:
   sync-eslint-pins:
     if: >-
-      github.actor == 'dependabot[bot]'
+      github.event.pull_request.head.repo.fork == false
+      && github.actor == 'dependabot[bot]'
       && startsWith(github.head_ref, 'dependabot/npm_and_yarn/')
       && !startsWith(github.head_ref, 'dependabot/npm_and_yarn/components/')
     runs-on: ubuntu-latest
