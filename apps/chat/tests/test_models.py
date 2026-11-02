@@ -105,6 +105,43 @@ class TestEmptyHumanMessageReplay:
         assert [m.content for m in messages] == [EMPTY_MESSAGE_PLACEHOLDER, "How can I help?"]
 
 
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_type", "status", "expected"),
+    [
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.FLAGGED, True, id="flagged_human"),
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.PASSED, False, id="passed_human"),
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.SKIPPED, False, id="skipped_human"),
+        pytest.param(ChatMessageType.HUMAN, None, False, id="unmoderated_human"),
+        pytest.param(ChatMessageType.AI, ModerationStatus.FLAGGED, False, id="flagged_ai"),
+    ],
+)
+def test_flagged_human_message_is_excluded_from_history(message_type, status, expected):
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(
+        chat=session.chat, message_type=message_type, content="text", moderation_status=status
+    )
+
+    assert message.is_excluded_from_history is expected
+
+
+@pytest.mark.django_db()
+def test_flagged_human_message_is_skipped_on_replay():
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+    ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        content="bad",
+        moderation_status=ModerationStatus.FLAGGED,
+    )
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="I can't answer that.")
+
+    messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
+
+    assert [m.content for m in messages] == ["fine", "I can't answer that."]
+
+
 def test_model_refused_is_an_internal_metadata_key():
     assert ChatMessageMetadataKeys.MODEL_REFUSED in ChatMessageMetadataKeys.internal_keys()
     assert ChatMessageMetadataKeys.MODEL_REFUSED not in ChatMessageMetadataKeys.attachment_keys()

@@ -71,7 +71,7 @@ dependencies = [
     "tiktoken",
     "turn-python>=1.0.0",
     "twilio",
-    "whitenoise[brotli]",
+    "whitenoise[brotli]>=6.8.0",
     "phonenumberslite",
     "emoji",
     "python-magic",
@@ -170,7 +170,7 @@ omit = [
     # Dev and CI tooling, not the application. `scripts/` is not a package, so coverage cannot
     # discover the files in it that no test imports, which would leave it half-measured.
     "scripts/*",
-    "tasks.py",
+    "./tasks.py",
     "manage.py",
     "*/migrations/*",
     "*/tests/*",

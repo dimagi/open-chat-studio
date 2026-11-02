@@ -24,7 +24,7 @@ from apps.channels.stages.core import (
     ResponseFormattingStage,
     SessionActivationStage,
 )
-from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.stages.terminal import ActivityTrackingStage, ModerationResultStage, PersistenceStage
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus
@@ -94,6 +94,7 @@ class WebChannel(ChannelBase):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
+                ModerationResultStage(),
                 # No ResponseSendingStage or SendingErrorHandlerStage —
                 # responses returned via new_user_message()
                 PersistenceStage(),

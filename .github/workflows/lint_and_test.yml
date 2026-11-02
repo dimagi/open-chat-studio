@@ -179,7 +179,7 @@ jobs:
           files=$(printf '%s' "$CHANGED_FILES" | jq -r '.[]' | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
       - name: Run pre-commit hooks
-        uses: j178/prek-action@v3.0.0
+        uses: j178/prek-action@v3.1.0
         with:
           extra-args: --files ${{ steps.changed_files.outputs.files }}
 
@@ -433,7 +433,7 @@ jobs:
         run: pnpm e2e
       - name: Upload Playwright results
         if: failure()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: playwright-results
           path: |

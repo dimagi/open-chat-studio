@@ -122,6 +122,16 @@ def test_provider_builds_openai_service():
     assert service.timeout is not None
 
 
+@pytest.mark.django_db()
+def test_provider_passes_service_kwargs():
+    provider = ModerationProviderFactory.create(config={"openai_api_key": "sk-1"})
+
+    service = provider.get_moderation_service(timeout=3, max_retries=0)
+
+    assert service.timeout == 3
+    assert service.max_retries == 0
+
+
 def _urls(team, provider=None):
     """Moderation provider URLs for ``team``, as ``(http_method, url)``. Edit and delete need ``provider``."""
     kwargs = {"team_slug": team.slug, "provider_type": "moderation"}

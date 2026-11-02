@@ -25,7 +25,7 @@ from apps.channels.stages.core import (
     SessionActivationStage,
     SessionResolutionStage,
 )
-from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.stages.terminal import ActivityTrackingStage, ModerationResultStage, PersistenceStage
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus
@@ -111,6 +111,7 @@ class ApiChannel(ChannelBase):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
+                ModerationResultStage(),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],

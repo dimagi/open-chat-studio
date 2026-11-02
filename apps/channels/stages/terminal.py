@@ -8,14 +8,22 @@ from django.utils import timezone
 
 from apps.annotations.models import TagCategories
 from apps.channels.const import MESSAGE_TYPES
-from apps.channels.pipeline import MessageProcessingContext
+from apps.channels.pipeline import MessageProcessingContext, generate_user_message
 from apps.channels.stages.base import ProcessingStage
 from apps.channels.stages.core import RESET_COMMAND
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.files.models import File, FilePurpose
+from apps.moderation.const import FLAGGED_MESSAGE
+from apps.moderation.services import (
+    get_moderation_result,
+    record_moderation_result,
+    remove_turn_from_pipeline_histories,
+    replace_bot_reply,
+)
 from apps.ocs_notifications.notifications import (
     file_delivery_failure_notification,
     message_delivery_failure_notification,
+    moderation_skipped_notification,
 )
 
 if TYPE_CHECKING:
@@ -53,6 +61,70 @@ class FileDeliveryFailure(Exception):
         super().__init__(str(original_exc))
         self.original_exc = original_exc
         self.file = file
+
+
+# ---------------------------------------------------------------------------
+# ModerationResultStage
+# ---------------------------------------------------------------------------
+
+
+class ModerationResultStage(ProcessingStage):
+    """TERMINAL STAGE: Records the moderation result on the human message and replaces the reply to a flagged one.
+
+    A flagged turn is also removed from the pipeline's node and named histories, so it is not replayed.
+
+    A terminal stage so that it also runs when a core stage exits early. A failure to get a result is
+    recorded as a skip, and the response is sent as normal. Any other error is logged, and the later
+    stages still send and store the response.
+    """
+
+    FLAGGED_PROMPT = (
+        "Tell the user that their last message was flagged by content moderation, so it will not be answered."
+    )
+
+    span_input_fields = ("moderation_task_id",)
+    span_output_fields = ("human_message.moderation_status", "human_message.moderation_detail.skip_reason")
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.moderation_task_id is not None and ctx.human_message is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        task_id, human_message = ctx.moderation_task_id, ctx.human_message
+        if task_id is None or human_message is None:
+            return
+        try:
+            self._apply_result(ctx, task_id=task_id, human_message=human_message)
+        except Exception:
+            logger.exception("Could not record the moderation result for task %s", task_id)
+
+    def _apply_result(self, ctx: MessageProcessingContext, *, task_id: str, human_message: ChatMessage) -> None:
+        output, skip_reason = get_moderation_result(task_id)
+        record_moderation_result(message=human_message, output=output, skip_reason=skip_reason)
+        if skip_reason is not None:
+            moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason=skip_reason)
+        elif human_message.is_flagged:
+            bot_response = ctx.bot_response
+            remove_turn_from_pipeline_histories(human_message=human_message, bot_response=bot_response)
+            if bot_response is not None:
+                self._replace_response(ctx, bot_response=bot_response)
+
+    def _replace_response(self, ctx: MessageProcessingContext, *, bot_response: ChatMessage) -> None:
+        """Replace the stored bot reply with a notice that the message will not be answered, and send only that.
+
+        The fixed notice is saved before EventBot writes one, so the original reply is not in the
+        conversation history EventBot reads.
+        """
+        self._save_reply(ctx, bot_response=bot_response, reply=FLAGGED_MESSAGE)
+        reply = generate_user_message(
+            ctx=ctx, prompt=self.FLAGGED_PROMPT, trace_name="moderation flagged", fallback=FLAGGED_MESSAGE
+        )
+        if reply != FLAGGED_MESSAGE:
+            self._save_reply(ctx, bot_response=bot_response, reply=reply)
+
+    def _save_reply(self, ctx: MessageProcessingContext, *, bot_response: ChatMessage, reply: str) -> None:
+        """Save `reply` as the bot response, without attachments, and make it the reply to send."""
+        replace_bot_reply(message=bot_response, text=reply)
+        ctx.replace_response(reply)
 
 
 # ---------------------------------------------------------------------------

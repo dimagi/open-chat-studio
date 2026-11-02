@@ -29,10 +29,11 @@ from apps.experiments.models import (
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
-from apps.moderation.services import record_rule_hits
+from apps.moderation.services import record_moderation_result, record_rule_hits, start_moderation
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
+    moderation_skipped_notification,
 )
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
@@ -563,8 +564,8 @@ class ConsentFlowStage(ProcessingStage):
         triggered SETUP -> PENDING -- so it can be answered after consent.
 
         Returns None when the participant's first message was itself just the
-        consent token (no prior content), so the caller falls back to the seed
-        message / silent halt.
+        consent token (no prior content) or moderation flagged it, so the caller
+        falls back to the seed message / silent halt.
         """
         first_human_message = (
             ctx.experiment_session.chat.messages.filter(message_type=ChatMessageType.HUMAN)
@@ -574,6 +575,8 @@ class ConsentFlowStage(ProcessingStage):
         if first_human_message is None:
             return None
         if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
+            return None
+        if first_human_message.is_flagged:
             return None
         return first_human_message
 
@@ -780,10 +783,10 @@ class ErrorGuardStage(ProcessingStage):
 
 
 class AbuseRulesStage(ProcessingStage):
-    """Records the abuse rules the human message triggers on its `moderation_detail`."""
+    """Records the abuse rules the human message triggers and starts moderation of its text."""
 
     span_input_fields = ("human_message.id",)
-    span_output_fields = ("human_message.moderation_detail.rules",)
+    span_output_fields = ("human_message.moderation_detail.rules", "moderation_task_id")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.human_message is not None and abuse_detection_enabled(ctx.experiment.team)
@@ -795,8 +798,12 @@ class AbuseRulesStage(ProcessingStage):
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-
-        # Start moderation of the message here.
+        try:
+            ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
+        except Exception:
+            logger.exception("Could not queue moderation for message %s", ctx.human_message.id)
+            record_moderation_result(message=ctx.human_message, skip_reason="error")
+            moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason="error")
 
 
 # ---------------------------------------------------------------------------

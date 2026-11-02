@@ -14,6 +14,7 @@ from apps.ocs_notifications.notifications import (
     deprecated_model_notification,
     file_delivery_failure_notification,
     message_delivery_failure_notification,
+    moderation_skipped_notification,
     trace_error_notification,
 )
 from apps.utils.factories.custom_actions import CustomActionFactory
@@ -73,6 +74,10 @@ def _pair_for_file_delivery():
         pytest.param(
             lambda: file_delivery_failure_notification(*_pair_for_file_delivery()),
             id="file-delivery",
+        ),
+        pytest.param(
+            lambda: moderation_skipped_notification(*_session(), reason="timeout"),
+            id="moderation-skipped",
         ),
     ],
 )
