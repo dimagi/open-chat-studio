@@ -50,6 +50,9 @@ HOOK_ID = "eslint"
 # components/chat_widget) have their own importers and their own lockfiles.
 ROOT_IMPORTER = "."
 
+REPO_LINE = re.compile(r"\s*- repo:")
+DEPENDENCIES_KEY = re.compile(r"\s*additional_dependencies:")
+LIST_ITEM = re.compile(r"\s*-\s")
 PIN_LINE = re.compile(r"(?P<head>\s*-\s*['\"]?)(?P<name>.+?)@(?P<version>[^'\"\s#]+)(?P<tail>['\"]?\s*(?:#.*)?\r?\n?)$")
 REV_LINE = re.compile(r"(?P<head>\s*rev:\s*['\"]?v?)(?P<version>[^'\"\s#]+)")
 
@@ -97,56 +100,98 @@ def load_resolved_versions() -> dict[str, str]:
     return resolved
 
 
+def hook_block(lines: list[str]) -> range:
+    """Return the line range of the mirrors-eslint repo entry (empty if absent)."""
+    starts = [i for i, line in enumerate(lines) if REPO_LINE.match(line)]
+    for n, start in enumerate(starts):
+        if ESLINT_MIRROR in lines[start]:
+            end = starts[n + 1] if n + 1 < len(starts) else len(lines)
+            return range(start, end)
+    return range(0)
+
+
+def dependency_lines(lines: list[str], block: range) -> list[int]:
+    """Return the indexes of the list items under the block's ``additional_dependencies:`` key."""
+    keys = [i for i in block if DEPENDENCIES_KEY.match(lines[i])]
+    if not keys:
+        return []
+    items = []
+    for i in range(keys[0] + 1, block.stop):
+        if LIST_ITEM.match(lines[i]):
+            items.append(i)
+        elif not is_blank_or_comment(lines[i]):
+            break
+    return items
+
+
+def is_blank_or_comment(line: str) -> bool:
+    return not line.strip() or line.lstrip().startswith("#")
+
+
+def fix_pin_line(line: str, resolved: dict[str, str]) -> str:
+    pin = PIN_LINE.match(line)
+    if not pin or pin["name"] not in resolved:
+        return line
+    return f"{pin['head']}{pin['name']}@{resolved[pin['name']]}{pin['tail']}"
+
+
+def fix_rev_line(line: str, eslint_version: str) -> str:
+    rev = REV_LINE.match(line)
+    if not rev:
+        return line
+    return f"{rev['head']}{eslint_version}{line[rev.end() :]}"
+
+
 def fix_hook_pins(config_text: str, resolved: dict[str, str]) -> str:
     """Rewrite the mirrors-eslint pins in ``config_text`` to the lockfile-resolved versions.
 
-    Edits the text in place so comments and quoting survive. Pins for packages absent
+    Edits the text in place so comments and quoting survive. Only the list items under
+    ``additional_dependencies`` and the repo's ``rev`` are touched, and pins for packages absent
     from the lockfile are left alone for the check to report.
     """
     lines = config_text.splitlines(keepends=True)
-    start = next((i for i, line in enumerate(lines) if f"repo: {ESLINT_MIRROR}" in line), None)
-    if start is None:
-        return config_text
-    end = next((i for i in range(start + 1, len(lines)) if re.match(r"\s*- repo:", lines[i])), len(lines))
-
-    for i in range(start, end):
-        if pin := PIN_LINE.match(lines[i]):
-            if pin["name"] in resolved:
-                lines[i] = f"{pin['head']}{pin['name']}@{resolved[pin['name']]}{pin['tail']}"
-        elif "eslint" in resolved and (rev := REV_LINE.match(lines[i])):
-            lines[i] = f"{rev['head']}{resolved['eslint']}{lines[i][rev.end() :]}"
+    block = hook_block(lines)
+    for i in dependency_lines(lines, block):
+        lines[i] = fix_pin_line(lines[i], resolved)
+    if "eslint" in resolved:
+        for i in block:
+            lines[i] = fix_rev_line(lines[i], resolved["eslint"])
     return "".join(lines)
+
+
+def check_pin(pin: str, resolved: dict[str, str]) -> str | None:
+    """Return the failure message for one hook pin, or None if it matches the lockfile."""
+    name, version = split_pin(pin)
+    if not version:
+        return f"{name}: pinned without a version in {PRE_COMMIT_CONFIG.name} (use `{name}@<version>`)"
+    if name not in resolved:
+        return (
+            f"{name}: pinned at {version} in {PRE_COMMIT_CONFIG.name} but absent from package.json "
+            f"— drop the pin, or add the package back"
+        )
+    if resolved[name] != version:
+        return f"{name}: {PRE_COMMIT_CONFIG.name} pins {version} but {PNPM_LOCK.name} resolves {resolved[name]}"
+    return None
+
+
+def check_rev(rev: str, pins: list[str]) -> str | None:
+    """Return a failure message unless the mirror's ``rev`` agrees with the pinned eslint version.
+
+    The mirror's rev tracks the eslint release it wraps, so ``rev: v10.8.0`` must agree with
+    ``eslint@10.8.0``; otherwise the hook runs a different binary than its own dependency list claims.
+    """
+    eslint_versions = [version for name, version in map(split_pin, pins) if name == "eslint"]
+    if not eslint_versions:
+        return f"eslint: not pinned in {PRE_COMMIT_CONFIG.name} additional_dependencies"
+    if rev.lstrip("v") != eslint_versions[-1]:
+        return f"eslint: hook rev is {rev} but additional_dependencies pins eslint@{eslint_versions[-1]}"
+    return None
 
 
 def find_mismatches(rev: str, pins: list[str], resolved: dict[str, str]) -> list[str]:
     """Return a message for every hook pin that disagrees with the lockfile."""
-    failures = []
-    eslint_pin = None
-
-    for pin in pins:
-        name, version = split_pin(pin)
-        if name == "eslint":
-            eslint_pin = version
-        if not version:
-            failures.append(f"{name}: pinned without a version in {PRE_COMMIT_CONFIG.name} (use `{name}@<version>`)")
-        elif name not in resolved:
-            failures.append(
-                f"{name}: pinned at {version} in {PRE_COMMIT_CONFIG.name} but absent from package.json "
-                f"— drop the pin, or add the package back"
-            )
-        elif resolved[name] != version:
-            failures.append(
-                f"{name}: {PRE_COMMIT_CONFIG.name} pins {version} but {PNPM_LOCK.name} resolves {resolved[name]}"
-            )
-
-    # The mirror's rev tracks the eslint release it wraps, so ``rev: v10.8.0`` must
-    # agree with ``eslint@10.8.0``; otherwise the hook runs a different binary than
-    # the one its own dependency list claims.
-    if eslint_pin is None:
-        failures.append(f"eslint: not pinned in {PRE_COMMIT_CONFIG.name} additional_dependencies")
-    elif rev.lstrip("v") != eslint_pin:
-        failures.append(f"eslint: hook rev is {rev} but additional_dependencies pins eslint@{eslint_pin}")
-    return failures
+    checks = [check_pin(pin, resolved) for pin in pins] + [check_rev(rev, pins)]
+    return [check for check in checks if check]
 
 
 def apply_fix() -> None:

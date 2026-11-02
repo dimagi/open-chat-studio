@@ -124,6 +124,14 @@ class TestFixHookPins:
         resolved = {"eslint": "10.13.0", "@eslint/js": "10.0.1", "typescript-eslint": "8.70.1"}
         assert expected in fix_hook_pins(config, resolved)
 
+    def test_only_additional_dependencies_are_rewritten(self):
+        extra = "args:\n              - eslint@9.9.9\n            files: x"
+        config = PRE_COMMIT_CONFIG.replace("args: [ --fix ]", extra)
+        resolved = {"eslint": "10.13.0", "@eslint/js": "10.0.1", "typescript-eslint": "8.70.1"}
+        fixed = fix_hook_pins(config, resolved)
+        assert "- eslint@9.9.9" in fixed
+        assert "- eslint@10.13.0" in fixed
+
     def test_no_eslint_mirror_is_unchanged(self):
         config = "repos:\n  - repo: https://example.com/x\n    rev: v1\n"
         assert fix_hook_pins(config, {"eslint": "10.13.0"}) == config
