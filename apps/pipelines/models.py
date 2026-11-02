@@ -31,8 +31,8 @@ from apps.pipelines.flow import (
     FlowWithoutNodes,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
-from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
+from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
