@@ -141,9 +141,6 @@ importers:
       '@babel/cli':
         specifier: ^7.27.2
         version: 7.29.7(@babel/core@7.29.7)
-      '@babel/compat-data':
-        specifier: ^7.29.7
-        version: 7.29.7
       '@babel/core':
         specifier: ^7.29.6
         version: 7.29.7
