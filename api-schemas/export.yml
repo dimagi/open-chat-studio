@@ -3580,6 +3580,7 @@ components:
             * `github` - GitHub Repository
             * `confluence` - Confluence
             * `json_collection` - JSON Collection
+            * `google_docs` - Google Docs
         auto_sync_enabled:
           type: boolean
           description: Automatically sync this source on a schedule
@@ -6079,11 +6080,13 @@ components:
       - github
       - confluence
       - json_collection
+      - google_docs
       type: string
       description: |-
         * `github` - GitHub Repository
         * `confluence` - Confluence
         * `json_collection` - JSON Collection
+        * `google_docs` - Google Docs
     StaticTriggerDetail:
       type: object
       properties:

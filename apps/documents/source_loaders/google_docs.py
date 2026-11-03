@@ -35,58 +35,85 @@ def extract_document_id(value: str) -> str:
     return match.group(1)
 
 
+def _paragraph_text(paragraph: dict[str, Any]) -> str:
+    text = "".join(run.get("textRun", {}).get("content", "") for run in paragraph.get("elements", []))
+    if paragraph.get("paragraphStyle", {}).get("namedStyleType", "").startswith("HEADING_") and text.strip():
+        text = "# " + text
+    if paragraph.get("bullet") is not None and text.strip():
+        text = "- " + text
+    return text.rstrip("\n")
+
+
+def _table_text(table: dict[str, Any]) -> list[str]:
+    lines = []
+    for row in table.get("tableRows", []):
+        cells = [" ".join(_text_from_content(cell.get("content", []))).strip() for cell in row.get("tableCells", [])]
+        lines.append(" | ".join(cells))
+    return lines
+
+
+def _append_section_break(lines: list[str]) -> None:
+    if lines and lines[-1]:
+        lines.append("")
+
+
 def _text_from_content(content: list[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
     for element in content:
         if paragraph := element.get("paragraph"):
-            text = "".join(run.get("textRun", {}).get("content", "") for run in paragraph.get("elements", []))
-            style = paragraph.get("paragraphStyle", {}).get("namedStyleType", "")
-            if style.startswith("HEADING_") and text.strip():
-                text = "# " + text
-            bullet = paragraph.get("bullet")
-            if bullet is not None and text.strip():
-                text = "- " + text
-            lines.append(text.rstrip("\n"))
+            lines.append(_paragraph_text(paragraph))
         elif table := element.get("table"):
-            for row in table.get("tableRows", []):
-                cells = [
-                    " ".join(_text_from_content(cell.get("content", []))).strip() for cell in row.get("tableCells", [])
-                ]
-                lines.append(" | ".join(cells))
+            lines.extend(_table_text(table))
         elif toc := element.get("tableOfContents"):
             lines.extend(_text_from_content(toc.get("content", [])))
         elif element.get("sectionBreak"):
-            if lines and lines[-1] != "":
-                lines.append("")
+            _append_section_break(lines)
     return lines
 
 
 def normalize_document_text(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    return "".join(char if char in "\n\t" or unicodedata.category(char) not in {"Cc", "Cf"} else " " for char in text)
+    preserved = {"\n", "\t", "\u200c", "\u200d"}
+    return "".join(
+        char if char in preserved or unicodedata.category(char) not in {"Cc", "Cf"} else " " for char in text
+    )
+
+
+def _tab_title_lines(title: str | None, show_title: bool) -> list[str]:
+    return [f"## {title}", ""] if title and show_title else []
+
+
+def _append_tab_content(tab: dict[str, Any], lines: list[str], show_titles: bool, is_child: bool = False) -> None:
+    properties = tab.get("tabProperties", {})
+    lines.extend(_tab_title_lines(properties.get("title"), is_child or show_titles))
+    body = tab.get("documentTab", {}).get("body", {})
+    lines.extend(_text_from_content(body.get("content", [])))
+    for child in tab.get("childTabs", []):
+        _append_tab_content(child, lines, show_titles, is_child=True)
 
 
 def extract_document_text(document: dict[str, Any]) -> str:
     lines: list[str] = []
-
-    def visit_tab(tab: dict[str, Any], is_child: bool = False) -> None:
-        properties = tab.get("tabProperties", {})
-        title = properties.get("title")
-        if title and (is_child or len(document.get("tabs", [])) > 1):
-            lines.extend([f"## {title}", ""])
-        body = tab.get("documentTab", {}).get("body", {})
-        lines.extend(_text_from_content(body.get("content", [])))
-        for child in tab.get("childTabs", []):
-            visit_tab(child, True)
-
     tabs = document.get("tabs") or []
-    if tabs:
-        for tab in tabs:
-            visit_tab(tab)
-    else:
+    for tab in tabs:
+        _append_tab_content(tab, lines, show_titles=len(tabs) > 1)
+    if not tabs:
         lines.extend(_text_from_content(document.get("body", {}).get("content", [])))
     text = normalize_document_text("\n".join(lines)).strip()
     return f"{text}\n" if text else ""
+
+
+def _reason_from_details(details: Any) -> str | None:
+    if not isinstance(details, list):
+        return None
+    for detail in details:
+        if isinstance(detail, dict) and detail.get("reason"):
+            return detail["reason"]
+    return None
+
+
+def _reason_from_error(error: dict[str, Any]) -> str | None:
+    return _reason_from_details(error.get("errors")) or _reason_from_details(error.get("details"))
 
 
 def _google_api_error_message(response: httpx.Response) -> str:
@@ -95,30 +122,69 @@ def _google_api_error_message(response: httpx.Response) -> str:
     try:
         payload = response.json()
     except ValueError:
-        return f"Google Docs request failed ({http_status}): HTTP error"
-
+        payload = None
     error = payload.get("error") if isinstance(payload, dict) else None
     if not isinstance(error, dict):
         return f"Google Docs request failed ({http_status}): HTTP error"
-
     google_status = error.get("status") or "unknown status"
-    message = error.get("message") or "Google API error"
-    reason = None
-    reasons = error.get("errors")
-    if isinstance(reasons, list):
-        for detail in reasons:
-            if isinstance(detail, dict) and detail.get("reason"):
-                reason = detail["reason"]
-                break
-    details = error.get("details")
-    if not reason and isinstance(details, list):
-        for detail in details:
-            if isinstance(detail, dict) and detail.get("reason"):
-                reason = detail["reason"]
-                break
-
+    reason = _reason_from_error(error)
     suffix = f", reason={reason}" if reason else ""
+    message = error.get("message") or "Google API error"
     return f"Google Docs request failed ({http_status}, {google_status}{suffix}): {message}"
+
+
+def _decode_document_response(response: httpx.Response) -> dict[str, Any]:
+    if response.is_error:
+        raise ValueError(_google_api_error_message(response))
+    try:
+        document = response.json()
+    except ValueError as exc:
+        raise ValueError("Google Docs API returned an invalid document") from exc
+    if not isinstance(document, dict):
+        raise ValueError("Google Docs API returned an invalid document")
+    return document
+
+
+def _fetch_google_document(auth_provider: Any, document_id: str) -> dict[str, Any]:
+    try:
+        headers = auth_provider.get_auth_service().get_auth_headers()
+        response = httpx.get(
+            f"{DOCS_API_URL}/{document_id}",
+            params={"includeTabsContent": "true"},
+            headers=headers,
+            timeout=settings.RESTRICTED_HTTP_MAX_TIMEOUT,
+        )
+        return _decode_document_response(response)
+    except OAuthTokenError:
+        raise
+    except httpx.HTTPError as exc:
+        raise ValueError(f"Google Docs request failed: {exc}") from exc
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Google Docs response was invalid: {exc}") from exc
+
+
+def _source_document(document: dict[str, Any], document_id: str, collection_id: int) -> SourceDocument:
+    content = extract_document_text(document)
+    if not content.strip():
+        raise ValueError("Google Docs document contains no extractable text")
+    content_bytes = content.encode("utf-8")
+    title = document.get("title") or document_id
+    source_url = f"https://docs.google.com/document/d/{document_id}/edit"
+    metadata = {
+        "collection_id": collection_id,
+        "source_type": "google_docs",
+        "document_id": document_id,
+        "title": title,
+        "filename": safe_document_filename(title, document_id),
+        "source": source_url,
+        "citation_url": source_url,
+        "content_hash": hashlib.sha256(content_bytes).hexdigest(),
+    }
+    if document.get("revisionId"):
+        metadata["revision_id"] = document["revisionId"]
+    return SourceDocument(content=content_bytes, metadata=metadata)
 
 
 class GoogleDocsDocumentLoader(BaseDocumentLoader[GoogleDocsSourceConfig]):
@@ -135,48 +201,8 @@ class GoogleDocsDocumentLoader(BaseDocumentLoader[GoogleDocsSourceConfig]):
 
     def load_documents(self) -> Iterator[SourceDocument]:
         document_id = extract_document_id(self.config.document_url)
-        try:
-            headers = self.auth_provider.get_auth_service().get_auth_headers()
-            response = httpx.get(
-                f"{DOCS_API_URL}/{document_id}",
-                params={"includeTabsContent": "true"},
-                headers=headers,
-                timeout=settings.RESTRICTED_HTTP_MAX_TIMEOUT,
-            )
-            if response.is_error:
-                raise ValueError(_google_api_error_message(response))
-            try:
-                document = response.json()
-            except ValueError as exc:
-                raise ValueError("Google Docs API returned an invalid document") from exc
-        except OAuthTokenError:
-            raise
-        except httpx.HTTPError as exc:
-            raise ValueError(f"Google Docs request failed: {exc}") from exc
-        except ValueError:
-            raise
-        except Exception as exc:
-            raise ValueError(f"Google Docs response was invalid: {exc}") from exc
-        if not isinstance(document, dict):
-            raise ValueError("Google Docs API returned an invalid document")
-        content = extract_document_text(document)
-        if not content.strip():
-            raise ValueError("Google Docs document contains no extractable text")
-        content_bytes = content.encode("utf-8")
-        title = document.get("title") or document_id
-        metadata = {
-            "collection_id": self.collection.id,
-            "source_type": "google_docs",
-            "document_id": document_id,
-            "title": title,
-            "filename": safe_document_filename(title, document_id),
-            "source": f"https://docs.google.com/document/d/{document_id}/edit",
-            "citation_url": f"https://docs.google.com/document/d/{document_id}/edit",
-            "content_hash": hashlib.sha256(content_bytes).hexdigest(),
-        }
-        if document.get("revisionId"):
-            metadata["revision_id"] = document["revisionId"]
-        yield SourceDocument(content=content_bytes, metadata=metadata)
+        document = _fetch_google_document(self.auth_provider, document_id)
+        yield _source_document(document, document_id, self.collection.id)
 
     def get_document_identifier(self, document: SourceDocument) -> str:
         return document.metadata["document_id"]

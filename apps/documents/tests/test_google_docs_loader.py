@@ -194,6 +194,7 @@ def test_loader_surfaces_http_errors_without_empty_success(httpx_mock):
             "403, PERMISSION_DENIED, reason=SERVICE_DISABLED",
         ),
         (429, {"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}, "429, RESOURCE_EXHAUSTED"),
+        (503, {"error": {"errors": [{}]}}, "503, unknown status"),
         (404, {"error": {"status": "NOT_FOUND", "message": "Document not found"}}, "404, NOT_FOUND"),
     ],
 )
@@ -270,6 +271,12 @@ def test_loader_metadata_preserves_content_and_stable_identifier(httpx_mock):
 
 def test_normalize_document_text_removes_control_artifacts_preserves_structure():
     assert normalize_document_text("Heading\x0bparagraph\n\n- item\x00\nA | B") == "Heading paragraph\n\n- item \nA | B"
+
+
+def test_normalize_document_text_preserves_joiners_and_removes_other_format_controls():
+    joiners = "می\u200cروم त्व\u200dरित 👩\u200d💻"
+    text = normalize_document_text(joiners + "\u200e" + "\x0b")
+    assert text == joiners + "  "
 
 
 def test_extracted_text_keeps_paragraph_separation_and_content_semantics():
