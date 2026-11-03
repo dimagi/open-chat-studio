@@ -102,7 +102,7 @@ dependencies = [
     "transformers",
     "packaging>=23.2",
     "pypdfium2>=5.12.1",
-    "django-cotton>=2.8.0",
+    "django-cotton",
 ]
 
 [project.urls]

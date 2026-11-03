@@ -3345,7 +3345,7 @@ requires-dist = [
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers", specifier = ">=4.7.0" },
-    { name = "django-cotton", specifier = ">=2.8.0" },
+    { name = "django-cotton" },
     { name = "django-cryptography-django5" },
     { name = "django-environ" },
     { name = "django-field-audit", specifier = ">=1.2.7" },
