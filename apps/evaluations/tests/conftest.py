@@ -1,12 +1,21 @@
+import textwrap
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 
 from apps.cost_tracking.models import PricingRule, ServiceKind
 from apps.evaluations.models import ConditionType, Evaluator
+from apps.pipelines.tests.utils import code_node, create_pipeline_model, end_node, start_node
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.evaluations import EvaluationTagFactory, EvaluatorTagRuleFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.evaluations import (
+    EvaluationDatasetFactory,
+    EvaluationMessageFactory,
+    EvaluationTagFactory,
+    EvaluatorTagRuleFactory,
+)
+from apps.utils.factories.experiment import ChatbotFactory, ExperimentFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import GroupFactory
 
@@ -14,6 +23,35 @@ INSUFFICIENT_COPY_PERMISSIONS = [
     pytest.param(("view_evaluator",), id="view-only"),
     pytest.param(("view_evaluator", "add_evaluator"), id="add-without-change"),
 ]
+
+
+TAGGING_CODE = textwrap.dedent("""
+    def main(input, **kwargs):
+        add_message_tag("urgent")
+        add_session_tag("needs-review")
+        set_participant_data_key("plan", "pro")
+        set_participant_data_key("name", "Ada")
+        return "tagged: " + input
+    """)
+
+
+@pytest.fixture()
+def tagging_experiment(team_with_users):
+    experiment = ChatbotFactory.create(team=team_with_users)
+    create_pipeline_model(
+        [start_node(), code_node(TAGGING_CODE, name="Tagger"), end_node()], pipeline=experiment.pipeline
+    )
+    experiment.pipeline.save()
+    return experiment
+
+
+@pytest.fixture()
+def message(team_with_users):
+    message = EvaluationMessageFactory.create(
+        input={"content": "hello", "role": "human"}, participant_data={"plan": "free"}
+    )
+    EvaluationDatasetFactory.create(team=team_with_users, messages=[message])
+    return message
 
 
 @pytest.fixture()
@@ -58,6 +96,16 @@ def tag_rule(team, evaluator, tag_a):
         condition_type=ConditionType.EQUALS,
         condition_value={"value": "negative"},
     )
+
+
+@pytest.fixture()
+def llm_provider():
+    return LlmProviderFactory.create()
+
+
+@pytest.fixture()
+def llm_provider_model():
+    return LlmProviderModelFactory.create(name="gpt-4o")
 
 
 @pytest.fixture()

@@ -3,7 +3,7 @@ import textwrap
 import pytest
 from pydantic import ValidationError
 
-from apps.evaluations.evaluators import PythonEvaluator
+from apps.evaluations.evaluators import DEFAULT_FUNCTION, PythonEvaluator
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.generation import GenerationRecord
 from apps.utils.factories.evaluations import EvaluationMessageFactory
@@ -207,3 +207,83 @@ def test_python_evaluator_generation_is_empty_without_a_record():
             return {"tags": kwargs["generation"]["message_tags"]}
         """)
     assert PythonEvaluator(code=code).run(EvaluationMessageFactory.create(), "").result == {"tags": []}
+
+
+def test_params_without_a_selector_mean_the_whole_reply():
+    evaluator = PythonEvaluator(code=DEFAULT_FUNCTION)
+    assert (evaluator.span_type, evaluator.span_name, evaluator.span_as_response) == ("reply", "", False)
+
+
+@pytest.mark.django_db()
+def test_python_evaluator_receives_the_selected_span():
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            return {"tool": kwargs["span"]["name"], "output": kwargs["span"]["output"], "response": generated_response}
+        """)
+    evaluator = PythonEvaluator(code=code, span_type="tool", span_name="calculator", span_as_response=True)
+    record = GenerationRecord(
+        tool_calls=[
+            {"node": "Answer", "name": "calculator", "input": {"expression": "2+2"}, "output": "4", "error": None}
+        ]
+    )
+    result = evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
+    assert result.result == {"tool": "calculator", "output": "4", "response": "4"}
+    assert result.generated_response == "the reply"
+    assert result.judged_response == "4"
+
+
+@pytest.mark.django_db()
+def test_an_errored_span_is_refused_before_the_code_runs():
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            return {"ran": True}
+        """)
+    evaluator = PythonEvaluator(code=code, span_type="tool", span_name="calculator", span_as_response=True)
+    record = GenerationRecord(
+        tool_calls=[
+            {
+                "node": "Agent",
+                "name": "calculator",
+                "input": {"expression": "1/0"},
+                "output": None,
+                "error": "division by zero",
+            }
+        ]
+    )
+
+    with pytest.raises(EvaluationRunException, match=r"calculator.*division by zero"):
+        evaluator.run(EvaluationMessageFactory.create(), "the reply", generation=record)
+
+
+@pytest.mark.django_db()
+def test_span_is_none_without_a_selector():
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            return {"span": kwargs["span"]}
+        """)
+    assert PythonEvaluator(code=code).run(EvaluationMessageFactory.create(), "").result == {"span": None}
+
+
+_NAME_REQUIRED = "A span name is required when a node, tool or LLM span is selected"
+
+
+@pytest.mark.parametrize(
+    ("params", "message"),
+    [
+        pytest.param({"span_type": "tool"}, _NAME_REQUIRED, id="type-without-name"),
+        pytest.param({"span_type": "tool", "span_name": "   "}, _NAME_REQUIRED, id="type-with-whitespace-name"),
+        pytest.param(
+            {"span_as_response": True},
+            "Select a span to use its output as the generated response",
+            id="response-without-selector",
+        ),
+    ],
+)
+def test_inconsistent_selectors_are_rejected(params, message):
+    with pytest.raises(ValidationError, match=message):
+        PythonEvaluator(code=DEFAULT_FUNCTION, **params)
+
+
+def test_span_name_is_stripped():
+    evaluator = PythonEvaluator(code=DEFAULT_FUNCTION, span_type="node", span_name=" Tagger ")
+    assert evaluator.span_name == "Tagger"
