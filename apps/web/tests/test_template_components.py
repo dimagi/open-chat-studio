@@ -1,12 +1,18 @@
-"""Rendering of the `templates/cotton/ui/` components and of the loader chain that serves them."""
+"""Rendering of the `templates/cotton/ui/` components."""
 
 import pytest
+from django.conf import settings
 from django.template import engines
+from django.template.loader import render_to_string
+from django.test import override_settings
 from django_cotton.compiler_regex import CottonCompiler
 
 
 def render(source, context=None):
-    """Render a template string the way the cotton loader serves a file: `<c-...>` tags compiled first."""
+    """Render a template string the way the cotton loader serves a file: `<c-...>` tags compiled first.
+
+    Whitespace is collapsed so assertions can spell out markup without copying template indentation.
+    """
     compiled = CottonCompiler().process(source)
     return " ".join(engines["django"].from_string(compiled).render(context or {}).split())
 
@@ -78,13 +84,20 @@ def test_include_wrappers_match_components(include, component):
     assert render(include) == render(component)
 
 
-def test_partials_and_components_share_the_loader_chain():
-    """`{% partialdef %}` (template_partials) and `<c-...>` (cotton) both hook in through template loaders."""
-    source = (
+def test_partials_and_components_share_the_loader_chain(tmp_path):
+    """`{% partialdef %}` (template_partials) and `<c-...>` (cotton) both hook in through template loaders.
+
+    Renders a file through the loader chain configured in settings, so a wrong loader order fails here.
+    """
+    (tmp_path / "page.html").write_text(
         '{% partialdef item %}<li><c-ui.chip :label="item" /></li>{% endpartialdef %}'
         "<ul>{% for item in items %}{% partial item %}{% endfor %}</ul>"
     )
-    html = render(source, {"items": ["a", "b"]})
-    assert html.count("<li>") == 2
-    assert "> a </div>" in html
-    assert "> b </div>" in html
+    templates = [{**settings.TEMPLATES[0], "DIRS": [*settings.TEMPLATES[0]["DIRS"], tmp_path]}]
+    with override_settings(TEMPLATES=templates):
+        page = " ".join(render_to_string("page.html", {"items": ["a", "b"]}).split())
+        partial = " ".join(render_to_string("page.html#item", {"item": "solo"}).split())
+    assert page.count("<li>") == 2
+    assert "> a </div>" in page
+    assert "> b </div>" in page
+    assert partial == '<li> <div class="btn btn-sm btn-soft btn-primary no-animation " > solo </div> </li>'
