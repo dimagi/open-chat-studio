@@ -24,13 +24,13 @@ Anything else (hx-*, x-*, @click, id, title, aria-*) is passed through to the el
     {% if href %}
       {% with disabled_class=disabled|yesno:" btn-disabled," %}
         {% with link_classes=classes|add:disabled_class %}
-          <a href="{{ href }}" {{ attrs|with_classes:link_classes }} {% if disabled %}aria-disabled="true" tabindex="-1"{% endif %}>
+          <a href="{{ href }}" {% if disabled %}aria-disabled="true" tabindex="-1"{% endif %} {{ attrs|with_classes:link_classes }}>
             {% if loading %}<span class="loading loading-spinner loading-xs"></span>{% elif icon %}<i class="{{ icon }}"></i>{% endif %}{{ slot }}
           </a>
         {% endwith %}
       {% endwith %}
     {% else %}
-      <button type="{{ type }}" {{ attrs|with_classes:classes }} {% if disabled %}disabled{% endif %}>
+      <button type="{{ type }}" {% if disabled %}disabled{% endif %} {{ attrs|with_classes:classes }}>
         {% if loading %}<span class="loading loading-spinner loading-xs"></span>{% elif icon %}<i class="{{ icon }}"></i>{% endif %}{{ slot }}
       </button>
     {% endif %}

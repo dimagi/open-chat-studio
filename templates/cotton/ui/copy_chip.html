@@ -13,7 +13,7 @@ Params:
 {% endcomment %}
 {% load i18n %}
 <c-vars target="" value="" show_value="True" text="" />
-<div {{ attrs|with_classes:"btn btn-sm" }} onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="{% translate 'Copy to clipboard' %}">
+<div onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="{% translate 'Copy to clipboard' %}" {{ attrs|with_classes:"btn btn-sm" }}>
   {% if value %}
     {% if show_value %}<span id="{{ target }}">{{ value }}</span>
     {% else %}<input id="{{ target }}" type="hidden" value="{{ value }}"/>

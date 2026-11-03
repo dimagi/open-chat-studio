@@ -209,7 +209,7 @@ def test_column_with_help_header_renders_the_help_component():
         ),
         pytest.param(
             '<c-ui.button href="/x" disabled>No</c-ui.button>',
-            ['class="btn btn-disabled" aria-disabled="true" tabindex="-1"'],
+            ['aria-disabled="true" tabindex="-1" class="btn btn-disabled"'],
             ['disabled="True"'],
             id="disabled-link",
         ),
@@ -292,3 +292,27 @@ def test_with_classes_merges_escapes_and_skips_declared_parameters():
 )
 def test_with_classes_boolean_attributes(flag, expected):
     assert render('<c-ui.badge :hx-boost="flag">x</c-ui.badge>', {"flag": flag}) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            '<c-ui.badge title="{{ name }}">x</c-ui.badge>',
+            'title="Rock &amp; Roll&#x27;s"',
+            id="interpolated-escaped-once",
+        ),
+        pytest.param(
+            '<c-ui.badge :title="name">x</c-ui.badge>', 'title="Rock &amp; Roll&#x27;s"', id="dynamic-escaped-once"
+        ),
+        pytest.param('<c-ui.badge :title="safe">x</c-ui.badge>', 'title="pre &amp; escaped"', id="safe-value-kept"),
+    ],
+)
+def test_with_classes_escapes_attribute_values_once(source, expected):
+    assert expected in render(source, {"name": "Rock & Roll's", "safe": mark_safe("pre &amp; escaped")})
+
+
+def test_component_attributes_come_before_pass_through_attributes():
+    """The component's own attributes are written first, as `{{ attrs }}` last used to do."""
+    html = render('<c-ui.copy-chip target="t" value="v" title="mine" />')
+    assert html.index('title="Copy to clipboard"') < html.index('title="mine"')
