@@ -70,6 +70,7 @@ from apps.pipelines.nodes.node_metadata import (
     get_node_schemas,
     get_speakable_voices,
 )
+from apps.pipelines.nodes.router_prompts import router_prompt_templates_data
 from apps.pipelines.views import get_widget_page_context, llm_model_parameter_context
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.flags import Flags
@@ -417,6 +418,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "breadcrumbs": [*chatbot_crumbs(self.request.team.slug, experiment), (_("Edit"), None)],
             "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
             "default_values": get_node_default_values(self.request.team),
+            "router_prompt_templates": router_prompt_templates_data(),
             "allow_edit_name": False,
             "flags_enabled": [
                 name

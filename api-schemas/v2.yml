@@ -527,6 +527,10 @@ paths:
                     llm_provider_model_id: 12
                     llm_model_parameters:
                       temperature: 0.0
+                    prompt_mode: standard
+                    custom_context: A request to change an existing booking is a reschedule,
+                      not a new booking.
+                    prompt_template_version: v1
                     prompt: |-
                       Route on what {participant_data} is asking for.
 
@@ -548,8 +552,10 @@ paths:
                     user_max_token_limit: 4000
                     max_history_length: 25
                 summary: 'RouterNode: `keywords[i]` routes to handle `output_i`; keywords
-                  are uppercased on save. `{routes}` renders each keyword with its
-                  `route_descriptions` entry.'
+                  are uppercased on save. The standard prompt lists each keyword with
+                  its `route_descriptions` entry; `custom_context` adds to it, and
+                  `prompt` is used only when `prompt_mode` is `custom`. `prompt_template_version`
+                  picks the standard prompt version; omit it for the latest.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -4752,9 +4758,23 @@ components:
         tag_output_message:
           type: boolean
           description: Tag the output message with the selected route.
+        prompt_mode:
+          type: string
+          description: 'How the router''s prompt is built: ``standard`` from the routes,
+            their descriptions and ``custom_context``, or ``custom`` from ``prompt``.'
+        custom_context:
+          type: string
+          description: Instructions added to the standard prompt when ``prompt_mode``
+            is ``standard``; left out when blank.
+        prompt_template_version:
+          type: string
+          description: Version of the standard prompt the router uses in ``standard``
+            mode. New routers get the latest version; set the latest version to upgrade
+            a router.
         prompt:
           type: string
-          description: Prompt steering the LLM router's choice.
+          description: Prompt steering the LLM router's choice, used when ``prompt_mode``
+            is ``custom``.
         route_descriptions:
           type: object
           additionalProperties:

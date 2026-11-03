@@ -474,6 +474,7 @@ class Widgets(StrEnum):
     text_editor = "text_editor_widget"
     voice_widget = "voice_widget"
     jinja_template = "jinja_template"
+    router_prompt_mode = "router_prompt_mode"
 
 
 class OptionsSource(StrEnum):
@@ -533,6 +534,7 @@ _UI_SCHEMA_KEYS = {
     "flag_required": "ui:flagRequired",
     "rows": "ui:rows",
     "default_on_show": "ui:onShowDefault",
+    "keep_value_when_hidden": "ui:keepValueWhenHidden",
 }
 
 
@@ -553,6 +555,10 @@ class UiSchema(BaseModel):
     # Use this to conditionally show/hide a field based on another field's value.
     # Can be a single condition or a list of conditions (all must be satisfied).
     visible_when: VisibleWhen | list[VisibleWhen] | None = None
+
+    # The frontend clears a field when `visible_when` hides it. Set this to keep the value instead,
+    # for a field the node ignores while it is hidden, so that showing it again restores what was typed.
+    keep_value_when_hidden: bool | None = None
 
     # When set, the frontend will populate this field with this value when the field
     # transitions from hidden to visible and its current value is null/undefined.

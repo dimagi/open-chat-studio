@@ -3,7 +3,14 @@ import Select, {MultiValue, SingleValue} from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 import {LlmProviderModel, Option, TypedOption} from "../types/nodeParameterValues";
 import usePipelineStore from "../stores/pipelineStore";
-import {classNames, concatenate, getCachedData, getDocumentationLink, getSelectOptions} from "../utils";
+import {
+  classNames,
+  concatenate,
+  getCachedData,
+  getDocumentationLink,
+  getSelectOptions,
+  renderRouterPromptPreview,
+} from "../utils";
 import {JsonSchema, NodeParams, PropertySchema, ToolConfigField} from "../types/nodeParams";
 import {Node, useUpdateNodeInternals} from "reactflow";
 import DOMPurify from 'dompurify';
@@ -55,6 +62,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return JinjaWidget
     case "key_value_pairs":
         return KeyValuePairsWidget
+    case "router_prompt_mode":
+        return RouterPromptModeWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -738,6 +747,115 @@ function KeyValuePairsWidget(props: WidgetParams) {
           </button>
         )}
       </div>
+    </InputField>
+  );
+}
+
+/**
+ * Chooses how an LLM Router's prompt is built, and previews the standard prompt. A router saved
+ * before prompt modes existed has no `prompt_mode` and reads as custom, as on the server, so the
+ * stored value is read here rather than the schema default the caller substitutes for a missing one.
+ *
+ * A router keeps the standard prompt version it is pinned to. When a newer one exists, the widget
+ * previews both and offers to switch.
+ */
+export function RouterPromptModeWidget(props: WidgetParams) {
+  const modalId = useId();
+  const setNode = usePipelineStore((state) => state.setNode);
+  const {routerPromptTemplates} = getCachedData();
+  const latest = routerPromptTemplates.latest;
+  const mode = String(props.nodeParams.prompt_mode || "custom");
+  const isCustom = mode === "custom";
+  const version = String(props.nodeParams.prompt_template_version || latest);
+  const isOutdated = !isCustom && version !== latest;
+
+  const setParams = (update: (params: NodeParams) => void) =>
+    setNode(props.nodeId, (old) => produce(old, (next) => update(next.data.params)));
+
+  const changeMode = (event: ChangeEvent<HTMLSelectElement>) => {
+    const newMode = event.target.value;
+    setParams((params) => {
+      params.prompt_mode = newMode;
+      if (newMode !== "custom" && !params.prompt_template_version) {
+        params.prompt_template_version = latest;
+      }
+    });
+  };
+
+  const preview = (templateVersion: string) => {
+    const template = routerPromptTemplates.templates[templateVersion];
+    if (template === undefined) {
+      return <p className="text-warning normal-case">{`Preview unavailable for version ${templateVersion}.`}</p>;
+    }
+    const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.map(String) : [];
+    const prompt = renderRouterPromptPreview(template, {
+      keywords,
+      routeDescriptions: (props.nodeParams.route_descriptions || {}) as Record<string, string>,
+      customContext: concatenate(props.nodeParams.custom_context),
+      defaultRoute: keywords[Number(props.nodeParams.default_keyword_index ?? 0)] ?? "",
+    });
+    return <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case">{prompt}</pre>;
+  };
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <select
+        className="select appearance-none w-full nodrag"
+        name={props.name}
+        onChange={changeMode}
+        value={mode}
+        disabled={props.readOnly}
+      >
+        {getSelectOptions(props.schema).map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+      {isOutdated && (
+        <div className="flex flex-wrap items-center gap-2 text-sm normal-case">
+          <span>A newer standard prompt is available ({version} → {latest}).</span>
+          {!props.readOnly && (
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={() => setParams((params) => {
+                params.prompt_template_version = latest;
+              })}
+            >
+              Switch to latest
+            </button>
+          )}
+        </div>
+      )}
+      {!isCustom && (
+        <>
+          <button
+            type="button"
+            className="btn btn-xs btn-ghost self-start"
+            onClick={() => (document.getElementById(modalId) as HTMLDialogElement)?.showModal()}
+          >
+            <i className="fa-solid fa-eye"></i> Preview generated prompt
+          </button>
+          <dialog id={modalId} className="modal nopan nodelete nodrag noflow nowheel">
+            <div className="modal-box max-w-3xl">
+              <form method="dialog">
+                <button type="submit" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+              </form>
+              <h4 className="font-bold text-lg mb-2">Generated prompt</h4>
+              {isOutdated && <h5 className="font-semibold mb-1 normal-case">Current ({version})</h5>}
+              {preview(version)}
+              {isOutdated && (
+                <>
+                  <h5 className="font-semibold mt-3 mb-1 normal-case">Latest ({latest})</h5>
+                  {preview(latest)}
+                </>
+              )}
+            </div>
+            <form method="dialog" className="modal-backdrop">
+              <button type="submit">close</button>
+            </form>
+          </dialog>
+        </>
+      )}
     </InputField>
   );
 }
@@ -1466,7 +1584,11 @@ export function TextEditorWidget(props: WidgetParams) {
     return {routes: keywords.filter(Boolean).map(String), defaultRoute};
   }, [isRouter, keywords, default_keyword_index]);
   const promptText = concatenate(props.paramValue);
-  const routesWarning = isRouter && !promptText.includes("{routes}") && !promptText.includes("{routes_list}")
+  // `custom_context` shares this editor but is only part of the router's prompt, so the routes
+  // nudge and prompt improvement apply to a node's whole `prompt` alone.
+  const isWholePrompt = props.name !== "custom_context";
+  const routesWarning = isRouter && isWholePrompt
+    && !promptText.includes("{routes}") && !promptText.includes("{routes_list}")
     ? "Add {routes} to the prompt to give the router each route and its description."
     : undefined;
   const modalId = useId();
@@ -1534,6 +1656,7 @@ export function TextEditorWidget(props: WidgetParams) {
         routes={routes}
         defaultRoute={defaultRoute}
         readOnly={props.readOnly}
+        canImprove={isWholePrompt}
       />
     </>
   );
@@ -1551,6 +1674,7 @@ export function TextEditorModal({
   routes,
   defaultRoute,
   readOnly,
+  canImprove = true,
 }: {
   modalId: string;
   value: string;
@@ -1563,6 +1687,7 @@ export function TextEditorModal({
   routes: string[];
   defaultRoute: string;
   readOnly: boolean;
+  canImprove?: boolean;
 }) {
   const [showImprove, setShowImprove] = useState(false);
   const toolNames = useMemo(() => toolCompletions.map((tool) => tool.name), [toolCompletions]);
@@ -1583,11 +1708,11 @@ export function TextEditorModal({
         <div className="grow h-full w-full flex flex-col">
           <div className="flex justify-between items-center mb-4">
             <h4 className="font-bold text-lg capitalize">{label}</h4>
-            {!readOnly && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowImprove(!showImprove)}>
+            {!readOnly && canImprove && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowImprove(!showImprove)}>
               <i className="fa-solid fa-wand-magic-sparkles"></i>Help
             </button>}
           </div>
-          {!readOnly && <ImprovePromptSection
+          {!readOnly && canImprove && <ImprovePromptSection
             show={showImprove}
             currentPrompt={value}
             nodeType={nodeType}
