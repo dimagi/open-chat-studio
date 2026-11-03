@@ -62,6 +62,7 @@ from apps.service_providers.llm_service.structured_output import NoStructuredOut
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.celery import Queues, delay_in_new_trace
+from apps.utils.csv_export import restore_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
@@ -914,8 +915,8 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                 row_count += 1
 
                 # Extract mapped columns
-                input_content = row.get(column_mapping.get("input", ""), "").strip()
-                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                input_content = restore_csv_formula(row.get(column_mapping.get("input", ""), "")).strip()
+                output_content = restore_csv_formula(row.get(column_mapping.get("output", ""), "")).strip()
                 if not input_content or not output_content:
                     continue
 
@@ -923,19 +924,19 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                 if context_mapping := column_mapping.get("context"):
                     for field_name, csv_column in context_mapping.items():
                         if csv_column in row:
-                            context[field_name] = parse_csv_value_as_json(row[csv_column])
+                            context[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 participant_data = {}
                 if participant_data_mapping := column_mapping.get("participant_data"):
                     for field_name, csv_column in participant_data_mapping.items():
                         if csv_column in row:
-                            participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+                            participant_data[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 session_state = {}
                 if session_state_mapping := column_mapping.get("session_state"):
                     for field_name, csv_column in session_state_mapping.items():
                         if csv_column in row:
-                            session_state[field_name] = parse_csv_value_as_json(row[csv_column])
+                            session_state[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 message_history = []
                 if populate_history:
@@ -943,7 +944,7 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                     message_history = [msg.copy() for msg in auto_history]
                 elif history_column and history_column in row:
                     # Parse history from CSV column
-                    history_text = row[history_column].strip()
+                    history_text = restore_csv_formula(row[history_column]).strip()
                     if history_text:
                         message_history = parse_history_text(history_text)
 
@@ -1021,8 +1022,8 @@ def _parse_csv_content(csv_content: str, progress_recorder: ProgressRecorder) ->
 
 def _extract_row_data(row: dict) -> dict:
     """Extract and validate data from a CSV row."""
-    input_content = row.get("input_content", "").strip()
-    output_content = row.get("output_content", "").strip()
+    input_content = restore_csv_formula(row.get("input_content", "")).strip()
+    output_content = restore_csv_formula(row.get("output_content", "")).strip()
 
     if not input_content or not output_content:
         raise ValueError("Missing input or output content")
@@ -1032,25 +1033,25 @@ def _extract_row_data(row: dict) -> dict:
     for col_name, value in row.items():
         if col_name.startswith("context.") and value:
             context_key = col_name.removeprefix("context.")
-            context[context_key] = parse_csv_value_as_json(value)
+            context[context_key] = parse_csv_value_as_json(restore_csv_formula(value))
 
     # Extract participant_data from participant_data.* columns
     participant_data = {}
     for col_name, value in row.items():
         if col_name.startswith("participant_data.") and value:
             key = col_name.removeprefix("participant_data.")
-            participant_data[key] = parse_csv_value_as_json(value)
+            participant_data[key] = parse_csv_value_as_json(restore_csv_formula(value))
 
     # Extract session_state from session_state.* columns
     session_state = {}
     for col_name, value in row.items():
         if col_name.startswith("session_state.") and value:
             key = col_name.removeprefix("session_state.")
-            session_state[key] = parse_csv_value_as_json(value)
+            session_state[key] = parse_csv_value_as_json(restore_csv_formula(value))
 
     # Parse history if present
     history = []
-    history_text = row.get("history", "").strip()
+    history_text = restore_csv_formula(row.get("history", "")).strip()
     if history_text:
         try:
             history = parse_history_text(history_text)
@@ -1276,10 +1277,11 @@ def process_evaluation_results_csv_rows(  # noqa: C901 - parser: one branch per 
                 value = row[column_name]
                 if value is None:
                     value = ""
+                value = restore_csv_formula(value)
 
-                result_key = column_name
-                if "(" in column_name and column_name.endswith(")"):
-                    result_key = column_name[: column_name.rfind("(")].strip()
+                result_key = restore_csv_formula(column_name)
+                if "(" in result_key and result_key.endswith(")"):
+                    result_key = result_key[: result_key.rfind("(")].strip()
 
                 try:
                     evaluator_id = int(evaluator_id)

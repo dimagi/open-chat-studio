@@ -1,8 +1,15 @@
+import csv
+import io
 from unittest.mock import Mock
 
 import pytest
 
 from apps.evaluations.aggregation import compute_aggregates_for_run
+from apps.evaluations.export import (
+    annotate_export_fields,
+    export_evaluation_csv_to_tempfile,
+    iter_evaluation_table_rows,
+)
 from apps.evaluations.models import EvaluationRunAggregate
 from apps.evaluations.tasks import _upload_evaluation_run_results, process_evaluation_results_csv_rows
 from apps.evaluations.views.evaluation_config_views import generate_evaluation_results_column_suggestions
@@ -277,3 +284,68 @@ def test_upload_task_recomputes_aggregates(evaluation_setup):
     assert agg1.aggregates["existing_score"]["mean"] == 9.5, "Value present in CSV should be updated"
     assert agg2.aggregates["existing_score"]["mean"] == 7.0, "Value not present in CSV should not be changed"
     assert agg2.aggregates["new_field"]["mean"] == 8.0, "New value from CSV get's saved and type converted"
+
+
+@pytest.mark.django_db()
+def test_exported_results_upload_back_without_the_formula_guard(evaluation_setup):
+    result = evaluation_setup["result1"]
+    result.output = {"result": {"verdict": "=needs review", "score": -2, "handle": "'@handle"}}
+    result.save()
+    rows = iter_evaluation_table_rows(
+        annotate_export_fields(evaluation_setup["run"].export_results).order_by("message_id"), include_ids=True
+    )
+    with export_evaluation_csv_to_tempfile(rows) as exported:
+        csv_data = list(csv.DictReader(io.StringIO(exported.read().decode("utf-8"))))
+    column_mappings = {
+        "verdict (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
+        "score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
+        "handle (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id,
+    }
+
+    stats = process_evaluation_results_csv_rows(
+        evaluation_setup["run"], csv_data, column_mappings, Mock(), evaluation_setup["team"]
+    )
+
+    assert stats == {"updated_count": 0, "created_count": 0, "error_messages": []}
+    result.refresh_from_db()
+    assert result.output["result"] == {"verdict": "=needs review", "score": -2, "handle": "'@handle"}
+
+
+@pytest.mark.django_db()
+def test_edited_export_updates_a_field_whose_name_starts_with_a_formula_character(evaluation_setup):
+    result = evaluation_setup["result1"]
+    result.output = {"result": {"-score": 3}}
+    result.save()
+    rows = iter_evaluation_table_rows(
+        annotate_export_fields(evaluation_setup["run"].export_results).order_by("message_id"), include_ids=True
+    )
+    with export_evaluation_csv_to_tempfile(rows) as exported:
+        csv_data = list(csv.DictReader(io.StringIO(exported.read().decode("utf-8"))))
+    header = "'-score (GPT-4 Evaluator)"
+    edited = [{**row, header: "5"} for row in csv_data]
+    suggestions = generate_evaluation_results_column_suggestions([header], evaluation_setup["run"])
+
+    stats = process_evaluation_results_csv_rows(
+        evaluation_setup["run"], edited, suggestions, Mock(), evaluation_setup["team"]
+    )
+
+    assert stats == {"updated_count": 1, "created_count": 0, "error_messages": []}
+    result.refresh_from_db()
+    assert result.output["result"] == {"-score": 5}
+
+
+@pytest.mark.django_db()
+def test_hand_typed_apostrophe_before_a_number_is_restored_in_an_int_column(evaluation_setup):
+    result = evaluation_setup["result1"]
+    result.output = {"result": {"score": 3}}
+    result.save()
+    csv_data = [{"id": str(evaluation_setup["message"].id), "score (GPT-4 Evaluator)": "'-5"}]
+    column_mappings = {"score (GPT-4 Evaluator)": evaluation_setup["evaluator1"].id}
+
+    stats = process_evaluation_results_csv_rows(
+        evaluation_setup["run"], csv_data, column_mappings, Mock(), evaluation_setup["team"]
+    )
+
+    assert stats == {"updated_count": 1, "created_count": 0, "error_messages": []}
+    result.refresh_from_db()
+    assert result.output["result"] == {"score": -5}

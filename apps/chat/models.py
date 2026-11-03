@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from enum import StrEnum
 from urllib.parse import quote
 
@@ -94,11 +95,22 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         return messages_from_dict(list(reversed(messages)))
 
     def message_iterator(self, with_summaries=True, exclude_message_id=None):
-        queryset = self.messages.order_by("-created_at")
-        if exclude_message_id:
-            queryset = queryset.exclude(id=exclude_message_id)
+        """Yields the chat's messages newest first, each followed by its summary message (if any).
 
-        for message in queryset.iterator(100):
+        If the messages were prefetched into ``_prefetched_messages`` (ordered by ``created_at``,
+        e.g. by ``ExperimentSessionViewSet``), those are used instead of querying the database,
+        so any relations prefetched with them (such as tags) are preserved.
+        """
+        prefetched = getattr(self, "_prefetched_messages", None)
+        if prefetched is not None:
+            messages = (message for message in reversed(prefetched) if message.id != exclude_message_id)
+        else:
+            queryset = self.messages.order_by("-created_at")
+            if exclude_message_id:
+                queryset = queryset.exclude(id=exclude_message_id)
+            messages = queryset.iterator(100)
+
+        for message in messages:
             yield message
             if with_summaries and message.summary:
                 yield message.get_summary_message()
@@ -177,6 +189,11 @@ class ChatMessageMetadataKeys(StrEnum):
 # to cover the longest provider id *plus* its prefix. Email is the binding case: a Message-ID is
 # capped at 500 chars when parsed, and "email:" takes six more.
 EXTERNAL_ID_MAX_LENGTH = 600
+
+
+def _file_matches(file: File, ids: set[str], external_ids: set[str]) -> bool:
+    """Whether ``file`` is referenced by the given (stringified) file ids or external ids."""
+    return str(file.id) in ids or bool(file.external_id and file.external_id in external_ids)
 
 
 class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
@@ -354,16 +371,50 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             # Summary messages are not saved to the DB, so they don't have a chat_id
             return []
 
+        prefetched = getattr(self, "_prefetched_attached_files", None)
+        if prefetched is not None:
+            return prefetched
+
+        ids, external_ids = self._attachment_file_ids()
+        return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
+
+    def _attachment_file_ids(self) -> tuple[list[int | str], list[str]]:
+        """Returns the (ids, external_ids) of the files referenced in this message's metadata."""
         external_ids = []
         ids = []
-
         for source in ChatMessageMetadataKeys.attachment_keys():
             # openai_file_ids is a list of external ids
             id_list = external_ids if source == ChatMessageMetadataKeys.OPENAI_FILE_IDS else ids
             if file_ids := self.metadata.get(source, []):
                 id_list.extend(file_ids)
+        return ids, external_ids
 
-        return File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat=self.chat)
+    @classmethod
+    def prefetch_attached_files(cls, chat: Chat, messages: Iterable["ChatMessage"]) -> None:
+        """Resolve the attached files for all ``messages`` of ``chat`` with a single query.
+
+        The result is cached on each message so that ``get_attached_files`` doesn't issue a
+        query per message.
+        """
+        saved_messages = [message for message in messages if message.chat_id]
+        message_file_ids = {message.pk: message._normalized_attachment_file_ids() for message in saved_messages}
+        all_ids = set().union(*(ids for ids, _ in message_file_ids.values()))
+        all_external_ids = set().union(*(external_ids for _, external_ids in message_file_ids.values()))
+
+        files = []
+        if all_ids or all_external_ids:
+            files = list(
+                File.objects.filter(Q(id__in=all_ids) | Q(external_id__in=all_external_ids), chatattachment__chat=chat)
+            )
+
+        for message in saved_messages:
+            ids, external_ids = message_file_ids[message.pk]
+            message._prefetched_attached_files = [file for file in files if _file_matches(file, ids, external_ids)]
+
+    def _normalized_attachment_file_ids(self) -> tuple[set[str], set[str]]:
+        """Like ``_attachment_file_ids`` but as sets of strings, for in-memory matching."""
+        ids, external_ids = self._attachment_file_ids()
+        return {str(i) for i in ids}, {str(i) for i in external_ids}
 
     def get_metadata(self, key: str):
         return self.metadata.get(key, None)
