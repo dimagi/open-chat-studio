@@ -3,6 +3,7 @@ from unittest.mock import Mock, call, patch
 
 import pydantic
 import pytest
+from atlassian import Confluence
 from atlassian.errors import ApiError
 from requests import HTTPError
 from tenacity import wait_none
@@ -357,3 +358,20 @@ class TestLoadDocuments:
         with pytest.raises(ConnectionError):
             _load(space_key="DEMO")
         assert client.get_all_pages_from_space_raw.call_count == 3
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "get_all_pages_from_space_raw",
+        "get_all_pages_by_label",
+        "get_all_restrictions_for_content",
+        "get_page_ancestors",
+        "get_page_by_id",
+        "get",
+    ],
+)
+def test_confluence_client_has_methods_the_loader_calls(method):
+    """The other tests mock the client, so check the installed atlassian-python-api still provides these."""
+    client = Confluence(url=BASE_URL, username="jack", password="secret", cloud=True)
+    assert callable(getattr(client, method, None))
