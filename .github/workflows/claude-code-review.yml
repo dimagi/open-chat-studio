@@ -78,7 +78,8 @@ jobs:
           sticky_summary: 'true'
           # Skips findings on lines that already carry a bot comment, so a repeat
           # push does not post them again. `comments_total` is counted before
-          # that filter, so a repeat finding still fails the verdict.
+          # that filter, so a repeat finding still fails the verdict:
+          # https://github.com/alibaba/open-code-review/blob/375f64cd6f67a48a135da83cfcf59c52669a09cb/scripts/github-actions/post-review-comments.js#L287
           incremental: 'true'
           upload_artifacts: 'true'
 
