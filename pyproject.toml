@@ -66,7 +66,7 @@ dependencies = [
     "RestrictedPython>=8.4",
     "sentry-sdk",
     "slack-bolt",
-    "taskbadger>=2.5.2",
+    "taskbadger>=2.7.0",
     "tenacity",
     "tiktoken",
     "turn-python>=1.0.0",

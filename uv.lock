@@ -3410,7 +3410,7 @@ requires-dist = [
     { name = "restrictedpython", specifier = ">=8.4" },
     { name = "sentry-sdk" },
     { name = "slack-bolt" },
-    { name = "taskbadger", specifier = ">=2.5.2" },
+    { name = "taskbadger", specifier = ">=2.7.0" },
     { name = "tenacity" },
     { name = "tiktoken" },
     { name = "transformers" },
@@ -4995,7 +4995,7 @@ wheels = [
 
 [[package]]
 name = "taskbadger"
-version = "2.5.2"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -5003,9 +5003,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "tomlkit" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/99/f3/adca12cdcbaa143dcbab6cab86a26065d667dae72af5e6456d918cc9f214/taskbadger-2.5.2.tar.gz", hash = "sha256:12a8f92dcd0277a7b53fc8cab2b46e9dc05117131bed0913ed38cb62b663b71b", size = 48000, upload-time = "2026-08-07T08:55:27.442Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2b/54/9b22f2091a87964b202532034dca2fcbc2d5690e097bd5323f0ab5d63633/taskbadger-2.7.0.tar.gz", hash = "sha256:ed2e2f47651e8ed3f0bec30d25ef8605012e66ff9ca6373f883d776072c864a1", size = 49401, upload-time = "2026-11-03T10:08:33.674Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/64/c43249029b785896105a15ebad626ecc81c76aa76c6ee5a3e7af95eea4a9/taskbadger-2.5.2-py3-none-any.whl", hash = "sha256:fb162c470c0b3626835b05371117a26b3cbde5005709eac8dcd8b92f0c74b943", size = 83499, upload-time = "2026-08-07T08:55:26.404Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/52/c61ac447b6f179babde486dd18cd5a34a3afefa24a9eb05a93ed5c4073c0/taskbadger-2.7.0-py3-none-any.whl", hash = "sha256:ead579673a80b277f8120d19b912d0f951283269573c30aab89613e132723723", size = 85377, upload-time = "2026-11-03T10:08:32.604Z" },
 ]
 
 [[package]]
