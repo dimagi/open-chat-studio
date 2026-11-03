@@ -13,6 +13,7 @@ from apps.api.session_tokens import issue_session_token
 from apps.experiments.models import Experiment, ExperimentSession, last_activity_expression
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
+from apps.generics.components import render_component
 from apps.generics.tables import ArrayColumn, ColumnWithHelp, TemplateColumn, TimeAgoColumn
 from apps.teams.utils import get_slug_for_team
 
@@ -228,16 +229,13 @@ class ChatbotSessionsTable(tables.Table):
         return template.render({"record": record})
 
     def render_participant(self, record):
-        template = get_template("generic/chip.html")
         chip = record.get_participant_chip(include_link=self._user_has_perm("experiments.view_participant"))
-        return template.render({"chip": chip, "truncate": True})
+        return render_component("ui.chip", chip=chip, truncate=True)
 
     def render_chatbot(self, record):
-        template = get_template("generic/chip.html")
         chatbot = record.experiment
         url = chatbot.get_absolute_url() if self._user_has_perm("experiments.view_experiment") else ""
-        chip = chips.Chip(label=str(chatbot), url=url)
-        return template.render({"chip": chip, "truncate": True})
+        return render_component("ui.chip", chip=chips.Chip(label=str(chatbot), url=url), truncate=True)
 
     def _user_has_perm(self, perm: str) -> bool:
         # `request` is only set when the table is built via RequestConfig/SingleTableView; guard

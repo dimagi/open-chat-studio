@@ -4,7 +4,7 @@
       <div>
         {{ form_field.label }}
         {% if form_field.help_text %}
-          <small class="form-text text-muted">{% include "generic/help.html" with help_content=form_field.help_text %}</small>
+          <small class="form-text text-muted"><c-ui.help>{{ form_field.help_text|safe }}</c-ui.help></small>
         {% endif %}
       </div>
       {{ form_field }}

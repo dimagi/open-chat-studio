@@ -147,7 +147,7 @@
           <dd class="text-xs mt-1 flex items-center gap-1">
             <code class="truncate max-w-32 inline-block"
                   title="{{ participant.public_id }}">{{ participant.public_id }}</code>
-            {% include "generic/copy_chip.html" with copy_element_id="participant-public-id" copy_value=participant.public_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+            <c-ui.copy-chip target="participant-public-id" :value="participant.public_id" :show_value="False" text="" extra_classes="btn-ghost btn-xs px-1" />
           </dd>
         </div>
         <div>

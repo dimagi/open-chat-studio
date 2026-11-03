@@ -1,0 +1,19 @@
+{% comment %}
+Dialog with a title, the slot as its body and a Close button. Give it an `id` and open it with
+`document.getElementById(id).showModal()`.
+
+  <c-ui.modal id="export-modal" title="Export sessions">Body text or markup.</c-ui.modal>
+{% endcomment %}
+{% load i18n %}
+<c-vars title="" />
+<dialog class="modal" {{ attrs }}>
+  <div class="modal-box">
+    <h3 class="text-lg font-bold">{{ title }}</h3>
+    <div class="py-4">{{ slot }}</div>
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">{% translate "Close" %}</button>
+      </form>
+    </div>
+  </div>
+</dialog>

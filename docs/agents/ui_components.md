@@ -37,10 +37,12 @@ Shared markup is a [django-cotton](https://django-cotton.com/docs/components) co
 ```
 
 - `ui/` holds presentation primitives (button, badge, chip, help, alert, modal, tabs, dropdown). `app/` holds domain pieces composed from them. The tag name is the path: `<c-ui.copy-chip>` is `templates/cotton/ui/copy_chip.html`.
-- Start every component with a usage example in a `{% comment %}` block and a `<c-vars>` line declaring every parameter, with defaults. Anything not declared lands in `{{ attrs }}`.
+- Start every component with a usage example in a `{% comment %}` block and a `<c-vars>` line declaring every parameter, each with a default (`<c-vars url="" truncate="" />`). A parameter declared without a default is not set when the caller omits it, so a same-named variable in the calling template's context shows through. Anything not declared lands in `{{ attrs }}`.
 - Put `{{ attrs }}` on the root element so callers can pass `hx-*`, `x-*`, `id` and extra `class` without the component listing them.
 - `:name="expr"` passes a context variable or Python literal, `name="text"` passes a string, a bare `name` passes `True`. Inside a component tag a single colon always means a Django expression, so Alpine's `:bind` shorthand is written `::bind`; `@click` and `x-*` pass through unchanged.
-- Once a `ui/` primitive exists, use it instead of writing the daisyUI classes by hand. The `{% include "generic/..." %}` wrappers stay for existing call sites only.
+- Once a `ui/` primitive exists, use it instead of writing the daisyUI classes by hand.
+- From Python (a table column, a model method), render a component with `apps.generics.components.render_component("ui.chip", chip=chip)`; a `slot` argument is escaped unless marked safe. In a `template_code` string, which never goes through the template loader, write the tag form: `{% cotton ui.session-id-chip :external_id="record.external_id" %}{% endcotton %}`.
+- `templates/generic/` keeps only what is not a component: page layouts that templates `extends` (`object_home.html`, `object_form.html`), the table action buttons rendered by `apps/generics/actions.py`, the referenced-objects modal rendered by `apps/generics/referenced_objects.py`, and `attrs.html`, which spreads an attribute dict onto a plain element.
 - `{% partialdef %}` is for repeating a fragment within one page and for HTMX fragment responses, not for shared components. A view that returns a single component uses `django_cotton.utils.render_component`.
 - Add every new component to the UI Gallery (`/admin/ui-gallery/`, `templates/admin/ui_gallery.html`) and check it in both themes.
 - Test a component by rendering a template string through the cotton compiler, as in `apps/web/tests/test_template_components.py`.

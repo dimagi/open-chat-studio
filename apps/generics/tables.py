@@ -3,6 +3,9 @@ from django.template import Context
 from django.template.loader import get_template
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+
+from apps.generics.components import render_component
 
 
 class ColumnWithHelp(tables.Column):
@@ -13,7 +16,7 @@ class ColumnWithHelp(tables.Column):
     def header(self):
         if not self.help_text:
             return self.verbose_name
-        help_html = get_template("generic/help.html").render({"help_content": self.help_text})
+        help_html = render_component("ui.help", slot=mark_safe(self.help_text))
         return format_html("""<span>{header}</span>{help}""", header=self.verbose_name, help=help_html)
 
 

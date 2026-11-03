@@ -14,7 +14,7 @@
           <h1 class="pg-title">{{ collection.name }} {% if collection.is_index %}<span class="badge badge-sm badge-ghost">Collection Index</span>{% endif %}{% if read_only %} <span class="text-sm text-gray-500"> (Read-Only) </span> {% endif %}</h1>
           <div class="text-sm text-base-content/60 mt-1">
             {% if collection.is_remote_index %}
-              <span class="pg-text-muted">OpenAI vector store id: {% include "generic/copy_chip.html" with copy_element_id="copy_vector_store_id" copy_value=collection.openai_vector_store_id extra_styles="btn-ghost" %}</span>
+              <span class="pg-text-muted">OpenAI vector store id: <c-ui.copy-chip target="copy_vector_store_id" :value="collection.openai_vector_store_id" extra_classes="btn-ghost" /></span>
 
             {% endif %}
           </div>

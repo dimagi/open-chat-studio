@@ -33,7 +33,7 @@
                                         The file contents will be divided into chunks of this many tokens each.
                                     {% endblocktranslate %}
                                     <small
-                                        class="form-text text-muted">{% include "generic/help.html" with help_content=chuck_size_help %}</small>
+                                        class="form-text text-muted"><c-ui.help>{{ chuck_size_help|safe }}</c-ui.help></small>
                                 </div>
                             </label>
                             <input name="chunk_size" type="number" class="input" x-model="chunk_size" required/>
@@ -46,7 +46,7 @@
                                         Each chunk will overlap this many tokens with the previous chunk.
                                     {% endblocktranslate %}
                                     <small
-                                        class="form-text text-muted">{% include "generic/help.html" with help_content=chunk_overlap_help %}</small>
+                                        class="form-text text-muted"><c-ui.help>{{ chunk_overlap_help|safe }}</c-ui.help></small>
                                 </div>
                             </label>
                             <div class="flex flex-col gap-2">

@@ -12,7 +12,7 @@ from apps.generics.tables import TemplateColumn
 
 CHIP_BUTTON_STYLE = "btn-soft btn-primary"
 """Styling for chips that stand in for the record itself (a name, a participant). Mirrored by
-`generic/chip_button.html`, which renders the same chips outside of an action column."""
+`cotton/ui/chip.html`, which renders the same chips outside of an action column."""
 
 
 @dataclasses.dataclass
@@ -134,7 +134,9 @@ class ModalAction(Action):
     """Action that will open a modal."""
 
     template: str = "generic/action_modal.html"
-    modal_template: str = "generic/modal.html"
+    modal_template: str | None = None
+    """Template for the modal itself; `modal_id` is in its context. Without one, `<c-ui.modal>` renders
+    `modal_title` and `modal_text` from `modal_context`."""
     modal_context: dict | None = None
 
     def get_context(self, request, record, value):

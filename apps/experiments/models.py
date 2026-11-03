@@ -28,7 +28,6 @@ from django.db.models import (
     When,
     functions,
 )
-from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -43,6 +42,7 @@ from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
+from apps.generics.components import render_component
 from apps.moderation.enforcement import is_participant_blocked
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -106,10 +106,7 @@ class VersionFieldDisplayFormatters:
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
-        name = str(pipeline)
-        template = get_template("generic/chip.html")
-        url = pipeline.get_absolute_url()
-        return template.render({"chip": Chip(label=name, url=url)})
+        return render_component("ui.chip", chip=Chip(label=str(pipeline), url=pipeline.get_absolute_url()))
 
     @staticmethod
     def format_wiring(wiring: set[tuple[str, str, str, str]]) -> str:

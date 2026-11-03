@@ -61,7 +61,7 @@
           {% endcomment %}
           <div class="flex items-center gap-1">
             <div class="stat-label truncate" x-text="stat.label"></div>
-            {# Mirrors generic/help.html; inlined because the card list is rendered by Alpine, not Django. #}
+            {# Mirrors cotton/ui/help.html; inlined because the card list is rendered by Alpine, not Django. #}
             <template x-if="stat.tooltip">
               <div class="dropdown dropdown-bottom dropdown-hover shrink-0">
                 <button
@@ -182,7 +182,7 @@
                 Active participants each month, broken down by how many separate weeks they were active.
               {% endblocktranslate %}
 
-              {% include "generic/help.html" with help_content=frequency_info %}
+              <c-ui.help>{{ frequency_info|safe }}</c-ui.help>
             </div>
 
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.frequency"></div>
@@ -208,7 +208,7 @@
                 of their first message.
               {% endblocktranslate %}
 
-              {% include "generic/help.html" with help_content=new_vs_returning_info %}
+              <c-ui.help>{{ new_vs_returning_info|safe }}</c-ui.help>
             </div>
 
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.newVsReturning"></div>

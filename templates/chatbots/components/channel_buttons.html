@@ -25,11 +25,7 @@
 {% endfor %}
 {% for channel in channels %}
   {% if channel.platform_enum == "public" and channel.public_url %}
-    {% with id_str=channel.id|stringformat:"s" %}
-      {% with link_id="public-link-"|add:id_str %}
-        {% include "generic/copy_chip.html" with copy_element_id=link_id copy_value=channel.public_url action_text="Copy link" extra_styles="btn-ghost" show_value=0 %}
-      {% endwith %}
-    {% endwith %}
+    <c-ui.copy-chip target="public-link-{{ channel.id }}" :value="channel.public_url" text="Copy link" extra_classes="btn-ghost" :show_value="False" />
   {% endif %}
 {% endfor %}
 {% if platforms %}

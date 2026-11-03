@@ -363,7 +363,7 @@ class EvaluationSessionsSelectionTable(tables.Table):
     )
     session_id = TemplateColumn(
         verbose_name="Session ID",
-        template_code='{% include "generic/session_id_chip.html" with external_id=record.external_id %}',
+        template_code='{% cotton ui.session-id-chip :external_id="record.external_id" %}{% endcotton %}',
         orderable=False,
     )
     experiment = columns.Column(accessor="experiment", verbose_name="Experiment", order_by="experiment__name")

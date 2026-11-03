@@ -16,7 +16,7 @@
       </svg>
       <div>
         <span>API Key created. Save this somewhere safe - you will only see it once: <code id="api-key">{{ new_api_key }}</code></span>
-        {% include "generic/copy_chip.html" with copy_element_id="api-key" extra_styles="btn-ghost" %}
+        <c-ui.copy-chip target="api-key" extra_classes="btn-ghost" />
       </div>
     </div>
   {% endif %}
