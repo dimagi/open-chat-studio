@@ -45,7 +45,7 @@ def with_classes(attrs, classes):
     """
     items = dict(attrs.attrs_dict()) if hasattr(attrs, "attrs_dict") else dict(attrs)
     caller_classes = str(items.pop("class", "") or "")
-    merged = " ".join(part for part in (classes.split() + caller_classes.split()))
+    merged = " ".join(classes.split() + caller_classes.split())
     rendered = [format_html('class="{}"', merged)]
     for key, value in items.items():
         if value is True:
