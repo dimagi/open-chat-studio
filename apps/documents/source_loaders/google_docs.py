@@ -212,4 +212,4 @@ class GoogleDocsDocumentLoader(BaseDocumentLoader[GoogleDocsSourceConfig]):
         content_changed = document.metadata.get("content_hash") != existing_metadata.get("content_hash")
         filename_changed = document.metadata.get("filename") != existing_file.file.name
         title_changed = document.metadata.get("title") != existing_metadata.get("title")
-        return content_changed or filename_changed or title_changed
+        return any((content_changed, filename_changed, title_changed))
