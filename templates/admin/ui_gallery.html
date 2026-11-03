@@ -34,6 +34,26 @@ When a component is added under templates/cotton/, add an example here.
               <c-ui.help>{% translate "Shown on hover." %} <b>{% translate "HTML allowed." %}</b></c-ui.help>
             </div>
           </div>
+          <div>
+            <h3 class="font-semibold mb-2"><code>&lt;c-ui.copy-chip&gt;</code></h3>
+            <div class="flex flex-wrap items-center gap-2">
+              <c-ui.copy-chip target="gallery-copy-shown" value="https://example.com/public/abc" text="Copy link" />
+              <c-ui.copy-chip target="gallery-copy-hidden" value="hidden-value" :show_value="False" text="Copy" extra_classes="btn-ghost" />
+              <c-ui.copy-chip target="gallery-copy-icon" value="icon-only" :show_value="False" extra_classes="btn-ghost btn-xs px-1" />
+            </div>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2"><code>&lt;c-ui.session-id-chip&gt;</code></h3>
+            <c-ui.session-id-chip external_id="7f3c2a9e-5b1d-4c8e-9a2f-0d4e6b8c1a3f" id_prefix="gallery-session" />
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2"><code>&lt;c-ui.breadcrumbs&gt;</code></h3>
+            <c-ui.breadcrumbs :items="gallery_breadcrumbs" />
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2"><code>&lt;c-app.participant-data-diff-changes&gt;</code></h3>
+            <c-app.participant-data-diff-changes :changes="gallery_changes" />
+          </div>
         </div>
       </section>
 
@@ -164,9 +184,7 @@ When a component is added under templates/cotton/, add an example here.
           <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ success_text|escapejs }}', 'success', 3)">{% translate "Success toast" %}</button>
           <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ error_text|escapejs }}', 'error', 3)">{% translate "Error toast" %}</button>
         </div>
-        {% translate "Modal title" as modal_title %}
-        {% translate "Modal body text." as modal_text %}
-        {% include "generic/modal.html" with modal_id="ui-gallery-modal" modal_title=modal_title modal_text=modal_text %}
+        <c-ui.modal id="ui-gallery-modal" title="{% translate 'Modal title' %}">{% translate "Modal body text." %}</c-ui.modal>
       </section>
 
       <section>

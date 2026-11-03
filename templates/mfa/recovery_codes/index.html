@@ -24,7 +24,7 @@
 
       <div class="mb-4">
         {% translate "Copy codes" as copy_text %}
-        {% include "generic/copy_chip.html" with copy_element_id="recovery_codes" action_text=copy_text extra_styles="btn-ghost" %}
+        <c-ui.copy-chip target="recovery_codes" :text="copy_text" extra_classes="btn-ghost" />
       </div>
 
       {% if MFA_RECOVERY_CODES_SHOW_ONCE %}

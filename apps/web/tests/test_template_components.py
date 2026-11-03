@@ -5,7 +5,10 @@ from django.conf import settings
 from django.template import engines
 from django.template.loader import render_to_string
 from django.test import override_settings
+from django.utils.safestring import mark_safe
 from django_cotton.compiler_regex import CottonCompiler
+
+from apps.generics.components import render_component
 
 
 def render(source, context=None):
@@ -66,22 +69,86 @@ def test_help_renders_slot_as_html():
 
 
 @pytest.mark.parametrize(
-    ("include", "component"),
+    ("chip", "expected"),
+    [
+        pytest.param({"label": "Bot", "url": "/b/"}, '<a href="/b/"', id="chip-with-url"),
+        pytest.param({"label": "Bot", "url": ""}, "no-animation", id="chip-without-url"),
+        pytest.param("plain text", "plain text", id="plain-value-printed-as-is"),
+    ],
+)
+def test_chip_from_chip_dict(chip, expected):
+    assert expected in render('<c-ui.chip :chip="chip" />', {"chip": chip})
+
+
+@pytest.mark.parametrize(
+    ("source", "expected", "unexpected"),
     [
         pytest.param(
-            '{% include "generic/help.html" with help_content="<i>text</i>" %}',
-            "<c-ui.help><i>text</i></c-ui.help>",
-            id="help",
+            '<c-ui.copy-chip target="link" value="https://x" text="Copy link" extra_classes="btn-ghost" />',
+            [
+                '<span id="link">https://x</span>',
+                "fa-copy",
+                "Copy link",
+                "btn btn-sm btn-ghost",
+                "copyToClipboard(this, 'link')",
+            ],
+            ["<input"],
+            id="shown-value",
         ),
         pytest.param(
-            '{% include "generic/chip_button.html" with url="/x" label="L" truncate=True %}',
-            '<c-ui.chip url="/x" label="L" truncate />',
-            id="chip_button",
+            '<c-ui.copy-chip target="secret" :value="value" :show_value="False" />',
+            ['<input id="secret" type="hidden" value="s3cret"/>'],
+            ['<span id="secret">'],
+            id="hidden-value",
+        ),
+        pytest.param(
+            '<c-ui.copy-chip target="elsewhere" />',
+            ["copyToClipboard(this, 'elsewhere')"],
+            ['id="elsewhere"'],
+            id="value-elsewhere",
         ),
     ],
 )
-def test_include_wrappers_match_components(include, component):
-    assert render(include) == render(component)
+def test_copy_chip(source, expected, unexpected):
+    html = render(source, {"value": "s3cret"})
+    for fragment in expected:
+        assert fragment in html
+    for fragment in unexpected:
+        assert fragment not in html
+
+
+def test_session_id_chip_nests_a_copy_chip():
+    html = render('<c-ui.session-id-chip :external_id="external_id" id_prefix="row" />', {"external_id": "abc"})
+    assert '<code class="truncate max-w-32 inline-block" title="abc">abc</code>' in html
+    assert '<input id="row-abc" type="hidden" value="abc"/>' in html
+
+
+def test_modal():
+    html = render('<c-ui.modal id="m" title="Title" x-data="{}">Body <b>text</b></c-ui.modal>')
+    assert html.startswith('<dialog class="modal" id="m" x-data="{}">')
+    assert '<h3 class="text-lg font-bold">Title</h3>' in html
+    assert '<div class="py-4">Body <b>text</b></div>' in html
+
+
+def test_participant_data_diff_changes():
+    changes = [
+        {"type": "add", "path": "name", "value": "Alex"},
+        {"type": "change", "path": "plan", "old": "free", "new": "pro"},
+        {"type": "remove", "path": "legacy", "value": "42"},
+    ]
+    html = render(
+        '<c-app.participant-data-diff-changes :changes="changes" text_size="text-xs" />', {"changes": changes}
+    )
+    assert html.count("text-xs") == 3
+    assert '<span class="text-error line-through">free</span>' in html
+    assert '<span class="text-success">pro</span>' in html
+
+
+def test_render_component_from_python():
+    html = render_component("ui.chip", chip={"label": "Bot", "url": "/b/"}, truncate=True)
+    assert 'title="Bot"' in html
+    assert render_component("ui.help", slot="<b>raw</b>").count("&lt;b&gt;raw&lt;/b&gt;") == 1
+    assert "<b>safe</b>" in render_component("ui.help", slot=mark_safe("<b>safe</b>"))
 
 
 def test_partials_and_components_share_the_loader_chain(tmp_path):

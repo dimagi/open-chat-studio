@@ -1,0 +1,22 @@
+{% comment %}
+Button that copies a value to the clipboard.
+
+  <c-ui.copy-chip target="public-link" :value="channel.public_url" text="Copy link" />
+  <c-ui.copy-chip target="api-key" extra_classes="btn-ghost" />                                   (copies the text of the page element with that id)
+  <c-ui.copy-chip target="participant-id" :value="participant.public_id" :show_value="False" extra_classes="btn-ghost btn-xs px-1" />
+
+Params:
+  target: id of the element whose text is copied. Rendered here when `value` is given; otherwise it must exist elsewhere on the page.
+  value, show_value (default True): the value to copy, and whether to show it next to the button.
+  text: button label, shown after the copy icon.
+  extra_classes: added to the button's classes.
+{% endcomment %}
+<c-vars target="" value="" show_value="True" text="" extra_classes="" />
+<div class="btn btn-sm {{ extra_classes }}" onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="Copy to clipboard" {{ attrs }}>
+  {% if value %}
+    {% if show_value %}<span id="{{ target }}">{{ value }}</span>
+    {% else %}<input id="{{ target }}" type="hidden" value="{{ value }}"/>
+    {% endif %}
+  {% endif %}
+  <i class="fa-regular fa-copy"></i> {{ text }}
+</div>

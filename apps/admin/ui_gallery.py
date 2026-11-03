@@ -29,5 +29,11 @@ def ui_gallery(request):
             "active_tab": "admin",
             "breadcrumbs": [admin_crumb(), (gettext("UI Gallery"), None)],
             "form": form,
+            "gallery_breadcrumbs": [("Chatbots", "#"), ("Support bot", "#"), ("Sessions", None)],
+            "gallery_changes": [
+                {"type": "add", "path": "name", "value": "Alex"},
+                {"type": "change", "path": "plan", "old": "free", "new": "pro"},
+                {"type": "remove", "path": "legacy_id", "value": "42"},
+            ],
         },
     )

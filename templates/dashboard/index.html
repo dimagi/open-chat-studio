@@ -127,7 +127,7 @@
               </div>
               <div class="flex items-center gap-1">
                 <div class="stat-label" x-text="stat.label"></div>
-                {# Mirrors generic/help.html; inlined because the card list is rendered by Alpine, not Django. #}
+                {# Mirrors cotton/ui/help.html; inlined because the card list is rendered by Alpine, not Django. #}
                 <template x-if="stat.tooltip">
                   <div class="dropdown dropdown-top dropdown-hover">
                     <button
@@ -173,7 +173,7 @@
                 Users who have participated in at least one chat message within the selected date range.
               {% endblocktranslate %}
 
-              {% include "generic/help.html" with help_content=active_info %}
+              <c-ui.help>{{ active_info|safe }}</c-ui.help>
             </div>
 
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.activeParticipants"></div>
@@ -195,7 +195,7 @@
                 A session is considered active if it has a message from either the bot or the participant.
               {% endblocktranslate %}
 
-              {% include "generic/help.html" with help_content=active_info %}
+              <c-ui.help>{{ active_info|safe }}</c-ui.help>
             </div>
 
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.sessionAnalytics"></div>
@@ -309,7 +309,7 @@
               <template x-for="item in botPerformanceData" :key="item.experiment_id">
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td>
-                    {# Note: Keep the styling consistent with `generic/chip_button.html` #}
+                    {# Note: Keep the styling consistent with `cotton/ui/chip.html` #}
                     <a :href="item.experiment_url" class="btn btn-sm btn-soft btn-primary">
                       <span x-text="item.experiment_name"></span>
                     </a>

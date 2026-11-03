@@ -1,18 +1,25 @@
+{% comment %}
+One line per participant-data change (add, remove or change), as produced by the participant data diff.
+
+  <c-app.participant-data-diff-changes :changes="changes" />
+  <c-app.participant-data-diff-changes :changes="changes" text_size="text-xs" />
+{% endcomment %}
+<c-vars changes="" text_size="text-sm" />
 {% for change in changes %}
   {% if change.type == "add" %}
-    <div class="flex items-start gap-2 {{ text_size|default:'text-sm' }}">
+    <div class="flex items-start gap-2 {{ text_size }}">
       <span class="badge badge-success badge-xs mt-1.5">+</span>
       <span class="font-mono text-success">{{ change.path }}</span>
       <span class="text-base-content/60">{{ change.value }}</span>
     </div>
   {% elif change.type == "remove" %}
-    <div class="flex items-start gap-2 {{ text_size|default:'text-sm' }}">
+    <div class="flex items-start gap-2 {{ text_size }}">
       <span class="badge badge-error badge-xs mt-1.5">-</span>
       <span class="font-mono text-error line-through">{{ change.path }}</span>
       <span class="text-base-content/60">{{ change.value }}</span>
     </div>
   {% elif change.type == "change" %}
-    <div class="flex items-start gap-2 {{ text_size|default:'text-sm' }}">
+    <div class="flex items-start gap-2 {{ text_size }}">
       <span class="badge badge-warning badge-xs mt-1.5">~</span>
       <span class="font-mono">{{ change.path }}</span>
       <span class="text-error line-through">{{ change.old }}</span>

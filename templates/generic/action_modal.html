@@ -10,4 +10,8 @@
     <i class="{{ icon_class }} htmx-hide"></i>
   {% endif %}
 </button>
-{% include modal_template %}
+{% if modal_template %}
+  {% include modal_template %}
+{% else %}
+  <c-ui.modal :id="modal_id" :title="modal_title">{{ modal_text }}</c-ui.modal>
+{% endif %}

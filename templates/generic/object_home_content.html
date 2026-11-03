@@ -32,7 +32,7 @@
           <a href="#{{ title|slugify }}">{{ title }}</a>
         </h1>
         {% if title_help_content %}
-          {% include "generic/help.html" with help_content=title_help_content %}
+          <c-ui.help>{{ title_help_content|safe }}</c-ui.help>
         {% endif %}
       </div>
       <span class="text-neutral-500 section-subtitle">{{ subtitle }}</span>

@@ -34,7 +34,7 @@
         {% endif %}
         {% block breadcrumbs %}
           {% if breadcrumbs and request.user.is_authenticated %}
-            {% include "generic/breadcrumbs.html" %}
+            <c-ui.breadcrumbs :items="breadcrumbs" />
           {% endif %}
         {% endblock breadcrumbs %}
         {% block app %}
