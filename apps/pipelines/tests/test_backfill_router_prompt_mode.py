@@ -1,7 +1,9 @@
 from importlib import import_module
+from unittest.mock import patch
 
 import pytest
 from django.apps import apps as global_apps
+from django.db.models import QuerySet
 
 from apps.pipelines.migrations.utils.backfill_router_prompt_mode import backfill_router_prompt_mode
 from apps.pipelines.models import Node
@@ -59,6 +61,42 @@ def test_the_backfill_is_not_reported_as_an_unpublished_change():
 
     node.refresh_from_db()
     assert not node.compare_with_latest()
+
+
+@pytest.mark.django_db()
+def test_edits_made_while_the_backfill_runs_are_kept():
+    switched = NodeFactory.create(type="RouterNode", params={"name": "switched"})
+    edited = NodeFactory.create(type="RouterNode", params={"name": "edited"})
+    read_ids = QuerySet.values_list
+
+    edits = [
+        lambda: Node.objects.filter(id=switched.id).update(params={"name": "switched", "prompt_mode": "standard"}),
+        lambda: Node.objects.filter(id=edited.id).update(params={"name": "renamed"}),
+    ]
+
+    def read_ids_then_edit(queryset, *args, **kwargs):
+        ids = list(read_ids(queryset, *args, **kwargs))
+        while edits:
+            edits.pop(0)()
+        return ids
+
+    with patch.object(QuerySet, "values_list", autospec=True, side_effect=read_ids_then_edit):
+        backfill_router_prompt_mode(Node)
+
+    switched.refresh_from_db()
+    edited.refresh_from_db()
+    assert switched.params == {"name": "switched", "prompt_mode": "standard"}
+    assert edited.params == {"name": "renamed", "prompt_mode": "custom"}
+
+
+@pytest.mark.django_db()
+def test_routers_are_backfilled_across_batches():
+    nodes = NodeFactory.create_batch(5, type="RouterNode", params={"name": "router"})
+
+    with patch(f"{backfill_router_prompt_mode.__module__}.BATCH_SIZE", 2):
+        assert backfill_router_prompt_mode(Node) == 5
+
+    assert all(Node.objects.get(id=node.id).params["prompt_mode"] == "custom" for node in nodes)
 
 
 @pytest.mark.django_db()

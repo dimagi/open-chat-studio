@@ -453,6 +453,24 @@ class TestUpdateNodesFromData:
         assert node.params["template_string"] == "{{ input }}"
 
     @pytest.mark.parametrize(
+        ("params", "expected_mode"),
+        [
+            pytest.param({}, "custom", id="missing-mode-saved-as-custom"),
+            pytest.param({"prompt_mode": ""}, "custom", id="empty-mode-saved-as-custom"),
+            pytest.param({"prompt_mode": "standard"}, "standard", id="standard-kept"),
+        ],
+    )
+    def test_a_router_saved_without_a_mode_keeps_its_prompt(self, params, expected_mode):
+        """A builder tab or export from before prompt modes existed sends a router with no mode."""
+        pipeline = PipelineFactory.create()
+        router_params = {"name": "router", "prompt": "Pick one.", "keywords": ["a"], **params}
+
+        pipeline.update_nodes_from_data({"router": content_flow_node("router", "RouterNode", params=router_params)})
+
+        node = Node.objects.get(pipeline=pipeline, flow_id="router")
+        assert node.params == {**router_params, "prompt_mode": expected_mode}
+
+    @pytest.mark.parametrize(
         "make_entry",
         [
             pytest.param(lambda flow_id: None, id="none"),

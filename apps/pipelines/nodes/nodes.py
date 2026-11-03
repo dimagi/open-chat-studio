@@ -773,6 +773,13 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             descriptions[keyword] = description
         return descriptions
 
+    @classmethod
+    def params_to_store(cls, params: dict) -> dict:
+        """A builder tab or export from before prompt modes existed sends no mode, and its prompt is the user's own."""
+        if params.get("prompt_mode"):
+            return params
+        return {**params, "prompt_mode": RouterPromptMode.CUSTOM.value}
+
     @field_validator("prompt_template_version", mode="before")
     @classmethod
     def ensure_prompt_template_version_exists(cls, value):

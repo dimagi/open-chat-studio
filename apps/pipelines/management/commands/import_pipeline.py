@@ -6,7 +6,6 @@ from django.db import transaction
 
 from apps.pipelines.flow import FullFlow, split_flow_data
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.nodes import RouterPromptMode
 from apps.teams.models import Team
 
 
@@ -44,7 +43,6 @@ class Command(BaseCommand):
         except pydantic.ValidationError as e:
             raise CommandError(f"Invalid pipeline data: {e}") from e
 
-        _keep_exported_routers_custom(flow)
         layout, node_data = split_flow_data(flow)
         new_pipeline = Pipeline.objects.create(
             team=team,
@@ -53,10 +51,3 @@ class Command(BaseCommand):
         )
         new_pipeline.update_nodes_from_data(node_data)
         self.stdout.write(self.style.SUCCESS(f"Pipeline '{name}' created successfully: {new_pipeline.pk}"))
-
-
-def _keep_exported_routers_custom(flow: FullFlow) -> None:
-    """A router exported before prompt modes existed has no `prompt_mode`, and sends the prompt it was written with."""
-    for node in flow.nodes:
-        if node.data and node.data.type == "RouterNode" and not node.data.params.get("prompt_mode"):
-            node.data.params["prompt_mode"] = RouterPromptMode.CUSTOM.value
