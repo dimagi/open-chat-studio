@@ -11,10 +11,9 @@ from apps.documents.source_loaders.google_docs import (
     GoogleDocsDocumentLoader,
     _google_api_error_message,
     extract_document_id,
-    extract_document_text,
-    normalize_document_text,
     safe_document_filename,
 )
+from apps.documents.source_loaders.google_docs_content import extract_document_text, normalize_document_text
 from apps.service_providers.auth_service.oauth import OAuthTokenError
 from apps.service_providers.models import AuthProviderType
 
