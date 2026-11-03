@@ -4,7 +4,7 @@ Breadcrumb trail. `items` is a list of (label, url) pairs; the last item is the 
   <c-ui.breadcrumbs :items="breadcrumbs" />
 {% endcomment %}
 <c-vars items="" />
-<nav class="text-sm breadcrumbs" aria-label="breadcrumbs" {{ attrs }}>
+<nav aria-label="breadcrumbs" {{ attrs|with_classes:"text-sm breadcrumbs" }}>
   <ul>
     {% for label, url in items %}
       {% if forloop.last %}
