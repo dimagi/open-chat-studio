@@ -201,3 +201,12 @@ class OcsConfigurationForm(forms.Form):
         clear_widget_embed_key_cache(chat_widget_config.chatbot_id)
 
         return config_instance
+
+
+class UiGalleryForm(forms.Form):
+    """Sample fields for the UI gallery, rendered through `render_form_fields` like every other form."""
+
+    name = forms.CharField(label="Name", help_text="Shown to participants.")
+    kind = forms.ChoiceField(label="Kind", choices=[("a", "Option A"), ("b", "Option B")])
+    notes = forms.CharField(label="Notes", widget=forms.Textarea(attrs={"rows": 2}), required=False)
+    enabled = forms.BooleanField(label="Enabled", required=False)

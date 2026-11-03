@@ -112,7 +112,8 @@ THIRD_PARTY_APPS = [
     "taggit",
     "tz_detect",
     "health_check",
-    "template_partials",
+    "django_cotton.apps.SimpleAppConfig",
+    "template_partials.apps.SimpleAppConfig",
     "silk",
     "oauth2_provider",
     "anymail",
@@ -211,11 +212,17 @@ ROOT_URLCONF = "config.urls"
 # used to disable the cache in dev, but turn it on in production.
 # more here: https://nickjanetakis.com/blog/django-4-1-html-templates-are-cached-by-default-with-debug-true
 _DEFAULT_LOADERS = [
+    "django_cotton.cotton_loader.Loader",
     "django.template.loaders.filesystem.Loader",
     "django.template.loaders.app_directories.Loader",
 ]
 
 _CACHED_LOADERS = [("django.template.loaders.cached.Loader", _DEFAULT_LOADERS)]
+
+# Both django-cotton and django-template-partials wrap the loader chain when their default
+# AppConfig is installed, and each overwrites the other's wrapping. The SimpleAppConfig
+# variants leave TEMPLATES alone, so the chain is spelled out here instead.
+_TEMPLATE_LOADERS = [("template_partials.loader.Loader", _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS)]
 
 TEMPLATES = [
     {
@@ -223,7 +230,7 @@ TEMPLATES = [
         "DIRS": [
             BASE_DIR / "templates",
         ],
-        "APP_DIRS": True,
+        "APP_DIRS": False,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -238,9 +245,10 @@ TEMPLATES = [
                 "apps.web.context_processors.unread_notifications_count",
                 "apps.admin.context_processors.ocs_config",
             ],
-            "loaders": _DEFAULT_LOADERS if DEBUG else _CACHED_LOADERS,
+            "loaders": _TEMPLATE_LOADERS,
             "builtins": [
                 "apps.web.templatetags.default_tags",
+                "django_cotton.templatetags.cotton",
                 "template_partials.templatetags.partials",
             ],
         },

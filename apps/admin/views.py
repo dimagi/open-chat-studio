@@ -28,6 +28,7 @@ from apps.admin.forms import (
     FlagUpdateForm,
     OcsConfigurationForm,
     TeamMetadataImportForm,
+    UiGalleryForm,
 )
 from apps.admin.imports import import_team_metadata_from_csv
 from apps.admin.models import OcsConfiguration
@@ -684,6 +685,23 @@ def delete_flag(request, flag_name):
     except Exception:
         logger.exception("Failed to delete flag")
         return HttpResponse("Failed to delete flag", status=500)
+
+
+@requires_admin
+def ui_gallery(request):
+    """Every shared UI component and daisyUI pattern on one page, for design review in both themes."""
+    form = UiGalleryForm(data={"name": "Support bot", "kind": "a"})
+    form.is_valid()
+    form.add_error("notes", gettext("Example of a field error."))
+    return TemplateResponse(
+        request,
+        "admin/ui_gallery.html",
+        context={
+            "active_tab": "admin",
+            "breadcrumbs": [admin_crumb(), (gettext("UI Gallery"), None)],
+            "form": form,
+        },
+    )
 
 
 @requires_admin_superuser

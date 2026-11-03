@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -999,6 +999,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/21/39/55822b15b7ec87410f34cd16ce04065ff390e50f9e29f31d6d116fc80456/django_cors_headers-4.9.0.tar.gz", hash = "sha256:fe5d7cb59fdc2c8c646ce84b727ac2bca8912a247e6e68e1fb507372178e59e8", size = 21458, upload-time = "2025-09-18T10:40:52.326Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/30/d8/19ed1e47badf477d17fb177c1c19b5a21da0fd2d9f093f23be3fb86c5fab/django_cors_headers-4.9.0-py3-none-any.whl", hash = "sha256:15c7f20727f90044dcee2216a9fd7303741a864865f0c3657e28b7056f61b449", size = 12809, upload-time = "2025-09-18T10:40:50.843Z" },
+]
+
+[[package]]
+name = "django-cotton"
+version = "2.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/8f/ca91ebdea636c0466ef517d0d8fc9f7d08290e4614bbc9a48aa0bb5a0141/django_cotton-2.8.0.tar.gz", hash = "sha256:fe60182f143e89296db2384da9818da4662a1b3aa8dd86f1b4eeb5e884015ea8", size = 35534, upload-time = "2026-10-14T10:59:16.235Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/52/18a6523f88b642691282e4eac97bc76df2a53af8ca69fd028f11662b9c77/django_cotton-2.8.0-py3-none-any.whl", hash = "sha256:f6142988ba957812a7272270bc06eedf8df27bbf76e7b7f22ea694fa9b9c9505", size = 34107, upload-time = "2026-10-14T10:59:17.11Z" },
 ]
 
 [[package]]
@@ -3187,7 +3199,6 @@ wheels = [
 name = "open-chat-studio"
 version = "0.1.0"
 source = { virtual = "." }
-default-groups = ["dev", "docs"]
 dependencies = [
     { name = "anthropic" },
     { name = "atlassian-python-api" },
@@ -3207,6 +3218,7 @@ dependencies = [
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers" },
+    { name = "django-cotton" },
     { name = "django-cryptography-django5" },
     { name = "django-environ" },
     { name = "django-field-audit" },
@@ -3333,6 +3345,7 @@ requires-dist = [
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers", specifier = ">=4.7.0" },
+    { name = "django-cotton", specifier = ">=2.8.0" },
     { name = "django-cryptography-django5" },
     { name = "django-environ" },
     { name = "django-field-audit", specifier = ">=1.2.7" },
