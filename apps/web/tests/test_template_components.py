@@ -349,10 +349,17 @@ def test_component_attributes_come_before_pass_through_attributes():
         pytest.param(
             '<c-ui.dropdown><c-slot name="trigger"><div tabindex="0" role="button" class="btn btn-ghost">'
             "<i></i></div></c-slot><li>x</li></c-ui.dropdown>",
-            {},
+            {"trigger": "from the page context"},
             ['<div class="dropdown"> <div tabindex="0" role="button" class="btn btn-ghost"><i></i></div> <ul'],
-            ['class="btn">', "fa-caret-down"],
+            ['class="btn">', "fa-caret-down", "from the page context"],
             id="trigger-slot",
+        ),
+        pytest.param(
+            '<c-ui.dropdown label="Menu"><li>x</li></c-ui.dropdown>',
+            {"trigger": "from the page context"},
+            ['<div tabindex="0" role="button" class="btn"> Menu'],
+            ["from the page context"],
+            id="context-trigger-does-not-leak",
         ),
     ],
 )
@@ -430,7 +437,7 @@ def test_tabs(source, expected):
             {"count": 12},
             [
                 '<label role="tab" class="tab" hx-get="/panel" hx-trigger="change">',
-                '<input type="radio" name="g" class="hidden" checked />',
+                '<input type="radio" name="g" class="sr-only" checked />',
                 'Sessions<span class="text-base-content/50 ml-1">12</span> </label>',
                 '<div role="tabpanel" class="tab-content pt-3">Panel</div>',
             ],
@@ -440,7 +447,7 @@ def test_tabs(source, expected):
         pytest.param(
             '<c-ui.tab name="g" label="Versions"> </c-ui.tab>',
             {},
-            ['<input type="radio" name="g" class="hidden" />'],
+            ['<input type="radio" name="g" class="sr-only" />'],
             ["checked", "tab-content"],
             id="radio-tab-blank-slot-has-no-panel",
         ),

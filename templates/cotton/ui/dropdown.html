@@ -31,7 +31,7 @@ Params:
   class: extra classes, merged with the component's own.
 Anything else (id, x-*, data-*) is passed through to the wrapper.
 {% endcomment %}
-<c-vars label="" icon="" variant="" style="" size="" shape="" caret="True" placement="" align="" hover="" width="w-52" menu_class="" />
+<c-vars label="" icon="" variant="" style="" size="" shape="" caret="True" placement="" align="" hover="" width="w-52" menu_class="" trigger="" />
 {% with placement_class=placement|yesno:"dropdown-,"|add:placement align_class=align|yesno:"dropdown-,"|add:align hover_class=hover|yesno:"dropdown-hover," %}
   {% with classes="dropdown "|add:placement_class|add:" "|add:align_class|add:" "|add:hover_class %}
     <div {{ attrs|with_classes:classes }}>

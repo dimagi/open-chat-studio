@@ -198,8 +198,8 @@ When a component is added under templates/cotton/, add an example here.
           <div x-data="{ tab: 'messages' }">
             <h3 class="font-semibold mb-2">{% translate "Button tabs switched by Alpine" %}</h3>
             <c-ui.tabs>
-              <c-ui.tab label="{% translate 'Messages' %}" :count="3" ::class="tab === 'messages' && 'tab-active'" @click="tab = 'messages'" />
-              <c-ui.tab label="{% translate 'Participant data' %}" ::class="tab === 'data' && 'tab-active'" @click="tab = 'data'" />
+              <c-ui.tab label="{% translate 'Messages' %}" :count="3" ::class="tab === 'messages' && 'tab-active'" ::aria-selected="tab === 'messages'" @click="tab = 'messages'" />
+              <c-ui.tab label="{% translate 'Participant data' %}" ::class="tab === 'data' && 'tab-active'" ::aria-selected="tab === 'data'" @click="tab = 'data'" />
             </c-ui.tabs>
             <div class="pt-3" x-show="tab === 'messages'">{% translate "Messages panel." %}</div>
             <div class="pt-3" x-show="tab === 'data'" x-cloak>{% translate "Participant data panel." %}</div>
