@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from apps.evaluations.evaluators import PythonEvaluator
 from apps.evaluations.exceptions import EvaluationRunException
+from apps.evaluations.generation import GenerationRecord
 from apps.utils.factories.evaluations import EvaluationMessageFactory
 
 
@@ -181,3 +182,28 @@ def test_python_evaluator_receives_participant_data_and_session_state():
         session_state={"current_step": "onboarding"},
     )
     assert evaluator.run(message, "").result == {"name": "Ada", "step": "onboarding"}
+
+
+@pytest.mark.django_db()
+def test_python_evaluator_receives_the_generation_record():
+    """The record reaches main() through **kwargs as plain data."""
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            generation = kwargs["generation"]
+            return {"urgent": "urgent" in generation["message_tags"], "calls": len(generation["tool_calls"])}
+        """)
+    record = GenerationRecord(
+        message_tags=["urgent"],
+        tool_calls=[{"node": "Answer", "name": "file-search", "input": "q", "output": "chunks", "error": None}],
+    )
+    result = PythonEvaluator(code=code).run(EvaluationMessageFactory.create(), "", generation=record).result
+    assert result == {"urgent": True, "calls": 1}
+
+
+@pytest.mark.django_db()
+def test_python_evaluator_generation_is_empty_without_a_record():
+    code = textwrap.dedent("""
+        def main(input, output, context, full_history, generated_response, **kwargs):
+            return {"tags": kwargs["generation"]["message_tags"]}
+        """)
+    assert PythonEvaluator(code=code).run(EvaluationMessageFactory.create(), "").result == {"tags": []}

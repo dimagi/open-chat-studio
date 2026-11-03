@@ -12,6 +12,9 @@ FINALIZATION_GRACE = timedelta(minutes=10)
 # The results table shows only failed rows when this query parameter is "1".
 FAILED_FILTER_PARAM = "failed"
 
+# Caps the characters of each generation record field substituted into an evaluator prompt.
+GENERATION_PROMPT_VARIABLE_MAX_LENGTH = 10_000
+
 EVALUATION_RUN_FIXED_HEADERS = [
     "id",
     "session",
@@ -36,6 +39,16 @@ EVALUATOR_PROMPT_VARIABLES = {
         ("session_state", True),
         ("full_history", False),
         ("generated_response", False),
+        # JSON strings of the generation record (``GenerationRecord.prompt_variables``), capped at
+        # ``GENERATION_PROMPT_VARIABLE_MAX_LENGTH``, so no sub-key is addressable. The validator
+        # accepts exactly these names, with no conversion or format spec.
+        ("generation.node_outputs", False),
+        ("generation.path", False),
+        ("generation.message_tags", False),
+        ("generation.session_tags", False),
+        ("generation.participant_data_diff", False),
+        ("generation.llm_calls", False),
+        ("generation.tool_calls", False),
     ],
     "session": [
         ("context", True),
@@ -50,6 +63,11 @@ EVALUATOR_PROMPT_VARIABLES = {
 ALL_EVALUATOR_PROMPT_VARIABLE_ROOTS = {
     name.split(".")[0] for variables in EVALUATOR_PROMPT_VARIABLES.values() for name, _ in variables
 }
+
+
+GENERATION_PROMPT_VARIABLE_NAMES = [
+    name for name, _ in EVALUATOR_PROMPT_VARIABLES["message"] if name.split(".")[0] == "generation"
+]
 
 
 def evaluator_prompt_variable_names(evaluation_mode: str) -> list[str]:
@@ -75,3 +93,25 @@ def prompt_variable_roots(prompt: str) -> set[str]:
     except ValueError:
         return set()
     return {re.split(r"[.\[]", field, maxsplit=1)[0] for field in fields}
+
+
+def _field_as_written(field: str, format_spec: str, conversion: str | None) -> str:
+    return field + (f"!{conversion}" if conversion else "") + (f":{format_spec}" if format_spec else "")
+
+
+def unknown_generation_variables(prompt: str) -> set[str]:
+    """Format fields rooted at ``generation`` that are not an advertised name or carry a conversion or format spec.
+
+    Each is returned as written, e.g. ``generation.message_tags!r``. A malformed template yields
+    nothing, as in `prompt_variable_roots`.
+    """
+    try:
+        parsed = [(field, spec, conversion) for _, field, spec, conversion in Formatter().parse(prompt) if field]
+    except ValueError:
+        return set()
+    return {
+        _field_as_written(field, spec or "", conversion)
+        for field, spec, conversion in parsed
+        if re.split(r"[.\[]", field, maxsplit=1)[0] == "generation"
+        and (field not in GENERATION_PROMPT_VARIABLE_NAMES or spec or conversion)
+    }
