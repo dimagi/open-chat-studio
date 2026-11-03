@@ -10,8 +10,8 @@ class TestUiGallery:
         response = staff_client.get(reverse("ocs_admin:ui_gallery"))
         assert response.status_code == 200
         html = response.content.decode()
-        assert "btn btn-sm btn-soft btn-primary" in html  # <c-ui.chip>
-        assert "dropdown-hover" in html  # <c-ui.help>
+        assert "Static chip" in html  # <c-ui.chip>
+        assert "More information" in html  # <c-ui.help>
         assert "Example of a field error." in html
 
     def test_hidden_from_non_staff(self, client):

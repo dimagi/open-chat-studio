@@ -157,9 +157,12 @@ When a component is added under templates/cotton/, add an example here.
         <h2 class="text-lg font-bold mb-3">{% translate "Dialogs and toasts" %}</h2>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" class="btn btn-sm" onclick="document.getElementById('ui-gallery-modal').showModal()">{% translate "Open modal" %}</button>
-          <button type="button" class="btn btn-sm" onclick="confirmDialog('{% translate "Archive this chatbot?" %}')">{% translate "Confirm dialog" %}</button>
-          <button type="button" class="btn btn-sm" onclick="alertify.notify('{% translate "Saved." %}', 'success', 3)">{% translate "Success toast" %}</button>
-          <button type="button" class="btn btn-sm" onclick="alertify.notify('{% translate "Something went wrong." %}', 'error', 3)">{% translate "Error toast" %}</button>
+          {% translate "Archive this chatbot?" as confirm_text %}
+          {% translate "Saved." as success_text %}
+          {% translate "Something went wrong." as error_text %}
+          <button type="button" class="btn btn-sm" onclick="confirmDialog('{{ confirm_text|escapejs }}')">{% translate "Confirm dialog" %}</button>
+          <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ success_text|escapejs }}', 'success', 3)">{% translate "Success toast" %}</button>
+          <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ error_text|escapejs }}', 'error', 3)">{% translate "Error toast" %}</button>
         </div>
         {% translate "Modal title" as modal_title %}
         {% translate "Modal body text." as modal_text %}
