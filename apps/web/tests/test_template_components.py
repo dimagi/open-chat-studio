@@ -279,3 +279,16 @@ def test_with_classes_merges_escapes_and_skips_declared_parameters():
         '<c-ui.badge variant="info" class="mt-1" :title="title" hx-boost>x</c-ui.badge>', {"title": 'A "q" <b>'}
     )
     assert html == '<span class="badge badge-info mt-1" title="A &quot;q&quot; &lt;b&gt;" hx-boost>x</span>'
+
+
+@pytest.mark.parametrize(
+    ("flag", "expected"),
+    [
+        pytest.param(True, '<span class="badge" hx-boost>x</span>', id="true-renders-bare"),
+        pytest.param(False, '<span class="badge">x</span>', id="false-omitted"),
+        pytest.param(None, '<span class="badge">x</span>', id="none-omitted"),
+        pytest.param("yes", '<span class="badge" hx-boost="yes">x</span>', id="string-kept"),
+    ],
+)
+def test_with_classes_boolean_attributes(flag, expected):
+    assert render('<c-ui.badge :hx-boost="flag">x</c-ui.badge>', {"flag": flag}) == expected
