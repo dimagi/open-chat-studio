@@ -250,6 +250,7 @@ def test_loader_metadata_preserves_content_and_stable_identifier(httpx_mock):
         url=f"{DOCS_API_URL}/doc_123?includeTabsContent=true",
         json={
             "title": "Untitled Meeting - Notes",
+            "revisionId": "revision-123",
             "tabs": [
                 {
                     "documentTab": {
@@ -262,6 +263,7 @@ def test_loader_metadata_preserves_content_and_stable_identifier(httpx_mock):
     loader = GoogleDocsDocumentLoader.for_document_source(SimpleNamespace(id=7, team_id=1), source)
     document = next(loader.load_documents())
     assert document.metadata["filename"] == "Untitled Meeting - Notes.txt"
+    assert document.metadata["revision_id"] == "revision-123"
     assert loader.get_document_identifier(document) == "doc_123"
     assert document.content == b"Body\n"
 
@@ -282,17 +284,182 @@ def test_extracted_text_keeps_paragraph_separation_and_content_semantics():
     assert extract_document_text(document) == "Summary \nDetails\n"
 
 
-def test_title_change_updates_filename_without_changing_identifier_or_content():
+def test_title_change_updates_metadata_even_when_filename_is_unchanged():
     loader = GoogleDocsDocumentLoader(
         SimpleNamespace(id=7),
         GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
         SimpleNamespace(),
     )
     content = b"Unchanged body\n"
-    metadata = {"content_hash": hashlib.sha256(content).hexdigest(), "filename": "New title.txt"}
-    existing_file = SimpleNamespace(file=SimpleNamespace(name="Old title.txt", metadata=metadata))
-    document = SimpleNamespace(content=content, metadata=metadata)
+    filename = safe_document_filename("Plan/", "doc_123")
+    new_metadata = {
+        "content_hash": hashlib.sha256(content).hexdigest(),
+        "filename": filename,
+        "title": "Plan/",
+    }
+    existing_file = SimpleNamespace(
+        file=SimpleNamespace(
+            name=filename,
+            metadata={"content_hash": new_metadata["content_hash"], "filename": filename, "title": "Plan:"},
+        )
+    )
+    document = SimpleNamespace(content=content, metadata=new_metadata)
     assert loader.get_document_identifier(SimpleNamespace(metadata={"document_id": "doc_123"})) == "doc_123"
     assert loader.should_update_document(document, existing_file)
-    existing_file.file.name = "New title.txt"
+
+    existing_file.file.metadata = new_metadata
     assert not loader.should_update_document(document, existing_file)
+
+
+def test_loader_rejects_invalid_google_api_json(httpx_mock):
+    auth_service = Mock()
+    auth_service.get_auth_headers.return_value = {"Authorization": "Bearer token"}
+    provider = SimpleNamespace(
+        team_id=1,
+        type=AuthProviderType.oauth_authorization_code,
+        get_auth_service=Mock(return_value=auth_service),
+    )
+    httpx_mock.add_response(
+        url=f"{DOCS_API_URL}/doc_123?includeTabsContent=true",
+        status_code=200,
+        text="<html>not JSON</html>",
+    )
+    loader = GoogleDocsDocumentLoader(
+        SimpleNamespace(id=7),
+        GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
+        provider,
+    )
+    with pytest.raises(ValueError, match="Google Docs API returned an invalid document"):
+        list(loader.load_documents())
+
+
+def test_content_hash_detects_body_changes_and_ignores_revision_only_changes():
+    loader = GoogleDocsDocumentLoader(
+        SimpleNamespace(id=7),
+        GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
+        SimpleNamespace(),
+    )
+    original_content = b"Body\n"
+    original_metadata = {
+        "content_hash": hashlib.sha256(original_content).hexdigest(),
+        "filename": "Plan.txt",
+        "title": "Plan",
+        "revision_id": "revision-1",
+    }
+    existing_file = SimpleNamespace(file=SimpleNamespace(name="Plan.txt", metadata=original_metadata))
+    unchanged = SimpleNamespace(
+        content=original_content,
+        metadata={**original_metadata, "revision_id": "revision-2"},
+    )
+    assert not loader.should_update_document(unchanged, existing_file)
+
+    updated_content = b"Changed body\n"
+    updated = SimpleNamespace(
+        content=updated_content,
+        metadata={
+            **original_metadata,
+            "content_hash": hashlib.sha256(updated_content).hexdigest(),
+            "revision_id": "revision-3",
+        },
+    )
+    assert loader.should_update_document(updated, existing_file)
+
+
+def test_extract_document_text_handles_table_of_contents_and_section_breaks():
+    document = {
+        "body": {
+            "content": [
+                {"paragraph": {"elements": [{"textRun": {"content": "Introduction\n"}}]}},
+                {"sectionBreak": {"sectionStyle": {}}},
+                {
+                    "tableOfContents": {
+                        "content": [{"paragraph": {"elements": [{"textRun": {"content": "Contents\n"}}]}}]
+                    }
+                },
+                {"sectionBreak": {"sectionStyle": {}}},
+            ]
+        }
+    }
+    assert extract_document_text(document) == "Introduction\n\nContents\n"
+
+
+def test_google_api_error_handles_non_object_error_payload():
+    response = httpx.Response(503, json={"error": "upstream failure"})
+    assert _google_api_error_message(response) == "Google Docs request failed (503): HTTP error"
+
+
+def test_loader_wraps_http_transport_errors(httpx_mock):
+    auth_service = Mock()
+    auth_service.get_auth_headers.return_value = {}
+    provider = SimpleNamespace(
+        team_id=1,
+        type=AuthProviderType.oauth_authorization_code,
+        get_auth_service=Mock(return_value=auth_service),
+    )
+    request = httpx.Request("GET", f"{DOCS_API_URL}/doc_123")
+    httpx_mock.add_exception(httpx.ConnectError("connection failed", request=request))
+    loader = GoogleDocsDocumentLoader(
+        SimpleNamespace(id=7),
+        GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
+        provider,
+    )
+    with pytest.raises(ValueError, match="Google Docs request failed:"):
+        list(loader.load_documents())
+
+
+def test_loader_wraps_unexpected_auth_service_errors():
+    provider = SimpleNamespace(
+        team_id=1,
+        type=AuthProviderType.oauth_authorization_code,
+        get_auth_service=Mock(side_effect=RuntimeError("auth service unavailable")),
+    )
+    loader = GoogleDocsDocumentLoader(
+        SimpleNamespace(id=7),
+        GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
+        provider,
+    )
+    with pytest.raises(ValueError, match="Google Docs response was invalid: auth service unavailable"):
+        list(loader.load_documents())
+
+
+@pytest.mark.parametrize("payload", [[], "not a document"])
+def test_loader_rejects_non_object_document_responses(httpx_mock, payload):
+    auth_service = Mock()
+    auth_service.get_auth_headers.return_value = {}
+    provider = SimpleNamespace(
+        team_id=1,
+        type=AuthProviderType.oauth_authorization_code,
+        get_auth_service=Mock(return_value=auth_service),
+    )
+    httpx_mock.add_response(
+        url=f"{DOCS_API_URL}/doc_123?includeTabsContent=true",
+        json=payload,
+    )
+    loader = GoogleDocsDocumentLoader(
+        SimpleNamespace(id=7),
+        GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
+        provider,
+    )
+    with pytest.raises(ValueError, match="Google Docs API returned an invalid document"):
+        list(loader.load_documents())
+
+
+def test_loader_rejects_documents_without_extractable_text(httpx_mock):
+    auth_service = Mock()
+    auth_service.get_auth_headers.return_value = {}
+    provider = SimpleNamespace(
+        team_id=1,
+        type=AuthProviderType.oauth_authorization_code,
+        get_auth_service=Mock(return_value=auth_service),
+    )
+    httpx_mock.add_response(
+        url=f"{DOCS_API_URL}/doc_123?includeTabsContent=true",
+        json={"title": "Empty"},
+    )
+    loader = GoogleDocsDocumentLoader(
+        SimpleNamespace(id=7),
+        GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
+        provider,
+    )
+    with pytest.raises(ValueError, match="contains no extractable text"):
+        list(loader.load_documents())

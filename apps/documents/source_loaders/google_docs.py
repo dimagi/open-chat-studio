@@ -145,7 +145,10 @@ class GoogleDocsDocumentLoader(BaseDocumentLoader[GoogleDocsSourceConfig]):
             )
             if response.is_error:
                 raise ValueError(_google_api_error_message(response))
-            document = response.json()
+            try:
+                document = response.json()
+            except ValueError as exc:
+                raise ValueError("Google Docs API returned an invalid document") from exc
         except OAuthTokenError:
             raise
         except httpx.HTTPError as exc:
@@ -179,8 +182,8 @@ class GoogleDocsDocumentLoader(BaseDocumentLoader[GoogleDocsSourceConfig]):
         return document.metadata["document_id"]
 
     def should_update_document(self, document: SourceDocument, existing_file: CollectionFile) -> bool:
-        content_changed = document.metadata.get("content_hash") != (existing_file.file.metadata or {}).get(
-            "content_hash"
-        )
+        existing_metadata = existing_file.file.metadata or {}
+        content_changed = document.metadata.get("content_hash") != existing_metadata.get("content_hash")
         filename_changed = document.metadata.get("filename") != existing_file.file.name
-        return content_changed or filename_changed
+        title_changed = document.metadata.get("title") != existing_metadata.get("title")
+        return content_changed or filename_changed or title_changed
