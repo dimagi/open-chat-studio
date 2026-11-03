@@ -4,7 +4,7 @@ Help icon that shows the slot content on hover.
   <c-ui.help>Shown on hover. <b>HTML allowed.</b></c-ui.help>
 {% endcomment %}
 {% load i18n %}
-<div class="dropdown dropdown-right dropdown-hover" {{ attrs }}>
+<div {{ attrs|with_classes:"dropdown dropdown-right dropdown-hover" }}>
   <button
     type="button"
     class="btn btn-circle btn-ghost btn-xs text-info"

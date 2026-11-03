@@ -2,18 +2,18 @@
 Button that copies a value to the clipboard.
 
   <c-ui.copy-chip target="public-link" :value="channel.public_url" text="Copy link" />
-  <c-ui.copy-chip target="api-key" extra_classes="btn-ghost" />                                   (copies the text of the page element with that id)
-  <c-ui.copy-chip target="participant-id" :value="participant.public_id" :show_value="False" extra_classes="btn-ghost btn-xs px-1" />
+  <c-ui.copy-chip target="api-key" class="btn-ghost" />                                   (copies the text of the page element with that id)
+  <c-ui.copy-chip target="participant-id" :value="participant.public_id" :show_value="False" class="btn-ghost btn-xs px-1" />
 
 Params:
   target: id of the element whose text is copied. Rendered here when `value` is given; otherwise it must exist elsewhere on the page.
   value, show_value (default True): the value to copy, and whether to show it next to the button.
   text: button label, shown after the copy icon.
-  extra_classes: added to the button's classes.
+  class: extra classes, merged with the component's own.
 {% endcomment %}
 {% load i18n %}
-<c-vars target="" value="" show_value="True" text="" extra_classes="" />
-<div class="btn btn-sm {{ extra_classes }}" onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="{% translate 'Copy to clipboard' %}" {{ attrs }}>
+<c-vars target="" value="" show_value="True" text="" />
+<div {{ attrs|with_classes:"btn btn-sm" }} onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="{% translate 'Copy to clipboard' %}">
   {% if value %}
     {% if show_value %}<span id="{{ target }}">{{ value }}</span>
     {% else %}<input id="{{ target }}" type="hidden" value="{{ value }}"/>
