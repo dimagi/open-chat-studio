@@ -124,25 +124,102 @@ When a component is added under templates/cotton/, add an example here.
       </section>
 
       <section>
-        <h2 class="text-lg font-bold mb-3">{% translate "Tooltip, help and dropdown" %}</h2>
-        <div class="flex flex-wrap items-center gap-6">
-          <span class="tooltip" data-tip="{% translate 'Tooltip text' %}"><c-ui.button size="sm">{% translate "Hover me" %}</c-ui.button></span>
-          <div class="dropdown">
-            <c-ui.button size="sm" tabindex="0">{% translate "Dropdown" %} <i class="fa-solid fa-caret-down"></i></c-ui.button>
-            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
-              <li><a href="#">{% translate "First action" %}</a></li>
-              <li><a href="#">{% translate "Second action" %}</a></li>
-            </ul>
-          </div>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.field&gt;</code></h2>
+        <div class="max-w-md space-y-2">
+          <c-ui.field label="{% translate 'Display name' %}" input_id="gallery-field-name" help="{% translate 'Shown to participants.' %}">
+            <input id="gallery-field-name" type="text" class="input w-full" value="Support bot" />
+          </c-ui.field>
+          <c-ui.field label="{% translate 'Kind' %}" input_id="gallery-field-kind" :errors="gallery_field_errors">
+            <select id="gallery-field-kind" class="select w-full">
+              <option>{% translate "Option A" %}</option>
+              <option>{% translate "Option B" %}</option>
+            </select>
+          </c-ui.field>
+          <c-ui.field label="{% translate 'Enabled' %}" help="{% translate 'Inline layout for a checkbox or toggle.' %}" inline>
+            <input type="checkbox" class="checkbox" checked />
+          </c-ui.field>
         </div>
       </section>
 
       <section>
-        <h2 class="text-lg font-bold mb-3">{% translate "Tabs" %}</h2>
-        <div role="tablist" class="tabs tabs-border">
-          <a role="tab" class="tab tab-active">{% translate "Overview" %}</a>
-          <a role="tab" class="tab">{% translate "Sessions" %}</a>
-          <a role="tab" class="tab">{% translate "Settings" %}</a>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.tooltip&gt;</code></h2>
+        <div class="flex flex-wrap items-center gap-6">
+          <c-ui.tooltip tip="{% translate 'Tooltip text' %}"><c-ui.button size="sm">{% translate "Top" %}</c-ui.button></c-ui.tooltip>
+          <c-ui.tooltip tip="{% translate 'Tooltip text' %}" position="bottom"><c-ui.button size="sm">{% translate "Bottom" %}</c-ui.button></c-ui.tooltip>
+          <c-ui.tooltip tip="{% translate 'Tooltip text' %}" position="left"><c-ui.button size="sm">{% translate "Left" %}</c-ui.button></c-ui.tooltip>
+          <c-ui.tooltip tip="{% translate 'Tooltip text' %}" position="right"><c-ui.button size="sm">{% translate "Right" %}</c-ui.button></c-ui.tooltip>
+          <c-ui.tooltip tip="{% translate 'Added by this team' %}"><c-ui.badge size="xs" style="outline">{% translate "custom" %}</c-ui.badge></c-ui.tooltip>
+          <c-ui.tooltip tip="{% translate 'No trace recorded' %}" position="right"><c-ui.button variant="ghost" shape="square" size="xs" icon="fa-solid fa-diagram-project" disabled /></c-ui.tooltip>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.dropdown&gt;</code></h2>
+        <div class="flex flex-wrap items-center gap-6">
+          <c-ui.dropdown label="{% translate 'Actions' %}" size="sm">
+            <li><a href="#">{% translate "First action" %}</a></li>
+            <li><a href="#">{% translate "Second action" %}</a></li>
+          </c-ui.dropdown>
+          <c-ui.dropdown label="{% translate 'Add new' %}" icon="fa-solid fa-plus" variant="primary" size="sm" align="end">
+            <li><a href="#">{% translate "Chatbot" %}</a></li>
+            <li><a href="#">{% translate "Collection" %}</a></li>
+          </c-ui.dropdown>
+          <c-ui.dropdown label="{% translate 'Mute for' %}" variant="ghost" size="sm" hover width="w-40">
+            <li class="menu-title">{% translate "Duration" %}</li>
+            <li><button type="button">{% translate "8 hours" %}</button></li>
+            <li><button type="button">{% translate "A week" %}</button></li>
+          </c-ui.dropdown>
+          <c-ui.dropdown label="{% translate 'Opens upward' %}" size="sm" placement="top" :caret="False">
+            <li><a href="#">{% translate "An item" %}</a></li>
+          </c-ui.dropdown>
+          <c-ui.dropdown align="end" width="w-48">
+            <c-slot name="trigger">
+              <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square" aria-label="{% translate 'More actions' %}">
+                <i class="fa-solid fa-ellipsis-vertical"></i>
+              </div>
+            </c-slot>
+            <li><a href="#"><i class="fa-solid fa-database"></i> {% translate "Create dataset" %}</a></li>
+            <li><a href="#"><i class="fa-solid fa-table-list"></i> {% translate "Analyze transcripts" %}</a></li>
+          </c-ui.dropdown>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.tabs&gt;</code></h2>
+        <div class="space-y-6">
+          <div>
+            <h3 class="font-semibold mb-2">{% translate "Radio tabs with panels" %}</h3>
+            <c-ui.tabs>
+              <c-ui.tab name="gallery_tabs" label="{% translate 'Sessions' %}" :count="12" active panel_class="pt-3">{% translate "Sessions panel." %}</c-ui.tab>
+              <c-ui.tab name="gallery_tabs" label="{% translate 'Versions' %}" panel_class="pt-3">{% translate "Versions panel." %}</c-ui.tab>
+              <c-ui.tab name="gallery_tabs" label="{% translate 'Settings' %}" panel_class="pt-3">{% translate "Settings panel." %}</c-ui.tab>
+            </c-ui.tabs>
+          </div>
+          <div x-data="{ tab: 'messages' }">
+            <h3 class="font-semibold mb-2">{% translate "Button tabs switched by Alpine" %}</h3>
+            <c-ui.tabs>
+              <c-ui.tab label="{% translate 'Messages' %}" :count="3" ::class="tab === 'messages' && 'tab-active'" @click="tab = 'messages'" />
+              <c-ui.tab label="{% translate 'Participant data' %}" ::class="tab === 'data' && 'tab-active'" @click="tab = 'data'" />
+            </c-ui.tabs>
+            <div class="pt-3" x-show="tab === 'messages'">{% translate "Messages panel." %}</div>
+            <div class="pt-3" x-show="tab === 'data'" x-cloak>{% translate "Participant data panel." %}</div>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">{% translate "Link tabs, lift style" %}</h3>
+            <c-ui.tabs style="lift">
+              <c-ui.tab href="#" label="{% translate 'Overview' %}" active />
+              <c-ui.tab href="#" label="{% translate 'Sessions' %}" />
+              <c-ui.tab href="#" label="{% translate 'Settings' %}" />
+            </c-ui.tabs>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">{% translate "Box style, small" %}</h3>
+            <c-ui.tabs style="box" size="sm">
+              <c-ui.tab label="{% translate 'Day' %}" active />
+              <c-ui.tab label="{% translate 'Week' %}" />
+              <c-ui.tab label="{% translate 'Month' %}" />
+            </c-ui.tabs>
+          </div>
         </div>
       </section>
 

@@ -1,0 +1,18 @@
+{% comment %}
+Tooltip shown on hover around the slot.
+
+  <c-ui.tooltip tip="{% translate 'Edit' %}"><c-ui.button size="sm" icon="fa-solid fa-pencil" /></c-ui.tooltip>
+  <c-ui.tooltip :tip="status.message" position="bottom"><c-ui.badge variant="warning">{{ status.label }}</c-ui.badge></c-ui.tooltip>
+
+Params:
+  tip: the tooltip text.
+  position: top, bottom, left or right. Empty for daisyUI's default (top).
+  class: extra classes, merged with the component's own.
+Anything else is passed through to the element.
+{% endcomment %}
+<c-vars tip="" position="" />
+{% with position_class=position|yesno:"tooltip-,"|add:position %}
+  {% with classes="tooltip "|add:position_class %}
+    <span data-tip="{{ tip }}" {{ attrs|with_classes:classes }}>{{ slot }}</span>
+  {% endwith %}
+{% endwith %}

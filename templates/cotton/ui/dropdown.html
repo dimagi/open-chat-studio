@@ -1,0 +1,50 @@
+{% comment %}
+Dropdown menu: a trigger and a menu of items. The slot holds the menu's <li> items.
+
+  <c-ui.dropdown label="Add" icon="fa-solid fa-plus" variant="primary" size="sm" align="end">
+    <li><a href="{% url 'evaluations:dataset_add_sessions' request.team.slug object.id %}">{% translate "Clone sessions" %}</a></li>
+    <li><button type="button" hx-post="...">{% translate "Import" %}</button></li>
+  </c-ui.dropdown>
+
+  <c-ui.dropdown placement="top" hover>
+    <c-slot name="trigger">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square" aria-label="{% translate 'More actions' %}">
+        <i class="fa-solid fa-ellipsis-vertical"></i>
+      </div>
+    </c-slot>
+    <li><a href="#">{% translate "Rename" %}</a></li>
+  </c-ui.dropdown>
+
+The menu opens while the trigger or the menu has focus. A `trigger` slot replaces the built-in trigger; give it
+`tabindex="0"` and use a <div role="button">, not a <button>, because Safari does not focus buttons on click.
+
+Params:
+  label: text of the built-in trigger, styled as a button. Ignored when a `trigger` slot is given.
+  icon: Font Awesome classes, rendered before the label.
+  variant, style, size, shape: the built-in trigger's button variant, style, size and shape, as for ui.button.
+  caret (default True): shows a caret after the label.
+  placement: top, bottom, left or right. Empty for daisyUI's default (bottom).
+  align: start, center or end. Empty for daisyUI's default (start).
+  hover: boolean; also opens the menu on hover.
+  width: Tailwind width class of the menu, "w-52" unless given.
+  menu_class: extra classes for the menu, such as "menu-sm".
+  class: extra classes, merged with the component's own.
+Anything else (id, x-*, data-*) is passed through to the wrapper.
+{% endcomment %}
+<c-vars label="" icon="" variant="" style="" size="" shape="" caret="True" placement="" align="" hover="" width="w-52" menu_class="" />
+{% with placement_class=placement|yesno:"dropdown-,"|add:placement align_class=align|yesno:"dropdown-,"|add:align hover_class=hover|yesno:"dropdown-hover," %}
+  {% with classes="dropdown "|add:placement_class|add:" "|add:align_class|add:" "|add:hover_class %}
+    <div {{ attrs|with_classes:classes }}>
+      {% if trigger %}
+        {{ trigger }}
+      {% else %}
+        <div tabindex="0" role="button" class="btn{% if variant %} btn-{{ variant }}{% endif %}{% if style %} btn-{{ style }}{% endif %}{% if size %} btn-{{ size }}{% endif %}{% if shape %} btn-{{ shape }}{% endif %}">
+          {% if icon %}<i class="{{ icon }}"></i>{% endif %}{{ label }}{% if caret %}<i class="fa-solid fa-caret-down"></i>{% endif %}
+        </div>
+      {% endif %}
+      <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-10 p-2 shadow-sm border border-base-300 {{ width }}{% if menu_class %} {{ menu_class }}{% endif %}">
+        {{ slot }}
+      </ul>
+    </div>
+  {% endwith %}
+{% endwith %}
