@@ -184,18 +184,18 @@ def test_column_with_help_header_renders_the_help_component():
     [
         pytest.param(
             '<c-ui.button variant="primary" type="submit">Save</c-ui.button>',
-            ['<button type="submit" class="btn btn-primary" >', "Save </button>"],
+            ['<button type="submit" class="btn btn-primary">', "Save </button>"],
             ["variant="],
             id="submit-button",
         ),
         pytest.param(
-            "<c-ui.button>Plain</c-ui.button>", ['<button type="button" class="btn" >'], [], id="default-button"
+            "<c-ui.button>Plain</c-ui.button>", ['<button type="button" class="btn">'], [], id="default-button"
         ),
         pytest.param(
             '<c-ui.button href="/x" variant="primary" size="sm" icon="fa-solid fa-plus" class="w-full" hx-boost="true">'
             "Add</c-ui.button>",
             [
-                '<a href="/x" class="btn btn-primary btn-sm w-full" hx-boost="true" >',
+                '<a href="/x" class="btn btn-primary btn-sm w-full" hx-boost="true">',
                 '<i class="fa-solid fa-plus"></i>Add',
             ],
             ["<button", 'href="/x" href'],
@@ -216,7 +216,7 @@ def test_column_with_help_header_renders_the_help_component():
         pytest.param(
             '<c-ui.button variant="error" style="outline" disabled loading>Busy</c-ui.button>',
             [
-                'class="btn btn-error btn-outline" disabled>',
+                '<button type="button" disabled class="btn btn-error btn-outline">',
                 '<span class="loading loading-spinner loading-xs"></span>Busy',
             ],
             ["loading="],
