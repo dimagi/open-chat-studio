@@ -6,14 +6,14 @@ import httpx
 import pytest
 
 from apps.documents.datamodels import GoogleDocsSourceConfig
-from apps.documents.source_loaders.google_docs import (
-    DOCS_API_URL,
-    GoogleDocsDocumentLoader,
-    _google_api_error_message,
-    extract_document_id,
+from apps.documents.source_loaders.google_docs import GoogleDocsDocumentLoader
+from apps.documents.source_loaders.google_docs_api import DOCS_API_URL, _google_api_error_message
+from apps.documents.source_loaders.google_docs_content import (
+    extract_document_text,
+    normalize_document_text,
     safe_document_filename,
 )
-from apps.documents.source_loaders.google_docs_content import extract_document_text, normalize_document_text
+from apps.documents.source_loaders.google_docs_urls import extract_document_id
 from apps.service_providers.auth_service.oauth import OAuthTokenError
 from apps.service_providers.models import AuthProviderType
 
@@ -389,8 +389,9 @@ def test_extract_document_text_handles_table_of_contents_and_section_breaks():
     assert extract_document_text(document) == "Introduction\n\nContents\n"
 
 
-def test_google_api_error_handles_non_object_error_payload():
-    response = httpx.Response(503, json={"error": "upstream failure"})
+@pytest.mark.parametrize("payload", [{"error": "upstream failure"}, []])
+def test_google_api_error_handles_non_object_error_payload(payload):
+    response = httpx.Response(503, json=payload)
     assert _google_api_error_message(response) == "Google Docs request failed (503): HTTP error"
 
 
@@ -413,18 +414,25 @@ def test_loader_wraps_http_transport_errors(httpx_mock):
         list(loader.load_documents())
 
 
-def test_loader_wraps_unexpected_auth_service_errors():
+@pytest.mark.parametrize(
+    ("auth_error", "expected_message"),
+    [
+        (RuntimeError("auth service unavailable"), "Google Docs response was invalid: auth service unavailable"),
+        (ValueError("credentials missing"), "credentials missing"),
+    ],
+)
+def test_loader_preserves_auth_service_value_errors_and_wraps_unexpected_errors(auth_error, expected_message):
     provider = SimpleNamespace(
         team_id=1,
         type=AuthProviderType.oauth_authorization_code,
-        get_auth_service=Mock(side_effect=RuntimeError("auth service unavailable")),
+        get_auth_service=Mock(side_effect=auth_error),
     )
     loader = GoogleDocsDocumentLoader(
         SimpleNamespace(id=7),
         GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123"),
         provider,
     )
-    with pytest.raises(ValueError, match="Google Docs response was invalid: auth service unavailable"):
+    with pytest.raises(ValueError, match=expected_message):
         list(loader.load_documents())
 
 

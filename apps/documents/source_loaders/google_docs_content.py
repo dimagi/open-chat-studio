@@ -1,5 +1,9 @@
+import hashlib
+import re
 import unicodedata
 from typing import Any
+
+from apps.documents.source_loaders.base import SourceDocument
 
 
 def _paragraph_text(paragraph: dict[str, Any]) -> str:
@@ -68,3 +72,31 @@ def extract_document_text(document: dict[str, Any]) -> str:
         lines.extend(_text_from_content(document.get("body", {}).get("content", [])))
     text = normalize_document_text("\n".join(lines)).strip()
     return f"{text}\n" if text else ""
+
+
+def safe_document_filename(title: str, document_id: str) -> str:
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", title).strip(" .")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return f"{(cleaned or document_id)[:200]}.txt"
+
+
+def build_source_document(document: dict[str, Any], document_id: str, collection_id: int) -> SourceDocument:
+    content = extract_document_text(document)
+    if not content.strip():
+        raise ValueError("Google Docs document contains no extractable text")
+    content_bytes = content.encode("utf-8")
+    title = document.get("title") or document_id
+    source_url = f"https://docs.google.com/document/d/{document_id}/edit"
+    metadata = {
+        "collection_id": collection_id,
+        "source_type": "google_docs",
+        "document_id": document_id,
+        "title": title,
+        "filename": safe_document_filename(title, document_id),
+        "source": source_url,
+        "citation_url": source_url,
+        "content_hash": hashlib.sha256(content_bytes).hexdigest(),
+    }
+    if document.get("revisionId"):
+        metadata["revision_id"] = document["revisionId"]
+    return SourceDocument(content=content_bytes, metadata=metadata)
