@@ -3328,7 +3328,7 @@ prod = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
-    { name = "atlassian-python-api", specifier = ">=4.0.7" },
+    { name = "atlassian-python-api", specifier = ">=4.0.7,<5" },
     { name = "audioop-lts", specifier = ">=0.2.2" },
     { name = "azure-cognitiveservices-speech" },
     { name = "backoff" },

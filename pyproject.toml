@@ -83,7 +83,9 @@ dependencies = [
     "django-cors-headers>=4.7.0",
     "markitdown[docx, xlsx, xls, outlook, pptx]",
     "langchain-mcp-adapters",
-    "atlassian-python-api>=4.0.7",
+    # 5.x splits Confluence into Cloud and Server clients, and the Cloud client drops the methods
+    # ConfluenceDocumentLoader calls. Lift once the loader is migrated (#4953).
+    "atlassian-python-api>=4.0.7,<5",
     "beautifulsoup4",
     "lxml",
     "audioop-lts>=0.2.2",
