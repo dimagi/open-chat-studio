@@ -37,8 +37,8 @@ When a component is added under templates/cotton/, add an example here.
           <div>
             <h3 class="font-semibold mb-2"><code>&lt;c-ui.copy-chip&gt;</code></h3>
             <div class="flex flex-wrap items-center gap-2">
-              <c-ui.copy-chip target="gallery-copy-shown" value="https://example.com/public/abc" text="Copy link" />
-              <c-ui.copy-chip target="gallery-copy-hidden" value="hidden-value" :show_value="False" text="Copy" extra_classes="btn-ghost" />
+              <c-ui.copy-chip target="gallery-copy-shown" value="https://example.com/public/abc" text="{% translate 'Copy link' %}" />
+              <c-ui.copy-chip target="gallery-copy-hidden" value="hidden-value" :show_value="False" text="{% translate 'Copy' %}" extra_classes="btn-ghost" />
               <c-ui.copy-chip target="gallery-copy-icon" value="icon-only" :show_value="False" extra_classes="btn-ghost btn-xs px-1" />
             </div>
           </div>
