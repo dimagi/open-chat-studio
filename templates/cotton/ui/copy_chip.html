@@ -11,8 +11,9 @@ Params:
   text: button label, shown after the copy icon.
   extra_classes: added to the button's classes.
 {% endcomment %}
+{% load i18n %}
 <c-vars target="" value="" show_value="True" text="" extra_classes="" />
-<div class="btn btn-sm {{ extra_classes }}" onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="Copy to clipboard" {{ attrs }}>
+<div class="btn btn-sm {{ extra_classes }}" onclick="SiteJS.app.copyToClipboard(this, '{{ target }}')" title="{% translate 'Copy to clipboard' %}" {{ attrs }}>
   {% if value %}
     {% if show_value %}<span id="{{ target }}">{{ value }}</span>
     {% else %}<input id="{{ target }}" type="hidden" value="{{ value }}"/>
