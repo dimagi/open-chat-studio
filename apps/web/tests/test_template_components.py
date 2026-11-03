@@ -9,6 +9,7 @@ from django.utils.safestring import mark_safe
 from django_cotton.compiler_regex import CottonCompiler
 
 from apps.generics.components import render_component
+from apps.generics.tables import ColumnWithHelp
 
 
 def render(source, context=None):
@@ -168,3 +169,11 @@ def test_partials_and_components_share_the_loader_chain(tmp_path):
     assert "> a </div>" in page
     assert "> b </div>" in page
     assert partial == '<li> <div class="btn btn-sm btn-soft btn-primary no-animation " > solo </div> </li>'
+
+
+def test_column_with_help_header_renders_the_help_component():
+    column = ColumnWithHelp(help_text="<b>Shown</b> on hover", verbose_name="Score")
+    header = column.header()
+    assert header.startswith("<span>Score</span>")
+    assert "<p><b>Shown</b> on hover</p>" in header
+    assert ColumnWithHelp(verbose_name="Plain").header() == "Plain"
