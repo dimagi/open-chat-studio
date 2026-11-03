@@ -38,7 +38,7 @@ def render(source, context=None):
         pytest.param(
             '<c-ui.chip :url="url" :label="label" hx-get="/next" x-data="{open: false}" ::class="open && \'x\'" />',
             {"url": "/x", "label": "L"},
-            ['hx-get="/next"', 'x-data="{open: false}"', ':class="open && \'x\'"'],
+            ['hx-get="/next"', 'x-data="{open: false}"', ":class=\"open && 'x'\""],
             [],
             id="attrs-pass-through",
         ),
