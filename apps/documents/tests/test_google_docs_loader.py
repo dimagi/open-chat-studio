@@ -7,12 +7,13 @@ import pytest
 
 from apps.documents.datamodels import GoogleDocsSourceConfig
 from apps.documents.source_loaders.google_docs import GoogleDocsDocumentLoader
-from apps.documents.source_loaders.google_docs_api import DOCS_API_URL, _google_api_error_message
+from apps.documents.source_loaders.google_docs_api import DOCS_API_URL
 from apps.documents.source_loaders.google_docs_content import (
     extract_document_text,
     normalize_document_text,
     safe_document_filename,
 )
+from apps.documents.source_loaders.google_docs_errors import _google_api_error_message
 from apps.documents.source_loaders.google_docs_urls import extract_document_id
 from apps.service_providers.auth_service.oauth import OAuthTokenError
 from apps.service_providers.models import AuthProviderType
