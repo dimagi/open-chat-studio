@@ -405,6 +405,19 @@ class TestDocumentSourceManager:
         document = SourceDocument(content=b"x", metadata={"source": source})
         assert manager._extract_filename(document, source) == expected
 
+    def test_extract_filename_prefers_source_filename_metadata(self, document_source):
+        manager = DocumentSourceManager(document_source)
+        document = SourceDocument(
+            content=b"x",
+            metadata={
+                "filename": "Google Doc title.txt",
+                "path": "fallback.md",
+                "source": "https://docs.google.com/document/d/doc_123/edit",
+            },
+        )
+
+        assert manager._extract_filename(document, "doc_123") == "Google Doc title.txt"
+
     @patch("apps.documents.document_source_service.create_loader")
     def test_update_file_refreshes_decoded_name(self, create_loader, collection, document_source):
         url = "https://example.com/files/My%20Doc.pdf"

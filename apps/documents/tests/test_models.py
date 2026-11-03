@@ -4,8 +4,8 @@ import pytest
 from django.conf import settings
 from pydantic import ValidationError
 
-from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
-from apps.documents.models import FAILURE_REASON_MAX_LENGTH, format_failure_reason
+from apps.documents.datamodels import DocumentSourceConfig, GoogleDocsSourceConfig, JSONCollectionSourceConfig
+from apps.documents.models import FAILURE_REASON_MAX_LENGTH, SourceType, format_failure_reason
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
@@ -231,6 +231,14 @@ class TestCollection:
 
 @pytest.mark.django_db()
 class TestDocumentSource:
+    def test_google_docs_source_config_is_selected(self):
+        config = DocumentSourceConfig(
+            google_docs=GoogleDocsSourceConfig(document_url="https://docs.google.com/document/d/doc_123/edit"),
+        )
+        source = DocumentSourceFactory.create(source_type=SourceType.GOOGLE_DOCS, config=config)
+
+        assert source.source_config == config.google_docs
+
     @mock.patch("apps.documents.tasks.delete_document_source_task.delay")
     def test_archive_document_source(self, delete_document_source_task):
         document_source = DocumentSourceFactory.create()
