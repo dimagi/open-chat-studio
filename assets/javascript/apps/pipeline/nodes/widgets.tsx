@@ -752,9 +752,7 @@ function KeyValuePairsWidget(props: WidgetParams) {
 }
 
 /**
- * Chooses how an LLM Router's prompt is built, and previews the standard prompt. A router saved
- * before prompt modes existed has no `prompt_mode` and reads as custom, as on the server, so the
- * stored value is read here rather than the schema default the caller substitutes for a missing one.
+ * Chooses how an LLM Router's prompt is built, and previews the standard prompt.
  *
  * A router keeps the standard prompt version it is pinned to. When a newer one exists, the widget
  * previews both and offers to switch.
@@ -764,7 +762,7 @@ export function RouterPromptModeWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
   const {routerPromptTemplates} = getCachedData();
   const latest = routerPromptTemplates.latest;
-  const mode = String(props.nodeParams.prompt_mode || "custom");
+  const mode = String(props.paramValue);
   const isCustom = mode === "custom";
   const version = String(props.nodeParams.prompt_template_version || latest);
   const isOutdated = !isCustom && version !== latest;
@@ -782,18 +780,32 @@ export function RouterPromptModeWidget(props: WidgetParams) {
     });
   };
 
+  // The dialog is rendered while closed, so without this the preview is rebuilt on every edit to the node.
+  const {keywords: rawKeywords, route_descriptions, custom_context, default_keyword_index} = props.nodeParams;
+  const prompts = useMemo(() => {
+    if (isCustom) return {};
+    const keywords = Array.isArray(rawKeywords) ? rawKeywords.map(String) : [];
+    const values = {
+      keywords,
+      routeDescriptions: (route_descriptions || {}) as Record<string, string>,
+      customContext: concatenate(custom_context),
+      defaultRoute: keywords[Number(default_keyword_index ?? 0)] ?? "",
+    };
+    const versions = isOutdated ? [version, latest] : [version];
+    return Object.fromEntries(versions.flatMap((templateVersion) => {
+      const template = routerPromptTemplates.templates[templateVersion];
+      return template === undefined ? [] : [[templateVersion, renderRouterPromptPreview(template, values)]];
+    })) as Record<string, string>;
+  }, [
+    isCustom, isOutdated, version, latest, routerPromptTemplates,
+    rawKeywords, route_descriptions, custom_context, default_keyword_index,
+  ]);
+
   const preview = (templateVersion: string) => {
-    const template = routerPromptTemplates.templates[templateVersion];
-    if (template === undefined) {
+    const prompt = prompts[templateVersion];
+    if (prompt === undefined) {
       return <p className="text-warning normal-case">{`Preview unavailable for version ${templateVersion}.`}</p>;
     }
-    const keywords = Array.isArray(props.nodeParams.keywords) ? props.nodeParams.keywords.map(String) : [];
-    const prompt = renderRouterPromptPreview(template, {
-      keywords,
-      routeDescriptions: (props.nodeParams.route_descriptions || {}) as Record<string, string>,
-      customContext: concatenate(props.nodeParams.custom_context),
-      defaultRoute: keywords[Number(props.nodeParams.default_keyword_index ?? 0)] ?? "",
-    });
     return <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded p-3 normal-case">{prompt}</pre>;
   };
 

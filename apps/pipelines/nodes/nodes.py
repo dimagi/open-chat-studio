@@ -700,8 +700,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         title="Prompt Mode",
         description=(
             "How the router's prompt is built. `standard` builds it from the routes, their "
-            "`route_descriptions` and `custom_context`; `custom` sends `prompt` instead. A router saved "
-            "without this setting reads as `custom`."
+            "`route_descriptions` and `custom_context`; `custom` sends `prompt` instead."
         ),
         json_schema_extra=UiSchema(widget=Widgets.router_prompt_mode, enum_labels=RouterPromptMode.labels),
     )
@@ -732,7 +731,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         json_schema_extra=UiSchema(
             widget=Widgets.text_editor,
             options_source=OptionsSource.router_prompt_variables,
-            visible_when=VisibleWhen(field="prompt_mode", operator="not_in", value=[RouterPromptMode.STANDARD.value]),
+            visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.CUSTOM.value),
             keep_value_when_hidden=True,
         ),
     )
@@ -773,14 +772,6 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
                 )
             descriptions[keyword] = description
         return descriptions
-
-    @model_validator(mode="before")
-    @classmethod
-    def read_a_router_without_a_mode_as_custom(cls, data):
-        """A router saved before prompt modes existed keeps sending the prompt it was written with."""
-        if isinstance(data, dict) and not data.get("prompt_mode"):
-            return {**data, "prompt_mode": RouterPromptMode.CUSTOM}
-        return data
 
     @field_validator("prompt_template_version", mode="before")
     @classmethod

@@ -15,7 +15,7 @@ This builds on [object versioning](versioning.md).
 | `standard` | The router's pinned template, filled with the routes and their descriptions, plus the user's `custom_context` under "Additional context" when it is not blank. |
 | `custom` | The user's `prompt`, followed by the default route. The template is not used. |
 
-A router saved before prompt modes existed has no `prompt_mode`. The node reads it as `custom` (`read_a_router_without_a_mode_as_custom`), so it keeps sending the prompt it was written with. New routers default to `standard`.
+New routers default to `standard`. Routers saved before prompt modes existed were given `custom` by migration `pipelines.0036_backfill_router_prompt_mode`, so they keep sending the prompt they were written with. `import_pipeline` does the same for a router in an export file that has no `prompt_mode`.
 
 Validation follows the mode: `prompt` is checked only in `custom`, and `custom_context` only in `standard`. The text a mode does not use is kept, so switching back restores it, but it is never validated or sent.
 
