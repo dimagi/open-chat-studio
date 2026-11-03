@@ -146,6 +146,7 @@ nav:
       - 0068 Field order is presentation, stored outside the locked schema: adr/0068-field-order-is-presentation-outside-the-locked-schema.md
       - 0069 Status messages are generated in the background: adr/0069-status-messages-are-generated-in-the-background.md
       - 0070 Client-credentials applications may reach all chatbots: adr/0070-client-credentials-applications-may-reach-all-chatbots.md
+      - 0071 Build shared template components with django-cotton: adr/0071-build-shared-template-components-with-django-cotton.md
   - Core User Stories: core_user_stories.md
   - Developer Guides:
     - Processes:
