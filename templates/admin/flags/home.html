@@ -19,31 +19,14 @@
       </div>
     </div>
 
-    <!-- DaisyUI Tabs -->
-    <div role="tablist" class="tabs tabs-bordered">
-      <input
-        type="radio"
-        name="flag_tabs"
-        role="tab"
-        class="tab"
-        aria-label="Active Flags ({{ active_flags|length }})"
-        checked
-      />
-      <div role="tabpanel" class="tab-content py-6">
+    <c-ui.tabs>
+      <c-ui.tab name="flag_tabs" label="{% translate 'Active Flags' %}" count="{{ active_flags|length }}" active panel_class="py-6">
         {% include "admin/flags/flag_list.html" with flags=active_flags show_legacy=False %}
-      </div>
-
-      <input
-        type="radio"
-        name="flag_tabs"
-        role="tab"
-        class="tab"
-        aria-label="Legacy Flags ({{ legacy_flags|length }})"
-      />
-      <div role="tabpanel" class="tab-content py-6">
+      </c-ui.tab>
+      <c-ui.tab name="flag_tabs" label="{% translate 'Legacy Flags' %}" count="{{ legacy_flags|length }}" panel_class="py-6">
         {% include "admin/flags/flag_list.html" with flags=legacy_flags show_legacy=True %}
-      </div>
-    </div>
+      </c-ui.tab>
+    </c-ui.tabs>
   </section>
 
 {% endblock app %}
