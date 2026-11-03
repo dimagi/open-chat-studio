@@ -1,13 +1,13 @@
 from django.urls import path
 
-from . import views
+from . import ui_gallery, views
 
 app_name = "ocs_admin"
 
 urlpatterns = [
     path("", views.admin_home, name="home"),
     path("configuration/", views.configuration, name="configuration"),
-    path("ui-gallery/", views.ui_gallery, name="ui_gallery"),
+    path("ui-gallery/", ui_gallery.ui_gallery, name="ui_gallery"),
     path("find-provider-by-key/", views.find_provider_by_key, name="find_provider_by_key"),
     path("usage/", views.usage_chart, name="usage_chart"),
     # Dashboard sections (lazy-loaded independently so a slow section can't block the rest)
