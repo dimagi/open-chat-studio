@@ -118,13 +118,13 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
             self.add_tag(tag, team, added_by)
 
     def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser | None = None):
-        tag, _ = Tag.objects.get_or_create(
+        tag_obj, _ = Tag.objects.get_or_create(
             name=tag[: Tag._meta.get_field("name").max_length],
             team=team,
             is_system_tag=bool(tag_category),
             category=tag_category or "",
         )
-        self.add_tag(tag, team=team, added_by=added_by)
+        self.add_tag(tag_obj, team=team, added_by=added_by)
 
     def add_tag(self, tag: Tag, team: Team, added_by: CustomUser | None = None):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})

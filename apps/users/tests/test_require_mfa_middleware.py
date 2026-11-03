@@ -240,7 +240,7 @@ def test_sso_front_channel_logout_stays_reachable(client, user):
 def test_sso_login_round_trip_is_not_gated(client, user, url):
     """Gating the provider round trip leaves an SSO login unable to complete."""
     app = SocialApp.objects.create(provider="microsoft", name="Microsoft", client_id="id", secret="secret")
-    app.sites.add(Site.objects.get_current())
+    app.sites.add(Site.objects.get_current())  # ty: ignore[possibly-missing-attribute]
     user.is_superuser = True
     user.set_unusable_password()
     user.save()
