@@ -17,7 +17,7 @@
   <c-ui.tab name="pipeline_run_tabs_{{ pipeline_run.id }}" label="{% translate 'Logs' %}" panel_class="p-4">
     <div class="font-mono" x-data="{ showDebug: false, openSections: {} }">
       <div class="flex mb-4 items-center cursor-pointer">
-        <span class="mr-2">Show Debug</span>
+        <span class="mr-2">{% translate "Show Debug" %}</span>
         <input x-model="showDebug" type="checkbox" class="toggle" />
       </div>
       {% for entry in pipeline_run.log.entries %}
@@ -38,11 +38,11 @@
           <div x-show="openSections['{{ entry.time }}']" x-cloak>
             <hr class="mt-4 mb-4" />
             {% if entry.input %}
-              Input: <br/>
+              {% translate "Input:" %} <br/>
               {{ entry.input|linebreaksbr }}
             {% endif %}
             {% if entry.output %}
-              Output: <br/>
+              {% translate "Output:" %} <br/>
               {{ entry.output|linebreaksbr }}
             {% endif %}
           </div>
