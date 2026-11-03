@@ -1,0 +1,20 @@
+{% comment %}
+Tab list. The slot holds ui.tab components.
+
+  <c-ui.tabs>
+    <c-ui.tab label="{% translate 'Sessions' %}" :count="session_count" name="chatbot_tabs" active>…panel…</c-ui.tab>
+    <c-ui.tab label="{% translate 'Settings' %}" name="chatbot_tabs">…panel…</c-ui.tab>
+  </c-ui.tabs>
+
+Params:
+  style: border, lift or box. "border" unless given; empty for daisyUI's plain tabs.
+  size: xs, sm, md, lg or xl.
+  class: extra classes, merged with the component's own.
+Anything else (id, x-data) is passed through to the element.
+{% endcomment %}
+<c-vars style="border" size="" />
+{% with style_class=style|yesno:"tabs-,"|add:style size_class=size|yesno:"tabs-,"|add:size %}
+  {% with classes="tabs "|add:style_class|add:" "|add:size_class %}
+    <div role="tablist" {{ attrs|with_classes:classes }}>{{ slot }}</div>
+  {% endwith %}
+{% endwith %}

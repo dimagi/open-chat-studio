@@ -1,7 +1,9 @@
 """Rendering of the `templates/cotton/ui/` components."""
 
 import pytest
+from django import forms
 from django.conf import settings
+from django.forms.utils import ErrorList
 from django.template import engines
 from django.template.loader import render_to_string
 from django.test import override_settings
@@ -10,6 +12,7 @@ from django_cotton.compiler_regex import CottonCompiler
 
 from apps.generics.components import render_component
 from apps.generics.tables import ColumnWithHelp
+from apps.web.templatetags.form_tags import render_field
 
 
 def render(source, context=None):
@@ -316,3 +319,235 @@ def test_component_attributes_come_before_pass_through_attributes():
     """The component's own attributes are written first, as `{{ attrs }}` last used to do."""
     html = render('<c-ui.copy-chip target="t" value="v" title="mine" />')
     assert html.index('title="Copy to clipboard"') < html.index('title="mine"')
+
+
+@pytest.mark.parametrize(
+    ("source", "context", "expected", "unexpected"),
+    [
+        pytest.param(
+            '<c-ui.dropdown label="Add" icon="fa-solid fa-plus" variant="primary" size="sm" align="end" id="d">'
+            '<li><a href="/new">New</a></li></c-ui.dropdown>',
+            {},
+            [
+                '<div class="dropdown dropdown-end" id="d">',
+                '<div tabindex="0" role="button" class="btn btn-primary btn-sm">',
+                '<i class="fa-solid fa-plus"></i>Add<i class="fa-solid fa-caret-down"></i>',
+                '<ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-10 p-2 shadow-sm border '
+                'border-base-300 w-52"> <li><a href="/new">New</a></li> </ul>',
+            ],
+            ["label=", "<button"],
+            id="label-trigger",
+        ),
+        pytest.param(
+            '<c-ui.dropdown placement="top" hover width="w-64" menu_class="menu-sm" :caret="False" label="Up">'
+            "<li>x</li></c-ui.dropdown>",
+            {},
+            ['class="dropdown dropdown-top dropdown-hover"', 'class="btn">', "Up </div>", "w-64 menu-sm"],
+            ["fa-caret-down"],
+            id="placement-hover-no-caret",
+        ),
+        pytest.param(
+            '<c-ui.dropdown><c-slot name="trigger"><div tabindex="0" role="button" class="btn btn-ghost">'
+            "<i></i></div></c-slot><li>x</li></c-ui.dropdown>",
+            {"trigger": "from the page context"},
+            ['<div class="dropdown"> <div tabindex="0" role="button" class="btn btn-ghost"><i></i></div> <ul'],
+            ['class="btn">', "fa-caret-down", "from the page context"],
+            id="trigger-slot",
+        ),
+        pytest.param(
+            '<c-ui.dropdown label="Menu"><li>x</li></c-ui.dropdown>',
+            {"trigger": "from the page context"},
+            ['<div tabindex="0" role="button" class="btn"> Menu'],
+            ["from the page context"],
+            id="context-trigger-does-not-leak",
+        ),
+    ],
+)
+def test_dropdown(source, context, expected, unexpected):
+    html = render(source, context)
+    for fragment in expected:
+        assert fragment in html
+    for fragment in unexpected:
+        assert fragment not in html
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            '<c-ui.tooltip tip="Edit">x</c-ui.tooltip>', '<span data-tip="Edit" class="tooltip">x</span>', id="default"
+        ),
+        pytest.param(
+            '<c-ui.tooltip :tip="tip" position="left" class="ml-1" x-show="on">x</c-ui.tooltip>',
+            '<span data-tip="A &quot;q&quot; &lt;b&gt;" class="tooltip tooltip-left ml-1" x-show="on">x</span>',
+            id="position-and-escaped-tip",
+        ),
+    ],
+)
+def test_tooltip(source, expected):
+    assert render(source, {"tip": 'A "q" <b>'}) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param("<c-ui.tabs>x</c-ui.tabs>", '<div role="tablist" class="tabs tabs-border">x</div>', id="default"),
+        pytest.param(
+            '<c-ui.tabs style="box" size="sm" class="mt-4" x-data="{}">x</c-ui.tabs>',
+            '<div role="tablist" class="tabs tabs-box tabs-sm mt-4" x-data="{}">x</div>',
+            id="style-size-attrs",
+        ),
+        pytest.param('<c-ui.tabs style="">x</c-ui.tabs>', '<div role="tablist" class="tabs">x</div>', id="plain"),
+    ],
+)
+def test_tabs(source, expected):
+    assert render(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "context", "expected", "unexpected"),
+    [
+        pytest.param(
+            '<c-ui.tab label="Messages" :count="count" active />',
+            {"count": 0},
+            [
+                '<button type="button" role="tab" aria-selected="true" class="tab tab-active">',
+                'Messages<span class="text-base-content/50 ml-1">0</span> </button>',
+            ],
+            ["tab-content", "<label", "<a "],
+            id="active-button-with-zero-count",
+        ),
+        pytest.param(
+            "<c-ui.tab label=\"Data\" ::class=\"tab === 'data' && 'tab-active'\" @click=\"tab = 'data'\" />",
+            {},
+            ['<button type="button" role="tab" class="tab" :class="tab === &#x27;data&#x27; &amp;&amp;', "@click="],
+            ["aria-selected", "<span"],
+            id="alpine-button",
+        ),
+        pytest.param(
+            '<c-ui.tab href="/overview" label="Overview" active class="px-6" />',
+            {},
+            ['<a role="tab" href="/overview" aria-current="page" class="tab tab-active px-6"> Overview </a>'],
+            ["<button"],
+            id="active-link",
+        ),
+        pytest.param(
+            '<c-ui.tab name="g" label="Sessions" :count="count" active panel_class="pt-3" hx-get="/panel" '
+            'hx-trigger="change">Panel</c-ui.tab>',
+            {"count": 12},
+            [
+                '<label role="tab" class="tab" hx-get="/panel" hx-trigger="change">',
+                '<input type="radio" name="g" class="sr-only" checked />',
+                'Sessions<span class="text-base-content/50 ml-1">12</span> </label>',
+                '<div role="tabpanel" class="tab-content pt-3">Panel</div>',
+            ],
+            ["tab-active", "aria-selected"],
+            id="radio-tab-with-panel",
+        ),
+        pytest.param(
+            '<c-ui.tab name="g" label="Versions"> </c-ui.tab>',
+            {},
+            ['<input type="radio" name="g" class="sr-only" />'],
+            ["checked", "tab-content"],
+            id="radio-tab-blank-slot-has-no-panel",
+        ),
+    ],
+)
+def test_tab(source, context, expected, unexpected):
+    html = render(source, context)
+    for fragment in expected:
+        assert fragment in html
+    for fragment in unexpected:
+        assert fragment not in html
+
+
+@pytest.mark.parametrize(
+    ("source", "expected", "unexpected"),
+    [
+        pytest.param(
+            '<c-ui.field label="Name" input_id="id_name" help="Shown <b>bold</b>" :errors="errors" x-show="adv" '
+            'class="mt-2">CTRL</c-ui.field>',
+            [
+                '<div class="fieldset w-full mt-2" x-show="adv">',
+                '<label class="label font-bold" for="id_name"> <div> Name <small>',
+                "<p>Shown <b>bold</b></p>",
+                '</label> CTRL <ul class="errorlist"><li>Required.</li></ul> </div>',
+            ],
+            ["cursor-pointer"],
+            id="label-help-control-errors",
+        ),
+        pytest.param(
+            '<c-ui.field label="On" inline>CTRL</c-ui.field>',
+            [
+                '<div class="fieldset">',
+                '<label class="label font-bold cursor-pointer"> <div> On </div> CTRL </label> </div>',
+            ],
+            ["w-full", "<small>", "for="],
+            id="inline-checkbox-layout",
+        ),
+    ],
+)
+def test_field(source, expected, unexpected):
+    html = render(source, {"errors": ErrorList(["Required."])})
+    for fragment in expected:
+        assert fragment in html
+    for fragment in unexpected:
+        assert fragment not in html
+
+
+class _FieldForm(forms.Form):
+    name = forms.CharField(label="Name", help_text="Shown to <b>participants</b>")
+    kind = forms.ChoiceField(label="Kind", choices=[("a", "A")])
+    tags = forms.MultipleChoiceField(label="Tags", choices=[("a", "A")], widget=forms.CheckboxSelectMultiple)
+    enabled = forms.BooleanField(
+        label="Enabled", required=False, widget=forms.CheckboxInput(attrs={"control_attrs": {"x-show": "advanced"}})
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "attrs", "expected", "unexpected"),
+    [
+        pytest.param(
+            "name",
+            {"xmodel": "name"},
+            [
+                '<div class="fieldset w-full" x-model="name">',
+                '<label class="label font-bold" for="id_name">',
+                "<p>Shown to <b>participants</b></p>",
+                '<input class="input w-full " type="text" name="name" required',
+                '<ul class="errorlist" id="id_name_error"><li>This field is required.</li></ul>',
+            ],
+            [],
+            id="text",
+        ),
+        pytest.param(
+            "kind", {}, ['<label class="label font-bold" for="id_kind">', "<select"], ["<small>"], id="select"
+        ),
+        pytest.param(
+            "tags",
+            {},
+            ['<div class="fieldset w-full">', '<label class="label font-bold"> <div> Tags </div>', 'type="checkbox"'],
+            ['<label class="label font-bold" for='],
+            id="checkbox-multiple",
+        ),
+        pytest.param(
+            "enabled",
+            {},
+            [
+                '<div class="fieldset" x-show="advanced">',
+                '<label class="label font-bold cursor-pointer"> <div> Enabled </div> <input class="checkbox "',
+                "</label> </div>",
+            ],
+            ["for=", "w-full"],
+            id="checkbox-inline-with-control-attrs",
+        ),
+    ],
+)
+def test_render_field_uses_the_field_component(field, attrs, expected, unexpected):
+    form = _FieldForm(data={})
+    form.is_valid()
+    html = " ".join(render_field(form[field], **attrs).split())
+    for fragment in expected:
+        assert fragment in html
+    for fragment in unexpected:
+        assert fragment not in html

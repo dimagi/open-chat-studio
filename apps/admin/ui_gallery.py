@@ -1,6 +1,7 @@
 """Staff-only page that renders every shared UI component and daisyUI pattern for design review."""
 
 from django import forms
+from django.forms.utils import ErrorList
 from django.template.response import TemplateResponse
 from django.utils.translation import gettext
 
@@ -29,6 +30,7 @@ def ui_gallery(request):
             "active_tab": "admin",
             "breadcrumbs": [admin_crumb(), (gettext("UI Gallery"), None)],
             "form": form,
+            "gallery_field_errors": ErrorList([gettext("Pick one.")]),
             "gallery_breadcrumbs": [
                 (gettext("Chatbots"), "#"),
                 (gettext("Support bot"), "#"),
