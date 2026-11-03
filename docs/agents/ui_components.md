@@ -26,3 +26,21 @@ When the confirmation needs input or more than a sentence of context, use a `<di
 ## Toast notifications
 
 Server side: use Django `messages`; `templates/web/components/messages.html` shows them as toasts. Client side: `alertify.notify(message, type, seconds)`.
+
+## Template components
+
+Shared markup is a [django-cotton](https://django-cotton.com/docs/components) component under `templates/cotton/`, used as an HTML tag:
+
+```html
+<c-ui.chip :url="session.get_absolute_url" :label="session.name" truncate />
+<c-ui.help>{% translate "Shown on hover." %}</c-ui.help>
+```
+
+- `ui/` holds presentation primitives (button, badge, chip, help, alert, modal, tabs, dropdown). `app/` holds domain pieces composed from them. The tag name is the path: `<c-ui.copy-chip>` is `templates/cotton/ui/copy_chip.html`.
+- Start every component with a usage example in a `{% comment %}` block and a `<c-vars>` line declaring every parameter, with defaults. Anything not declared lands in `{{ attrs }}`.
+- Put `{{ attrs }}` on the root element so callers can pass `hx-*`, `x-*`, `id` and extra `class` without the component listing them.
+- `:name="expr"` passes a context variable or Python literal, `name="text"` passes a string, a bare `name` passes `True`. Inside a component tag a single colon always means a Django expression, so Alpine's `:bind` shorthand is written `::bind`; `@click` and `x-*` pass through unchanged.
+- Once a `ui/` primitive exists, use it instead of writing the daisyUI classes by hand. The `{% include "generic/..." %}` wrappers stay for existing call sites only.
+- `{% partialdef %}` is for repeating a fragment within one page and for HTMX fragment responses, not for shared components. A view that returns a single component uses `django_cotton.utils.render_component`.
+- Add every new component to the UI Gallery (`/admin/ui-gallery/`, `templates/admin/ui_gallery.html`) and check it in both themes.
+- Test a component by rendering a template string through the cotton compiler, as in `apps/web/tests/test_template_components.py`.

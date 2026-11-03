@@ -1,0 +1,181 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+{% comment %}
+Every shared component and daisyUI pattern on one page, for design review in both themes.
+When a component is added under templates/cotton/, add an example here.
+{% endcomment %}
+{% block app %}
+  <section class="app-card">
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <h1 class="pg-title">{% translate "UI Gallery" %}</h1>
+      {% include "web/components/theme_select.html" %}
+    </div>
+    <p class="mb-6">
+      {% blocktranslate %}Shared components from <code>templates/cotton/</code> and the daisyUI patterns pages are built from. Switch the theme to check both.{% endblocktranslate %}
+    </p>
+
+    <div class="space-y-10">
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Components" %}</h2>
+        <div class="space-y-4">
+          <div>
+            <h3 class="font-semibold mb-2"><code>&lt;c-ui.chip&gt;</code></h3>
+            <div class="flex flex-wrap items-center gap-2">
+              <c-ui.chip url="#" label="Link chip" />
+              <c-ui.chip label="Static chip" />
+              <c-ui.chip url="#" label="A very long label that is truncated inside a table cell" truncate />
+              <c-ui.chip url="#" label="With a tooltip" class="tooltip" data-tip="Extra attributes pass through" />
+            </div>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2"><code>&lt;c-ui.help&gt;</code></h3>
+            <div class="flex items-center gap-2">
+              {% translate "Label with help" %}
+              <c-ui.help>{% translate "Shown on hover." %} <b>{% translate "HTML allowed." %}</b></c-ui.help>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Buttons" %}</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn btn-primary">{% translate "Primary" %}</button>
+          <button type="button" class="btn btn-secondary">{% translate "Secondary" %}</button>
+          <button type="button" class="btn btn-soft btn-primary">{% translate "Soft" %}</button>
+          <button type="button" class="btn btn-outline">{% translate "Outline" %}</button>
+          <button type="button" class="btn btn-ghost">{% translate "Ghost" %}</button>
+          <button type="button" class="btn btn-error">{% translate "Danger" %}</button>
+          <button type="button" class="btn btn-primary" disabled>{% translate "Disabled" %}</button>
+          <button type="button" class="btn btn-sm btn-primary">{% translate "Small" %}</button>
+          <button type="button" class="btn btn-xs btn-primary">{% translate "Extra small" %}</button>
+          <button type="button" class="btn btn-primary"><i class="fa-solid fa-plus"></i> {% translate "With icon" %}</button>
+          <button type="button" class="btn btn-circle btn-ghost btn-sm" aria-label="{% translate 'Icon only' %}"><i class="fa-solid fa-ellipsis"></i></button>
+          <button type="button" class="btn btn-primary"><span class="loading loading-spinner loading-sm"></span> {% translate "Loading" %}</button>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Badges" %}</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="badge">{% translate "Default" %}</span>
+          <span class="badge badge-primary">{% translate "Primary" %}</span>
+          <span class="badge badge-secondary">{% translate "Secondary" %}</span>
+          <span class="badge badge-success">{% translate "Success" %}</span>
+          <span class="badge badge-info">{% translate "Info" %}</span>
+          <span class="badge badge-warning">{% translate "Warning" %}</span>
+          <span class="badge badge-error">{% translate "Error" %}</span>
+          <span class="badge badge-ghost">{% translate "Ghost" %}</span>
+          <span class="badge badge-outline">{% translate "Outline" %}</span>
+          <span class="badge badge-sm badge-warning"><i class="fa-solid fa-ban"></i> {% translate "Small with icon" %}</span>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Alerts" %}</h2>
+        <div class="space-y-2">
+          <div class="alert alert-info"><span>{% translate "Information for the reader." %}</span></div>
+          <div class="alert alert-success"><span>{% translate "The change was saved." %}</span></div>
+          <div class="alert alert-warning"><span>{% translate "Something needs attention." %}</span></div>
+          <div class="alert alert-error"><span>{% translate "The request failed." %}</span></div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Form fields" %}</h2>
+        <form class="max-w-md space-y-2" onsubmit="return false">
+          {% render_form_fields form %}
+          <div class="flex gap-2 mt-4">
+            <button type="button" class="btn btn-primary">{% translate "Save" %}</button>
+            <button type="button" class="btn">{% translate "Cancel" %}</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Tooltip, help and dropdown" %}</h2>
+        <div class="flex flex-wrap items-center gap-6">
+          <span class="tooltip" data-tip="{% translate 'Tooltip text' %}"><button type="button" class="btn btn-sm">{% translate "Hover me" %}</button></span>
+          <div class="dropdown">
+            <button type="button" tabindex="0" class="btn btn-sm">{% translate "Dropdown" %} <i class="fa-solid fa-caret-down"></i></button>
+            <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
+              <li><a href="#">{% translate "First action" %}</a></li>
+              <li><a href="#">{% translate "Second action" %}</a></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Tabs" %}</h2>
+        <div role="tablist" class="tabs tabs-border">
+          <a role="tab" class="tab tab-active">{% translate "Overview" %}</a>
+          <a role="tab" class="tab">{% translate "Sessions" %}</a>
+          <a role="tab" class="tab">{% translate "Settings" %}</a>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Card" %}</h2>
+        <div class="card bg-base-100 shadow-xl max-w-md">
+          <div class="card-body">
+            <h3 class="card-title">{% translate "Card title" %}</h3>
+            <p>{% translate "Card body text." %}</p>
+            <div class="card-actions justify-end">
+              <button type="button" class="btn btn-sm btn-primary">{% translate "Action" %}</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Table" %}</h2>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr><th>{% translate "Name" %}</th><th>{% translate "Status" %}</th><th>{% translate "Updated" %}</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><c-ui.chip url="#" label="Support bot" truncate /></td>
+                <td><span class="badge badge-success">{% translate "Active" %}</span></td>
+                <td>2026-11-03</td>
+                <td class="text-right"><button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pencil"></i></button></td>
+              </tr>
+              <tr>
+                <td><c-ui.chip url="#" label="Survey bot" truncate /></td>
+                <td><span class="badge badge-ghost">{% translate "Archived" %}</span></td>
+                <td>2026-10-12</td>
+                <td class="text-right"><button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pencil"></i></button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Dialogs and toasts" %}</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('ui-gallery-modal').showModal()">{% translate "Open modal" %}</button>
+          {% translate "Archive this chatbot?" as confirm_text %}
+          {% translate "Saved." as success_text %}
+          {% translate "Something went wrong." as error_text %}
+          <button type="button" class="btn btn-sm" onclick="confirmDialog('{{ confirm_text|escapejs }}')">{% translate "Confirm dialog" %}</button>
+          <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ success_text|escapejs }}', 'success', 3)">{% translate "Success toast" %}</button>
+          <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ error_text|escapejs }}', 'error', 3)">{% translate "Error toast" %}</button>
+        </div>
+        {% translate "Modal title" as modal_title %}
+        {% translate "Modal body text." as modal_text %}
+        {% include "generic/modal.html" with modal_id="ui-gallery-modal" modal_title=modal_title modal_text=modal_text %}
+      </section>
+
+      <section>
+        <h2 class="text-lg font-bold mb-3">{% translate "Loading and empty states" %}</h2>
+        <div class="flex flex-wrap items-center gap-6">
+          <div class="flex items-center gap-2"><span class="loading loading-spinner loading-md"></span> {% translate "Loading..." %}</div>
+          {% include "table/table_placeholder.html" %}
+        </div>
+      </section>
+    </div>
+  </section>
+{% endblock app %}

@@ -1,0 +1,27 @@
+{% comment %}
+Chip-styled link, or a static chip when `url` is empty. Renders nothing when both are empty.
+
+  <c-ui.chip :url="session.get_absolute_url" :label="session.name" />
+  <c-ui.chip label="Archived" />
+  <c-ui.chip :url="url" :label="label" truncate />   (one line, ellipsized, full label in the tooltip;
+                                                     use in table cells)
+
+Extra attributes (`hx-*`, `x-*`, `id`, ...) are passed through to the root element.
+{% endcomment %}
+<c-vars url label truncate />
+{% with classes="btn btn-sm btn-soft btn-primary" truncate_classes=truncate|yesno:"max-w-xs," %}
+  {% if url %}
+    <a href="{{ url }}" class="{{ classes }} {{ truncate_classes }}" {{ attrs }}>
+      {% if truncate %}
+        {# min-w-0 lets the flex item shrink below the (unbreakable) label width so the ellipsis shows #}
+        <span class="min-w-0 truncate" title="{{ label }}">{{ label }}</span>
+      {% else %}{{ label }}{% endif %}
+    </a>
+  {% elif label %}
+    <div class="{{ classes }} no-animation {{ truncate_classes }}" {{ attrs }}>
+      {% if truncate %}
+        <span class="min-w-0 truncate" title="{{ label }}">{{ label }}</span>
+      {% else %}{{ label }}{% endif %}
+    </div>
+  {% endif %}
+{% endwith %}

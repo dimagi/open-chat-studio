@@ -1002,6 +1002,18 @@ wheels = [
 ]
 
 [[package]]
+name = "django-cotton"
+version = "2.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/8f/ca91ebdea636c0466ef517d0d8fc9f7d08290e4614bbc9a48aa0bb5a0141/django_cotton-2.8.0.tar.gz", hash = "sha256:fe60182f143e89296db2384da9818da4662a1b3aa8dd86f1b4eeb5e884015ea8", size = 35534, upload-time = "2026-10-14T10:59:16.235Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/52/18a6523f88b642691282e4eac97bc76df2a53af8ca69fd028f11662b9c77/django_cotton-2.8.0-py3-none-any.whl", hash = "sha256:f6142988ba957812a7272270bc06eedf8df27bbf76e7b7f22ea694fa9b9c9505", size = 34107, upload-time = "2026-10-14T10:59:17.11Z" },
+]
+
+[[package]]
 name = "django-cryptography-django5"
 version = "2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3207,6 +3219,7 @@ dependencies = [
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers" },
+    { name = "django-cotton" },
     { name = "django-cryptography-django5" },
     { name = "django-environ" },
     { name = "django-field-audit" },
@@ -3333,6 +3346,7 @@ requires-dist = [
     { name = "django-celery-beat" },
     { name = "django-cleanup" },
     { name = "django-cors-headers", specifier = ">=4.7.0" },
+    { name = "django-cotton" },
     { name = "django-cryptography-django5" },
     { name = "django-environ" },
     { name = "django-field-audit", specifier = ">=1.2.7" },
