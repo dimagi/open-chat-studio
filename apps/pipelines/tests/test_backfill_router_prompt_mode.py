@@ -83,6 +83,7 @@ def test_edits_made_while_the_backfill_runs_are_kept():
     with patch.object(QuerySet, "values_list", autospec=True, side_effect=read_ids_then_edit):
         backfill_router_prompt_mode(Node)
 
+    assert not edits, "The backfill no longer reads router ids with values_list, so the edits never ran"
     switched.refresh_from_db()
     edited.refresh_from_db()
     assert switched.params == {"name": "switched", "prompt_mode": "standard"}
