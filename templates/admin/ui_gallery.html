@@ -38,8 +38,8 @@ When a component is added under templates/cotton/, add an example here.
             <h3 class="font-semibold mb-2"><code>&lt;c-ui.copy-chip&gt;</code></h3>
             <div class="flex flex-wrap items-center gap-2">
               <c-ui.copy-chip target="gallery-copy-shown" value="https://example.com/public/abc" text="{% translate 'Copy link' %}" />
-              <c-ui.copy-chip target="gallery-copy-hidden" value="hidden-value" :show_value="False" text="{% translate 'Copy' %}" extra_classes="btn-ghost" />
-              <c-ui.copy-chip target="gallery-copy-icon" value="icon-only" :show_value="False" extra_classes="btn-ghost btn-xs px-1" />
+              <c-ui.copy-chip target="gallery-copy-hidden" value="hidden-value" :show_value="False" text="{% translate 'Copy' %}" class="btn-ghost" />
+              <c-ui.copy-chip target="gallery-copy-icon" value="icon-only" :show_value="False" class="btn-ghost btn-xs px-1" />
             </div>
           </div>
           <div>
@@ -58,46 +58,57 @@ When a component is added under templates/cotton/, add an example here.
       </section>
 
       <section>
-        <h2 class="text-lg font-bold mb-3">{% translate "Buttons" %}</h2>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.button&gt;</code></h2>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <c-ui.button variant="primary">{% translate "Primary" %}</c-ui.button>
+          <c-ui.button variant="secondary">{% translate "Secondary" %}</c-ui.button>
+          <c-ui.button variant="primary" style="soft">{% translate "Soft" %}</c-ui.button>
+          <c-ui.button style="outline">{% translate "Outline" %}</c-ui.button>
+          <c-ui.button variant="ghost">{% translate "Ghost" %}</c-ui.button>
+          <c-ui.button variant="error">{% translate "Danger" %}</c-ui.button>
+          <c-ui.button variant="link">{% translate "Link" %}</c-ui.button>
+          <c-ui.button variant="primary" disabled>{% translate "Disabled" %}</c-ui.button>
+        </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn btn-primary">{% translate "Primary" %}</button>
-          <button type="button" class="btn btn-secondary">{% translate "Secondary" %}</button>
-          <button type="button" class="btn btn-soft btn-primary">{% translate "Soft" %}</button>
-          <button type="button" class="btn btn-outline">{% translate "Outline" %}</button>
-          <button type="button" class="btn btn-ghost">{% translate "Ghost" %}</button>
-          <button type="button" class="btn btn-error">{% translate "Danger" %}</button>
-          <button type="button" class="btn btn-primary" disabled>{% translate "Disabled" %}</button>
-          <button type="button" class="btn btn-sm btn-primary">{% translate "Small" %}</button>
-          <button type="button" class="btn btn-xs btn-primary">{% translate "Extra small" %}</button>
-          <button type="button" class="btn btn-primary"><i class="fa-solid fa-plus"></i> {% translate "With icon" %}</button>
-          <button type="button" class="btn btn-circle btn-ghost btn-sm" aria-label="{% translate 'Icon only' %}"><i class="fa-solid fa-ellipsis"></i></button>
-          <button type="button" class="btn btn-primary"><span class="loading loading-spinner loading-sm"></span> {% translate "Loading" %}</button>
+          <c-ui.button variant="primary" size="sm">{% translate "Small" %}</c-ui.button>
+          <c-ui.button variant="primary" size="xs">{% translate "Extra small" %}</c-ui.button>
+          <c-ui.button variant="primary" icon="fa-solid fa-plus">{% translate "With icon" %}</c-ui.button>
+          <c-ui.button variant="ghost" shape="circle" size="sm" icon="fa-solid fa-ellipsis" aria-label="{% translate 'Icon only' %}" />
+          <c-ui.button variant="primary" loading>{% translate "Loading" %}</c-ui.button>
+          <c-ui.button href="#" variant="primary" style="outline" size="sm" icon="fa-solid fa-arrow-up-right-from-square">{% translate "Link styled as a button" %}</c-ui.button>
         </div>
       </section>
 
       <section>
-        <h2 class="text-lg font-bold mb-3">{% translate "Badges" %}</h2>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.badge&gt;</code></h2>
         <div class="flex flex-wrap items-center gap-2">
-          <span class="badge">{% translate "Default" %}</span>
-          <span class="badge badge-primary">{% translate "Primary" %}</span>
-          <span class="badge badge-secondary">{% translate "Secondary" %}</span>
-          <span class="badge badge-success">{% translate "Success" %}</span>
-          <span class="badge badge-info">{% translate "Info" %}</span>
-          <span class="badge badge-warning">{% translate "Warning" %}</span>
-          <span class="badge badge-error">{% translate "Error" %}</span>
-          <span class="badge badge-ghost">{% translate "Ghost" %}</span>
-          <span class="badge badge-outline">{% translate "Outline" %}</span>
-          <span class="badge badge-sm badge-warning"><i class="fa-solid fa-ban"></i> {% translate "Small with icon" %}</span>
+          <c-ui.badge>{% translate "Default" %}</c-ui.badge>
+          <c-ui.badge variant="primary">{% translate "Primary" %}</c-ui.badge>
+          <c-ui.badge variant="secondary">{% translate "Secondary" %}</c-ui.badge>
+          <c-ui.badge variant="success">{% translate "Success" %}</c-ui.badge>
+          <c-ui.badge variant="info">{% translate "Info" %}</c-ui.badge>
+          <c-ui.badge variant="warning">{% translate "Warning" %}</c-ui.badge>
+          <c-ui.badge variant="error">{% translate "Error" %}</c-ui.badge>
+          <c-ui.badge variant="ghost">{% translate "Ghost" %}</c-ui.badge>
+          <c-ui.badge style="outline">{% translate "Outline" %}</c-ui.badge>
+          <c-ui.badge variant="success" style="soft">{% translate "Soft" %}</c-ui.badge>
+          <c-ui.badge variant="warning" size="sm" icon="fa-solid fa-ban">{% translate "Small with icon" %}</c-ui.badge>
+          <c-ui.badge variant="info" size="xs">{% translate "Extra small" %}</c-ui.badge>
         </div>
       </section>
 
       <section>
-        <h2 class="text-lg font-bold mb-3">{% translate "Alerts" %}</h2>
+        <h2 class="text-lg font-bold mb-3"><code>&lt;c-ui.alert&gt;</code></h2>
         <div class="space-y-2">
-          <div class="alert alert-info"><span>{% translate "Information for the reader." %}</span></div>
-          <div class="alert alert-success"><span>{% translate "The change was saved." %}</span></div>
-          <div class="alert alert-warning"><span>{% translate "Something needs attention." %}</span></div>
-          <div class="alert alert-error"><span>{% translate "The request failed." %}</span></div>
+          <c-ui.alert variant="info"><span>{% translate "Information for the reader." %}</span></c-ui.alert>
+          <c-ui.alert variant="success"><span>{% translate "The change was saved." %}</span></c-ui.alert>
+          <c-ui.alert variant="warning" icon="fa-solid fa-triangle-exclamation"><span>{% translate "Something needs attention." %}</span></c-ui.alert>
+          <c-ui.alert variant="error"><span>{% translate "The request failed." %}</span></c-ui.alert>
+          <c-ui.alert variant="info" style="soft"><span>{% translate "A soft alert." %}</span></c-ui.alert>
+          <c-ui.alert variant="warning" layout="vertical">
+            <span>{% translate "An alert with an action." %}</span>
+            <c-ui.button size="sm">{% translate "Act" %}</c-ui.button>
+          </c-ui.alert>
         </div>
       </section>
 
@@ -106,8 +117,8 @@ When a component is added under templates/cotton/, add an example here.
         <form class="max-w-md space-y-2" onsubmit="return false">
           {% render_form_fields form %}
           <div class="flex gap-2 mt-4">
-            <button type="button" class="btn btn-primary">{% translate "Save" %}</button>
-            <button type="button" class="btn">{% translate "Cancel" %}</button>
+            <c-ui.button variant="primary">{% translate "Save" %}</c-ui.button>
+            <c-ui.button>{% translate "Cancel" %}</c-ui.button>
           </div>
         </form>
       </section>
@@ -115,9 +126,9 @@ When a component is added under templates/cotton/, add an example here.
       <section>
         <h2 class="text-lg font-bold mb-3">{% translate "Tooltip, help and dropdown" %}</h2>
         <div class="flex flex-wrap items-center gap-6">
-          <span class="tooltip" data-tip="{% translate 'Tooltip text' %}"><button type="button" class="btn btn-sm">{% translate "Hover me" %}</button></span>
+          <span class="tooltip" data-tip="{% translate 'Tooltip text' %}"><c-ui.button size="sm">{% translate "Hover me" %}</c-ui.button></span>
           <div class="dropdown">
-            <button type="button" tabindex="0" class="btn btn-sm">{% translate "Dropdown" %} <i class="fa-solid fa-caret-down"></i></button>
+            <c-ui.button size="sm" tabindex="0">{% translate "Dropdown" %} <i class="fa-solid fa-caret-down"></i></c-ui.button>
             <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow-sm bg-base-100 rounded-box w-52 border">
               <li><a href="#">{% translate "First action" %}</a></li>
               <li><a href="#">{% translate "Second action" %}</a></li>
@@ -142,7 +153,7 @@ When a component is added under templates/cotton/, add an example here.
             <h3 class="card-title">{% translate "Card title" %}</h3>
             <p>{% translate "Card body text." %}</p>
             <div class="card-actions justify-end">
-              <button type="button" class="btn btn-sm btn-primary">{% translate "Action" %}</button>
+              <c-ui.button variant="primary" size="sm">{% translate "Action" %}</c-ui.button>
             </div>
           </div>
         </div>
@@ -158,15 +169,15 @@ When a component is added under templates/cotton/, add an example here.
             <tbody>
               <tr>
                 <td><c-ui.chip url="#" label="Support bot" truncate /></td>
-                <td><span class="badge badge-success">{% translate "Active" %}</span></td>
+                <td><c-ui.badge variant="success">{% translate "Active" %}</c-ui.badge></td>
                 <td>2026-11-03</td>
-                <td class="text-right"><button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pencil"></i></button></td>
+                <td class="text-right"><c-ui.button variant="ghost" size="xs" icon="fa-solid fa-pencil" aria-label="{% translate 'Edit' %}" /></td>
               </tr>
               <tr>
                 <td><c-ui.chip url="#" label="Survey bot" truncate /></td>
-                <td><span class="badge badge-ghost">{% translate "Archived" %}</span></td>
+                <td><c-ui.badge variant="ghost">{% translate "Archived" %}</c-ui.badge></td>
                 <td>2026-10-12</td>
-                <td class="text-right"><button type="button" class="btn btn-ghost btn-xs"><i class="fa-solid fa-pencil"></i></button></td>
+                <td class="text-right"><c-ui.button variant="ghost" size="xs" icon="fa-solid fa-pencil" aria-label="{% translate 'Edit' %}" /></td>
               </tr>
             </tbody>
           </table>
@@ -176,13 +187,13 @@ When a component is added under templates/cotton/, add an example here.
       <section>
         <h2 class="text-lg font-bold mb-3">{% translate "Dialogs and toasts" %}</h2>
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn btn-sm" onclick="document.getElementById('ui-gallery-modal').showModal()">{% translate "Open modal" %}</button>
+          <c-ui.button size="sm" onclick="document.getElementById('ui-gallery-modal').showModal()">{% translate "Open modal" %}</c-ui.button>
           {% translate "Archive this chatbot?" as confirm_text %}
           {% translate "Saved." as success_text %}
           {% translate "Something went wrong." as error_text %}
-          <button type="button" class="btn btn-sm" onclick="confirmDialog('{{ confirm_text|escapejs }}')">{% translate "Confirm dialog" %}</button>
-          <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ success_text|escapejs }}', 'success', 3)">{% translate "Success toast" %}</button>
-          <button type="button" class="btn btn-sm" onclick="alertify.notify('{{ error_text|escapejs }}', 'error', 3)">{% translate "Error toast" %}</button>
+          <c-ui.button size="sm" onclick="confirmDialog('{{ confirm_text|escapejs }}')">{% translate "Confirm dialog" %}</c-ui.button>
+          <c-ui.button size="sm" onclick="alertify.notify('{{ success_text|escapejs }}', 'success', 3)">{% translate "Success toast" %}</c-ui.button>
+          <c-ui.button size="sm" onclick="alertify.notify('{{ error_text|escapejs }}', 'error', 3)">{% translate "Error toast" %}</c-ui.button>
         </div>
         <c-ui.modal id="ui-gallery-modal" title="{% translate 'Modal title' %}">{% translate "Modal body text." %}</c-ui.modal>
       </section>

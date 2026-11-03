@@ -48,7 +48,7 @@ def render(source, context=None):
         pytest.param(
             '<c-ui.chip :url="url" :label="label" hx-get="/next" x-data="{open: false}" ::class="open && \'x\'" />',
             {"url": "/x", "label": "L"},
-            ['hx-get="/next"', 'x-data="{open: false}"', ":class=\"open && 'x'\""],
+            ['hx-get="/next"', 'x-data="{open: false}"', ':class="open &amp;&amp; &#x27;x&#x27;"'],
             [],
             id="attrs-pass-through",
         ),
@@ -85,7 +85,7 @@ def test_chip_from_chip_dict(chip, expected):
     ("source", "expected", "unexpected"),
     [
         pytest.param(
-            '<c-ui.copy-chip target="link" value="https://x" text="Copy link" extra_classes="btn-ghost" />',
+            '<c-ui.copy-chip target="link" value="https://x" text="Copy link" class="btn-ghost" />',
             [
                 '<span id="link">https://x</span>',
                 "fa-copy",
@@ -168,7 +168,7 @@ def test_partials_and_components_share_the_loader_chain(tmp_path):
     assert page.count("<li>") == 2
     assert "> a </div>" in page
     assert "> b </div>" in page
-    assert partial == '<li> <div class="btn btn-sm btn-soft btn-primary no-animation " > solo </div> </li>'
+    assert partial == '<li> <div class="btn btn-sm btn-soft btn-primary no-animation"> solo </div> </li>'
 
 
 def test_column_with_help_header_renders_the_help_component():
@@ -177,3 +177,105 @@ def test_column_with_help_header_renders_the_help_component():
     assert header.startswith("<span>Score</span>")
     assert "<p><b>Shown</b> on hover</p>" in header
     assert ColumnWithHelp(verbose_name="Plain").header() == "Plain"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected", "unexpected"),
+    [
+        pytest.param(
+            '<c-ui.button variant="primary" type="submit">Save</c-ui.button>',
+            ['<button type="submit" class="btn btn-primary" >', "Save </button>"],
+            ["variant="],
+            id="submit-button",
+        ),
+        pytest.param(
+            "<c-ui.button>Plain</c-ui.button>", ['<button type="button" class="btn" >'], [], id="default-button"
+        ),
+        pytest.param(
+            '<c-ui.button href="/x" variant="primary" size="sm" icon="fa-solid fa-plus" class="w-full" hx-boost="true">'
+            "Add</c-ui.button>",
+            [
+                '<a href="/x" class="btn btn-primary btn-sm w-full" hx-boost="true" >',
+                '<i class="fa-solid fa-plus"></i>Add',
+            ],
+            ["<button", 'href="/x" href'],
+            id="link-with-icon-and-merged-class",
+        ),
+        pytest.param(
+            '<c-ui.button variant="ghost" shape="circle" size="sm" icon="fa-solid fa-ellipsis" aria-label="More" />',
+            ['class="btn btn-ghost btn-sm btn-circle" aria-label="More"'],
+            [],
+            id="icon-only",
+        ),
+        pytest.param(
+            '<c-ui.button href="/x" disabled>No</c-ui.button>',
+            ['class="btn btn-disabled" aria-disabled="true" tabindex="-1"'],
+            ['disabled="True"'],
+            id="disabled-link",
+        ),
+        pytest.param(
+            '<c-ui.button variant="error" style="outline" disabled loading>Busy</c-ui.button>',
+            [
+                'class="btn btn-error btn-outline" disabled>',
+                '<span class="loading loading-spinner loading-xs"></span>Busy',
+            ],
+            ["loading="],
+            id="disabled-loading-button",
+        ),
+    ],
+)
+def test_button(source, expected, unexpected):
+    html = render(source)
+    for fragment in expected:
+        assert fragment in html
+    for fragment in unexpected:
+        assert fragment not in html
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            '<c-ui.badge variant="success">Active</c-ui.badge>',
+            '<span class="badge badge-success">Active</span>',
+            id="variant",
+        ),
+        pytest.param(
+            '<c-ui.badge variant="warning" size="sm" style="outline" icon="fa-solid fa-ban" class="mt-1">'
+            "Off</c-ui.badge>",
+            '<span class="badge badge-warning badge-outline badge-sm mt-1"><i class="fa-solid fa-ban"></i> Off</span>',
+            id="all-options",
+        ),
+        pytest.param("<c-ui.badge>3</c-ui.badge>", '<span class="badge">3</span>', id="default"),
+    ],
+)
+def test_badge(source, expected):
+    assert render(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            '<c-ui.alert variant="info">Text</c-ui.alert>',
+            '<div role="alert" class="alert alert-info"> Text </div>',
+            id="variant",
+        ),
+        pytest.param(
+            '<c-ui.alert variant="warning" style="soft" layout="vertical" icon="fa-solid fa-triangle-exclamation" '
+            'class="mb-4" x-data="{}">Msg</c-ui.alert>',
+            '<div role="alert" class="alert alert-warning alert-soft alert-vertical mb-4" x-data="{}"> '
+            '<i class="fa-solid fa-triangle-exclamation"></i> Msg </div>',
+            id="all-options",
+        ),
+    ],
+)
+def test_alert(source, expected):
+    assert render(source) == expected
+
+
+def test_with_classes_merges_escapes_and_skips_declared_parameters():
+    html = render(
+        '<c-ui.badge variant="info" class="mt-1" :title="title" hx-boost>x</c-ui.badge>', {"title": 'A "q" <b>'}
+    )
+    assert html == '<span class="badge badge-info mt-1" title="A &quot;q&quot; &lt;b&gt;" hx-boost>x</span>'
