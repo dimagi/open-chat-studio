@@ -3,7 +3,7 @@ import logging
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import F, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.urls import reverse
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
@@ -94,8 +94,9 @@ class CustomAction(BaseTeamModel):
     def get_operations_by_id(self):
         return {op.operation_id: op for op in self.operations}
 
-    def is_in_use(self) -> bool:
-        """Whether a chatbot that is not archived can still call this action through a pipeline node.
+    @classmethod
+    def in_use_filter(cls) -> Exists:
+        """Filter for actions a chatbot that is not archived can still call through a pipeline node.
 
         A working node only offers the operations the action still allows; a published node keeps
         the operations it was versioned with (see ``CustomActionOperationMixin``).
@@ -103,12 +104,17 @@ class CustomAction(BaseTeamModel):
         callable_from_node = Q(node__working_version__isnull=False) | Q(
             custom_action__allowed_operations__contains=[F("operation_id")]
         )
-        return CustomActionOperation.objects.filter(
-            callable_from_node,
-            custom_action=self,
-            node__is_archived=False,
-            node__pipeline__experiment__is_archived=False,
-        ).exists()
+        return Exists(
+            CustomActionOperation.objects.filter(
+                callable_from_node,
+                custom_action=OuterRef("pk"),
+                node__is_archived=False,
+                node__pipeline__experiment__is_archived=False,
+            )
+        )
+
+    def is_in_use(self) -> bool:
+        return CustomAction.objects.filter(pk=self.pk).filter(self.in_use_filter()).exists()
 
     def detect_health_endpoint_from_spec(self) -> str | None:
         """

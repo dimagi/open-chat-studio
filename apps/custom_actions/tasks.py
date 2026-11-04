@@ -16,8 +16,12 @@ HEALTH_CHECK_TIMEOUT = 5
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def check_all_custom_actions_health():
-    """Periodic task to check health of all custom actions with health endpoints configured."""
-    custom_actions = CustomAction.objects.exclude(healthcheck_path__isnull=True).exclude(healthcheck_path="")
+    """Periodic task to check the health of every action with a health endpoint that a live chatbot can call."""
+    custom_actions = (
+        CustomAction.objects.exclude(healthcheck_path__isnull=True)
+        .exclude(healthcheck_path="")
+        .filter(CustomAction.in_use_filter())
+    )
 
     for action in custom_actions:
         check_single_custom_action_health.delay(action.id)
@@ -42,12 +46,6 @@ def check_single_custom_action_health(action_id: int):
         logger.warning(f"CustomAction {action.name} (id={action_id}) has no health endpoint configured")
         return
 
-    # An unused action keeps its last recorded status, so the first failed check after a live
-    # chatbot adopts it is still a transition to DOWN and alerts the team.
-    if not action.is_in_use():
-        logger.info(f"Skipping health check for {action.name} (id={action_id}): no live chatbot uses it")
-        return
-
     failure_reason = ""
     try:
         response = httpx.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)
@@ -66,8 +64,11 @@ def check_single_custom_action_health(action_id: int):
         failure_reason = str(e)
         logger.warning(f"Health check error for {action.name}: {e!s}")
 
-    # Notify team members if status changed to DOWN from a non-DOWN state
-    should_notify = new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN
+    # Notify team members on the transition to DOWN, and only for an action a live chatbot can call:
+    # a check run from the action's own page or on create still records the status for the user.
+    should_notify = (
+        new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN and action.is_in_use()
+    )
 
     # Update the action's health status
     action.health_status = new_status

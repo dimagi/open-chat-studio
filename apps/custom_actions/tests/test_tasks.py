@@ -36,7 +36,6 @@ class TestHealthCheckTask:
             healthcheck_path="/health",
             server_url="https://example.com",
         )
-        _attach_to_bot(custom_action_with_health, team_with_users)
 
         # Mock the health check response
         httpx_mock.add_response(url="https://example.com/health", status_code=status_code, json={"status": "ok"})
@@ -68,22 +67,24 @@ class TestHealthCheckTask:
 
     @patch("apps.custom_actions.tasks.check_single_custom_action_health.delay")
     def test_check_all_custom_actions_health(self, mock_delay, team_with_users):
-        """Test that custom actions with health paths are loaded."""
-        # Create custom actions: some with health paths, some without
+        """Only actions with a health path that a live chatbot can call are scheduled."""
         action_with_health_1 = CustomActionFactory.create(
             team=team_with_users,
             healthcheck_path="/health",
             server_url="https://example.com",
         )
+        _attach_to_bot(action_with_health_1, team_with_users)
         action_with_health_2 = CustomActionFactory.create(
             team=team_with_users,
             healthcheck_path="/healthz",
             server_url="https://example2.com",
         )
-        CustomActionFactory.create(
-            team=team_with_users,
-            healthcheck_path="",
-        )
+        _attach_to_bot(action_with_health_2, team_with_users)
+        no_health_path = CustomActionFactory.create(team=team_with_users, healthcheck_path="")
+        _attach_to_bot(no_health_path, team_with_users)
+        archived_bot_only = CustomActionFactory.create(team=team_with_users, healthcheck_path="/health")
+        _attach_to_bot(archived_bot_only, team_with_users, experiment_archived=True)
+        CustomActionFactory.create(team=team_with_users, healthcheck_path="/health")  # no chatbot
 
         # Run the periodic task
         check_all_custom_actions_health()
@@ -107,7 +108,7 @@ class TestHealthCheckFailureNotification:
         ],
     )
     @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
-    def test_checks_and_notifies_only_for_actions_a_live_bot_can_call(
+    def test_notifies_only_for_actions_a_live_bot_can_call(
         self, mock_notify, bot, allowed_operations, expected_calls, team_with_users, httpx_mock
     ):
         action = CustomActionFactory.create(
@@ -117,35 +118,27 @@ class TestHealthCheckFailureNotification:
             allowed_operations=allowed_operations,
         )
         _attach_to_bot(action, team_with_users, **bot)
-        if expected_calls:
-            httpx_mock.add_response(url="https://example.com/health", status_code=500)
-
-        check_single_custom_action_health(action.id)
-
-        action.refresh_from_db()
-        expected_status = HealthCheckStatus.DOWN if expected_calls else HealthCheckStatus.UNKNOWN
-        assert action.health_status == expected_status
-        assert mock_notify.call_count == expected_calls
-
-    @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
-    def test_alerts_once_a_live_bot_starts_using_an_unused_action(self, mock_notify, team_with_users, httpx_mock):
-        """An unused action is not checked, so its first failure after adoption is still a DOWN transition."""
-        action = CustomActionFactory.create(
-            team=team_with_users, healthcheck_path="/health", server_url="https://example.com"
-        )
-
-        check_single_custom_action_health(action.id)
-
-        action.refresh_from_db()
-        assert action.health_status == HealthCheckStatus.UNKNOWN
-        assert action.last_health_check is None
-        mock_notify.assert_not_called()
-
-        _attach_to_bot(action, team_with_users)
         httpx_mock.add_response(url="https://example.com/health", status_code=500)
 
         check_single_custom_action_health(action.id)
 
         action.refresh_from_db()
         assert action.health_status == HealthCheckStatus.DOWN
-        mock_notify.assert_called_once()
+        assert mock_notify.call_count == expected_calls
+
+    @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
+    def test_a_direct_check_of_an_unused_action_records_status_without_alerting(
+        self, mock_notify, team_with_users, httpx_mock
+    ):
+        """The create view and the check-health button call the task for actions no chatbot uses yet."""
+        action = CustomActionFactory.create(
+            team=team_with_users, healthcheck_path="/health", server_url="https://example.com"
+        )
+        httpx_mock.add_response(url="https://example.com/health", status_code=500)
+
+        check_single_custom_action_health(action.id)
+
+        action.refresh_from_db()
+        assert action.health_status == HealthCheckStatus.DOWN
+        assert action.last_health_check is not None
+        mock_notify.assert_not_called()
