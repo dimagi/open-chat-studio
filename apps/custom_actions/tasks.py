@@ -42,6 +42,12 @@ def check_single_custom_action_health(action_id: int):
         logger.warning(f"CustomAction {action.name} (id={action_id}) has no health endpoint configured")
         return
 
+    # An unused action keeps its last recorded status, so the first failed check after a live
+    # chatbot adopts it is still a transition to DOWN and alerts the team.
+    if not action.is_in_use():
+        logger.info(f"Skipping health check for {action.name} (id={action_id}): no live chatbot uses it")
+        return
+
     failure_reason = ""
     try:
         response = httpx.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)
@@ -60,10 +66,8 @@ def check_single_custom_action_health(action_id: int):
         failure_reason = str(e)
         logger.warning(f"Health check error for {action.name}: {e!s}")
 
-    # Notify team members on the transition to DOWN, and only for an action a live chatbot still uses
-    should_notify = (
-        new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN and action.is_in_use()
-    )
+    # Notify team members if status changed to DOWN from a non-DOWN state
+    should_notify = new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN
 
     # Update the action's health status
     action.health_status = new_status

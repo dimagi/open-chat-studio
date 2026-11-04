@@ -9,6 +9,12 @@ from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 
+def _attach_to_live_bot(action, team):
+    pipeline = PipelineFactory.create(team=team)
+    CustomActionOperationFactory.create(custom_action=action, node=NodeFactory.create(pipeline=pipeline))
+    ExperimentFactory.create(team=team, pipeline=pipeline)
+
+
 @pytest.mark.django_db()
 class TestHealthCheckTask:
     """Tests for the health check task."""
@@ -27,6 +33,7 @@ class TestHealthCheckTask:
             healthcheck_path="/health",
             server_url="https://example.com",
         )
+        _attach_to_live_bot(custom_action_with_health, team_with_users)
 
         # Mock the health check response
         httpx_mock.add_response(url="https://example.com/health", status_code=status_code, json={"status": "ok"})
@@ -87,39 +94,67 @@ class TestHealthCheckTask:
 @pytest.mark.django_db()
 class TestHealthCheckFailureNotification:
     @pytest.mark.parametrize(
-        ("experiment_archived", "node_archived", "expected_calls"),
+        ("experiment_archived", "node_archived", "node_is_version", "allowed_operations", "expected_calls"),
         [
-            pytest.param(False, False, 1, id="live-bot"),
-            pytest.param(True, False, 0, id="archived-bot"),
-            pytest.param(False, True, 0, id="node-removed-from-bot"),
+            pytest.param(False, False, False, ["weather_get"], 1, id="live-bot"),
+            pytest.param(True, False, False, ["weather_get"], 0, id="archived-bot"),
+            pytest.param(False, True, False, ["weather_get"], 0, id="node-removed-from-bot"),
+            pytest.param(False, False, False, [], 0, id="operation-disabled-on-working-node"),
+            pytest.param(False, False, True, [], 1, id="operation-disabled-but-published"),
         ],
     )
     @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
-    def test_notifies_only_for_actions_a_live_bot_uses(
-        self, mock_notify, experiment_archived, node_archived, expected_calls, team_with_users, httpx_mock
+    def test_checks_and_notifies_only_for_actions_a_live_bot_can_call(
+        self,
+        mock_notify,
+        experiment_archived,
+        node_archived,
+        node_is_version,
+        allowed_operations,
+        expected_calls,
+        team_with_users,
+        httpx_mock,
     ):
+        action = CustomActionFactory.create(
+            team=team_with_users,
+            healthcheck_path="/health",
+            server_url="https://example.com",
+            allowed_operations=allowed_operations,
+        )
+        pipeline = PipelineFactory.create(team=team_with_users)
+        working_version = NodeFactory.create(pipeline=pipeline) if node_is_version else None
+        node = NodeFactory.create(pipeline=pipeline, is_archived=node_archived, working_version=working_version)
+        CustomActionOperationFactory.create(custom_action=action, node=node)
+        ExperimentFactory.create(team=team_with_users, pipeline=pipeline, is_archived=experiment_archived)
+        if expected_calls:
+            httpx_mock.add_response(url="https://example.com/health", status_code=500)
+
+        check_single_custom_action_health(action.id)
+
+        action.refresh_from_db()
+        expected_status = HealthCheckStatus.DOWN if expected_calls else HealthCheckStatus.UNKNOWN
+        assert action.health_status == expected_status
+        assert mock_notify.call_count == expected_calls
+
+    @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
+    def test_alerts_once_a_live_bot_starts_using_an_unused_action(self, mock_notify, team_with_users, httpx_mock):
+        """An unused action is not checked, so its first failure after adoption is still a DOWN transition."""
         action = CustomActionFactory.create(
             team=team_with_users, healthcheck_path="/health", server_url="https://example.com"
         )
-        pipeline = PipelineFactory.create(team=team_with_users)
-        node = NodeFactory.create(pipeline=pipeline, is_archived=node_archived)
-        CustomActionOperationFactory.create(custom_action=action, node=node)
-        ExperimentFactory.create(team=team_with_users, pipeline=pipeline, is_archived=experiment_archived)
+
+        check_single_custom_action_health(action.id)
+
+        action.refresh_from_db()
+        assert action.health_status == HealthCheckStatus.UNKNOWN
+        assert action.last_health_check is None
+        mock_notify.assert_not_called()
+
+        _attach_to_live_bot(action, team_with_users)
         httpx_mock.add_response(url="https://example.com/health", status_code=500)
 
         check_single_custom_action_health(action.id)
 
         action.refresh_from_db()
         assert action.health_status == HealthCheckStatus.DOWN
-        assert mock_notify.call_count == expected_calls
-
-    @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
-    def test_does_not_notify_for_an_unused_action(self, mock_notify, team_with_users, httpx_mock):
-        action = CustomActionFactory.create(
-            team=team_with_users, healthcheck_path="/health", server_url="https://example.com"
-        )
-        httpx_mock.add_response(url="https://example.com/health", status_code=500)
-
-        check_single_custom_action_health(action.id)
-
-        mock_notify.assert_not_called()
+        mock_notify.assert_called_once()
