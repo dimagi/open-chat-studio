@@ -198,7 +198,7 @@ def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts
     rows = (
         ChatMessage.objects.filter(
             chat__team=team,
-            # An IN list on the leading column lets the planner use `chatmessage_moderation_idx` for each status.
+            # An IN list on the leading column lets the planner use `chatmessage_mod_created_idx` for each status.
             moderation_status__in=ModerationStatus.values,
             created_at__gte=since,
         )

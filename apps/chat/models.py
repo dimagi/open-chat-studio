@@ -247,7 +247,7 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             models.Index(fields=["updated_at", "id"], name="chatmessage_updated_at_id_idx"),
             models.Index(
                 fields=["moderation_status", "created_at"],
-                name="chatmessage_moderation_idx",
+                name="chatmessage_mod_created_idx",
                 condition=Q(moderation_status__isnull=False),
             ),
         ]
