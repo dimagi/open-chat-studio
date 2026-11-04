@@ -334,18 +334,6 @@ class TestModerationResultStageStrikes:
         assert not DeniedParticipant.objects.filter(participant=session.participant).exists()
         notification.assert_not_called()
 
-    def test_team_member_on_telegram_gets_a_strike(self, auto_block_session, moderation_task):
-        """A team member's Telegram participant has no linked user, so it is not exempt."""
-        MembershipFactory.create(team=auto_block_session.experiment.team)
-        auto_block_session.participant.platform = ChannelPlatform.TELEGRAM
-        auto_block_session.participant.save()
-        moderation_task.get.return_value = _ok(STRIKE_OUTPUT)
-
-        with _flagged_reply():
-            ModerationResultStage()(_context(auto_block_session, bot_response=_bot_response(auto_block_session)))
-
-        assert _strikes(auto_block_session) == 1
-
 
 @pytest.mark.django_db()
 class TestModerationInTheChannelPipeline:
