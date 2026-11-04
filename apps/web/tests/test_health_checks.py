@@ -225,6 +225,12 @@ class TestHealthCheckView:
 
         assert response.status_code == 404
 
+    def test_bearer_header_takes_precedence_over_query_param(self, client, fake_subsets):
+        with override_settings(HEALTH_CHECK_TOKENS=["secret-token"]):
+            response = client.get("/status/", {"token": "secret-token"}, headers={"Authorization": "Bearer wrong"})
+
+        assert response.status_code == 404
+
     def test_no_token_required_when_none_configured(self, client, fake_subsets):
         with override_settings(HEALTH_CHECK_TOKENS=[]):
             response = client.get("/status/")
