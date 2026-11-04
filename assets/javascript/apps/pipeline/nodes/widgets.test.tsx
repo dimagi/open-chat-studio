@@ -7,6 +7,12 @@ import type {PropertySchema} from '../types/nodeParams';
 import {ReactFlowProvider} from 'reactflow';
 import usePipelineStore from '../stores/pipelineStore';
 import {apiClient} from '../api/api';
+import {renderRouterPromptPreview} from '../utils';
+
+vi.mock('../utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils')>();
+  return {...actual, renderRouterPromptPreview: vi.fn(actual.renderRouterPromptPreview)};
+});
 
 // GenerateCodeSection renders CodeDiffEditor for the AI suggestion, which mounts a real
 // CodeMirror/EditorView -- not reliable in jsdom. Stub it with something that surfaces the
@@ -431,11 +437,18 @@ describe('RouterPromptModeWidget', () => {
     );
   };
 
-  it('reads a router without a prompt_mode as custom, with no preview', () => {
-    const {getByRole, queryByText} = renderWidget(routes);
+  it.each([
+    ['standard', true],
+    ['custom', false],
+  ])('shows the %s mode it is given, with a preview: %s', (mode, hasPreview) => {
+    const Widget = getWidget('router_prompt_mode', schema);
+    const {getByRole, queryByText} = render(
+      <Widget {...baseProps} name="prompt_mode" label="Prompt Mode" schema={schema} nodeParams={routes as never}
+        paramValue={mode} />
+    );
 
-    expect(getByRole('combobox')).toHaveValue('custom');
-    expect(queryByText(/Preview generated prompt/)).not.toBeInTheDocument();
+    expect(getByRole('combobox')).toHaveValue(mode);
+    expect(queryByText(/Preview generated prompt/) !== null).toBe(hasPreview);
   });
 
   it.each([
@@ -480,6 +493,21 @@ describe('RouterPromptModeWidget', () => {
           nodeParams={params} paramValue={String(params.prompt_mode ?? '')} />
       );
     }
+
+    it('rebuilds the preview only when a param it reads changes', () => {
+      seedRouter({prompt_mode: 'standard', prompt_template_version: 'v2'});
+      render(<Harness />);
+      const setParam = (name: string, value: unknown) => act(() => usePipelineStore.getState().setNode(
+        'node-1', (old) => ({...old, data: {...old.data, params: {...old.data.params, [name]: value}}})
+      ));
+      vi.mocked(renderRouterPromptPreview).mockClear();
+
+      setParam('name', 'renamed');
+      expect(renderRouterPromptPreview).not.toHaveBeenCalled();
+
+      setParam('keywords', ['BILLING', 'SUPPORT', 'SALES']);
+      expect(renderRouterPromptPreview).toHaveBeenCalledTimes(1);
+    });
 
     it('pins the latest version when a custom router switches to standard', () => {
       seedRouter({prompt_mode: 'custom'});

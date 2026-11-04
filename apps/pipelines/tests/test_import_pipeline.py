@@ -70,3 +70,24 @@ def test_import_file_without_nodes_key_is_rejected(tmp_path):
         call_command("import_pipeline", team.slug, "Imported", str(file_path))
 
     assert not Pipeline.objects.filter(team=team).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("params", "expected_mode"),
+    [
+        pytest.param({}, "custom", id="router-exported-before-prompt-modes-stays-custom"),
+        pytest.param({"prompt_mode": "standard"}, "standard", id="stored-mode-kept"),
+    ],
+)
+def test_import_keeps_how_an_exported_router_builds_its_prompt(tmp_path, params, expected_mode):
+    flow = _old_format_flow()
+    router = {"id": "router-1", "type": "RouterNode", "params": {"name": "router", "prompt": "Pick one.", **params}}
+    flow["nodes"].append({"id": "router-1", "position": {"x": 50, "y": 0}, "data": router})
+    file_path = tmp_path / "pipeline.json"
+    file_path.write_text(json.dumps(flow))
+
+    call_command("import_pipeline", TeamFactory().slug, "Imported", str(file_path))
+
+    node = Pipeline.objects.get(name="Imported").node_set.get(type="RouterNode")
+    assert node.params["prompt_mode"] == expected_mode

@@ -22,7 +22,7 @@ Anything else (x-show, id, data-*) is passed through to the wrapper.
       <label class="label font-bold cursor-pointer">
         <div>
           {{ label }}
-          {% if help %}<small><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
+          {% if help %}<small class="form-text text-muted"><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
         </div>
         {{ slot }}
       </label>
@@ -30,7 +30,7 @@ Anything else (x-show, id, data-*) is passed through to the wrapper.
       <label class="label font-bold"{% if input_id %} for="{{ input_id }}"{% endif %}>
         <div>
           {{ label }}
-          {% if help %}<small><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
+          {% if help %}<small class="form-text text-muted"><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
         </div>
       </label>
       {{ slot }}

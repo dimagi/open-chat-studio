@@ -127,7 +127,7 @@
       "title": "Prompt Mode",
       "type": "string",
       "default": "standard",
-      "description": "How the router's prompt is built. `standard` builds it from the routes, their `route_descriptions` and `custom_context`; `custom` sends `prompt` instead. A router saved without this setting reads as `custom`.",
+      "description": "How the router's prompt is built. `standard` builds it from the routes, their `route_descriptions` and `custom_context`; `custom` sends `prompt` instead.",
       "ui:enumLabels": [
         "Standard",
         "Custom (Advanced)"
@@ -157,10 +157,8 @@
       "ui:optionsSource": "router_prompt_variables",
       "ui:visibleWhen": {
         "field": "prompt_mode",
-        "operator": "not_in",
-        "value": [
-          "standard"
-        ]
+        "operator": "==",
+        "value": "custom"
       },
       "ui:widget": "text_editor_widget"
     },

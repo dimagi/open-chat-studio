@@ -99,6 +99,11 @@ class TestSystemPrompt:
         assert "Ignored" not in prompt
         assert "Additional context" not in prompt
 
+    def test_a_router_without_a_mode_is_standard(self):
+        prompt = _system_prompt(_router(prompt="Ignored prompt"))
+
+        assert prompt.startswith("You are a routing assistant.")
+
     def test_standard_adds_the_context(self):
         router = _router(prompt_mode="standard", custom_context="Refunds count as {routes_list}.")
 
@@ -107,15 +112,8 @@ class TestSystemPrompt:
         assert prompt.startswith("You are a routing assistant.")
         assert "Refunds count as BILLING, SUPPORT." in prompt
 
-    @pytest.mark.parametrize(
-        "params",
-        [
-            pytest.param({"prompt_mode": "custom"}, id="custom"),
-            pytest.param({}, id="no-mode-is-custom"),
-        ],
-    )
-    def test_custom_sends_the_users_prompt(self, params):
-        prompt = _system_prompt(_router(prompt="Pick a route.", custom_context="Ignored", **params))
+    def test_custom_sends_the_users_prompt(self):
+        prompt = _system_prompt(_router(prompt_mode="custom", prompt="Pick a route.", custom_context="Ignored"))
 
         assert prompt == "Pick a route.\nThe default routing destination is: BILLING"
 
