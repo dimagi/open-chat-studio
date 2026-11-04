@@ -68,8 +68,8 @@ ENABLE_JSON_LOGGING=True
 
 ## Health Check
 
-The ALB health check should be configured to call `/status` with a token from `HEALTH_CHECK_TOKENS`. ALB health checks cannot send custom headers, so pass the token as a query parameter. Example target group health check path:
+The ALB health check should be configured to call `/status/` with a token from `HEALTH_CHECK_TOKENS`. ALB health checks cannot send custom headers, so pass the token as a query parameter. Example target group health check path:
 
 ```text
-/status?token=your-health-check-token
+/status/?token=your-health-check-token
 ```
