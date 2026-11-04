@@ -9,6 +9,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.traces import TraceFactory
 
 from ..models import DashboardCache
 from ..services import DashboardService
@@ -215,6 +216,25 @@ class TestDashboardService:
         )
 
         assert data["results"][0]["messages"] == 2
+
+    def test_average_response_time_windows_traces_by_timestamp(self, team, experiment, participant):
+        """A session active in the window can carry traces from outside it; only
+        the traces inside the window belong to the chart."""
+        now = timezone.now()
+        session = ExperimentSession.objects.create(
+            experiment=experiment, participant=participant, team=team, status="active"
+        )
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="in window")
+        TraceFactory.create(team=team, session=session, experiment=experiment, duration=2000)
+        TraceFactory.create(
+            team=team, session=session, experiment=experiment, duration=60000, at=now - timedelta(days=90)
+        )
+
+        data = DashboardService(team).get_average_response_time_data(
+            start_date=now - timedelta(days=1), end_date=now + timedelta(days=1)
+        )
+
+        assert [point["avg_response_time_sec"] for point in data] == [2.0]
 
     def test_get_channel_breakdown_data(self, team, experiment, participant, experiment_channel):
         """Test channel breakdown data generation"""
