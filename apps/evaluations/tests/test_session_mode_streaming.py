@@ -10,6 +10,7 @@ ExperimentChannel per call, so asserting on 10k sessions directly is not viable.
 """
 
 import itertools
+import logging
 from unittest.mock import patch
 
 import pytest
@@ -17,16 +18,17 @@ from django.db import connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
-from apps.evaluations.tasks import create_dataset_from_sessions_task
-from apps.evaluations.utils import (
+from apps.evaluations.evaluation_messages import (
     iter_session_evaluation_messages,
     iter_session_evaluation_messages_for_sessions,
 )
+from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
+from apps.evaluations.tasks import create_dataset_from_sessions_task
+from apps.evaluations.tests.clone_helpers import make_sessions, session_with_messages
 from apps.experiments.models import ExperimentSession
-from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.trace.models import TraceStatus
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.traces import TraceFactory
 
 # Resolving the selected external ids to primary keys, done once up front.
 PK_RESOLUTION_QUERIES = 1
@@ -34,36 +36,11 @@ PK_RESOLUTION_QUERIES = 1
 QUERIES_PER_CHUNK = 3
 
 
-def _make_sessions(count, experiment, channel, messages_per_session=2):
-    """Create `count` sessions sharing one experiment/channel, each with a short conversation."""
-    sessions = []
-    chat_messages = []
-    for session_index in range(count):
-        session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=channel)
-        chat_messages.extend(
-            ChatMessage(
-                chat=session.chat,
-                message_type=ChatMessageType.HUMAN if turn % 2 == 0 else ChatMessageType.AI,
-                content=f"session-{session_index} turn-{turn}",
-            )
-            for turn in range(messages_per_session)
-        )
-        sessions.append(session)
-    ChatMessage.objects.bulk_create(chat_messages)
-    return sessions
-
-
-@pytest.fixture()
-def experiment_and_channel():
-    experiment = ExperimentFactory.create()
-    return experiment, ExperimentChannelFactory.create(team=experiment.team)
-
-
 @pytest.mark.django_db()
 def test_every_session_is_yielded_across_chunk_boundaries(experiment_and_channel):
     """A chunk size that doesn't divide the session count must not drop or repeat sessions."""
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(5, experiment, channel)
+    sessions = make_sessions(5, experiment, channel)
 
     result = list(
         iter_session_evaluation_messages([session.external_id for session in sessions], chunk_size=2),
@@ -77,10 +54,10 @@ def test_every_session_is_yielded_across_chunk_boundaries(experiment_and_channel
 def test_default_chunk_size_is_patchable(experiment_and_channel):
     """The module constant is read at call time, so tests can shrink it (as test_export.py does)."""
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(3, experiment, channel)
+    sessions = make_sessions(3, experiment, channel)
     external_ids = [session.external_id for session in sessions]
 
-    with patch("apps.evaluations.utils.SESSION_CHUNK_SIZE", 1), CaptureQueriesContext(connection) as ctx:
+    with patch("apps.evaluations.evaluation_messages.SESSION_CHUNK_SIZE", 1), CaptureQueriesContext(connection) as ctx:
         result = list(iter_session_evaluation_messages(external_ids))
 
     assert len(result) == 3
@@ -97,12 +74,12 @@ def test_query_count_is_independent_of_session_count(experiment_and_channel):
     count driven by chunk count, so the per-chunk cost must stay flat as sessions grow.
     """
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(2, experiment, channel)
+    sessions = make_sessions(2, experiment, channel)
 
     with CaptureQueriesContext(connection) as ctx_small:
         list(iter_session_evaluation_messages([s.external_id for s in sessions], chunk_size=50))
 
-    sessions += _make_sessions(2, experiment, channel)
+    sessions += make_sessions(2, experiment, channel)
 
     with CaptureQueriesContext(connection) as ctx_large:
         list(iter_session_evaluation_messages([s.external_id for s in sessions], chunk_size=50))
@@ -116,7 +93,7 @@ def test_query_count_is_independent_of_session_count(experiment_and_channel):
 def test_sessions_without_messages_are_skipped(experiment_and_channel):
     """An empty session mid-chunk is skipped without disturbing its neighbours."""
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(2, experiment, channel)
+    sessions = make_sessions(2, experiment, channel)
     empty = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=channel)
 
     result = list(
@@ -132,7 +109,7 @@ def test_sessions_without_messages_are_skipped(experiment_and_channel):
 def test_add_messages_stream_commits_each_batch(experiment_and_channel):
     """Progress is reported per batch, and every message lands exactly once."""
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(5, experiment, channel)
+    sessions = make_sessions(5, experiment, channel)
     dataset = EvaluationDataset.objects.create(
         team=experiment.team, name="streamed", evaluation_mode=EvaluationMode.SESSION
     )
@@ -155,7 +132,7 @@ def test_add_messages_stream_commits_each_batch(experiment_and_channel):
 def test_add_messages_stream_is_idempotent(experiment_and_channel):
     """Re-streaming the same sessions skips them all, so a failed run can simply be retried."""
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(4, experiment, channel)
+    sessions = make_sessions(4, experiment, channel)
     external_ids = [session.external_id for session in sessions]
     dataset = EvaluationDataset.objects.create(
         team=experiment.team, name="streamed", evaluation_mode=EvaluationMode.SESSION
@@ -176,7 +153,7 @@ def test_add_messages_stream_is_idempotent(experiment_and_channel):
 def test_task_resumes_after_partial_failure(experiment_and_channel):
     """A run that dies mid-stream leaves a FAILED dataset that a re-run completes."""
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(4, experiment, channel)
+    sessions = make_sessions(4, experiment, channel)
     external_ids = [session.external_id for session in sessions]
     dataset = EvaluationDataset.objects.create(
         team=experiment.team, name="partial", evaluation_mode=EvaluationMode.SESSION
@@ -215,7 +192,7 @@ def test_queryset_entry_point_pages_in_chunks(experiment_and_channel):
     queryset, so no caller ever materialises the ids.
     """
     experiment, channel = experiment_and_channel
-    sessions = _make_sessions(5, experiment, channel)
+    sessions = make_sessions(5, experiment, channel)
 
     queryset = ExperimentSession.objects.filter(experiment=experiment)
     with CaptureQueriesContext(connection) as ctx:
@@ -224,3 +201,58 @@ def test_queryset_entry_point_pages_in_chunks(experiment_and_channel):
     assert [message.session_id for message in result] == sorted(session.id for session in sessions)
     # 5 sessions in chunks of 2 is 3 chunks, on top of the single pk-resolution query.
     assert len(ctx.captured_queries) == PK_RESOLUTION_QUERIES + QUERIES_PER_CHUNK * 3
+
+
+def _session_with_trace(participant_data, participant_data_diff):
+    session = session_with_messages()
+    human, ai = session.chat.messages.order_by("id")
+    TraceFactory.create(
+        experiment=session.experiment,
+        session=session,
+        participant=session.participant,
+        team=session.team,
+        status=TraceStatus.SUCCESS,
+        input_message=human,
+        output_message=ai,
+        participant_data=participant_data,
+        participant_data_diff=participant_data_diff,
+    )
+    return session
+
+
+@pytest.mark.django_db()
+def test_session_message_applies_latest_participant_data_diff():
+    session = _session_with_trace({"name": "Alice", "age": 25}, [["change", "age", [25, 26]]])
+
+    (message,) = iter_session_evaluation_messages_for_sessions(ExperimentSession.objects.filter(pk=session.pk))
+
+    assert message.participant_data == {"name": "Alice", "age": 26}
+
+
+@pytest.mark.django_db()
+def test_session_message_keeps_snapshot_when_participant_data_diff_does_not_apply(caplog):
+    session = _session_with_trace({"name": "Alice"}, [["change", "address.city", ["Cape Town", "Durban"]]])
+
+    with caplog.at_level(logging.WARNING, logger="ocs.evaluations"):
+        (message,) = iter_session_evaluation_messages_for_sessions(ExperimentSession.objects.filter(pk=session.pk))
+
+    assert message.participant_data == {"name": "Alice"}
+    assert [r for r in caplog.records if "participant_data_diff" in r.getMessage()] != []
+
+
+@pytest.mark.django_db()
+def test_session_id_generator_yields_nothing_for_no_ids(django_assert_num_queries):
+    with django_assert_num_queries(0):
+        assert list(iter_session_evaluation_messages([])) == []
+
+
+@pytest.mark.django_db()
+def test_session_id_generator_filters_by_team():
+    first = session_with_messages()
+    second = session_with_messages()
+
+    result = list(
+        iter_session_evaluation_messages([first.external_id, second.external_id], team=first.team),
+    )
+
+    assert [message.session_id for message in result] == [first.id]

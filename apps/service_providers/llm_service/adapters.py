@@ -8,6 +8,7 @@ from apps.service_providers.llm_service.main import (
     AnthropicBuiltinTool,
     OpenAIBuiltinTool,
 )
+from apps.service_providers.llm_service.utils import exclude_disabled_tools
 
 
 class BaseAdapter:
@@ -26,10 +27,7 @@ class BaseAdapter:
         return template.format(**context)
 
     def get_allowed_tools(self):
-        if self.disabled_tools:
-            # Model builtin tools doesn't have a name attribute and are dicts
-            return [tool for tool in self.tools if hasattr(tool, "name") and tool.name not in self.disabled_tools]
-        return self.tools
+        return exclude_disabled_tools(self.tools, self.disabled_tools)
 
     def get_callable_tools(self):
         """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to

@@ -81,6 +81,7 @@ IGNORE_APPS = {
     "staticfiles",
     "assistants",  # retired feature, historical migrations only (#4254)
     "taggit",
+    "django_cotton",
     "template_partials",
     "tz_detect",
     "usage_metrics",  # shared activity-metric read path, no models

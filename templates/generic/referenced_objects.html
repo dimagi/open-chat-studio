@@ -4,7 +4,7 @@
     <h2 class="font-semibold my-2">Chatbots</h2>
     <ul class="list-disc list-inside">
       {% for experiment in experiments %}
-        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+        <li><c-ui.chip :chip="experiment" /></li>
       {% endfor %}
     </ul>
   {% endif %}
@@ -13,7 +13,7 @@
     <h2 class="font-semibold my-2">Pipelines</h2>
     <ul class="list-disc list-inside">
       {% for node in pipeline_nodes %}
-        <li>{% include "generic/chip.html" with chip=node %}</li>
+        <li><c-ui.chip :chip="node" /></li>
       {% endfor %}
     </ul>
   {% endif %}
@@ -22,7 +22,7 @@
     <h2 class="font-semibold my-2">Chatbots referencing Pipeline</h2>
     <ul class="list-disc list-inside">
       {% for experiment in experiments_with_pipeline_nodes %}
-        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+        <li><c-ui.chip :chip="experiment" /></li>
       {% endfor %}
     </ul>
   {% endif %}
@@ -32,7 +32,7 @@
     <h2 class="font-semibold my-2">Static Trigger Chatbots</h2>
     <ul class="list-disc list-inside">
       {% for experiment in static_trigger_experiments %}
-        <li>{% include "generic/chip.html" with chip=experiment %}</li>
+        <li><c-ui.chip :chip="experiment" /></li>
       {% endfor %}
     </ul>
   {% endif %}
@@ -40,7 +40,15 @@
     <h2 class="font-semibold my-2">Evaluators</h2>
     <ul class="list-disc list-inside">
       {% for evaluator in evaluators %}
-        <li>{% include "generic/chip.html" with chip=evaluator %}</li>
+        <li><c-ui.chip :chip="evaluator" /></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if team_settings %}
+    <h2 class="font-semibold my-2">Team settings</h2>
+    <ul class="list-disc list-inside">
+      {% for setting in team_settings %}
+        <li>{{ setting }}</li>
       {% endfor %}
     </ul>
   {% endif %}

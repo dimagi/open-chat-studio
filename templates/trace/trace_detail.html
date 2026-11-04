@@ -133,7 +133,7 @@
         {% if trace.experiment %}
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
             <span class="text-xs text-base-content/60">Chatbot</span>
-            {% include "generic/chip.html" with chip=trace.experiment.as_chatbot_chip %}
+            <c-ui.chip :chip="trace.experiment.as_chatbot_chip" />
             <span class="text-xs text-base-content/60">
               {% if trace.experiment_version_number is not None %}· v{{ trace.experiment_version_number }}{% else %}· unreleased{% endif %}
             </span>
@@ -142,13 +142,13 @@
         {% if trace.session %}
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
             <span class="text-xs text-base-content/60">Session</span>
-            {% include "generic/chip.html" with chip=trace.session.as_chatbot_chip %}
+            <c-ui.chip :chip="trace.session.as_chatbot_chip" />
           </div>
         {% endif %}
         {% if trace.participant %}
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
             <span class="text-xs text-base-content/60">Participant</span>
-            {% include "generic/chip.html" with chip=trace.participant.as_chip %}
+            <c-ui.chip :chip="trace.participant.as_chip" />
           </div>
         {% endif %}
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">

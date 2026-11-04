@@ -55,7 +55,9 @@ The component uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 
 ## Publishing
 
-This widget is published via GitHub actions. To trigger the action:
+See the publishing guide for the full process: [docs/developer_guides/widget_versioning.md](https://developers.openchatstudio.com/developer_guides/widget_versioning/#releasing-a-new-widget-version)
+
+This widget is published via [GitHub actions](https://github.com/dimagi/open-chat-studio/actions/workflows/publish_widget.yml). To trigger the action:
 
 * Update the version number in `package.json`.
   * `npm version [patch|minor|major]`

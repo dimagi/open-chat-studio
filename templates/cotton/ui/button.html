@@ -1,0 +1,38 @@
+{% comment %}
+Button, or a link styled as one when `href` is given.
+
+  <c-ui.button variant="primary" type="submit">Save</c-ui.button>
+  <c-ui.button href="{% url 'chatbots:new' request.team.slug %}" variant="primary" size="sm" icon="fa-solid fa-plus">Add new</c-ui.button>
+  <c-ui.button variant="error" style="outline" size="sm" id="archive" hx-post="..." hx-trigger="confirmed">Archive</c-ui.button>
+  <c-ui.button variant="ghost" shape="circle" size="sm" icon="fa-solid fa-ellipsis" aria-label="More" />
+
+Params:
+  variant: primary, secondary, accent, neutral, info, success, warning, error, ghost or link. Empty for the default button.
+  style: outline, soft or dash.
+  size: xs, sm, md, lg or xl.
+  shape: circle, square, block or wide.
+  icon: Font Awesome classes, rendered before the label.
+  href: renders an <a> instead of a <button>.
+  type: the button's type, "button" unless given.
+  disabled, loading: booleans; `loading` shows a spinner before the label.
+  class: extra classes, merged with the component's own.
+Anything else (hx-*, x-*, @click, id, title, aria-*) is passed through to the element.
+{% endcomment %}
+<c-vars variant="" style="" size="" shape="" icon="" href="" type="button" disabled="" loading="" />
+{% with variant_class=variant|yesno:"btn-,"|add:variant style_class=style|yesno:"btn-,"|add:style size_class=size|yesno:"btn-,"|add:size shape_class=shape|yesno:"btn-,"|add:shape %}
+  {% with classes="btn "|add:variant_class|add:" "|add:style_class|add:" "|add:size_class|add:" "|add:shape_class %}
+    {% if href %}
+      {% with disabled_class=disabled|yesno:" btn-disabled," %}
+        {% with link_classes=classes|add:disabled_class %}
+          <a href="{{ href }}" {% if disabled %}aria-disabled="true" tabindex="-1"{% endif %} {{ attrs|with_classes:link_classes }}>
+            {% if loading %}<span class="loading loading-spinner loading-xs"></span>{% elif icon %}<i class="{{ icon }}"></i>{% endif %}{{ slot }}
+          </a>
+        {% endwith %}
+      {% endwith %}
+    {% else %}
+      <button type="{{ type }}" {% if disabled %}disabled{% endif %} {{ attrs|with_classes:classes }}>
+        {% if loading %}<span class="loading loading-spinner loading-xs"></span>{% elif icon %}<i class="{{ icon }}"></i>{% endif %}{{ slot }}
+      </button>
+    {% endif %}
+  {% endwith %}
+{% endwith %}

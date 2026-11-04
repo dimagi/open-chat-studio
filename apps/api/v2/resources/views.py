@@ -18,10 +18,10 @@ from apps.api.v2.resources.permissions import ReadOnlyForLimitedMachineTokens
 from apps.api.v2.resources.schema import consent_form_schema, source_material_schema
 from apps.api.v2.resources.serializers import (
     ConsentFormResourceSerializer,
-    ResourceArchivedSerializer,
     SourceMaterialResourceSerializer,
 )
 from apps.api.v2.write.base import DescribesPatch
+from apps.api.v2.write.serializers import ResourceArchivedSerializer
 from apps.experiments.models import ConsentForm, SourceMaterial
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Node

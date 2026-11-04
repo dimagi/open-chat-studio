@@ -3,14 +3,15 @@ from django.conf import settings
 
 from apps.custom_actions.models import CustomAction
 from apps.generics import actions
+from apps.generics.tables import TemplateColumn
 
 
 class CustomActionTable(tables.Table):
-    name = tables.TemplateColumn(
+    name = TemplateColumn(
         template_name="custom_actions/name_column.html",
         orderable=True,
     )
-    health_status = tables.TemplateColumn(
+    health_status = TemplateColumn(
         template_name="custom_actions/health_status_column.html", verbose_name="Status", orderable=False
     )
     actions = actions.ActionsColumn(

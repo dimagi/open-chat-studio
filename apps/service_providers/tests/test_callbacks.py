@@ -33,6 +33,11 @@ def test_serialize_trace_data():
     }
 
 
+def test_serialize_turns_tuple_values_into_lists_and_keeps_tuple_keys():
+    output = serialize_input_output_dict({"pair": ("a", 1), "by_pair": {("a", 1): "x"}})
+    assert output == {"pair": ["a", 1], "by_pair": {("a", 1): "x"}}
+
+
 def test_filter_patterns():
     class MockCallback:
         def on_llm_start(self, serialized, prompts, tags=None, **kwargs):

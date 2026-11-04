@@ -13,17 +13,6 @@
      x-effect="if (!provider) enabled = false">
   <h3 class="pg-subtitle font-bold text-sm">{% translate "Settings" %}</h3>
 
-  {% if request.team.moderation_deleted_provider_name %}
-    <div role="alert" class="alert alert-warning alert-soft text-sm mt-2" data-testid="moderation-provider-deleted">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-      <span>
-        {% blocktranslate trimmed with name=request.team.moderation_deleted_provider_name %}
-          Moderation was turned off because the provider "{{ name }}" was deleted. Select another provider to turn it back on.
-        {% endblocktranslate %}
-      </span>
-    </div>
-  {% endif %}
-
   <form id="moderation-settings-form"
         hx-post="{% url 'moderation:settings' request.team.slug %}"
         hx-target="#moderation-settings" hx-swap="outerHTML"
@@ -80,7 +69,7 @@
     {% else %}
       <div class="rounded-box border border-dashed border-base-300 p-4" data-testid="moderation-empty-state">
         <p class="text-sm whitespace-normal">
-          {% translate "Moderation uses your own OpenAI API key, so the checks run on your account's rate limits and costs. Add a moderation provider to turn moderation on." %}
+          {% translate "No moderation provider configured." %}
         </p>
         {% if can_add_moderation_provider %}
           <button type="button" class="btn btn-sm btn-primary mt-2"

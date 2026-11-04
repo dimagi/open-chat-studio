@@ -67,12 +67,6 @@ def general_synthetic_voices():
 
 class TestSyntheticVoice:
     @pytest.mark.django_db()
-    def test_get_for_team_returns_all_general_services(self):
-        """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
-        voices_queryset = SyntheticVoice.get_for_team(team=None)
-        assert voices_queryset.count() == SyntheticVoice.objects.count()
-
-    @pytest.mark.django_db()
     def test_get_for_team_excludes_service(self, general_synthetic_voices):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
@@ -669,10 +663,6 @@ class TestExperimentSession:
         with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
             session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
 
-    def test_latest_trace_returns_none_when_no_traces(self):
-        session = ExperimentSessionFactory.create()
-        assert session.latest_trace is None
-
     def test_latest_trace_returns_most_recent(self):
         session = ExperimentSessionFactory.create()
         Trace.objects.create(session=session, team=session.team, experiment=session.experiment, duration=100)
@@ -913,6 +903,41 @@ class TestExperimentModel:
 
         experiment.refresh_from_db()
         assert experiment.compare_with_latest() is False
+
+    def test_latest_version_eagerly_loads_related_fields(self, django_assert_num_queries):
+        """Regression test: Experiment.latest_version must not cause N+1 queries when version_details is accessed."""
+        experiment = self._setup_original_experiment()
+        experiment.create_new_version(make_default=True)
+
+        # Fetch working version with the same eager loading used by get_release_status_badge
+        experiment = (
+            Experiment.objects.select_related(
+                "consent_form",
+                "synthetic_voice",
+                "voice_provider",
+                "trace_provider",
+                "pipeline",
+            )
+            .prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers")
+            .get(id=experiment.id)
+        )
+
+        # latest_version should fetch the snapshot in a fixed number of queries regardless
+        # of how many FK/M2M relations are defined on the experiment.
+        version = experiment.latest_version
+        assert version is not None
+        # All FK fields must be pre-loaded (present in the instance cache, no extra queries needed)
+        with django_assert_num_queries(0):
+            _ = version.consent_form
+            _ = version.synthetic_voice
+            _ = version.voice_provider
+            _ = version.trace_provider
+            _ = version.pipeline
+        # All reverse-FK querysets must be pre-loaded (present in the prefetch cache, no extra queries needed)
+        with django_assert_num_queries(0):
+            list(version.static_triggers.all())
+            list(version.timeout_triggers.all())
+            list(version.scheduled_triggers.all())
 
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline

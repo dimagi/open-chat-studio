@@ -238,3 +238,19 @@ def test_unicode_normalization_prevents_duplicates(client):
     assert "A tag with this name already exists" in response.content.decode()
 
     assert Tag.objects.filter(name=unicodedata.normalize("NFC", "café"), team=team).count() == 1
+
+
+@pytest.mark.django_db()
+def test_create_and_add_tag_truncates_long_name(chat):
+    chat.create_and_add_tag("x" * 128, team=chat.team, tag_category="")
+
+    assert [tag.name for tag in chat.tags.all()] == ["x" * 100]
+
+
+@pytest.mark.django_db()
+def test_tags_with_same_long_name_in_different_teams_get_unique_slugs():
+    name = "x" * 100
+    tags = [Tag.objects.create(name=name, team=TeamWithUsersFactory.create()) for _ in range(3)]
+
+    assert len({tag.slug for tag in tags}) == 3
+    assert all(len(tag.slug) <= 100 for tag in tags)

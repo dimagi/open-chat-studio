@@ -5,9 +5,9 @@ from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_sche
 
 from apps.api.serializers import ErrorDetailSerializer
 from apps.api.v2.resources.serializers import (
-    ResourceArchivedSerializer,
     SourceMaterialInUseSerializer,
 )
+from apps.api.v2.write.serializers import ResourceArchivedSerializer
 
 
 def resource_schema(*, noun: str, plural: str, archive_refusal: str, archive_refused_serializer=ErrorDetailSerializer):

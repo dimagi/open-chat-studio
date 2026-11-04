@@ -36,8 +36,16 @@ def get_affected_teams_data(db_model) -> dict:
     referenced_experiments = Experiment.objects.filter(pipeline_id__in=list(nodes_by_pipeline)).filter(
         Q(working_version__isnull=True) | Q(is_default_version=True)
     )
-    referenced_pipeline_ids = {exp.pipeline_id for exp in referenced_experiments}
-    unreferenced_pipelines = [p for p in pipelines if p.id not in referenced_pipeline_ids]
+    # Archiving a chatbot leaves its working pipeline unarchived, so a pipeline any chatbot owns, archived
+    # or not, is never reported on its own.
+    chatbot_pipelines = Experiment.objects.get_all().filter(pipeline_id__in=list(nodes_by_pipeline))
+    chatbot_pipeline_ids = set(chatbot_pipelines.values_list("pipeline_id", flat=True))
+    # Only working pipelines are reported on their own. A pipeline *version* belongs to a chatbot version
+    # (the published one is reported through its chatbot above); the others are frozen history that
+    # nobody can edit or link to usefully. Archived pipelines are gone as far as the team is concerned.
+    unreferenced_pipelines = [
+        p for p in pipelines if p.id not in chatbot_pipeline_ids and p.working_version_id is None and not p.is_archived
+    ]
 
     for exp in referenced_experiments:
         teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()

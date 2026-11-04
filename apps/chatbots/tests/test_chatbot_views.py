@@ -377,13 +377,7 @@ def test_versions_table_chat_action_opens_widget(client, team_with_users):
     assert f"openChatWidget({version.version_number}, " in content
     assert f"headerText: 'Version {version.version_number}'" in content
     assert "allowAttachments: true" in content
-    assert (
-        reverse(
-            "chatbots:start_authed_web_session",
-            args=[team.slug, experiment.id, version.version_number],
-        )
-        not in content
-    )
+    assert "start_authed_web_session" not in content
 
 
 def attach_session_middleware_to_request(request):
@@ -854,7 +848,7 @@ def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
     assert f'chatbot-id="{experiment.public_id}"' in content
     assert f"openChatWidget({experiment.version_number}, " in content
     assert "openChatWidget(0, " in content
-    assert reverse("chatbots:start_authed_web_session", args=[team.slug, experiment.id, 0]) not in content
+    assert "start_authed_web_session" not in content
 
 
 @pytest.mark.django_db()
@@ -1221,27 +1215,6 @@ def test_chatbot_chat_ui_includes_valid_session_token():
     token = response.context_data["session_token"]
     assert token
     assert parse_session_token(token, session.external_id) is not None
-
-
-@pytest.mark.django_db()
-@patch("apps.experiments.services.enqueue_static_triggers", Mock())
-def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
-    """The chatbots table chat button posts version 0 so sessions run against the published version."""
-    user = team_with_users.members.first()
-    experiment = ExperimentFactory(team=team_with_users)
-    experiment.create_new_version(make_default=True)
-    client.force_login(user)
-
-    url = reverse(
-        "chatbots:start_authed_web_session",
-        args=[team_with_users.slug, experiment.id, Experiment.DEFAULT_VERSION_NUMBER],
-    )
-    response = client.post(url)
-    assert response.status_code == 302
-
-    response = client.get(response.url)
-    assert response.status_code == 200
-    assert response.context["experiment_version"].is_default_version
 
 
 @pytest.mark.django_db()

@@ -2,9 +2,12 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.sunsets import LEGACY_WEB_CHAT
 from apps.teams.decorators import team_required
+from apps.utils.decorators import sunset
 
 
+@sunset(LEGACY_WEB_CHAT.sunset_at, successor_url=LEGACY_WEB_CHAT.successor_url)
 @team_required
 def rate_message(request, team_slug: str, message_id: int, rating: str):
     if rating not in ["👍", "👎"]:

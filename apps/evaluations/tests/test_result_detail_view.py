@@ -1,5 +1,7 @@
 """Tests for EvaluationResultDetailView: the side panel a results-table row opens into."""
 
+import re
+
 import pytest
 from django.urls import reverse
 
@@ -15,8 +17,8 @@ from apps.utils.factories.evaluations import (
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
-def _result(run, evaluator, *, sentiment="positive", input_content="hi", generated="hi there", **kwargs):
-    output = EvaluatorResult(
+def _output(*, sentiment="positive", input_content="hi", generated="hi there", judged=None) -> dict:
+    return EvaluatorResult(
         message={
             "input": {"content": input_content, "role": "human"},
             "output": {"content": "expected output", "role": "ai"},
@@ -26,8 +28,14 @@ def _result(run, evaluator, *, sentiment="positive", input_content="hi", generat
         },
         result={"sentiment": sentiment},
         generated_response=generated,
+        judged_response=judged,
     ).model_dump()
-    return EvaluationResultFactory.create(output=output, team=run.team, run=run, evaluator=evaluator, **kwargs)
+
+
+def _result(run, evaluator, output=None, **kwargs):
+    return EvaluationResultFactory.create(
+        output=output or _output(), team=run.team, run=run, evaluator=evaluator, **kwargs
+    )
 
 
 def _detail_url(team, config, run, message_id):
@@ -40,7 +48,7 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        result = _result(run, evaluator, input_content="What happened?", generated="It went well.")
+        result = _result(run, evaluator, output=_output(input_content="What happened?", generated="It went well."))
         client.force_login(team_with_users.members.first())
 
         response = client.get(_detail_url(team_with_users, config, run, result.message_id))
@@ -51,6 +59,76 @@ class TestEvaluationResultDetailView:
         assert "It went well." in content
         assert "expected output" in content
         assert "#1" in content
+
+    def test_shows_the_judged_span_text_beside_the_generated_response(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator, output=_output(generated="hi there", judged="tagged: hello"))
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert "hi there" in content
+        assert "tagged: hello" in content
+        assert "JUDGED RESPONSE (Judge)" in content
+
+    def test_shows_a_dash_when_the_judged_span_text_is_empty(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator, output=_output(judged=""))
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert content.count('data-testid="result-detail-judged-response"') == 1
+        assert "JUDGED RESPONSE (Judge)" in content
+        assert re.search(r'data-testid="result-detail-judged-response">\s*—\s*</div>', content)
+
+    def test_escapes_the_judged_span_text(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator, output=_output(judged='<b>tagged</b> & "quoted"'))
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert "&lt;b&gt;tagged&lt;/b&gt; &amp; &quot;quoted&quot;" in content
+        assert "<b>tagged</b>" not in content
+
+    def test_no_judged_response_block_when_the_evaluator_judged_the_reply(self, client, team_with_users):
+        evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
+        run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
+        result = _result(run, evaluator)
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        assert "JUDGED RESPONSE" not in response.content.decode()
+
+    def test_only_the_span_evaluator_gets_a_judged_response_block(self, client, team_with_users):
+        span_evaluator = EvaluatorFactory.create(team=team_with_users, name="Span Judge")
+        reply_evaluator = EvaluatorFactory.create(team=team_with_users, name="Reply Judge")
+        config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[span_evaluator, reply_evaluator])
+        run = EvaluationRunFactory.create(
+            team=team_with_users, config=config, evaluator_ids=[span_evaluator.id, reply_evaluator.id]
+        )
+        result = _result(run, span_evaluator, output=_output(judged="tagged: hello"))
+        _result(run, reply_evaluator, message=result.message)
+        client.force_login(team_with_users.members.first())
+
+        response = client.get(_detail_url(team_with_users, config, run, result.message_id))
+
+        content = response.content.decode()
+        assert content.count('data-testid="result-detail-judged-response"') == 1
+        assert "JUDGED RESPONSE (Span Judge)" in content
+        assert "JUDGED RESPONSE (Reply Judge)" not in content
 
     def test_panel_carries_its_message_id_for_the_table_row_highlight_sync(self, client, team_with_users):
         """The panel root's data-result-id drives `syncEvalResultHighlight()` (see
@@ -106,9 +184,9 @@ class TestEvaluationResultDetailView:
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
-        first = _result(run, evaluator, sentiment="positive")
-        middle = _result(run, evaluator, sentiment="neutral")
-        last = _result(run, evaluator, sentiment="negative")
+        first = _result(run, evaluator, output=_output(sentiment="positive"))
+        middle = _result(run, evaluator, output=_output(sentiment="neutral"))
+        last = _result(run, evaluator, output=_output(sentiment="negative"))
         client.force_login(team_with_users.members.first())
 
         first_resp = client.get(_detail_url(team_with_users, config, run, first.message_id)).content.decode()

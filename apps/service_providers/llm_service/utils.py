@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import Collection
 from io import BytesIO
 
 import httpx
@@ -15,6 +16,13 @@ from apps.service_providers.llm_service.image_types import DEFAULT_SUPPORTED_IMA
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 logger = logging.getLogger("ocs.llm_service")
+
+
+def exclude_disabled_tools(tools: list, disabled_tools: Collection[str] | None) -> list:
+    """Drop the named tools in `disabled_tools`. Provider built-in tools are nameless dicts and are kept."""
+    if not disabled_tools:
+        return tools
+    return [tool for tool in tools if not hasattr(tool, "name") or tool.name not in disabled_tools]
 
 
 def detangle_file_ids(file_ids: list[str]) -> list[str]:
