@@ -297,7 +297,7 @@ class RuleHitFilter(ChoiceColumnFilter):
     ]
 
     def _matching(self, value) -> Exists | None:
-        """The condition for the selected options, or None when they select every session (or none)."""
+        """The condition for the selected options, or None when they select both options or neither."""
         any_rule_hit = _session_has_message(moderation_detail__rules__0__isnull=False)
         selected = set(value) & {self.RULE_HIT, self.NO_RULE_HIT}
         if selected == {self.RULE_HIT}:
@@ -311,6 +311,8 @@ class RuleHitFilter(ChoiceColumnFilter):
         return queryset if condition is None else queryset.filter(condition)
 
     def apply_excludes(self, queryset, value, timezone=None):
+        if {self.RULE_HIT, self.NO_RULE_HIT} <= set(value):
+            return queryset.none()
         condition = self._matching(value)
         return queryset if condition is None else queryset.exclude(condition)
 
