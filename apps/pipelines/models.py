@@ -431,11 +431,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         its own right (see ``Experiment.unarchive``).
         """
         super().unarchive()
-        archived_nodes = self.node_set.get_all().filter(is_archived=True)
-        if self.is_working_version:
-            archived_nodes = archived_nodes.filter(archived_with_pipeline=True)
-        for node in archived_nodes:
+        for node in self.nodes_archived_with_pipeline():
             node.unarchive()
+
+    def nodes_archived_with_pipeline(self) -> models.QuerySet:
+        """The archived node rows that make up this pipeline's graph (see ``unarchive``)."""
+        nodes = self.node_set.get_all().filter(is_archived=True)
+        if self.is_working_version:
+            nodes = nodes.filter(archived_with_pipeline=True)
+        return nodes
 
     def get_node_param_values(self, param_name: str) -> list:
         """Every value stored for ``param_name``, across the nodes whose type declares it.

@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import Subquery, prefetch_related_objects
+from django.db.models import Prefetch, Subquery, prefetch_related_objects
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -241,11 +241,16 @@ def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "PATCH":
         return _handle_pipeline_patch(request, pk, team_slug)
 
-    # flow_data below rebuilds every node from its row, reading the collection_indexes M2M.
     # get_all(): the builder of an archived chatbot still shows its pipeline.
-    pipeline = get_object_or_404(
-        Pipeline.objects.get_all().prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team
-    )
+    pipeline = get_object_or_404(Pipeline.objects.get_all(), pk=pk, team=request.team)
+    # flow_data below rebuilds every node from its row, reading the collection_indexes M2M. An
+    # archived pipeline's graph is its archived rows, which the related manager hides.
+    if pipeline.is_archived:
+        nodes = pipeline.nodes_archived_with_pipeline()
+        nodes = nodes.prefetch_related("collection_indexes", "custom_action_operations")
+        prefetch_related_objects([pipeline], Prefetch("node_set", queryset=nodes))
+    else:
+        prefetch_related_objects([pipeline], *NODE_RESOURCE_PREFETCHES)
 
     return JsonResponse(
         {

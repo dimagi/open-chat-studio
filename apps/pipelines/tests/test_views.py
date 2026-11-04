@@ -31,11 +31,16 @@ class TestPipelineData:
         experiment.archive()
         return experiment.pipeline
 
-    def test_serves_an_archived_pipeline(self, member_client, team_with_users, archived_pipeline):
+    def test_serves_an_archived_pipeline_with_its_nodes(self, member_client, team_with_users, archived_pipeline):
+        """The graph is rebuilt from node rows, which are archived with the pipeline."""
+        node_count = archived_pipeline.node_set.get_all().count()
+        assert node_count > 0
+
         response = member_client.get(self._url(team_with_users, archived_pipeline))
 
         assert response.status_code == 200
         assert response.json()["pipeline"]["id"] == archived_pipeline.id
+        assert len(response.json()["pipeline"]["data"]["nodes"]) == node_count
 
     @pytest.mark.parametrize(
         ("method", "payload"),
