@@ -465,11 +465,12 @@ def test_tab(source, context, expected, unexpected):
     ("source", "expected", "unexpected"),
     [
         pytest.param(
+            # The pre-login pages hide the help icon by its form-text class.
             '<c-ui.field label="Name" input_id="id_name" help="Shown <b>bold</b>" :errors="errors" x-show="adv" '
             'class="mt-2">CTRL</c-ui.field>',
             [
                 '<div class="fieldset w-full mt-2" x-show="adv">',
-                '<label class="label font-bold" for="id_name"> <div> Name <small>',
+                '<label class="label font-bold" for="id_name"> <div> Name <small class="form-text text-muted">',
                 "<p>Shown <b>bold</b></p>",
                 '</label> CTRL <ul class="errorlist"><li>Required.</li></ul> </div>',
             ],
