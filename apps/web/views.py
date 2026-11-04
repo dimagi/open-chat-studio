@@ -53,8 +53,9 @@ class HealthCheck(HealthCheckView):
     @staticmethod
     def _request_token(request):
         scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+        token = token.strip()
         if scheme.lower() == "bearer" and token:
-            return token.strip()
+            return token
         return request.GET.get("token")
 
 

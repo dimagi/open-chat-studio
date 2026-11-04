@@ -203,6 +203,10 @@ class TestHealthCheckView:
         [
             pytest.param({"data": {"token": "secret-token"}}, id="query_param"),
             pytest.param({"headers": {"Authorization": "Bearer secret-token"}}, id="bearer_header"),
+            pytest.param(
+                {"data": {"token": "secret-token"}, "headers": {"Authorization": "Bearer   "}},
+                id="query_param_with_blank_bearer_header",
+            ),
         ],
     )
     def test_token_accepted_when_correct(self, client, fake_subsets, request_kwargs):
