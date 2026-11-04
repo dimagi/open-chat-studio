@@ -207,6 +207,15 @@ class TestGetAffectedTeamsData:
         assert pipeline.name in data["pipelines"]
         assert data["chatbots"] == {}
 
+    def test_an_archived_chatbot_is_not_reported(self):
+        """Archiving a chatbot leaves its working pipeline unarchived, so that pipeline must not surface either."""
+        model = self._deprecated_model()
+        experiment = ExperimentFactory(pipeline=_make_pipeline_referencing(model))
+        experiment.create_new_version()
+        experiment.archive()
+
+        assert get_affected_teams_data(model) == {}
+
     def test_an_archived_pipeline_is_not_reported(self):
         model = self._deprecated_model()
         pipeline = _make_pipeline_referencing(model)
