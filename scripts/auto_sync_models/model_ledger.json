@@ -1570,6 +1570,30 @@
       "reasoning": true
     }
   },
+  "openai/gpt-6-astra-law": {
+    "first_seen": "2026-11-04",
+    "verdict": "rejected",
+    "reason": "Absent from OpenAI's model catalogue; no public API model of this name.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-6-rosalind": {
+    "first_seen": "2026-11-04",
+    "verdict": "rejected",
+    "reason": "Absent from OpenAI's model catalogue; GPT-Rosalind is a life-sciences model restricted to approved organizations.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "openai/gpt-audio": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -1811,6 +1835,11 @@
     "params": {
       "reasoning": true
     }
+  },
+  "perplexity/nemotron-3.5-super-120b-a12b": {
+    "first_seen": "2026-11-04",
+    "verdict": "rejected",
+    "reason": "Served only through Perplexity's Agent API; OCS calls the Sonar chat completions endpoint, which does not offer it."
   },
   "perplexity/pplx-70b-chat": {
     "first_seen": "2026-09-17",
