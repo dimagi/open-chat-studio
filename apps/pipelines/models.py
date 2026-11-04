@@ -187,7 +187,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 flow_id=flow_id,
                 defaults={
                     "type": content.type,
-                    "params": content.params,
+                    "params": content.node_type.params_to_store(content.params),
                     "label": content.label,
                     **node_position_fields(node.position),
                 },

@@ -272,6 +272,11 @@ class BasePipelineNode(BaseModel, ABC):
         json_schema_extra={"ui:widget": "node_name"},
     )
 
+    @classmethod
+    def params_to_store(cls, params: dict) -> dict:
+        """The params to save for a node of this type, given the params a client sent."""
+        return params
+
     def _prepare_state(self, node_id: str, incoming_nodes: list, state: PipelineState):
         """This function initializes the state before executing the node function. This is primarily
         determining which output to select from the state as this node's input.
