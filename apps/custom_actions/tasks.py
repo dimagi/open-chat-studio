@@ -60,8 +60,10 @@ def check_single_custom_action_health(action_id: int):
         failure_reason = str(e)
         logger.warning(f"Health check error for {action.name}: {e!s}")
 
-    # Notify team members if status changed to DOWN from a non-DOWN state
-    should_notify = new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN
+    # Notify team members on the transition to DOWN, and only for an action a live chatbot still uses
+    should_notify = (
+        new_status == HealthCheckStatus.DOWN and action.health_status != HealthCheckStatus.DOWN and action.is_in_use()
+    )
 
     # Update the action's health status
     action.health_status = new_status

@@ -4,7 +4,9 @@ import pytest
 
 from apps.custom_actions.models import HealthCheckStatus
 from apps.custom_actions.tasks import check_all_custom_actions_health, check_single_custom_action_health
-from apps.utils.factories.custom_actions import CustomActionFactory
+from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
+from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 
 @pytest.mark.django_db()
@@ -80,3 +82,44 @@ class TestHealthCheckTask:
         assert mock_delay.call_count == 2
         mock_delay.assert_any_call(action_with_health_1.id)
         mock_delay.assert_any_call(action_with_health_2.id)
+
+
+@pytest.mark.django_db()
+class TestHealthCheckFailureNotification:
+    @pytest.mark.parametrize(
+        ("experiment_archived", "node_archived", "expected_calls"),
+        [
+            pytest.param(False, False, 1, id="live-bot"),
+            pytest.param(True, False, 0, id="archived-bot"),
+            pytest.param(False, True, 0, id="node-removed-from-bot"),
+        ],
+    )
+    @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
+    def test_notifies_only_for_actions_a_live_bot_uses(
+        self, mock_notify, experiment_archived, node_archived, expected_calls, team_with_users, httpx_mock
+    ):
+        action = CustomActionFactory.create(
+            team=team_with_users, healthcheck_path="/health", server_url="https://example.com"
+        )
+        pipeline = PipelineFactory.create(team=team_with_users)
+        node = NodeFactory.create(pipeline=pipeline, is_archived=node_archived)
+        CustomActionOperationFactory.create(custom_action=action, node=node)
+        ExperimentFactory.create(team=team_with_users, pipeline=pipeline, is_archived=experiment_archived)
+        httpx_mock.add_response(url="https://example.com/health", status_code=500)
+
+        check_single_custom_action_health(action.id)
+
+        action.refresh_from_db()
+        assert action.health_status == HealthCheckStatus.DOWN
+        assert mock_notify.call_count == expected_calls
+
+    @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
+    def test_does_not_notify_for_an_unused_action(self, mock_notify, team_with_users, httpx_mock):
+        action = CustomActionFactory.create(
+            team=team_with_users, healthcheck_path="/health", server_url="https://example.com"
+        )
+        httpx_mock.add_response(url="https://example.com/health", status_code=500)
+
+        check_single_custom_action_health(action.id)
+
+        mock_notify.assert_not_called()

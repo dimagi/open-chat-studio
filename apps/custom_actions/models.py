@@ -94,6 +94,12 @@ class CustomAction(BaseTeamModel):
     def get_operations_by_id(self):
         return {op.operation_id: op for op in self.operations}
 
+    def is_in_use(self) -> bool:
+        """Whether a chatbot that is not archived still references this action through a pipeline node."""
+        return CustomActionOperation.objects.filter(
+            custom_action=self, node__is_archived=False, node__pipeline__experiment__is_archived=False
+        ).exists()
+
     def detect_health_endpoint_from_spec(self) -> str | None:
         """
         Attempt to detect a health endpoint from the API schema.
