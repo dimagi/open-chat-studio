@@ -420,12 +420,16 @@ class TestRelatedManagerGetAll:
         assert list(chatbot.versions.get_all()) == [version]
 
     def test_unarchiving_one_chatbot_leaves_another_archived(self):
+        """chatbot's version takes unarchive() through Pipeline.unarchive(), which must not reach other's nodes."""
         chatbot = ExperimentFactory.create()
+        chatbot.create_new_version()
         other = ExperimentFactory.create(team=chatbot.team)
         trigger = StaticTriggerFactory.create(experiment=other)
         other_version = other.create_new_version()
         chatbot.archive()
         other.archive()
+        other_node_ids = list(other.pipeline.node_set.values_list("id", flat=True))
+        Node.objects.filter(id__in=other_node_ids).update(is_archived=True)
 
         chatbot.unarchive()
 
@@ -433,6 +437,7 @@ class TestRelatedManagerGetAll:
         other_version.refresh_from_db()
         assert trigger.is_archived is True
         assert other_version.is_archived is True
+        assert not Node.objects.filter(id__in=other_node_ids).exists()
 
 
 class TestExperimentFieldClassification:
