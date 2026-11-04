@@ -65,6 +65,15 @@
               </div>
             {% endwith %}
           </div>
+          {% if block_form %}
+            <div class="grid grid-rows-subgrid row-span-2 gap-1 pe-8 border-e border-base-300">
+              <div class="text-lg font-extrabold self-end" id="participant-strikes">{{ participant.strikes }}</div>
+              <div class="stat-title-upper tooltip tooltip-bottom"
+                   data-tip="{% blocktranslate %}Flagged messages since the participant was last unblocked. Counted only while auto-block is on.{% endblocktranslate %}">
+                {% translate "Strikes" %}
+              </div>
+            </div>
+          {% endif %}
           <div class="grid grid-rows-subgrid row-span-2 gap-1">
             <div class="self-end">
               <div class="w-36 h-10">

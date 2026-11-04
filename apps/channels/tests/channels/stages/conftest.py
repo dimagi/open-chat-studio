@@ -3,20 +3,6 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.factories.service_provider_factories import ModerationProviderFactory
-
-
-@pytest.fixture()
-def moderated_session():
-    """A session whose team has moderation turned on with a provider."""
-    session = ExperimentSessionFactory.create()
-    team = session.experiment.team
-    team.moderation_enabled = True
-    team.moderation_provider = ModerationProviderFactory.create(team=team)
-    team.save()
-    return session
-
 
 @pytest.fixture()
 def moderation_task():
