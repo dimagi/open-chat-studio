@@ -420,8 +420,14 @@ class VersionsObjectManagerMixin:
     """A manager mixin that needs to be added to the model manager that will be versioned"""
 
     def get_all(self):
-        """A method to return all experiments whether it is deprecated or not"""
-        return super().get_queryset()
+        """Every row, archived or not, scoped to the parent row when called on a related manager."""
+        queryset = super().get_queryset()
+        # Django's related manager scopes to the parent in its get_queryset(), which this bypasses to
+        # drop the archived filter, so the scoping is applied here.
+        apply_rel_filters = getattr(self, "_apply_rel_filters", None)
+        if apply_rel_filters is not None:
+            queryset = apply_rel_filters(queryset)
+        return queryset
 
     def get_queryset(self):
         query = (
