@@ -9,10 +9,13 @@ from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 
-def _attach_to_live_bot(action, team):
+def _attach_to_bot(action, team, *, experiment_archived=False, node_archived=False, node_is_version=False):
+    """Reference the action from a chatbot's pipeline node; the defaults make a bot that can call it."""
     pipeline = PipelineFactory.create(team=team)
-    CustomActionOperationFactory.create(custom_action=action, node=NodeFactory.create(pipeline=pipeline))
-    ExperimentFactory.create(team=team, pipeline=pipeline)
+    working_version = NodeFactory.create(pipeline=pipeline) if node_is_version else None
+    node = NodeFactory.create(pipeline=pipeline, is_archived=node_archived, working_version=working_version)
+    CustomActionOperationFactory.create(custom_action=action, node=node)
+    ExperimentFactory.create(team=team, pipeline=pipeline, is_archived=experiment_archived)
 
 
 @pytest.mark.django_db()
@@ -33,7 +36,7 @@ class TestHealthCheckTask:
             healthcheck_path="/health",
             server_url="https://example.com",
         )
-        _attach_to_live_bot(custom_action_with_health, team_with_users)
+        _attach_to_bot(custom_action_with_health, team_with_users)
 
         # Mock the health check response
         httpx_mock.add_response(url="https://example.com/health", status_code=status_code, json={"status": "ok"})
@@ -94,26 +97,18 @@ class TestHealthCheckTask:
 @pytest.mark.django_db()
 class TestHealthCheckFailureNotification:
     @pytest.mark.parametrize(
-        ("experiment_archived", "node_archived", "node_is_version", "allowed_operations", "expected_calls"),
+        ("bot", "allowed_operations", "expected_calls"),
         [
-            pytest.param(False, False, False, ["weather_get"], 1, id="live-bot"),
-            pytest.param(True, False, False, ["weather_get"], 0, id="archived-bot"),
-            pytest.param(False, True, False, ["weather_get"], 0, id="node-removed-from-bot"),
-            pytest.param(False, False, False, [], 0, id="operation-disabled-on-working-node"),
-            pytest.param(False, False, True, [], 1, id="operation-disabled-but-published"),
+            pytest.param({}, ["weather_get"], 1, id="live-bot"),
+            pytest.param({"experiment_archived": True}, ["weather_get"], 0, id="archived-bot"),
+            pytest.param({"node_archived": True}, ["weather_get"], 0, id="node-removed-from-bot"),
+            pytest.param({}, [], 0, id="operation-disabled-on-working-node"),
+            pytest.param({"node_is_version": True}, [], 1, id="operation-disabled-but-published"),
         ],
     )
     @patch("apps.custom_actions.tasks.custom_action_health_check_failure_notification")
     def test_checks_and_notifies_only_for_actions_a_live_bot_can_call(
-        self,
-        mock_notify,
-        experiment_archived,
-        node_archived,
-        node_is_version,
-        allowed_operations,
-        expected_calls,
-        team_with_users,
-        httpx_mock,
+        self, mock_notify, bot, allowed_operations, expected_calls, team_with_users, httpx_mock
     ):
         action = CustomActionFactory.create(
             team=team_with_users,
@@ -121,11 +116,7 @@ class TestHealthCheckFailureNotification:
             server_url="https://example.com",
             allowed_operations=allowed_operations,
         )
-        pipeline = PipelineFactory.create(team=team_with_users)
-        working_version = NodeFactory.create(pipeline=pipeline) if node_is_version else None
-        node = NodeFactory.create(pipeline=pipeline, is_archived=node_archived, working_version=working_version)
-        CustomActionOperationFactory.create(custom_action=action, node=node)
-        ExperimentFactory.create(team=team_with_users, pipeline=pipeline, is_archived=experiment_archived)
+        _attach_to_bot(action, team_with_users, **bot)
         if expected_calls:
             httpx_mock.add_response(url="https://example.com/health", status_code=500)
 
@@ -150,7 +141,7 @@ class TestHealthCheckFailureNotification:
         assert action.last_health_check is None
         mock_notify.assert_not_called()
 
-        _attach_to_live_bot(action, team_with_users)
+        _attach_to_bot(action, team_with_users)
         httpx_mock.add_response(url="https://example.com/health", status_code=500)
 
         check_single_custom_action_health(action.id)
