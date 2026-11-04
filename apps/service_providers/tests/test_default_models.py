@@ -49,7 +49,7 @@ def test_updates_existing_models():
 
 @pytest.mark.django_db()
 def test_creates_new_models():
-    candidate = DEFAULT_LLM_PROVIDER_MODELS["openai"][0]
+    candidate = next(m for m in DEFAULT_LLM_PROVIDER_MODELS["openai"] if not m.deprecated)
     try:
         model = LlmProviderModel.objects.get(team=None, type="openai", name=candidate.name)
         model.delete()

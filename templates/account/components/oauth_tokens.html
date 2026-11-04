@@ -26,7 +26,7 @@
           <tbody>
     {% endif %}
     <tr>
-      <td>{% include "generic/chip.html" with chip=token.application.as_chip %}</td>
+      <td><c-ui.chip :chip="token.application.as_chip" /></td>
       <td>
         {% if token.team %}
           <a href="{% url "web_team:home" token.team.slug %}" class="link">{{ token.team.name }}</a>

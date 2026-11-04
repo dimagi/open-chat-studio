@@ -48,6 +48,7 @@ type VisibleWhenWrapperProps = {
   fieldName: string;
   nodeId: string;
   schemaDefault: unknown;
+  keepValueWhenHidden?: boolean;
   onHide?: () => void;
   onShow?: () => void;
   children: React.ReactNode;
@@ -62,6 +63,10 @@ type VisibleWhenWrapperProps = {
  * The optional `onHide` callback overrides the default reset behaviour, which
  * is useful for sub-schema widgets (e.g. ModelParametersWidget) that store
  * their values at a nested path rather than directly in node.data.params.
+ *
+ * `keepValueWhenHidden` skips the clearing and `onHide`, so the stored value survives being hidden.
+ * The field is still not rendered while it is hidden. Passing both `onHide` and `keepValueWhenHidden`
+ * is not supported: `onHide` never fires, and a warning is logged.
  */
 export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   visibleWhen,
@@ -69,6 +74,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   fieldName,
   nodeId,
   schemaDefault,
+  keepValueWhenHidden = false,
   onHide,
   onShow,
   children,
@@ -85,6 +91,13 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
   // (or hidden-to-visible populate) silently never runs.
   const fieldIdentity = `${nodeId}:${fieldName}`;
   const prevFieldIdentityRef = useRef(fieldIdentity);
+  const ignoresOnHide = keepValueWhenHidden && onHide !== undefined;
+
+  useEffect(() => {
+    if (ignoresOnHide) {
+      console.warn(`VisibleWhenWrapper: onHide is ignored for "${fieldName}" because keepValueWhenHidden is set.`);
+    }
+  }, [ignoresOnHide, fieldName]);
 
   useEffect(() => {
     if (prevFieldIdentityRef.current !== fieldIdentity) {
@@ -96,7 +109,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
     // 1. The field is initially hidden on mount (prevVisibleRef.current === undefined)
     // 2. The field transitions from visible to hidden (prevVisibleRef.current === true)
     const wasVisibleOrUnmounted = prevVisibleRef.current === undefined || prevVisibleRef.current === true;
-    if (wasVisibleOrUnmounted && !isVisible) {
+    if (wasVisibleOrUnmounted && !isVisible && !keepValueWhenHidden) {
       if (onHide) {
         onHide();
       } else {
@@ -114,7 +127,7 @@ export const VisibleWhenWrapper: React.FC<VisibleWhenWrapperProps> = ({
       }
     }
     prevVisibleRef.current = isVisible;
-  }, [isVisible, fieldIdentity, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
+  }, [isVisible, fieldIdentity, keepValueWhenHidden, onHide, onShow, setNode, nodeId, fieldName, schemaDefault]);
 
   if (!isVisible) return <></>;
   return <>{children}</>;
@@ -145,7 +158,7 @@ export type InputWidgetParams = {
 }
 
 const nodeTypeToInputParamsMap: Record<string, string[]> = {
-  "RouterNode": ["llm_model", "history_type", "prompt"],
+  "RouterNode": ["llm_model", "history_type", "prompt_mode", "custom_context", "prompt"],
   "StaticRouterNode": ["data_source", "route_key"],
   "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
   "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
@@ -315,6 +328,7 @@ export const getInputWidget = (
       fieldName={params.name}
       nodeId={params.id}
       schemaDefault={widgetSchema.default}
+      keepValueWhenHidden={widgetSchema["ui:keepValueWhenHidden"]}
       onHide={onHide}
       onShow={onShow}
     >

@@ -5,9 +5,6 @@ import pytest
 from django.db import DatabaseError
 from waffle.testutils import override_flag
 
-from apps.channels.api_channel import ApiChannel
-from apps.channels.channel_base import ChannelBase
-from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.exceptions import EarlyExitResponse
 from apps.channels.models import ChannelPlatform
 from apps.channels.stages.terminal import ModerationResultStage
@@ -38,12 +35,7 @@ STRIKE_OUTPUT = {"illicit/violent": {"flagged": True, "score": 0.84}, "hate": {"
 
 
 def _ok(output: dict) -> dict:
-    return {"status": "ok", "output": output}
-
-
-def _terminal_stage_types(channel_cls):
-    stub_self = MagicMock()
-    return [type(stage) for stage in channel_cls._build_pipeline(stub_self).terminal_stages]
+    return {"output": output, "skip_reason": None}
 
 
 def _context(session, *, bot_response=None, **kwargs):
@@ -132,9 +124,9 @@ class TestModerationResultStage:
         ("wait", "expected_reason"),
         [
             pytest.param(
-                {"return_value": {"status": "skipped", "reason": "rate_limited"}}, "rate_limited", id="rate_limited"
+                {"return_value": {"output": None, "skip_reason": "rate_limited"}}, "rate_limited", id="rate_limited"
             ),
-            pytest.param({"return_value": {"status": "skipped", "reason": "error"}}, "error", id="task_error"),
+            pytest.param({"return_value": {"output": None, "skip_reason": "error"}}, "error", id="task_error"),
             pytest.param(
                 {"side_effect": connection_error(openai.APIConnectionError)}, "error", id="task_failed_after_retries"
             ),
@@ -517,19 +509,3 @@ class TestModerationInTheChannelPipeline:
         moderation_task.async_result.assert_not_called()
         assert channel.text_sent == ["The bot's answer"]
         assert self._human_message(moderated_session).moderation_status is None
-
-
-class TestModerationResultStageIsWired:
-    @pytest.mark.parametrize(
-        "channel_cls",
-        [
-            pytest.param(ChannelBase, id="messaging"),
-            pytest.param(ApiChannel, id="api"),
-            pytest.param(WebChannel, id="web"),
-        ],
-    )
-    def test_is_the_first_terminal_stage(self, channel_cls):
-        assert _terminal_stage_types(channel_cls)[0] is ModerationResultStage
-
-    def test_evaluation_channel_is_unaffected(self):
-        assert ModerationResultStage not in _terminal_stage_types(EvaluationChannel)

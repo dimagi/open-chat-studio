@@ -18,7 +18,7 @@
         <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap text-sm text-base-content/70">
           <span><i class="fa-solid fa-robot text-base-content/50 mr-1"></i>{{ experiment.name }}</span>
           <span class="text-base-content/30">|</span>
-          {% include "generic/chip.html" with chip=participant_chip %}
+          <c-ui.chip :chip="participant_chip" />
           <span class="text-base-content/30">|</span>
           <span>Started {{ session_start }}</span>
         </div>
@@ -177,13 +177,13 @@
           <div>
             <dt class="text-xs uppercase tracking-wide text-base-content/60">{% translate "Session ID" %}</dt>
             <dd class="text-sm mt-1">
-              {% include "generic/session_id_chip.html" with external_id=experiment_session.external_id id_prefix="session-external-id" %}
+              <c-ui.session-id-chip :external_id="experiment_session.external_id" id_prefix="session-external-id" />
             </dd>
           </div>
           {% for label, chip in details %}
             <div>
               <dt class="text-xs uppercase tracking-wide text-base-content/60">{{ label }}</dt>
-              <dd class="text-sm mt-1">{% include "generic/chip.html" %}</dd>
+              <dd class="text-sm mt-1"><c-ui.chip :chip="chip" /></dd>
             </div>
           {% endfor %}
           <div>

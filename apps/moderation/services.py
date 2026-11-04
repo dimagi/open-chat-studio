@@ -10,17 +10,17 @@ from django.db.models import F
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.chat.models import ModerationStatus
+from apps.chat.models import ChatMessageMetadataKeys, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.experiments.models import Participant
 from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
+from apps.moderation.datamodels import ModerationTaskResult
 from apps.moderation.enforcement import block_participant, is_exempt
 from apps.moderation.models import DeniedParticipantSource
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
 from apps.ocs_notifications.notifications import participant_auto_blocked_notification
 from apps.pipelines.models import PipelineChatMessages
-from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from apps.chat.models import ChatMessage
     from apps.chat.schemas import ModerationSkipReason
     from apps.experiments.models import Experiment
+    from apps.service_providers.moderation_service.schemas import ModerationOutput
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.moderation")
@@ -73,13 +74,12 @@ def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, Modera
         # The task's own failure is already reported by Celery.
         logger.warning("Moderation task %s failed: %r", task_id, error)
         return None, "error"
-    if result["status"] != "ok":
-        return None, result["reason"]
     try:
-        return ModerationOutput.model_validate(result["output"]), None
+        task_result = ModerationTaskResult.model_validate(result)
     except ValidationError:
-        logger.exception("Moderation task %s returned an invalid output", task_id)
+        logger.exception("Moderation task %s returned an invalid result", task_id)
         return None, "error"
+    return task_result.output, task_result.skip_reason
 
 
 def strike_categories(output: ModerationOutput) -> set[str]:
@@ -163,3 +163,21 @@ def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_respo
     if bot_response is not None:
         rows = rows.filter(created_at__lte=bot_response.created_at)
     rows.delete()
+
+
+def replace_bot_reply(*, message: ChatMessage, text: str) -> None:
+    """Save `text` as the bot reply's content and drop its attachments.
+
+    When the save fails, the in-memory message is restored to match the database, as web and API
+    channels return it.
+    """
+    previous_content, previous_metadata = message.content, message.metadata
+    message.content = text
+    message.metadata = {
+        key: value for key, value in previous_metadata.items() if key not in ChatMessageMetadataKeys.attachment_keys()
+    }
+    try:
+        message.save(update_fields=["content", "metadata", "updated_at"])
+    except Exception:
+        message.content, message.metadata = previous_content, previous_metadata
+        raise

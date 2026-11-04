@@ -28,13 +28,28 @@ window.confirmDialog = function (message) {
 };
 
 // Confirm before an htmx request. Pair with `hx-trigger="confirmed"` and a unique element id
-// on the triggering element.
-window.confirmThenTrigger = function (elementId, message) {
-  window.confirmDialog(message).then((confirmed) => {
+// on the triggering element. `optionsTemplateId` names an element whose checkboxes are shown in
+// the dialog and sent as `hx-vals`.
+window.confirmThenTrigger = function (elementId, message, optionsTemplateId) {
+  const options = optionsTemplateId ? document.getElementById(optionsTemplateId) : null;
+  window.confirmDialog(options ? message + options.innerHTML : message).then((confirmed) => {
     const element = document.getElementById(elementId);
-    if (confirmed && element) {
-      htmx.trigger(element, 'confirmed');
+    if (!confirmed || !element) {
+      return;
     }
+    if (options) {
+      const values = {};
+      alertify
+        .confirm()
+        .elements.content.querySelectorAll('input[type="checkbox"][name]')
+        .forEach((checkbox) => {
+          if (checkbox.checked) {
+            values[checkbox.name] = 'on';
+          }
+        });
+      element.setAttribute('hx-vals', JSON.stringify(values));
+    }
+    htmx.trigger(element, 'confirmed');
   });
 };
 

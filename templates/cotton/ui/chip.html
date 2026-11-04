@@ -1,0 +1,32 @@
+{% comment %}
+Chip-styled link, or a static chip when there is no url. Renders nothing without a label.
+
+  <c-ui.chip :url="session.get_absolute_url" :label="session.name" />
+  <c-ui.chip label="Archived" />
+  <c-ui.chip :chip="participant.as_chip" />          (a `Chip` dict with `label` and `url`; any other value is printed as is)
+  <c-ui.chip :url="url" :label="label" truncate />   (one line, ellipsized, full label in the tooltip; use in table cells)
+
+From Python: `apps.generics.components.render_component("ui.chip", chip=chip, truncate=True)`.
+Extra attributes (`hx-*`, `x-*`, `id`, ...) are passed through to the root element.
+{% endcomment %}
+<c-vars chip="" url="" label="" truncate="" />
+{% with url=chip.url|default:url label=chip.label|default:label %}
+  {% with truncate_class=truncate|yesno:" max-w-xs," %}
+  {% with link_classes="btn btn-sm btn-soft btn-primary"|add:truncate_class static_classes="btn btn-sm btn-soft btn-primary no-animation"|add:truncate_class %}
+    {% if url %}
+      <a href="{{ url }}" {{ attrs|with_classes:link_classes }}>
+        {% if truncate %}
+          {# min-w-0 lets the flex item shrink below the (unbreakable) label width so the ellipsis shows #}
+          <span class="min-w-0 truncate" title="{{ label }}">{{ label }}</span>
+        {% else %}{{ label }}{% endif %}
+      </a>
+    {% elif label %}
+      <div {{ attrs|with_classes:static_classes }}>
+        {% if truncate %}
+          <span class="min-w-0 truncate" title="{{ label }}">{{ label }}</span>
+        {% else %}{{ label }}{% endif %}
+      </div>
+    {% elif chip %}{{ chip }}{% endif %}
+  {% endwith %}
+  {% endwith %}
+{% endwith %}

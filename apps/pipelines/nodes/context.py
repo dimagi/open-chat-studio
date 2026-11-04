@@ -112,7 +112,7 @@ class PipelineAccessor:
         """Get the execution path leading to a node."""
         path = []
         current_name = node_name
-        while current_name:
+        while current_name and current_name not in path:
             path.insert(0, current_name)
             current_node_id = self._get_node_id(current_name)
             if not current_node_id:

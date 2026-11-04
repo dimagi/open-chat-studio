@@ -4,5 +4,5 @@
        @change="{{ js_function }}">
 <span>{{ verbose_name }}</span>
 {% if help_content %}
-{% include "generic/help.html" %}
+<c-ui.help>{{ help_content|safe }}</c-ui.help>
 {% endif %}

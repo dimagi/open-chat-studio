@@ -21,7 +21,7 @@ MARKUP_PATTERN = re.compile(
     | <svg
     | <img\b[^>]{0,500}\bsrc\s*=
     | <[a-z][^>]{0,500}?[\s"'/]on[a-z]{2,30}\s*=   # event handler attribute inside a tag
-    | ["'/]\s*on[a-z]{2,30}\s*=                    # event handler attribute after a quote or slash
+    | ["']\s*on[a-z]{2,30}\s*=                     # event handler attribute after a quote
     | java[\s\x00-\x1f]{0,10}script[\s\x00-\x1f]{0,10}:
     | vbscript[\s\x00-\x1f]{0,10}:
     | data:text/html

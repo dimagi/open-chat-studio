@@ -37,7 +37,14 @@ def get_affected_teams_data(db_model) -> dict:
         Q(working_version__isnull=True) | Q(is_default_version=True)
     )
     referenced_pipeline_ids = {exp.pipeline_id for exp in referenced_experiments}
-    unreferenced_pipelines = [p for p in pipelines if p.id not in referenced_pipeline_ids]
+    # Only working pipelines are reported on their own. A pipeline *version* belongs to a chatbot version
+    # (the published one is reported through its chatbot above); the others are frozen history that
+    # nobody can edit or link to usefully. Archived pipelines are gone as far as the team is concerned.
+    unreferenced_pipelines = [
+        p
+        for p in pipelines
+        if p.id not in referenced_pipeline_ids and p.working_version_id is None and not p.is_archived
+    ]
 
     for exp in referenced_experiments:
         teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()

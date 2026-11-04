@@ -255,6 +255,12 @@ class ArchivedSerializer(serializers.Serializer):
     )
 
 
+class ResourceArchivedSerializer(serializers.Serializer):
+    """The archive response for a record whose archiving changes nothing else."""
+
+    archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
+
+
 class ChannelsAttachedSerializer(ErrorDetailSerializer):
     """The archive 409: why it was refused, and what a person has to do about it."""
 

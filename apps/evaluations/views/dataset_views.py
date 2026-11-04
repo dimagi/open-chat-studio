@@ -27,12 +27,12 @@ from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.chat.models import ChatMessage
 from apps.evaluations.breadcrumbs import datasets_crumbs
 from apps.evaluations.dataset_clone import (
-    MESSAGE_MODE_ALL_MATCHING_LIMIT,
     dispatch_clone_task,
     mark_dataset_pending,
     resolve_sessions_to_clone,
 )
-from apps.evaluations.exceptions import InFlightRunsError, SessionSelectionTooLargeError
+from apps.evaluations.evaluation_messages import make_evaluation_messages_from_sessions
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
     EvaluationDatasetForm,
@@ -58,7 +58,6 @@ from apps.evaluations.tasks import (
 )
 from apps.evaluations.utils import (
     generate_csv_column_suggestions,
-    make_evaluation_messages_from_sessions,
     normalize_json_quotes,
     parse_history_text,
 )
@@ -71,6 +70,7 @@ from apps.files.models import File, FilePurpose
 from apps.filters.models import FilterSet
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.csv_export import neutralize_csv_formula
 from apps.utils.tables import render_first_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
@@ -236,7 +236,6 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
         context["breadcrumbs"] = [*datasets_crumbs(self.request.team.slug), (_("Create"), None)]
-        context["message_mode_all_matching_limit"] = MESSAGE_MODE_ALL_MATCHING_LIMIT
         return context
 
     def get_success_url(self):
@@ -599,6 +598,36 @@ def parse_csv_columns(request, team_slug: str):
         return JsonResponse({"error": "An error occurred while parsing the CSV file."}, status=400)
 
 
+def _serialize_value(value):
+    """Serialize a value to string, converting dicts/lists to JSON."""
+    if isinstance(value, dict | list):
+        return json.dumps(value)
+    return str(value) if value is not None else ""
+
+
+def _dataset_csv_row(message, context_keys, participant_data_keys, session_state_keys):
+    """Build one formula-guarded CSV row for a dataset message."""
+    values = [
+        message.input.get("content", ""),
+        message.output.get("content", ""),
+    ]
+
+    for key in context_keys:
+        value = message.context.get(key, "") if message.context else ""
+        values.append(_serialize_value(value))
+
+    for key in participant_data_keys:
+        value = message.participant_data.get(key, "") if message.participant_data else ""
+        values.append(_serialize_value(value))
+
+    for key in session_state_keys:
+        value = message.session_state.get(key, "") if message.session_state else ""
+        values.append(_serialize_value(value))
+
+    values.append(message.full_history)
+    return [message.id, *(neutralize_csv_formula(value) for value in values)]
+
+
 @login_and_team_required
 def download_dataset_csv(request, team_slug: str, pk: int):
     """Download dataset as CSV with expanded context and metadata columns."""
@@ -636,33 +665,8 @@ def download_dataset_csv(request, team_slug: str, pk: int):
 
     writer.writerow(headers)
 
-    def _serialize_value(value):
-        """Serialize a value to string, converting dicts/lists to JSON."""
-        if isinstance(value, dict | list):
-            return json.dumps(value)
-        return str(value) if value is not None else ""
-
     for message in messages:
-        row = [
-            message.id,
-            message.input.get("content", ""),
-            message.output.get("content", ""),
-        ]
-
-        for key in context_keys:
-            value = message.context.get(key, "") if message.context else ""
-            row.append(_serialize_value(value))
-
-        for key in participant_data_keys:
-            value = message.participant_data.get(key, "") if message.participant_data else ""
-            row.append(_serialize_value(value))
-
-        for key in session_state_keys:
-            value = message.session_state.get(key, "") if message.session_state else ""
-            row.append(_serialize_value(value))
-
-        row.append(message.full_history)
-        writer.writerow(row)
+        writer.writerow(_dataset_csv_row(message, context_keys, participant_data_keys, session_state_keys))
 
     return response
 
@@ -890,7 +894,6 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 "sessions_count_url": count_url,
                 "active_tab": "evaluation_datasets",
                 "breadcrumbs": [*datasets_crumbs(team_slug, dataset), (_("Add Sessions"), None)],
-                "message_mode_all_matching_limit": MESSAGE_MODE_ALL_MATCHING_LIMIT,
                 **filter_context,
             },
         )
@@ -902,18 +905,13 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         filter_params = FilterParams(request.POST)
         filter_query = filter_params.to_query()
         base_qs = _get_dataset_available_sessions(request, pk, filter_params=filter_params)
-        try:
-            selection = resolve_sessions_to_clone(
-                dataset=dataset,
-                mode=request.POST.get("mode", "selected"),
-                post_data=request.POST,
-                base_qs=base_qs,
-                team=request.team,
-                filter_query=filter_query,
-            )
-        except SessionSelectionTooLargeError as e:
-            messages.error(request, e.messages[0])
-            return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
+        selection = resolve_sessions_to_clone(
+            mode=request.POST.get("mode", "selected"),
+            post_data=request.POST,
+            base_qs=base_qs,
+            team=request.team,
+            filter_query=filter_query,
+        )
         if not selection.count:
             messages.error(request, "No sessions selected.")
             return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)

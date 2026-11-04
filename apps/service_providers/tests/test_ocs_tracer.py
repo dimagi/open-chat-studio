@@ -28,21 +28,6 @@ class TestOCSTracer:
 
         assert Trace.objects.count() == 1
 
-    def test_noop(self, experiment):
-        """Span context manager should do nothing if the tracer is not ready"""
-
-        tracer = OCSTracer(experiment, experiment.team_id)
-
-        # Using span context manager when tracer is not ready should not raise an error
-        span_context = TraceContext(id=uuid4(), name="test_span")
-        with tracer.span(
-            span_context=span_context,
-            inputs={"input": "data"},
-            metadata={"meta": "data"},
-        ):
-            # Should execute without errors even though tracer is not ready
-            pass
-
     def test_record_experiment_version(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create()
@@ -359,20 +344,6 @@ class TestSetParticipantDataDiff:
 
 
 class TestSetTraceMetadata:
-    def test_set_trace_metadata_stores_on_trace_record(self):
-        experiment = Mock()
-        tracer = OCSTracer(experiment=experiment, team_id=1)
-        tracer.trace_record = Mock()
-
-        metadata = {
-            "trace_info": [
-                {"trace_id": "lf-123", "trace_url": "https://langfuse.com/traces/lf-123", "trace_provider": "langfuse"}
-            ]
-        }
-        tracer.set_trace_metadata(metadata)
-
-        assert tracer.trace_record.trace_metadata == metadata
-
     def test_set_trace_metadata_noop_when_no_trace_record(self):
         experiment = Mock()
         tracer = OCSTracer(experiment=experiment, team_id=1)

@@ -47,6 +47,14 @@ def team_admin_only(team):
 
 
 @pytest.fixture()
+def change_team_member(team):
+    """Not a team admin, but holds ``teams.change_team`` directly."""
+    user = member_with_groups(team=team, group_names=NORMAL_USER_GROUPS)
+    user.user_permissions.add(Permission.objects.get(codename="change_team"))
+    return user
+
+
+@pytest.fixture()
 def chat_viewer(team):
     return member_with_groups(team=team, group_names=[CHAT_VIEWER_GROUP])
 
@@ -113,19 +121,6 @@ class TestTeamModerationForm:
 
         assert not form.is_valid()
         assert "moderation_provider" in form.errors
-
-    def test_selecting_a_provider_clears_the_deleted_provider_name(self):
-        team = TeamFactory.create(moderation_deleted_provider_name="Old provider")
-        provider = ModerationProviderFactory.create(team=team)
-
-        form = TeamModerationForm({"moderation_enabled": True, "moderation_provider": provider.pk}, instance=team)
-        assert form.is_valid()
-        form.save()
-
-        team.refresh_from_db()
-        assert team.moderation_enabled
-        assert team.moderation_provider == provider
-        assert team.moderation_deleted_provider_name == ""
 
     def test_save_keeps_concurrent_changes_to_other_team_fields(self):
         team = TeamFactory.create(name="Before")
@@ -204,16 +199,6 @@ class TestSectionRendering:
         assert "Other team provider" not in content
         assert 'data-testid="edit-moderation-provider"' in content
 
-    def test_deleted_provider_banner(self, client, admin, team):
-        team.moderation_deleted_provider_name = "Old provider"
-        team.save()
-        client.force_login(admin)
-
-        content = client.get(_section_url(team)).content.decode()
-
-        assert 'data-testid="moderation-provider-deleted"' in content
-        assert "Old provider" in content
-
     @pytest.mark.parametrize(
         ("user_fixture", "can_edit", "sees_denylist"),
         [
@@ -262,7 +247,11 @@ class TestSaveSettings:
 
     @pytest.mark.parametrize(
         "user_fixture",
-        [pytest.param("member", id="participant_editor"), pytest.param("chat_viewer", id="chat_viewer")],
+        [
+            pytest.param("member", id="participant_editor"),
+            pytest.param("chat_viewer", id="chat_viewer"),
+            pytest.param("change_team_member", id="change_team_without_admin"),
+        ],
     )
     def test_requires_team_admin(self, client, request, team, user_fixture):
         client.force_login(request.getfixturevalue(user_fixture))
@@ -340,7 +329,9 @@ class TestProviderDialog:
         provider = ModerationProviderFactory.create(team=team, name="Before")
         user = member_with_groups(team=team, group_names=NORMAL_USER_GROUPS)
         user.user_permissions.add(
-            *Permission.objects.filter(codename__in=["add_moderationprovider", "change_moderationprovider"])
+            *Permission.objects.filter(
+                codename__in=["add_moderationprovider", "change_moderationprovider", "change_team"]
+            )
         )
         client.force_login(user)
         url = (

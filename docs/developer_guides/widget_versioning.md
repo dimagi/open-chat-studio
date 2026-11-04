@@ -108,7 +108,7 @@ See `docs/design/oauth-chat-widget.md` for the admission model as a whole.
 
 ## Releasing a new widget version
 
-1. Publish the new version to npm (see `components/chat_widget`).
+1. Publish the new version to npm (see [`components/chat_widget/README.md`](https://github.com/dimagi/open-chat-studio/blob/main/components/chat_widget/README.md#publishing)).
 2. In the same PR, bump `LATEST_VERSION` in `apps/channels/widget_versions.py`.
    The embed snippet (`{% widget_script_url %}`) and the "update available"
    badges follow automatically.

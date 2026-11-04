@@ -1,4 +1,7 @@
+import asyncio
 import dataclasses
+import datetime
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -40,7 +43,27 @@ class TestCeleryQueueCheck:
 
         check.run()
 
-        check.app.control.ping.assert_called_once_with(destination=["worker1"], timeout=check.timeout.total_seconds())
+        check.app.control.ping.assert_called_once_with(destination=["worker1"], timeout=check.rpc_timeout)
+
+    def test_rpcs_using_their_full_budget_finish_within_the_check_timeout(self):
+        # kombu waits the full timeout for a broadcast with no destination, and for a ping whose
+        # destinations do not all reply.
+        def slow_inspect(timeout):
+            time.sleep(timeout)
+            return MagicMock(active_queues=MagicMock(return_value={"worker1": [{"name": "celery"}]}))
+
+        def slow_ping(destination, timeout):
+            time.sleep(timeout)
+            return []
+
+        app = MagicMock()
+        app.control.inspect.side_effect = slow_inspect
+        app.control.ping.side_effect = slow_ping
+        check = CeleryQueueCheck(label="chat", queue="celery", app=app, timeout=datetime.timedelta(seconds=1.2))
+
+        result = asyncio.run(check.get_result())
+
+        assert str(result.error) == "Unavailable: No worker for Celery queue 'chat' (celery)"
 
     @pytest.mark.parametrize(
         ("check_kwargs", "match"),
@@ -194,7 +217,7 @@ class TestCeleryQueueCheckThroughView:
 
     HealthCheckView.get is an async view, so it's easy to end up awaiting a sync method directly
     (`await None` raises `TypeError`). The base `HealthCheck.get_result()` guards against this via
-    `asyncio.to_thread`, but that guarantee lives in a third-party dependency, so exercise the real
+    `loop.run_in_executor`, but that guarantee lives in a third-party dependency, so exercise the real
     `CeleryQueueCheck` through the actual view dispatch (not just by calling `run()` in isolation)
     to catch a regression if that dispatch ever changes.
     """

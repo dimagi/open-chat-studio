@@ -50,15 +50,20 @@ def serialize_input_output_dict(data: dict[Any, Any]) -> dict[Any, Any]:
     return safe_serialize(data)
 
 
+def _serialize_key(key: Any) -> Any:
+    """A dict key serialized like any value, except a tuple key, which a list could not replace."""
+    return key if isinstance(key, tuple) else safe_serialize(key)
+
+
 def safe_serialize(obj: Any) -> Any:
-    if isinstance(obj, list):
+    if isinstance(obj, list | tuple):
         return [safe_serialize(item) for item in obj]
     if isinstance(obj, dict):
-        return {safe_serialize(k): safe_serialize(v) for k, v in obj.items()}
+        return {_serialize_key(k): safe_serialize(v) for k, v in obj.items()}
     if isinstance(obj, BaseModel):
         return safe_serialize(obj.model_dump())
     if is_dataclass(obj):
-        return asdict(obj)
+        return safe_serialize(asdict(obj))
     if isinstance(obj, Model):
         return str(obj)
     return obj

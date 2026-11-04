@@ -28,7 +28,6 @@ from django.db.models import (
     When,
     functions,
 )
-from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -40,8 +39,10 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.versioning import TriggerSyncMode, sync_triggers
 from apps.experiments import model_audit_fields
+from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
+from apps.generics.components import render_component
 from apps.moderation.enforcement import is_participant_blocked
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -105,10 +106,7 @@ class VersionFieldDisplayFormatters:
     def format_pipeline(pipeline) -> str:
         if not pipeline:
             return ""
-        name = str(pipeline)
-        template = get_template("generic/chip.html")
-        url = pipeline.get_absolute_url()
-        return template.render({"chip": Chip(label=name, url=url)})
+        return render_component("ui.chip", chip=Chip(label=str(pipeline), url=pipeline.get_absolute_url()))
 
     @staticmethod
     def format_wiring(wiring: set[tuple[str, str, str, str]]) -> str:
@@ -1001,13 +999,16 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def unarchive(self):
-        """Reverse of archive(): the version, its static triggers and its pipeline."""
+        """Reverse of archive(): the experiment, its triggers, and — for the working version — its versions."""
         super().unarchive()
         # The related manager excludes archived rows; get_all() reaches them.
         self.static_triggers.get_all().update(is_archived=False)
         self.scheduled_triggers.get_all().update(is_archived=False)
-        # Mirrors archive(), which leaves the working version's pipeline alone.
-        if not self.is_working_version and self.pipeline:
+        if self.is_working_version:
+            for version in self.versions.get_all().filter(is_archived=True):
+                version.unarchive()
+        elif self.pipeline:
+            # Mirrors archive(), which leaves the working version's pipeline alone.
             self.pipeline.unarchive()
 
     def delete_experiment_channels(self):
@@ -1017,6 +1018,31 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         for channel in ExperimentChannel.objects.filter(experiment_id=self.id):
             channel.soft_delete()
+
+    def restore_experiment_channels(self) -> list:
+        """Undo delete_experiment_channels() where the identifier is still free; returns the ones skipped."""
+        from apps.channels.models import (  # noqa: PLC0415 - circular: channels.models imports experiments.models
+            ExperimentChannel,
+        )
+
+        skipped = []
+        deleted_channels = ExperimentChannel.objects.get_unfiltered_queryset().filter(
+            experiment_id=self.id, deleted=True
+        )
+        for channel in deleted_channels:
+            identifier_key = channel.platform_enum.channel_identifier_key
+            if not identifier_key:
+                skipped.append(channel)
+                continue
+            try:
+                ExperimentChannel.check_usage_by_another_experiment(
+                    channel.platform_enum, channel.extra_data.get(identifier_key), self
+                )
+            except ChannelAlreadyUtilizedException:
+                skipped.append(channel)
+                continue
+            channel.restore()
+        return skipped
 
     def _copy_pipeline_to_new_version(self, new_version, is_copy: bool = False):
         if not self.pipeline:
@@ -1052,6 +1078,21 @@ class Experiment(BaseTeamModel, VersionsMixin):
             setattr(new_version, attr_name, latest_attr_version)
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
+
+    @property
+    def latest_version(self):
+        return (
+            self.versions.select_related(
+                "consent_form",
+                "synthetic_voice",
+                "voice_provider",
+                "trace_provider",
+                "pipeline",
+            )
+            .prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers")
+            .order_by("-created_at")
+            .first()
+        )
 
     def _get_version_details(self) -> VersionDetails:
         """

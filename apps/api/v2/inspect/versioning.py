@@ -10,7 +10,7 @@ additional per-node fetches.
 from django.db.models import Prefetch
 
 from apps.api.v2.inspect.nodes import inspect_node_queryset
-from apps.events.models import StaticTrigger, TimeoutTrigger
+from apps.events.models import ScheduledTrigger, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
 
 
@@ -31,6 +31,7 @@ def _inspect_target_queryset():
         Prefetch("pipeline__node_set", queryset=inspect_node_queryset()),
         Prefetch("static_triggers", queryset=StaticTrigger.objects.select_related("action")),
         Prefetch("timeout_triggers", queryset=TimeoutTrigger.objects.select_related("action")),
+        Prefetch("scheduled_triggers", queryset=ScheduledTrigger.objects.select_related("action")),
     )
 
 
