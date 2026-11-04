@@ -1093,6 +1093,18 @@ def test_chatbot_admin_can_access_edit_chatbot(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_edit_chatbot_opens_an_archived_chatbot_read_only(client, team_with_users):
+    experiment = ExperimentFactory.create(team=team_with_users)
+    experiment.archive()
+    client.force_login(team_with_users.members.first())
+
+    response = client.get(reverse("chatbots:edit", args=[team_with_users.slug, experiment.id]))
+
+    assert response.status_code == 200
+    assert response.context["read_only"] is True
+
+
+@pytest.mark.django_db()
 def test_session_table_prefetch_is_page_bounded(team_with_users):
     """Adding more sessions than fit on one page must not increase the number of
     queries fired for the tag prefetch — the prefetch should target only the

@@ -52,6 +52,62 @@ def test_archive_pipeline_archives_nodes_as_well():
 
 
 @pytest.mark.django_db()
+class TestUnarchivePipeline:
+    def test_restores_the_nodes_archived_with_it(self):
+        pipeline = PipelineFactory.create()
+        node_count = pipeline.node_set.count()
+        pipeline.archive()
+
+        pipeline.unarchive()
+
+        assert pipeline.is_archived is False
+        assert pipeline.node_set.count() == node_count
+
+    def test_leaves_a_node_removed_from_the_canvas_archived(self):
+        """A removed node with versions stays as an archived row; restoring the pipeline must not revive it."""
+        pipeline = PipelineFactory.create()
+        removed = NodeFactory.create(pipeline=pipeline)
+        pipeline.create_new_version()
+        pipeline.update_nodes_from_data({flow_id: None for flow_id in pipeline.node_ids if flow_id != removed.flow_id})
+        removed.refresh_from_db()
+        assert removed.is_archived is True
+        pipeline.archive()
+
+        pipeline.unarchive()
+
+        removed.refresh_from_db()
+        assert removed.is_archived is True
+        assert removed.flow_id not in pipeline.node_ids
+
+    def test_a_restored_node_removed_later_stays_removed(self):
+        """Restoring must clear the mark it restores by, or the next restore would revive a removed node."""
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(pipeline=pipeline)
+        pipeline.create_new_version()
+        pipeline.archive()
+        pipeline.unarchive()
+        pipeline.update_nodes_from_data({flow_id: None for flow_id in pipeline.node_ids if flow_id != node.flow_id})
+        pipeline.archive()
+
+        pipeline.unarchive()
+
+        node.refresh_from_db()
+        assert node.is_archived is True
+
+    def test_restores_every_node_of_a_version_pipeline(self):
+        """Version pipelines archived before the mark existed carry unmarked archived nodes."""
+        pipeline = PipelineFactory.create()
+        version = pipeline.create_new_version()
+        node_count = version.node_set.count()
+        version.archive()
+        Node.objects.get_all().filter(pipeline=version).update(archived_with_pipeline=False)
+
+        version.unarchive()
+
+        assert version.node_set.count() == node_count
+
+
+@pytest.mark.django_db()
 class TestVersioningNodes:
     @pytest.mark.parametrize("is_index", [True, False])
     def test_version_llm_with_prompt_node_with_collection(self, is_index):

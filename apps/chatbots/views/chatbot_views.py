@@ -425,6 +425,7 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
                 for name in Flag.objects.values_list("name", flat=True)
                 if flag_is_active_for_team(self.request.team, name)
             ],
+            "read_only": experiment.is_archived,
             "widget_page_context": get_widget_page_context(experiment.pipeline, experiment),
             **llm_model_parameter_context(),
         }

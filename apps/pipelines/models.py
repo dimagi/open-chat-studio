@@ -411,7 +411,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         super().archive()
         for node in self.node_set.all():
-            node.archive()
+            node.archive(with_pipeline=True)
 
         if self.is_working_version:
             for version in self.versions.filter(is_archived=False):
@@ -421,17 +421,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def unarchive(self):
-        """Reverse of archive(): this pipeline and its archived nodes.
+        """Reverse of archive(): this pipeline and the nodes archived with it.
 
-        For version pipelines only — those are archived as a unit with their experiment version
-        (see ``Experiment.archive``), so every archived node belongs to that unit. The working
-        pipeline is never archived that way: its archived nodes are the ones the user deleted from
-        the canvas (``update_nodes_from_data`` keeps a versioned node as an archived row), and its
-        archived versions belong to experiment versions archived in their own right. Neither may
-        be restored wholesale.
+        A working pipeline also holds archived rows for nodes the user removed from the canvas
+        (``update_nodes_from_data`` keeps a versioned node as an archived row), so only the nodes
+        ``archive()`` marked come back. A version pipeline is archived as a unit, so every archived
+        node belongs to that unit, including rows archived before the mark existed. Archived
+        versions are not restored here: each belongs to an experiment version that is restored in
+        its own right (see ``Experiment.unarchive``).
         """
         super().unarchive()
-        for node in self.node_set.get_all().filter(is_archived=True):
+        archived_nodes = self.node_set.get_all().filter(is_archived=True)
+        if self.is_working_version:
+            archived_nodes = archived_nodes.filter(archived_with_pipeline=True)
+        for node in archived_nodes:
             node.unarchive()
 
     def get_node_param_values(self, param_name: str) -> list:
@@ -504,6 +507,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
+    # Set when the pipeline's archive() archived this row, as opposed to the user removing the
+    # node from the canvas; Pipeline.unarchive() restores only the former.
+    archived_with_pipeline = models.BooleanField(default=False, db_default=False)
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider",
@@ -753,18 +759,25 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
-    def archive(self) -> bool:
+    def archive(self, *, with_pipeline: bool = False) -> bool:
         """
         Archiving a node also archives the versioned resources its params reference. The node's
         versions will be archived when the pipeline they belong to is archived.
         """
-        super().archive()
+        self.is_archived = True
+        self.archived_with_pipeline = with_pipeline
+        self.save(update_fields=["is_archived", "archived_with_pipeline"])
         if not self.is_a_version:
             # We don't want to archive related objects for working versions, since they can be used in other pipelines
             return True
 
         self._archive_related_params()
         return True
+
+    def unarchive(self):
+        self.is_archived = False
+        self.archived_with_pipeline = False
+        self.save(update_fields=["is_archived", "archived_with_pipeline"])
 
     def _get_version_details(self) -> VersionDetails:
         node_name = self.display_name

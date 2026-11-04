@@ -1063,19 +1063,78 @@ class TestExperimentModel:
         assert second_version.is_archived is True
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
 
-    def test_archive_with_pipeline(self):
+    def test_archive_version_archives_its_pipeline(self):
         pipeline = PipelineFactory.create()
         NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
         experiment = ExperimentFactory.create(pipeline=pipeline)
-
-        # Archiving a version archives that version's pipeline...
         new_version = experiment.create_new_version()
-        assert new_version.archive() is True
-        self._assert_archived(new_version.pipeline, True)
 
-        # ...but archiving the working experiment leaves the working pipeline alone.
-        experiment.archive()
+        assert new_version.archive() is True
+
+        self._assert_archived(new_version.pipeline, True)
         self._assert_archived(experiment.pipeline, False)
+
+    def test_archive_working_experiment_archives_its_pipeline(self):
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        version = experiment.create_new_version()
+
+        assert experiment.archive() is True
+
+        self._assert_archived(pipeline, True)
+        self._assert_archived(node, True)
+        self._assert_archived(version.pipeline, True)
+
+    def test_archive_working_experiment_leaves_a_pipeline_another_chatbot_uses(self):
+        pipeline = PipelineFactory.create()
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        ExperimentFactory.create(pipeline=pipeline, team=experiment.team)
+
+        assert experiment.archive() is True
+
+        self._assert_archived(experiment, True)
+        self._assert_archived(pipeline, False)
+
+    def test_archive_working_experiment_leaves_a_pipeline_a_static_trigger_starts(self):
+        pipeline = PipelineFactory.create()
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        action = EventActionFactory.create(
+            action_type=EventActionType.PIPELINE_START, params={"pipeline_id": pipeline.id}
+        )
+        StaticTriggerFactory.create(experiment=ExperimentFactory.create(team=experiment.team), action=action)
+
+        assert experiment.archive() is True
+
+        self._assert_archived(experiment, True)
+        self._assert_archived(pipeline, False)
+
+    def test_unarchive_working_experiment_restores_its_pipeline(self):
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment.archive()
+        self._assert_archived(pipeline, True)
+
+        experiment.unarchive()
+
+        self._assert_archived(pipeline, False)
+        self._assert_archived(node, False)
+
+    def test_unarchive_working_experiment_leaves_nodes_removed_from_the_canvas(self):
+        """A working pipeline keeps a removed node as an archived row while versions reference it."""
+        pipeline = PipelineFactory.create()
+        removed = NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment.create_new_version()
+        pipeline.update_nodes_from_data({flow_id: None for flow_id in pipeline.node_ids if flow_id != removed.flow_id})
+        self._assert_archived(removed, True)
+        experiment.archive()
+
+        experiment.unarchive()
+
+        self._assert_archived(pipeline, False)
+        self._assert_archived(removed, True)
 
     def _assert_archived(self, model_obj, archived: bool):
         model_obj.refresh_from_db(fields=["is_archived"])

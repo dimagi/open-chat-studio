@@ -242,7 +242,10 @@ def pipeline_data(request, team_slug: str, pk: int):
         return _handle_pipeline_patch(request, pk, team_slug)
 
     # flow_data below rebuilds every node from its row, reading the collection_indexes M2M.
-    pipeline = get_object_or_404(Pipeline.objects.prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team)
+    # get_all(): the builder of an archived chatbot still shows its pipeline.
+    pipeline = get_object_or_404(
+        Pipeline.objects.get_all().prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team
+    )
 
     return JsonResponse(
         {

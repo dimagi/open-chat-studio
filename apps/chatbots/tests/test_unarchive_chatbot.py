@@ -70,6 +70,21 @@ class TestUnarchiveChatbot:
         version.refresh_from_db()
         assert version.is_archived is False
 
+    def test_restores_the_working_pipeline(self, client, team_with_users, archived_chatbot):
+        """Archiving a chatbot archives its working pipeline and nodes. Restoring brings them back."""
+        chatbot, _version = archived_chatbot
+        chatbot.pipeline.refresh_from_db()
+        assert chatbot.pipeline.is_archived is True
+        nodes = Node.objects.get_all().filter(pipeline=chatbot.pipeline)
+        assert nodes.filter(is_archived=True).exists()
+        client.force_login(team_with_users.members.first())
+
+        client.post(_unarchive_url(team_with_users, chatbot))
+
+        chatbot.pipeline.refresh_from_db()
+        assert chatbot.pipeline.is_archived is False
+        assert not nodes.filter(is_archived=True).exists()
+
     def test_restores_the_static_triggers(self, client, team_with_users):
         owner = team_with_users.members.first()
         chatbot = ExperimentFactory.create(team=team_with_users, owner=owner)
