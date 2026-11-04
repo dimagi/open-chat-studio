@@ -93,6 +93,7 @@ checks every Celery queue, and `/status/queue-<name>/` checks a single queue. Se
 `HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token either in the
 `Authorization: Bearer <token>` request header or as a query parameter (`?token=...`). Prefer the header where the health
 checker can set request headers, since query strings are more likely to be written to access logs.
+If a request sends both, only the header is checked.
 
 ## Deployment Options
 
