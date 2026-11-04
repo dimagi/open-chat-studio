@@ -90,8 +90,9 @@ docker build -t open-chat-studio:latest .
 
 The app exposes a `/status/` endpoint (database, cache, and Redis checks) plus named subsets: `/status/celery/`
 checks every Celery queue, and `/status/queue-<name>/` checks a single queue. Secure them by setting
-`HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token as a query
-parameter (`?token=...`).
+`HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token either in the
+`Authorization: Bearer <token>` request header or as a query parameter (`?token=...`). Prefer the header where the health
+checker can set request headers, since query strings are more likely to be written to access logs.
 
 ## Deployment Options
 

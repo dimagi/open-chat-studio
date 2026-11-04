@@ -198,11 +198,32 @@ class TestHealthCheckView:
 
         assert response.status_code == 404
 
-    def test_token_accepted_when_correct(self, client, fake_subsets):
+    @pytest.mark.parametrize(
+        "request_kwargs",
+        [
+            pytest.param({"data": {"token": "secret-token"}}, id="query_param"),
+            pytest.param({"headers": {"Authorization": "Bearer secret-token"}}, id="bearer_header"),
+        ],
+    )
+    def test_token_accepted_when_correct(self, client, fake_subsets, request_kwargs):
         with override_settings(HEALTH_CHECK_TOKENS=["secret-token"]):
-            response = client.get("/status/", {"token": "secret-token"})
+            response = client.get("/status/", **request_kwargs)
 
         assert response.status_code == 200
+
+    @pytest.mark.parametrize(
+        "authorization",
+        [
+            pytest.param("Bearer wrong", id="wrong_token"),
+            pytest.param("Basic secret-token", id="wrong_scheme"),
+            pytest.param("Bearer", id="missing_token"),
+        ],
+    )
+    def test_bearer_header_rejected(self, client, fake_subsets, authorization):
+        with override_settings(HEALTH_CHECK_TOKENS=["secret-token"]):
+            response = client.get("/status/", headers={"Authorization": authorization})
+
+        assert response.status_code == 404
 
     def test_no_token_required_when_none_configured(self, client, fake_subsets):
         with override_settings(HEALTH_CHECK_TOKENS=[]):
