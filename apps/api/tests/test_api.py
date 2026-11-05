@@ -24,7 +24,7 @@ from apps.experiments.models import ExperimentSession, Participant, ParticipantD
 from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 from apps.utils.tests.langchain import mock_llm
@@ -34,6 +34,7 @@ from apps.utils.tests.langchain import mock_llm
 def experiment(db):
     exp = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     LlmProviderFactory.create(team=exp.team)
+    LlmProviderModelFactory.create(team=exp.team)
     return exp
 
 

@@ -44,6 +44,7 @@ from apps.utils.factories.experiment import (
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
+    LlmProviderModelFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
@@ -526,6 +527,7 @@ class TestExperimentSession:
         """The Trace created during ad_hoc_bot_message should reference the AI ChatMessage it produced."""
         mock_get_llm_service.return_value = build_fake_llm_service(responses=["Bot reply"])
         LlmProviderFactory.create(team=experiment_session.experiment.team)
+        LlmProviderModelFactory.create(team=experiment_session.experiment.team)
         from_experiment_session.return_value = Mock()
 
         experiment_session.ad_hoc_bot_message("Tell the user we're testing", TraceInfo(name="test"))
