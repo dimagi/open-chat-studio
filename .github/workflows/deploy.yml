@@ -47,7 +47,7 @@ jobs:
     # Audit only: records egress without blocking. Flip to `block` plus an
     # `allowed-endpoints` list once the recorded traffic looks stable.
     - name: Harden the runner
-      uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+      uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
       with:
         egress-policy: audit
 
@@ -164,7 +164,7 @@ jobs:
 
     - name: Update ECS task def for Django web container
       id: django-web-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
@@ -172,7 +172,7 @@ jobs:
 
     - name: Update ECS task def for Migration container
       id: migration-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Migration
         container-name: migrate
@@ -180,7 +180,7 @@ jobs:
 
     - name: Update ECS task def for Celery worker container
       id: celery-worker-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
         container-name: celery-worker
@@ -188,7 +188,7 @@ jobs:
 
     - name: Update ECS task def for Celery background worker container
       id: celery-background-worker-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBackgroundWorkerTask
         container-name: celery-background-worker
@@ -196,7 +196,7 @@ jobs:
 
     - name: Update ECS task def for Celery evaluations worker container
       id: celery-evaluations-worker-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryEvaluationsWorkerTask
         container-name: celery-evaluations-worker
@@ -204,7 +204,7 @@ jobs:
 
     - name: Update ECS task def for Celery beat container
       id: celery-beat-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.1
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
         container-name: celery-beat

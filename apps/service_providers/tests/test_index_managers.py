@@ -324,6 +324,7 @@ class TestLocalIndexManagerContextualization:
         embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
         assert embeddings.count() == 2
         for embedding in embeddings:
+            assert embedding.context is not None
             assert "annual_report.pdf" in embedding.context
             assert embedding.contextualized_text.startswith(embedding.context)
             assert embedding.text in embedding.contextualized_text

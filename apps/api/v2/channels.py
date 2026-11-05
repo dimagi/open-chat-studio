@@ -101,7 +101,7 @@ class TriggerBotMessageView(APIView):
             OpenApiExample(
                 name="ExperimentNotFound",
                 summary="No experiment with the given ID exists in the team",
-                value={"detail": "No Experiment matches the given query."},
+                value={"detail": "No chatbot matches the given query."},
                 response_only=True,
                 status_codes=[404],
             ),

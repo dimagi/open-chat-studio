@@ -10,9 +10,12 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.auth_service.oauth import AUTHORIZATION_PARAM_RESERVED_KEYS
+from apps.service_providers.exceptions import provider_error_message
+from apps.service_providers.llm_service.error_classification import provider_error_types
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
-from apps.service_providers.models import LlmProviderModel, MessagingProvider
+from apps.service_providers.models import LlmProviderModel, MessagingProvider, ModerationProviderType
 from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
@@ -46,6 +49,18 @@ class ProviderTypeConfigForm(forms.Form):
     def save(self, instance):
         instance.config = self.cleaned_data
         return instance
+
+
+def normalize_config(config: dict) -> dict:
+    """Drops blank optional fields cleaned_data fills in even when the user never touched
+    them, so an untouched field doesn't look like a change against an older, sparser saved
+    config."""
+    return {k: v for k, v in config.items() if v}
+
+
+def has_config_changed(*, old_config: dict | None, new_config: dict) -> bool:
+    """Whether ``new_config`` differs from the normalized ``old_config``. Always True when there is no old config."""
+    return old_config is None or old_config != normalize_config(new_config)
 
 
 class ObfuscatingMixin:
@@ -98,6 +113,31 @@ class OpenAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             " one organization or want to use your default organization."
         ),
     )
+
+
+CREDENTIAL_CHECK_TIMEOUT_SECONDS = 5
+
+
+class OpenAIModerationConfigForm(OpenAIConfigForm):
+    def clean(self):
+        """Check new or changed credentials. Reject those the provider refuses; report other failures as a warning."""
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+        old_config = normalize_config(self.initial_raw) if self.initial_raw else None
+        if not has_config_changed(old_config=old_config, new_config=cleaned_data):
+            return cleaned_data
+        service = ModerationProviderType.openai.get_moderation_service(
+            config=cleaned_data, timeout=CREDENTIAL_CHECK_TIMEOUT_SECONDS, max_retries=0
+        )
+        try:
+            service.moderate("Hello")
+        except provider_error_types().authentication as e:
+            self.add_error("openai_api_key", f"The provider rejected these credentials: {provider_error_message(e)}")
+        except Exception as e:
+            logger.warning("Could not check moderation provider credentials: %s", e)
+            self.warnings.append("Provider saved, but the credentials could not be checked right now.")
+        return cleaned_data
 
 
 class OpenAIGenericConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
@@ -508,6 +548,92 @@ class OAuthClientCredentialsConfigForm(ObfuscatingMixin, ProviderTypeConfigForm)
         initial="client_secret_basic",
         help_text=_("How the client credentials are sent to the token endpoint."),
     )
+
+
+class OAuthAuthorizationCodeConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    custom_template = "service_providers/oauth_authorization_code_config_form.html"
+    obfuscate_fields = ["client_secret"]
+
+    provider_preset = forms.ChoiceField(
+        label=_("Provider preset"),
+        choices=[
+            ("custom", _("Custom")),
+            ("github", _("GitHub")),
+            ("google", _("Google")),
+            ("microsoft", _("Microsoft")),
+        ],
+        initial="custom",
+        required=False,
+        help_text=_("Presets only fill the fields below; all values remain editable."),
+    )
+    additional_searchable_fields = ["client_id"]
+
+    client_id = forms.CharField(label=_("Client ID"), help_text=_("The client identifier from your OAuth provider."))
+    client_secret = forms.CharField(
+        label=_("Client Secret"), help_text=_("The client secret from your OAuth provider.")
+    )
+    authorize_url = forms.URLField(
+        label=_("Authorization URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The provider endpoint where users authorize access."),
+    )
+    token_url = forms.URLField(
+        label=_("Token URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The provider endpoint used to exchange codes and refresh tokens."),
+    )
+    scope = forms.CharField(label=_("Scope"), required=False, help_text=_("Space separated list of scopes."))
+    authorization_params = forms.JSONField(
+        label=_("Additional Authorization Request Parameters"),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=_('Optional JSON object, for example: {"access_type": "offline"}.'),
+    )
+    token_endpoint_auth_method = forms.ChoiceField(
+        label=_("Token Endpoint Authentication"),
+        choices=[
+            ("client_secret_basic", _("HTTP Basic")),
+            ("client_secret_post", _("Request Body (client_secret_post)")),
+        ],
+        initial="client_secret_basic",
+        help_text=_("How client credentials are sent to the token endpoint."),
+    )
+
+    def clean_authorization_params(self):
+        params = self.cleaned_data.get("authorization_params")
+        raw_value = self.data.get(self.add_prefix("authorization_params"))
+        if params is None and raw_value in (None, ""):
+            return {}
+        if not isinstance(params, dict):
+            raise forms.ValidationError(_("Authorization parameters must be a JSON object."))
+        reserved = AUTHORIZATION_PARAM_RESERVED_KEYS.intersection(params)
+        if reserved:
+            keys = ", ".join(sorted(reserved))
+            raise forms.ValidationError(_("Reserved OAuth parameters cannot be overridden: %(keys)s.") % {"keys": keys})
+        return params
+
+    def _check_secret_reentered_on_url_change(self):
+        """The stored secret is sent to ``token_url``, so it can't be reused with a different endpoint."""
+        if not self.initial_raw or self.cleaned_data.get("client_secret") != self.initial.get("client_secret"):
+            return
+        if any(self.cleaned_data.get(name) != self.initial_raw.get(name) for name in ("authorize_url", "token_url")):
+            self.add_error(
+                "client_secret", _("Re-enter the client secret when changing the authorization or token URL.")
+            )
+
+    def clean(self):
+        self._check_secret_reentered_on_url_change()
+        cleaned = super().clean()
+        if cleaned.get("provider_preset") == "google" and not cleaned.get("authorization_params"):
+            cleaned["authorization_params"] = {"access_type": "offline", "prompt": "consent"}
+        return cleaned
+
+    def save(self, instance):
+        self.cleaned_data.pop("provider_preset", None)
+        params = self.cleaned_data.pop("authorization_params", None)
+        if params:
+            self.cleaned_data["authorization_params"] = params
+        return super().save(instance)
 
 
 class SlackMessagingConfigForm(ProviderTypeConfigForm):

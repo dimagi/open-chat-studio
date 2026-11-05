@@ -232,7 +232,7 @@ class TestTheResponseEnvelope:
 #: of nodes -- without them each node would read the table itself.
 #: One is ``deprecated_models``, a single statement for the whole graph that does not move with the
 #: number of nodes.
-QUERIES_UNDER_THE_LOCK = 29
+QUERIES_UNDER_THE_LOCK = 24
 
 
 #: How many statements a wire may run while it holds the pipeline row, on this test's own graph.

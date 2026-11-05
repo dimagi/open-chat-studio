@@ -40,6 +40,24 @@
                   onclick="confirmThenTrigger('archive-chatbot-button', 'Are you sure you wish to archive this chatbot?')">
             Archive
           </button>
+        {% elif perms.experiments.change_experiment %}
+          <button id="unarchive-chatbot-button"
+                  class="btn btn-primary btn-sm"
+                  hx-post="{% url 'chatbots:unarchive' request.team.slug experiment.id %}"
+                  hx-trigger="confirmed"
+                  onclick="confirmThenTrigger('unarchive-chatbot-button', 'Restore this chatbot and all of its versions? Scheduled messages were deleted when it was archived and cannot be restored.', 'unarchive-confirm-options')">
+            <i class="fa-solid fa-recycle"></i> Un-archive
+          </button>
+          <template id="unarchive-confirm-options">
+            <label class="mt-4 flex cursor-pointer items-center gap-2">
+              <input type="checkbox" name="restore_channels" class="checkbox checkbox-sm checkbox-primary">
+              <span class="font-semibold">Also reconnect this chatbot's channels</span>
+            </label>
+            <p class="mt-2 text-sm opacity-60">
+              Archiving released this chatbot's channel identifiers. Any that another chatbot has claimed since stay
+              disconnected, as do Slack channels, and you will be told which.
+            </p>
+          </template>
         {% endif %}
       </div>
     {% endif %}

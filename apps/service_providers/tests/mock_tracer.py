@@ -19,7 +19,7 @@ class MockTracer(Tracer):
         super().__init__("mock", {})
         # Don't set self.trace here to avoid shadowing the trace() method
         # Instead, we'll use _trace_data internally and add a property
-        self._trace_data = None
+        self._trace_data: dict[str, Any] | None = None
         self.spans: dict[UUID, dict] = {}
         self.tags = None
 

@@ -74,6 +74,35 @@ def test_tool_filtering(disabled_tools, provider, provider_model):
 
 
 @pytest.mark.django_db()
+def test_disabling_a_tool_keeps_built_in_tools(provider, provider_model):
+    built_in_tool = {"type": "web_search"}
+    node_data = llm_response_with_prompt_node(
+        str(provider.id),
+        str(provider_model.id),
+        tools=[AgentTools.ONE_OFF_REMINDER, AgentTools.UPDATE_PARTICIPANT_DATA],
+        prompt="Be useful: {current_datetime} {participant_data}",
+    )
+    pipeline = create_pipeline_model([start_node(), node_data, end_node()])
+    django_node = pipeline.node_set.get(flow_id=node_data["id"])
+    node = LLMResponseWithPrompt.model_validate(
+        {**node_data["params"], "node_id": node_data["id"], "django_node": django_node}
+    )
+    node._config = ensure_config({"configurable": {"disabled_tools": [AgentTools.ONE_OFF_REMINDER]}})
+    session = ExperimentSessionFactory.create()
+    node._repo = ORMRepository(session=session)
+    llm_service = Mock()
+    llm_service.attach_built_in_tools.return_value = [built_in_tool]
+
+    with mock.patch.object(LLMResponseWithPrompt, "get_llm_service", return_value=llm_service):
+        tools = _get_configured_tools(node, session, ToolCallbacks())
+
+    assert built_in_tool in tools
+    tool_names = {getattr(tool, "name", "") for tool in tools}
+    assert AgentTools.ONE_OFF_REMINDER not in tool_names
+    assert AgentTools.UPDATE_PARTICIPANT_DATA in tool_names
+
+
+@pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_model):
     service = build_fake_llm_service(

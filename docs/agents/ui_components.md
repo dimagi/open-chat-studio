@@ -26,3 +26,26 @@ When the confirmation needs input or more than a sentence of context, use a `<di
 ## Toast notifications
 
 Server side: use Django `messages`; `templates/web/components/messages.html` shows them as toasts. Client side: `alertify.notify(message, type, seconds)`.
+
+## Template components
+
+Shared markup is a [django-cotton](https://django-cotton.com/docs/components) component under `templates/cotton/`, used as an HTML tag:
+
+```html
+<c-ui.chip :url="session.get_absolute_url" :label="session.name" truncate />
+<c-ui.help>{% translate "Shown on hover." %}</c-ui.help>
+```
+
+- `ui/` holds presentation primitives (button, badge, chip, help, alert, modal, tabs, dropdown). `app/` holds domain pieces composed from them. The tag name is the path: `<c-ui.copy-chip>` is `templates/cotton/ui/copy_chip.html`.
+- Start every component with a usage example in a `{% comment %}` block and a `<c-vars>` line declaring every parameter, each with a default (`<c-vars url="" truncate="" />`). A parameter declared without a default is not set when the caller omits it, so a same-named variable in the calling template's context shows through. Anything not declared lands in `{{ attrs }}`.
+- Put `{{ attrs }}` on the root element so callers can pass `hx-*`, `x-*`, `id` and `aria-*` without the component listing them. When the root has classes of its own, write `{{ attrs|with_classes:"btn btn-sm" }}` instead (from `apps/web/templatetags/default_tags.py`): it prepends those classes to any `class` the caller passed and leaves declared parameters out. cotton's own `merge` filter prints declared parameters as attributes, so do not use it.
+- Write the component's own attributes before `{{ attrs }}` on the element, so the component's value wins when a caller repeats one.
+- `:name="expr"` passes a context variable or Python literal, `name="text"` passes a string, a bare `name` passes `True`. Inside a component tag a single colon always means a Django expression, so Alpine's `:bind` shorthand is written `::bind`; `@click` and `x-*` pass through unchanged. `:attrs="some_dict"` spreads a dict of attributes onto the component as if the caller had written each one.
+- A component with more than one content area takes named slots: the caller writes `<c-slot name="trigger">…</c-slot>` inside the tag and the component reads `{{ trigger }}`. Keep the default `{{ slot }}` for the main content.
+- Once a `ui/` primitive exists, use it instead of writing the daisyUI classes by hand.
+- Visible form fields rendered by `{% render_field %}` and `{% render_form_fields %}` (`apps/web/templatetags/form_tags.py`) go through `ui.field`, which lays out the label, help icon, control and errors; a hidden field renders as the bare input. Use `<c-ui.field>` directly for a hand-written field (`inline` puts a checkbox or toggle inside the label); `control_attrs` on a widget and the tag's keyword arguments land on the wrapper.
+- From Python (a table column, a model method), render a component with `apps.generics.components.render_component("ui.chip", chip=chip)`; a `slot` argument is escaped unless marked safe. In a `template_code` string, which never goes through the template loader, write the tag form: `{% cotton ui.session-id-chip :external_id="record.external_id" %}{% endcotton %}`.
+- `templates/generic/` keeps only what is not a component: page layouts that templates `extends` (`object_home.html`, `object_form.html`), the table action buttons rendered by `apps/generics/actions.py`, the referenced-objects modal rendered by `apps/generics/referenced_objects.py`, and `attrs.html`, which spreads an attribute dict onto a plain element.
+- `{% partialdef %}` is for repeating a fragment within one page and for HTMX fragment responses, not for shared components. A view that returns a single component uses `django_cotton.utils.render_component`.
+- Add every new component to the UI Gallery (`/admin/ui-gallery/`, `templates/admin/ui_gallery.html`) and check it in both themes.
+- Test a component by rendering a template string through the cotton compiler, as in `apps/web/tests/test_template_components.py`.

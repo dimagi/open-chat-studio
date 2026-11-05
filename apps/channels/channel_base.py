@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.stages.core import (
+    AbuseRulesStage,
     AttachmentHydrationStage,
     BlockedParticipantStage,
     BotInteractionStage,
@@ -27,6 +28,7 @@ from apps.channels.stages.core import (
 from apps.channels.stages.terminal import (
     ActivityTrackingStage,
     DeliveryErrorHandler,
+    ModerationResultStage,
     PersistenceStage,
     ResponseSendingStage,
     SendingErrorHandlerStage,
@@ -42,6 +44,7 @@ from apps.teams.utils import current_team
 
 if TYPE_CHECKING:
     from apps.channels.callbacks import ChannelCallbacks
+    from apps.channels.const import MESSAGE_TYPES
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.channels.sender import ChannelSender
@@ -60,7 +63,7 @@ class ChannelBase(ABC):
     # Class-level defaults (overridden by subclasses)
     voice_replies_supported: ClassVar[bool] = False
     supports_multimedia: ClassVar[bool] = False
-    supported_message_types: ClassVar[tuple[str, ...]] = ()
+    supported_message_types: ClassVar[tuple[MESSAGE_TYPES, ...]] = ()
     attachment_hydration_stage_class: ClassVar[type[AttachmentHydrationStage]] = AttachmentHydrationStage
 
     def __init__(
@@ -153,11 +156,13 @@ class ChannelBase(ABC):
                 # of still appears in the history and on the trace. Every pipeline with a
                 # QueryExtractionStage needs this stage, in this position.
                 ErrorGuardStage(),
+                AbuseRulesStage(),
                 ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
+                ModerationResultStage(),
                 ResponseSendingStage(should_voice_fallback_to_text=self._should_voice_fallback_to_text),
                 SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),

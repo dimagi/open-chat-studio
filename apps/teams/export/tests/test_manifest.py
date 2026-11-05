@@ -56,6 +56,7 @@ IGNORED_MODELS = frozenset(
         "oauth.oauth2grant",
         "oauth.oauth2idtoken",
         "oauth.oauth2refreshtoken",
+        "service_providers.moderationprovider",
         "site_admin.ocsconfiguration",
         "slack.slackbot",
         "slack.slackinstallation",
@@ -324,6 +325,13 @@ def test_the_allowlist_is_not_exported():
     """The allowlist is per-server operational state, and load_team imports the team before any
     experiment exists, so the importer could not translate its FKs."""
     assert "exportable_experiments" in manifest.EXCLUDE_REGISTRY["teams.team"]
+
+
+def test_moderation_settings_are_not_exported():
+    """The provider isn't synced, so auto-block would arrive on without the moderation it depends on."""
+    assert {"moderation_enabled", "moderation_provider", "auto_block_enabled"} <= set(
+        manifest.EXCLUDE_REGISTRY["teams.team"]
+    )
 
 
 @pytest.mark.django_db()

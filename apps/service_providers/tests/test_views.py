@@ -6,6 +6,7 @@ import httpx
 import pytest
 from django.urls import reverse
 from django.utils import timezone
+from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import ServiceWindowExpiredException
@@ -18,12 +19,15 @@ from apps.service_providers.models import (
     LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
+    ModerationProvider,
     TraceProvider,
     VoiceProvider,
     VoiceProviderType,
 )
 from apps.service_providers.utils import ServiceProvider
 from apps.service_providers.views import _format_context
+from apps.teams.backends import CHAT_VIEWER_GROUP
+from apps.teams.flags import Flags
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
@@ -31,9 +35,13 @@ from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
     MessagingProviderFactory,
+    ModerationProviderFactory,
     TraceProviderFactory,
     VoiceProviderFactory,
 )
+from apps.utils.tests.team_helpers import member_with_groups
+
+pytestmark = pytest.mark.usefixtures("abuse_detection_flag_on")
 
 
 def factory_for_model(model):
@@ -43,7 +51,15 @@ def factory_for_model(model):
         MessagingProvider: MessagingProviderFactory,
         AuthProvider: AuthProviderFactory,
         TraceProvider: TraceProviderFactory,
+        ModerationProvider: ModerationProviderFactory,
     }.get(model)
+
+
+@pytest.fixture()
+def abuse_detection_flag_on(db):
+    """Moderation providers are only reachable with the abuse detection flag on."""
+    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
+        yield
 
 
 @pytest.fixture()
@@ -1046,3 +1062,22 @@ class TestWhatsappTestFormAvailability:
             response = authed_client.post(_whatsapp_url("whatsapp_refresh", meta_provider))
 
         assert response.context["template_ok"] is True
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("method", [pytest.param("get", id="get"), pytest.param("post", id="post")])
+@pytest.mark.parametrize("is_edit", [pytest.param(False, id="create"), pytest.param(True, id="edit")])
+def test_provider_form_requires_provider_permission(client, team_with_users, method, is_edit):
+    """A team member without the provider's add/change permission cannot open or submit the form."""
+    user = member_with_groups(team=team_with_users, group_names=[CHAT_VIEWER_GROUP])
+    client.force_login(user)
+    if is_edit:
+        provider = LlmProviderFactory.create(team=team_with_users, name="Before")
+        url = reverse("service_providers:edit", args=[team_with_users.slug, "llm", provider.pk])
+    else:
+        url = reverse("service_providers:new", args=[team_with_users.slug, "llm", "openai"])
+
+    response = getattr(client, method)(url, {"name": "After", "openai_api_key": "sk-test"})
+
+    assert response.status_code == 403
+    assert not LlmProvider.objects.filter(team=team_with_users, name="After").exists()

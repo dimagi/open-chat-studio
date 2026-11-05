@@ -77,6 +77,16 @@ Mannered prose substitutes metaphor and flourish for direct statement. Instead o
 * When a change adds or alters a core user workflow, ask the user whether it should become a story in `docs/core_user_stories.md` with a covering Playwright test (see `docs/developer_guides/testing/playwright_tests.md`). Do not add one without their confirmation
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use `.github/pull_request_template.md` as the template for pull request descriptions
+* Write commit messages as semantic commits: `<type>: <summary>`, with the summary in present tense (`feat: add CSV export for sessions`). An optional scope names the affected area: `fix(pipelines): handle empty router output`. The types are:
+  * `feat`: a new feature for the user
+  * `fix`: a bug fix for the user
+  * `docs`: documentation only
+  * `style`: formatting with no change in behaviour (whitespace, ruff format)
+  * `refactor`: a code change that neither fixes a bug nor adds a feature
+  * `test`: adding or changing tests only
+  * `chore`: build, tooling, dependency or config changes that do not touch app code
+
+  When the summary line cannot explain the change on its own, add a body after a blank line that says why the change was made and anything a reviewer would not see from the diff. Do not mix change types in one commit; split them into separate commits instead
 * Keep a comment when it carries context the file cannot show — when a reader of this file alone could not work out why the code is the way it is. Default docstrings to a single line
 * A migration must run correctly against **both** the old code and the new code: the deploy applies migrations to completion while the previous release is still serving. Adding a `NOT NULL` column is the usual trap — Django's `AddField` drops the DB default afterwards, so the running release's inserts, which omit the column, fail. Add it `null=True`, or keep a DB-level default
 * Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)

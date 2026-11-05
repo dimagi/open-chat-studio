@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.db import connections
+from silk.collector import DataCollector
 
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.teams.models import Flag
@@ -12,8 +13,11 @@ from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 from apps.utils.pytest import restore_serialized_database
 from apps.utils.tests.fixtures import (  # noqa: F401 -- registers the shared fixtures
+    admin,
+    auto_block_session,
     connect_request_headers,
     keypair,
+    moderated_session,
     slack_service,
     team_with_resources,
 )
@@ -127,3 +131,12 @@ def _reset_team_context():
         yield
     finally:
         unset_current_team()
+
+
+@pytest.fixture(autouse=True)
+def _clear_silk_request():
+    """Clears the request silk keeps per thread after profiling one, which makes it EXPLAIN every later query."""
+    try:
+        yield
+    finally:
+        DataCollector().clear()

@@ -1,0 +1,46 @@
+{% comment %}
+One tab inside ui.tabs. The slot, when given, is the tab's panel, shown while the tab is active.
+
+Radio tab (`name`): the browser switches panels, no script needed. `active` checks it; hx-* attributes with
+`hx-trigger="change"` load the panel on switch. The radio stays in the focus order, so arrow keys switch tabs.
+  <c-ui.tab name="participant_tabs" label="{% translate 'Sessions' %}" :count="total" active
+            hx-get="{% url 'participants:sessions-panel' request.team.slug participant.id %}" hx-target="#sessions-panel" hx-trigger="change">
+    <div id="sessions-panel">…</div>
+  </c-ui.tab>
+
+Button tab, switched by Alpine; the panels live outside the tab list with x-show:
+  <c-ui.tab label="{% translate 'Messages' %}" ::class="tab === 'messages' && 'tab-active'" ::aria-selected="tab === 'messages'" @click="tab = 'messages'" />
+
+Link tab (`href`): a page per tab; `active` marks the current page.
+  <c-ui.tab href="{% url 'chatbots:single_chatbot_home' request.team.slug chatbot.id %}" label="{% translate 'Overview' %}" active />
+
+Params:
+  label: the tab text.
+  count: a number shown muted after the label. Empty for none.
+  active: boolean; the tab that is selected when the page loads.
+  name: radio group name; renders a radio tab.
+  href: renders a link tab.
+  panel_class: extra classes for the panel, such as "pt-3".
+  class: extra classes, merged with the tab's own.
+Anything else (hx-*, x-*, @click, id) is passed through to the tab element.
+{% endcomment %}
+<c-vars label="" count="" active="" name="" href="" panel_class="" />
+{% with classes=active|yesno:"tab tab-active,tab" %}
+  {% if name %}
+    <label role="tab" {{ attrs|with_classes:"tab" }}>
+      <input type="radio" name="{{ name }}" class="sr-only" {% if active %}checked{% endif %} />
+      {{ label }}{% if count != "" %}<span class="text-base-content/50 ml-1">{{ count }}</span>{% endif %}
+    </label>
+  {% elif href %}
+    <a role="tab" href="{{ href }}" {% if active %}aria-current="page"{% endif %} {{ attrs|with_classes:classes }}>
+      {{ label }}{% if count != "" %}<span class="text-base-content/50 ml-1">{{ count }}</span>{% endif %}
+    </a>
+  {% else %}
+    <button type="button" role="tab" {% if active %}aria-selected="true"{% endif %} {{ attrs|with_classes:classes }}>
+      {{ label }}{% if count != "" %}<span class="text-base-content/50 ml-1">{{ count }}</span>{% endif %}
+    </button>
+  {% endif %}
+  {% if slot.strip %}
+    <div role="tabpanel" class="tab-content{% if panel_class %} {{ panel_class }}{% endif %}">{{ slot }}</div>
+  {% endif %}
+{% endwith %}

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from apps.channels.const import MESSAGE_TYPES
     from apps.files.models import File
 
 
@@ -48,7 +49,7 @@ class ChannelCapabilities:
     supports_files: bool = False
     supports_conversational_consent: bool = True
     supports_static_triggers: bool = True
-    supported_message_types: tuple[str, ...] = field(default_factory=tuple)
+    supported_message_types: tuple[MESSAGE_TYPES, ...] = field(default_factory=tuple)
     # File-level checking is delegated to a callable so that channel-specific
     # size/mime rules don't leak into the capabilities dataclass.
     can_send_file: Callable[[File], bool] = _default_can_send_file

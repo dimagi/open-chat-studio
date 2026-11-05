@@ -54,6 +54,21 @@ class TestNullObject:
         assert unresolvable.input_handles() == ["input"]
         assert unresolvable.react_flow_type == "pipelineNode"
         assert unresolvable.render_order == 1
+        assert unresolvable.params_to_store({"name": "odd"}) == {"name": "odd"}
+
+
+class TestParamsToStore:
+    @pytest.mark.parametrize(
+        ("node_type", "params", "expected"),
+        [
+            pytest.param("RouterNode", {"name": "r"}, {"name": "r", "prompt_mode": "custom"}, id="router-missing-mode"),
+            pytest.param("RouterNode", {"prompt_mode": None}, {"prompt_mode": "custom"}, id="router-null-mode"),
+            pytest.param("RouterNode", {"prompt_mode": "standard"}, {"prompt_mode": "standard"}, id="router-mode-kept"),
+            pytest.param("RenderTemplate", {"name": "t"}, {"name": "t"}, id="other-type-unchanged"),
+        ],
+    )
+    def test_params_to_store(self, node_type, params, expected):
+        assert NodeType(node_type).params_to_store(params) == expected
 
 
 class TestDeclaredParams:

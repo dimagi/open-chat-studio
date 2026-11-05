@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import Subquery, prefetch_related_objects
+from django.db.models import Prefetch, Subquery, prefetch_related_objects
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -30,6 +30,7 @@ from apps.pipelines.nodes.node_metadata import (
     get_node_parameter_values,
     get_node_schemas,
 )
+from apps.pipelines.nodes.router_prompts import router_prompt_templates_data
 from apps.pipelines.patching import apply_pipeline_patch
 from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
@@ -182,6 +183,7 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
                 include_versions=pipeline.is_a_version,
             ),
             "default_values": get_node_default_values(self.request.team),
+            "router_prompt_templates": router_prompt_templates_data(),
             "allow_edit_name": True,
             "flags_enabled": [
                 name
@@ -239,8 +241,16 @@ def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "PATCH":
         return _handle_pipeline_patch(request, pk, team_slug)
 
-    # flow_data below rebuilds every node from its row, reading the collection_indexes M2M.
-    pipeline = get_object_or_404(Pipeline.objects.prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team)
+    # get_all(): the builder of an archived chatbot still shows its pipeline.
+    pipeline = get_object_or_404(Pipeline.objects.get_all(), pk=pk, team=request.team)
+    # flow_data below rebuilds every node from its row, reading the collection_indexes M2M. An
+    # archived pipeline's graph is its archived rows, which the related manager hides.
+    if pipeline.is_archived:
+        nodes = pipeline.nodes_archived_with_pipeline()
+        nodes = nodes.prefetch_related("collection_indexes", "custom_action_operations")
+        prefetch_related_objects([pipeline], Prefetch("node_set", queryset=nodes))
+    else:
+        prefetch_related_objects([pipeline], *NODE_RESOURCE_PREFETCHES)
 
     return JsonResponse(
         {
@@ -347,9 +357,10 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
 @csrf_exempt
 @permission_required("pipelines.change_pipeline")
 def simple_pipeline_message(request, team_slug: str, pipeline_pk: int):
+    pipeline = get_object_or_404(Pipeline, id=pipeline_pk, team=request.team)
     message = json.loads(request.body).get("message")
     result = get_response_for_pipeline_test_message.delay(
-        pipeline_id=pipeline_pk, message_text=message, user_id=request.user.id
+        pipeline_id=pipeline.id, message_text=message, user_id=request.user.id
     )
     return JsonResponse({"task_id": result.task_id})
 

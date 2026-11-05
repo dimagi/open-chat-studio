@@ -29,6 +29,7 @@ from apps.chatbots.views import public_link_page
 from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
 from apps.service_providers import mock_llm
+from apps.service_providers.oauth_views import oauth_callback
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
 from apps.web.sitemaps import StaticViewSitemap
@@ -57,6 +58,7 @@ team_urlpatterns = [
     path("files/", include("apps.files.urls")),
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
+    path("moderation/", include("apps.moderation.urls")),
     path("mcp_integrations/", include("apps.mcp_integrations.urls")),
     path("notifications/channels/", include("apps.ocs_notifications.channel_urls")),
     path("oauth/applications/", include(oauth_team_urls)),
@@ -87,6 +89,7 @@ urlpatterns = [
         {"sitemaps": sitemaps},
         name="django.contrib.sitemaps.views.sitemap",
     ),
+    path("service_providers/auth/oauth/callback/", oauth_callback, name="service_providers_oauth_callback"),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
     path("c/<slug:token>/", public_link_page, name="public_link"),
     path("notifications/", include("apps.ocs_notifications.urls")),

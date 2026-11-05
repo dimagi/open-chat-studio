@@ -12,6 +12,9 @@
         <a href="{% url 'ocs_admin:team_metadata' %}" class="btn btn-sm btn-primary">
           {% translate "Team Metadata" %}
         </a>
+        <a href="{% url 'ocs_admin:ui_gallery' %}" class="btn btn-sm btn-primary">
+          {% translate "UI Gallery" %}
+        </a>
         {% if request.user.is_superuser %}
           <a href="{% url 'ocs_admin:configuration' %}" class="btn btn-sm btn-primary">
             {% translate "Configuration" %}

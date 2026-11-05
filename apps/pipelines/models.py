@@ -29,10 +29,10 @@ from apps.pipelines.flow import (
     FlowNode,
     FlowNodeData,
     FlowWithoutNodes,
-    node_position_fields,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
+from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -174,25 +174,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        for flow_id, node in node_data.items():
-            if flow_id in membership_only:
-                continue
-            if node.id != flow_id:
-                # The key is the flow_id the content is written under, so a mismatch would
-                # silently store this node's content on a different row.
-                raise ValueError(f"node_data key {flow_id!r} does not match node id {node.id!r}")
-            content = node.data
-            created_node, _ = Node.objects.update_or_create(
-                pipeline=self,
-                flow_id=flow_id,
-                defaults={
-                    "type": content.type,
-                    "params": content.params,
-                    "label": content.label,
-                    **node_position_fields(node.position),
-                },
-            )
-            created_node.update_from_params()
+        # Batched: one locked load and one bulk_update for all content nodes (see node_writes).
+        write_content_nodes(self, content_nodes_from_data(node_data, membership_only))
 
     def clear_node_caches(self) -> None:
         """Re-read the ``Node`` rows and drop the ``flow_data`` built from the stale ones.
@@ -411,7 +394,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         super().archive()
         for node in self.node_set.all():
-            node.archive()
+            node.archive(with_pipeline=True)
 
         if self.is_working_version:
             for version in self.versions.filter(is_archived=False):
@@ -421,18 +404,25 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def unarchive(self):
-        """Reverse of archive(): this pipeline and its archived nodes.
+        """Reverse of archive(): this pipeline and the nodes archived with it.
 
-        For version pipelines only — those are archived as a unit with their experiment version
-        (see ``Experiment.archive``), so every archived node belongs to that unit. The working
-        pipeline is never archived that way: its archived nodes are the ones the user deleted from
-        the canvas (``update_nodes_from_data`` keeps a versioned node as an archived row), and its
-        archived versions belong to experiment versions archived in their own right. Neither may
-        be restored wholesale.
+        A working pipeline also holds archived rows for nodes the user removed from the canvas
+        (``update_nodes_from_data`` keeps a versioned node as an archived row), so only the nodes
+        ``archive()`` marked come back. A version pipeline is archived as a unit, so every archived
+        node belongs to that unit, including rows archived before the mark existed. Archived
+        versions are not restored here: each belongs to an experiment version that is restored in
+        its own right (see ``Experiment.unarchive``).
         """
         super().unarchive()
-        for node in self.node_set.get_all().filter(is_archived=True):
+        for node in self.nodes_archived_with_pipeline():
             node.unarchive()
+
+    def nodes_archived_with_pipeline(self) -> models.QuerySet:
+        """The archived node rows that make up this pipeline's graph (see ``unarchive``)."""
+        nodes = self.node_set.get_all().filter(is_archived=True)
+        if self.is_working_version:
+            nodes = nodes.filter(archived_with_pipeline=True)
+        return nodes
 
     def get_node_param_values(self, param_name: str) -> list:
         """Every value stored for ``param_name``, across the nodes whose type declares it.
@@ -504,6 +494,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         related_name="versions",
     )
     is_archived = models.BooleanField(default=False)
+    # Set when the pipeline's archive() archived this row, as opposed to the user removing the
+    # node from the canvas; Pipeline.unarchive() restores only the former.
+    archived_with_pipeline = models.BooleanField(default=False, db_default=False)
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
     llm_provider = models.ForeignKey(
         "service_providers.LlmProvider",
@@ -729,8 +722,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         M2M below and the ``backfill_node_fks`` command. Versions may point at a since-deleted
         resource, but they're never re-synced. Only saves when a scalar FK changed.
         """
-        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
-
         params = self.params or {}
         update_fields = []
         for field_name in self.resource_fk_fields():
@@ -744,6 +735,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 update_fields.append(f"{field_name}_id")
         if update_fields:
             self.save(update_fields=update_fields)
+        self._sync_collection_indexes(params)
+
+    def _sync_collection_indexes(self, params: dict):
+        """Mirror ``params["collection_index_ids"]`` onto the ``collection_indexes`` M2M."""
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
 
         raw_index_ids = params.get("collection_index_ids") or []
         if not isinstance(raw_index_ids, list | tuple | set):
@@ -751,20 +747,35 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
         # than blowing up the id__in query.
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
+        # A caller that prefetched ``collection_indexes`` lets the no-op case skip the write without
+        # a read; without the prefetch, set() diffs against the rows itself.
+        prefetched = getattr(self, "_prefetched_objects_cache", {}).get("collection_indexes")
+        if prefetched is not None and set(index_ids) == {index.id for index in prefetched}:
+            return
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
-    def archive(self) -> bool:
+    def archive(self, *, with_pipeline: bool = False) -> bool:
         """
         Archiving a node also archives the versioned resources its params reference. The node's
         versions will be archived when the pipeline they belong to is archived.
         """
-        super().archive()
+        self.is_archived = True
+        self.archived_with_pipeline = with_pipeline
+        self.save(update_fields=["is_archived", "archived_with_pipeline"])
         if not self.is_a_version:
             # We don't want to archive related objects for working versions, since they can be used in other pipelines
             return True
 
         self._archive_related_params()
         return True
+
+    def unarchive(self):
+        """Reverse of archive(), including the versioned resources a node version archived."""
+        self.is_archived = False
+        self.archived_with_pipeline = False
+        self.save(update_fields=["is_archived", "archived_with_pipeline"])
+        if self.is_a_version:
+            self._unarchive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
         node_name = self.display_name
@@ -816,6 +827,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         for spec in self.node_type.versioned_param_specs:
             spec.archive_referenced_record(self.params)
+
+    def _unarchive_related_params(self):
+        for spec in self.node_type.versioned_param_specs:
+            spec.unarchive_referenced_record(self.params)
 
 
 class PipelineEventInputs(models.TextChoices):

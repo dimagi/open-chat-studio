@@ -11,7 +11,7 @@
       {% blocktranslate asvar cost_tracking_info %}
         Costs are estimated from recorded token usage times the configured price for each model. "Exact" figures use token counts reported by the provider; "Estimated" figures fall back to token estimates when usage data is missing. Pricing can be incomplete or out of date, so treat these numbers as a guide to relative spend, not an authoritative bill.
       {% endblocktranslate %}
-      {% include "generic/help.html" with help_content=cost_tracking_info %}
+      <c-ui.help>{{ cost_tracking_info|safe }}</c-ui.help>
     </div>
 
     {% if cost_summary.total_cost or cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}

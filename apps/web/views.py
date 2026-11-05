@@ -14,6 +14,7 @@ from health_check.views import HealthCheckView
 from apps.teams.decorators import TeamAccessDenied, check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
 from apps.teams.roles import is_member
+from apps.utils.redirects import safe_redirect_url
 from apps.web.elevation import (
     TOO_MANY_ELEVATIONS_MESSAGE,
     Elevation,
@@ -22,7 +23,6 @@ from apps.web.elevation import (
     InvalidGrant,
     acquire_redirect,
     release,
-    safe_redirect_url,
     start_elevation,
 )
 from apps.web.health_checks import CHECK_SUBSETS
@@ -41,7 +41,7 @@ class HealthCheck(HealthCheckView):
 
     async def get(self, request, *args, subset=None, **kwargs):
         tokens = settings.HEALTH_CHECK_TOKENS
-        if tokens and request.GET.get("token") not in tokens:
+        if tokens and self._request_token(request) not in tokens:
             raise Http404
         if subset is not None:
             try:
@@ -49,6 +49,14 @@ class HealthCheck(HealthCheckView):
             except KeyError:
                 raise Http404 from None
         return await super().get(request, *args, **kwargs)
+
+    @staticmethod
+    def _request_token(request):
+        scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+        token = token.strip()
+        if scheme.lower() == "bearer" and token:
+            return token
+        return request.GET.get("token")
 
 
 @login_required

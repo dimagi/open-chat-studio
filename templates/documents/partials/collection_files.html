@@ -28,7 +28,7 @@
                 {% include "documents/collection_file_status.html" %}
               {% endif %}
               <span
-                  class="text-sm font-medium">{% include "generic/chip.html" with chip=collection_file.file.as_chip %}</span>
+                  class="text-sm font-medium"><c-ui.chip :chip="collection_file.file.as_chip" /></span>
               <div class="text-xs badge badge-ghost">{{ collection_file.file_size_mb }} MB</div>
             </div>
             {% if collection.is_index %}

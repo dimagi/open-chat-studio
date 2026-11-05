@@ -44,12 +44,6 @@ class ConsentFormResourceSerializer(RejectsUnwritableKeys, serializers.ModelSeri
         return ConsentForm.objects.create(team=self.context["request"].team, **validated_data)
 
 
-class ResourceArchivedSerializer(serializers.Serializer):
-    """The archive response."""
-
-    archived = serializers.BooleanField(help_text="Always true; the failure cases are status codes.")
-
-
 class ReferencingChatbotSerializer(serializers.Serializer):
     """A chatbot version whose pipeline uses the source material."""
 

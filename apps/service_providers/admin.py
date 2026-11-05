@@ -10,6 +10,7 @@ from .models import (
     LlmProvider,
     LlmProviderModel,
     MessagingProvider,
+    ModerationProvider,
     TraceProvider,
     VoiceProvider,
 )
@@ -52,6 +53,12 @@ class MessagingProviderAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
 
 @admin.register(TraceProvider)
 class TraceProviderAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
+    list_display = ("name", "team", "type")
+    list_filter = ("team", "type")
+
+
+@admin.register(ModerationProvider)
+class ModerationProviderAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("name", "team", "type")
     list_filter = ("team", "type")
 

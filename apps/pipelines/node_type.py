@@ -202,6 +202,11 @@ class NodeType:
         """The params of this type that reference database records (``apps.pipelines.versioning``)."""
         return NODE_PARAM_SPECS.get(self.type, ())
 
+    def params_to_store(self, params: dict) -> dict:
+        """The params to save for a node of this type, given the params a client sent."""
+        node_class = self.node_class
+        return node_class.params_to_store(params) if node_class is not None else params
+
     def input_handles(self) -> list[str]:
         """The input handles a node of this type accepts an edge on.
 

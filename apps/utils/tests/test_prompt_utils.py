@@ -27,6 +27,16 @@ class TestValidatePromptVariables:
         with pytest.raises(ValidationError, match="Prompt contains unknown variables: unknown_var"):
             validate_prompt_variables(context, prompt_key="prompt", known_vars=known_vars)
 
+    def test_unknown_variable_error_lists_the_known_variables(self):
+        context = {"prompt": "Classify {input}"}
+        with pytest.raises(ValidationError) as exc_info:
+            validate_prompt_variables(context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
+
+        assert exc_info.value.message_dict["prompt"] == [
+            "Prompt contains unknown variables: input. Available here: "
+            "participant_data, routes, routes_list, session_state, temp_state."
+        ]
+
     def test_missing_variable(self):
         for prompt_var in PROMPT_VARS_REQUIRING_RESOURCES:
             context = {prompt_var: 1, "prompt": "Test prompt"}

@@ -24,7 +24,7 @@ from apps.cost_tracking.services.reporting import CostFilters, costs_by_particip
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.generics.breadcrumbs import Crumb
-from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt
+from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.participants.forms import (
     BlockParticipantForm,
@@ -36,6 +36,7 @@ from apps.participants.forms import (
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.redirects import safe_redirect_url
 
 from ..events.models import ScheduledMessage
 from ..events.tables import SchedulesTable
@@ -647,16 +648,14 @@ def block(request, team_slug: str, participant_id: int):
 @permission_required("experiments.change_participant")
 @require_POST
 def unblock(request, team_slug: str, participant_id: int):
-    """Remove the participant from the team's denylist."""
+    """Unblock the participant and reset its strikes, then go to `next` if given, otherwise the participant page."""
     participant = get_object_or_404(Participant, id=participant_id, team=request.team)
-    denial = DeniedParticipant.objects.filter(team=request.team, participant=participant).first()
-    if denial:
-        denial.delete()
+    if unblock_participant(participant):
         messages.success(request, format_html("{} is unblocked", participant))
     else:
         messages.info(request, format_html("{} was not blocked", participant))
-    url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
-    return HttpResponseClientRedirect(url)
+    participant_url = reverse("participants:single-participant-home", args=[team_slug, participant_id])
+    return HttpResponseClientRedirect(safe_redirect_url(request.GET.get("next", ""), fallback=participant_url))
 
 
 def _render_trigger_bot_form(request, participant_id: int, form: TriggerBotForm):

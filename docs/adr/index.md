@@ -92,3 +92,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0068](0068-field-order-is-presentation-outside-the-locked-schema.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Field order is presentation, stored outside the locked schema |
 | [0069](0069-status-messages-are-generated-in-the-background.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Status messages are generated in the background |
 | [0070](0070-client-credentials-applications-may-reach-all-chatbots.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Client-credentials applications may reach all chatbots |
+| [0071](0071-build-shared-template-components-with-django-cotton.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Build shared template components with django-cotton |

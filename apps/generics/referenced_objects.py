@@ -10,6 +10,7 @@ def render_referenced_objects_modal(
     experiments_with_pipeline_nodes: list | None = None,
     static_trigger_experiments: list | None = None,
     evaluators: list | None = None,
+    team_settings: list[str] | None = None,
 ) -> HttpResponse:
     """Render a modal listing the objects still referencing ``object_name``.
 
@@ -25,6 +26,7 @@ def render_referenced_objects_modal(
             "experiments_with_pipeline_nodes": experiments_with_pipeline_nodes or [],
             "static_trigger_experiments": static_trigger_experiments or [],
             "evaluators": evaluators or [],
+            "team_settings": team_settings or [],
         },
     )
     response = HttpResponse(html)

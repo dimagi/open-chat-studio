@@ -1,7 +1,8 @@
 import pytest
 from waffle.testutils import override_flag
 
-from apps.moderation.enforcement import block_participant, is_exempt, is_participant_blocked
+from apps.experiments.models import Participant
+from apps.moderation.enforcement import block_participant, is_exempt, is_participant_blocked, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ParticipantFactory
@@ -66,6 +67,25 @@ class TestBlockParticipant:
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "blocked",
+    [
+        pytest.param(True, id="blocked"),
+        pytest.param(False, id="not_blocked"),
+    ],
+)
+def test_unblock_participant(blocked):
+    participant = ParticipantFactory.create(strikes=2)
+    if blocked:
+        DeniedParticipantFactory.create(team=participant.team, participant=participant)
+
+    assert unblock_participant(participant) is blocked
+
+    assert not DeniedParticipant.objects.filter(participant=participant).exists()
+    assert Participant.objects.get(id=participant.id).strikes == 0
+
+
+@pytest.mark.django_db()
 class TestIsExempt:
     @pytest.mark.parametrize(
         ("remove_membership", "expected"),
@@ -81,6 +101,14 @@ class TestIsExempt:
             membership.delete()
 
         assert is_exempt(participant=participant, team=membership.team) is expected
+
+    def test_uses_one_query(self, django_assert_num_queries):
+        membership = MembershipFactory.create()
+        participant = ParticipantFactory.create(team=membership.team, user=membership.user)
+        participant = Participant.objects.get(id=participant.id)
+
+        with django_assert_num_queries(1):
+            assert is_exempt(participant=participant, team=membership.team) is True
 
     def test_user_who_is_not_a_member_is_not_exempt(self):
         participant = ParticipantFactory.create(user=UserFactory.create())
