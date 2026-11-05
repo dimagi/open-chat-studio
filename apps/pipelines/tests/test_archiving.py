@@ -6,6 +6,7 @@ from apps.events.models import EventActionType
 from apps.experiments.models import SourceMaterial
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.nodes import LLMResponseWithPrompt
+from apps.pipelines.repository import ORMRepository
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
@@ -75,6 +76,28 @@ class TestUnarchivePipeline:
         version.unarchive()
 
         assert version.node_set.count() == node_count
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "archive_working", [pytest.param(True, id="whole-chatbot"), pytest.param(False, id="one-version")]
+)
+def test_unarchive_restores_the_source_material_a_published_version_uses(archive_working):
+    source_material = SourceMaterialFactory.create()
+    chatbot = ExperimentFactory.create(team=source_material.team)
+    node_type = LLMResponseWithPrompt.__name__
+    params = {"source_material_id": str(source_material.id)}
+    NodeFactory.create(type=node_type, pipeline=chatbot.pipeline, params=params)
+    version = chatbot.create_new_version()
+    material_id = int(version.pipeline.node_set.get(type=node_type).params["source_material_id"])
+    assert material_id != source_material.id
+    archived = chatbot if archive_working else version
+    archived.archive()
+    assert SourceMaterial.objects.get_all().get(id=material_id).is_archived is True
+
+    archived.unarchive()
+
+    assert ORMRepository().get_source_material(material_id).id == material_id
 
 
 @pytest.mark.django_db()

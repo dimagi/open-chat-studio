@@ -779,9 +779,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return True
 
     def unarchive(self):
+        """Reverse of archive(), including the versioned resources a node version archived."""
         self.is_archived = False
         self.archived_with_pipeline = False
         self.save(update_fields=["is_archived", "archived_with_pipeline"])
+        if self.is_a_version:
+            self._unarchive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
         node_name = self.display_name
@@ -833,6 +836,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         for spec in self.node_type.versioned_param_specs:
             spec.archive_referenced_record(self.params)
+
+    def _unarchive_related_params(self):
+        for spec in self.node_type.versioned_param_specs:
+            spec.unarchive_referenced_record(self.params)
 
 
 class PipelineEventInputs(models.TextChoices):
