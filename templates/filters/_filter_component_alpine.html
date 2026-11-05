@@ -36,7 +36,7 @@
 
 
         this._participantIdentifierUrl = "{% if experiment.id %}{% url 'participants:participant_identifier' team.slug experiment.id %}{% else %}{% url 'participants:all_participant_identifiers' team.slug %}{% endif %}";
-        this._optionsSearchTimers = {};
+        this._optionsSearchTimers = new WeakMap();
         this.loadFiltersFromQueryString(window.location.search);
 
         // Load starred filters on initialization
@@ -95,7 +95,6 @@
       updateOperatorsByColumn(index) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
-        clearTimeout(this._optionsSearchTimers[index]);
         if (column && this.filterData.columns[column]) {
           filter.availableOperators = this.filterData.columns[column].operators;
           filter.operator = filter.availableOperators[0] || '';
@@ -119,9 +118,6 @@
       },
 
       removeFilter(index) {
-        // Pending searches are keyed by row index, which shifts once a row is removed
-        Object.values(this._optionsSearchTimers).forEach(clearTimeout);
-        this._optionsSearchTimers = {};
         this.filterData.filters.splice(index, 1);
         if (this.filterData.filters.length === 0) {
           this.addFilter();
@@ -228,11 +224,14 @@
         searchInput.closest('.overflow-y-auto')?.scrollTo({top: 0});
 
         if (this.serverOptionFields[column]) {
-          clearTimeout(this._optionsSearchTimers[index]);
+          clearTimeout(this._optionsSearchTimers.get(filter));
           const query = (filter.searchQuery || '').trim();
-          this._optionsSearchTimers[index] = setTimeout(() => {
-            this.searchServerOptions(index, query);
-          }, 300);
+          this._optionsSearchTimers.set(filter, setTimeout(() => {
+            // Rows can be removed, reordered or given a new column while the search is pending
+            const currentIndex = this.filterData.filters.indexOf(filter);
+            if (currentIndex === -1 || filter.column !== column) return;
+            this.searchServerOptions(currentIndex, query);
+          }, 300));
           return;
         }
 
