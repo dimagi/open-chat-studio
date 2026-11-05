@@ -747,9 +747,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
         # than blowing up the id__in query.
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
-        # Skip the write when the linked rows already match (read off the prefetch cache when the
-        # caller prefetched ``collection_indexes``); a set() would only diff to a no-op anyway.
-        if set(index_ids) == {index.id for index in self.collection_indexes.all()}:
+        # A caller that prefetched ``collection_indexes`` lets the no-op case skip the write without
+        # a read; without the prefetch, set() diffs against the rows itself.
+        prefetched = getattr(self, "_prefetched_objects_cache", {}).get("collection_indexes")
+        if prefetched is not None and set(index_ids) == {index.id for index in prefetched}:
             return
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
