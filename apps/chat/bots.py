@@ -18,7 +18,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.pipelines.repository import ORMRepository
-from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
+from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from apps.channels.datamodels import Attachment
+    from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 
 def create_conversation(
@@ -373,11 +374,11 @@ class EventBot:
         self.trace_service = trace_service
 
     def get_user_message(self, event_prompt: str) -> str:
-        provider = self.llm_provider
-        if not provider:
+        provider_and_model = self.get_provider_and_model()
+        if not provider_and_model:
             raise Exception("No LLM provider found")
 
-        model = get_default_model(provider.type)
+        provider, model = provider_and_model
         params = get_model_parameters(model.name, temperature=0.7)
 
         service = provider.get_llm_service()
@@ -414,9 +415,18 @@ class EventBot:
                     self.trace_service.set_output_message_id(ai_message.id)
         return message
 
-    @property
-    def llm_provider(self):
-        return self.experiment.team.llmprovider_set.first()
+    def get_provider_and_model(self) -> tuple[LlmProvider, LlmProviderModel] | None:
+        """The team's first provider that has a chat model, trying verified providers first and
+        providers whose credentials failed a check last."""
+        rank = {"verified": 0, "failed": 2}
+        providers = sorted(
+            self.experiment.team.llmprovider_set.all(),
+            key=lambda p: rank.get(p.verification_state, 1),
+        )
+        for provider in providers:
+            if model := provider.get_default_chat_model():
+                return provider, model
+        return None
 
     @property
     def system_prompt(self):
