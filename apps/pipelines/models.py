@@ -29,10 +29,10 @@ from apps.pipelines.flow import (
     FlowNode,
     FlowNodeData,
     FlowWithoutNodes,
-    node_position_fields,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
+from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -174,25 +174,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        for flow_id, node in node_data.items():
-            if flow_id in membership_only:
-                continue
-            if node.id != flow_id:
-                # The key is the flow_id the content is written under, so a mismatch would
-                # silently store this node's content on a different row.
-                raise ValueError(f"node_data key {flow_id!r} does not match node id {node.id!r}")
-            content = node.data
-            created_node, _ = Node.objects.update_or_create(
-                pipeline=self,
-                flow_id=flow_id,
-                defaults={
-                    "type": content.type,
-                    "params": content.node_type.params_to_store(content.params),
-                    "label": content.label,
-                    **node_position_fields(node.position),
-                },
-            )
-            created_node.update_from_params()
+        # Batched: one locked load and one bulk_update for all content nodes (see node_writes).
+        write_content_nodes(self, content_nodes_from_data(node_data, membership_only))
 
     def clear_node_caches(self) -> None:
         """Re-read the ``Node`` rows and drop the ``flow_data`` built from the stale ones.
@@ -739,8 +722,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         M2M below and the ``backfill_node_fks`` command. Versions may point at a since-deleted
         resource, but they're never re-synced. Only saves when a scalar FK changed.
         """
-        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
-
         params = self.params or {}
         update_fields = []
         for field_name in self.resource_fk_fields():
@@ -754,6 +735,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 update_fields.append(f"{field_name}_id")
         if update_fields:
             self.save(update_fields=update_fields)
+        self._sync_collection_indexes(params)
+
+    def _sync_collection_indexes(self, params: dict):
+        """Mirror ``params["collection_index_ids"]`` onto the ``collection_indexes`` M2M."""
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
 
         raw_index_ids = params.get("collection_index_ids") or []
         if not isinstance(raw_index_ids, list | tuple | set):
@@ -761,6 +747,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
         # than blowing up the id__in query.
         index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
+        # A caller that prefetched ``collection_indexes`` lets the no-op case skip the write without
+        # a read; without the prefetch, set() diffs against the rows itself.
+        prefetched = getattr(self, "_prefetched_objects_cache", {}).get("collection_indexes")
+        if prefetched is not None and set(index_ids) == {index.id for index in prefetched}:
+            return
         self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
     def archive(self, *, with_pipeline: bool = False) -> bool:
