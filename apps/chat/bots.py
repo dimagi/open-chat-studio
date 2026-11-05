@@ -416,7 +416,15 @@ class EventBot:
 
     @property
     def llm_provider(self):
-        return self.experiment.team.llmprovider_set.first()
+        """The team's first verified provider, else its first one whose credentials have not failed a check."""
+        providers = list(self.experiment.team.llmprovider_set.all())
+        for provider in providers:
+            if provider.verification_state == "verified":
+                return provider
+        for provider in providers:
+            if provider.verification_state != "failed":
+                return provider
+        return providers[0] if providers else None
 
     @property
     def system_prompt(self):

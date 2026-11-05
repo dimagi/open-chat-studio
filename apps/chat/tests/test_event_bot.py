@@ -90,3 +90,36 @@ def test_event_bot_history_skips_a_marked_human_message():
 
     assert "fine" in history
     assert "bad" not in history
+
+
+FAILED = {"verified_credentials": False, "verification_error": "NotFound: 404"}
+VERIFIED = {"verified_credentials": True}
+UNCHECKED = {}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("states", "expected_index"),
+    [
+        pytest.param([FAILED, UNCHECKED, VERIFIED], 2, id="verified-over-unchecked-and-failed"),
+        pytest.param([FAILED, UNCHECKED, UNCHECKED], 1, id="first-unchecked-when-none-verified"),
+        pytest.param([FAILED, FAILED], 0, id="first-provider-when-all-failed"),
+        pytest.param([VERIFIED, VERIFIED], 0, id="first-verified-when-several"),
+    ],
+)
+def test_llm_provider_prefers_verified_then_unfailed(states, expected_index):
+    session = ExperimentSessionFactory.create()
+    team = session.experiment.team
+    providers = [
+        LlmProviderFactory.create(team=team, name=f"provider {i}", extra_data=extra_data)
+        for i, extra_data in enumerate(states)
+    ]
+    bot = EventBot(session, session.experiment, TraceInfo(name="test"))
+
+    assert bot.llm_provider == providers[expected_index]
+
+
+@pytest.mark.django_db()
+def test_llm_provider_is_none_without_providers():
+    session = ExperimentSessionFactory.create()
+    assert EventBot(session, session.experiment, TraceInfo(name="test")).llm_provider is None
