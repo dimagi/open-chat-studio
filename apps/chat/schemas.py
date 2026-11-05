@@ -1,10 +1,14 @@
-from typing import Literal
-
+from django.db import models
+from django.utils.translation import gettext_lazy as _
 from pydantic import BaseModel
 
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 
-ModerationSkipReason = Literal["rate_limited", "error", "timeout"]
+
+class ModerationSkipReason(models.TextChoices):
+    RATE_LIMITED = "rate_limited", _("Rate limit")
+    ERROR = "error", _("Error")
+    TIMEOUT = "timeout", _("Timeout")
 
 
 class ModerationDetail(BaseModel):
