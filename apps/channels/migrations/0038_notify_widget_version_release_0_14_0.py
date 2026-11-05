@@ -11,9 +11,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Announce the 0.14.0 widget release to every team with an embedded-widget
-        # channel. force=True because the command's run-once slug is fixed; Django
-        # tracks this migration's single run. See docs/developer_guides/widget_versioning.md
         RunDataMigration(
             "notify_widget_version_release",
             command_options={
