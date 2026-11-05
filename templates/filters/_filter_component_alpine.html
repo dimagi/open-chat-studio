@@ -162,17 +162,17 @@
         filter.optionsRequestId = (filter.optionsRequestId || 0) + 1;
         filter.optionsQuery = (query || '').trim();
         filter.optionsHasMore = false;
-        filter.optionsLoadingMore = false;
+        filter.optionsLoading = true;
         this.requestServerOptions(filter, false);
       },
 
       loadMoreOptions(event, index) {
         const filter = this.filterData.filters[index];
         if (!filter || !this.serverOptionFields[filter.column]) return;
-        if (filter.optionsLoadingMore || !filter.optionsHasMore) return;
+        if (filter.optionsLoading || !filter.optionsHasMore) return;
         const el = event.target;
         if (el.scrollTop + el.clientHeight < el.scrollHeight - 40) return;
-        filter.optionsLoadingMore = true;
+        filter.optionsLoading = true;
         this.requestServerOptions(filter, true);
       },
 
@@ -210,8 +210,8 @@
           })
           .catch(err => console.error("Failed to load filter options", err))
           .finally(() => {
-            if (append && filter.optionsRequestId === requestId) {
-              filter.optionsLoadingMore = false;
+            if (filter.optionsRequestId === requestId) {
+              filter.optionsLoading = false;
             }
           });
       },
