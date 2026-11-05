@@ -95,6 +95,7 @@
       updateOperatorsByColumn(index) {
         const filter = this.filterData.filters[index];
         const column = filter.column;
+        clearTimeout(this._optionsSearchTimers[index]);
         if (column && this.filterData.columns[column]) {
           filter.availableOperators = this.filterData.columns[column].operators;
           filter.operator = filter.availableOperators[0] || '';
@@ -118,6 +119,9 @@
       },
 
       removeFilter(index) {
+        // Pending searches are keyed by row index, which shifts once a row is removed
+        Object.values(this._optionsSearchTimers).forEach(clearTimeout);
+        this._optionsSearchTimers = {};
         this.filterData.filters.splice(index, 1);
         if (this.filterData.filters.length === 0) {
           this.addFilter();
