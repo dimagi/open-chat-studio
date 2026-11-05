@@ -38,7 +38,7 @@ class AnnotationQueueForm(forms.ModelForm):
         widget=forms.HiddenInput(),
         required=False,
     )
-    field_order = forms.CharField(
+    field_order = forms.CharField(  # ty: ignore[invalid-assignment]
         widget=forms.HiddenInput(),
         required=False,
     )

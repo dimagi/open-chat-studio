@@ -13,7 +13,7 @@ class PipelineNodeInline(ReadonlyAdminMixin, admin.TabularInline):
 
 
 class PipelineAdminForm(forms.ModelForm):
-    data = forms.JSONField(encoder=PrettyJSONEncoder)
+    data = forms.JSONField(encoder=PrettyJSONEncoder)  # ty: ignore[invalid-assignment]
 
 
 @admin.register(Pipeline)

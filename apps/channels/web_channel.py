@@ -48,7 +48,7 @@ class WebChannel(ChannelBase):
     the channel class unchanged.
     """
 
-    supported_message_types = [MESSAGE_TYPES.TEXT]
+    supported_message_types = (MESSAGE_TYPES.TEXT,)
 
     def __init__(
         self,

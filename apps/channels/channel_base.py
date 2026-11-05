@@ -44,6 +44,7 @@ from apps.teams.utils import current_team
 
 if TYPE_CHECKING:
     from apps.channels.callbacks import ChannelCallbacks
+    from apps.channels.const import MESSAGE_TYPES
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.channels.sender import ChannelSender
@@ -62,7 +63,7 @@ class ChannelBase(ABC):
     # Class-level defaults (overridden by subclasses)
     voice_replies_supported: ClassVar[bool] = False
     supports_multimedia: ClassVar[bool] = False
-    supported_message_types: ClassVar[tuple[str, ...]] = ()
+    supported_message_types: ClassVar[tuple[MESSAGE_TYPES, ...]] = ()
     attachment_hydration_stage_class: ClassVar[type[AttachmentHydrationStage]] = AttachmentHydrationStage
 
     def __init__(

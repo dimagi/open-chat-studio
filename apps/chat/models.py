@@ -441,13 +441,13 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         self.create_and_add_tag(tag, self.chat.team, TagCategories.EXPERIMENT_VERSION)
 
     def add_rating(self, tag: str):
-        tag, _ = Tag.objects.get_or_create(
+        tag_obj, _ = Tag.objects.get_or_create(
             name=tag,
             team=self.chat.team,
             is_system_tag=False,
             category=TagCategories.RESPONSE_RATING,
         )
-        self.add_tag(tag, team=self.chat.team, added_by=None)
+        self.add_tag(tag_obj, team=self.chat.team, added_by=None)
 
     def rating(self) -> str | None:
         if not self.pk:

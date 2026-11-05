@@ -340,7 +340,7 @@ def ratchet_widget_auth_levels():
     for channel in channels:
         target = widget_versions.level_for_version(channel.widget_version)
 
-        if channel.auth_level_notified_at is None:
+        if channel.auth_level_notified_at is None or channel.pending_auth_level is None:
             # No bump pending yet. Start one only if the widget now implies a higher level.
             if target <= channel.required_auth_level:
                 continue
