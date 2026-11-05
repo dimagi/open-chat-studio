@@ -16,6 +16,7 @@ class Migration(migrations.Migration):
             command_options={
                 "force": True,
                 "widget_version": "0.14.0",
+                "changelog_url": "https://docs.openchatstudio.com/chat_widget/changelog/#v0140-2026-11-05",
                 "notes": (
                     'New: the widget has a dark theme. Set the theme attribute to "dark" to use it; '
                     'embedded widgets default to "light", so existing embeds are unchanged. '
