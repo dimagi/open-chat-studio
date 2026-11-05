@@ -105,6 +105,68 @@ describe('ocs-chat blocked participant', () => {
     });
   });
 
+  it('discards the unsent draft', async () => {
+    const page = await mountWidget();
+    stubChatService(page, { startSession: jest.fn().mockRejectedValue(new ParticipantBlockedError(BLOCKED_MESSAGE)) });
+    page.rootInstance.messageInput = 'hello';
+
+    await send(page, 'hello');
+
+    expect(page.rootInstance.messageInput).toBe('');
+  });
+
+  it('closes an open new chat confirmation', async () => {
+    const page = await restoredWidget();
+    stubChatService(page, { sendMessage: jest.fn().mockRejectedValue(new ParticipantBlockedError(BLOCKED_MESSAGE)) });
+    page.rootInstance.showNewChatConfirmation = true;
+
+    await send(page, 'hello');
+
+    expect(page.rootInstance.showNewChatConfirmation).toBe(false);
+  });
+
+  describe('when a bound session is refused with participant_blocked', () => {
+    let page: SpecPage;
+    let startMessagePolling: jest.Mock;
+
+    beforeEach(async () => {
+      page = await newSpecPage({
+        components: [OcsChat],
+        html: '<open-chat-studio-widget chatbot-id="bot-1" visible="true" session-id="s-bound"></open-chat-studio-widget>',
+      });
+      startMessagePolling = jest.fn(() => ({ stop: jest.fn() }));
+      stubChatService(page, {
+        fetchAllMessages: jest.fn().mockResolvedValue([]),
+        startMessagePolling,
+        sendMessage: jest.fn().mockRejectedValue(new ParticipantBlockedError(BLOCKED_MESSAGE)),
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await page.waitForChanges();
+    });
+
+    it('ignores a poll result that arrives after the notice', async () => {
+      const onMessages = startMessagePolling.mock.calls[0][1].onMessages;
+
+      await send(page, 'hello');
+      onMessages([{ created_at: '2026-01-02T00:00:00Z', role: 'assistant', content: 'late reply', attachments: [] }]);
+      await page.waitForChanges();
+
+      expect(page.rootInstance.messages.at(-1).content).toBe(BLOCKED_MESSAGE);
+    });
+
+    it('does not resume polling when the widget is reopened', async () => {
+      await send(page, 'hello');
+      startMessagePolling.mockClear();
+
+      page.rootInstance.visible = false;
+      await page.waitForChanges();
+      page.rootInstance.visible = true;
+      await page.waitForChanges();
+
+      expect(startMessagePolling).not.toHaveBeenCalled();
+    });
+  });
+
   it('shows the translated blocked notice when the refusal carries no detail', async () => {
     const page = await widgetAfterRefusedStart(new ParticipantBlockedError());
 

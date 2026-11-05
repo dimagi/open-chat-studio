@@ -672,11 +672,13 @@ export class OcsChat {
     this.cleanup();
     this.resetBusyState();
     this.participantBlocked = true;
+    this.showNewChatConfirmation = false;
+    this.messageInput = '';
     this.selectedFiles = [];
     this.consent = undefined;
     this.heldMessage = undefined;
+    this.sessionEpoch += 1;
     if (!this.isSessionBound()) {
-      this.sessionEpoch += 1;
       this.activeSessionId = undefined;
       this.applySessionToken(undefined);
       this.clearSessionStorage();
@@ -1390,7 +1392,7 @@ export class OcsChat {
   }
 
   private startMessagePolling(): void {
-    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded) {
+    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded || this.participantBlocked) {
       return;
     }
 
