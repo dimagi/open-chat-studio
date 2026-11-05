@@ -111,9 +111,7 @@ class VersionedParamSpec:
         if self.archiving == ParamArchiving.KEEP:
             return
 
-        value = params.get(self.param_name)
-        instance_ids = (value if self.many else [value]) if value else []
-        for instance_id in instance_ids:
+        for instance_id in self._referenced_ids(params):
             try:
                 instance = self.model_cls.objects.get(id=instance_id)
             except ObjectDoesNotExist:
@@ -124,6 +122,22 @@ class VersionedParamSpec:
             if self.archiving == ParamArchiving.ARCHIVE_VERSIONS_ONLY and not instance.is_a_version:
                 continue
             instance.archive()
+
+    def unarchive_referenced_record(self, params: dict) -> None:
+        """Restore the record(s) ``archive_referenced_record`` archived, for a node version being restored.
+
+        Only ``ARCHIVE`` records come back: archiving a collection deletes its remote index and files,
+        so a restored ``ARCHIVE_VERSIONS_ONLY`` collection row would have nothing behind it.
+        """
+        if self.archiving != ParamArchiving.ARCHIVE:
+            return
+        archived = self.model_cls.objects.get_all().filter(id__in=self._referenced_ids(params), is_archived=True)
+        for instance in archived:
+            instance.unarchive()
+
+    def _referenced_ids(self, params: dict) -> list:
+        value = params.get(self.param_name)
+        return (value if self.many else [value]) if value else []
 
     def resolve_for_display(self, value):
         """Resolve the raw param value to model instance(s) for version-detail display."""

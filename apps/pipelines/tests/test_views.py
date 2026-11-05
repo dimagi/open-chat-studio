@@ -12,6 +12,53 @@ from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
+@pytest.fixture()
+def member_client(client, team_with_users):
+    client.force_login(team_with_users.members.first())
+    return client
+
+
+@pytest.mark.django_db()
+class TestPipelineData:
+    """The builder of an archived chatbot still shows its pipeline, but no longer accepts changes."""
+
+    def _url(self, team, pipeline):
+        return reverse("pipelines:pipeline_data", kwargs={"team_slug": team.slug, "pk": pipeline.id})
+
+    @pytest.fixture()
+    def archived_pipeline(self, team_with_users):
+        experiment = ExperimentFactory.create(team=team_with_users)
+        experiment.archive()
+        return experiment.pipeline
+
+    def test_serves_an_archived_pipeline_with_its_nodes(self, member_client, team_with_users, archived_pipeline):
+        """The graph is rebuilt from node rows, which are archived with the pipeline."""
+        node_count = archived_pipeline.node_set.get_all().count()
+        assert node_count > 0
+
+        response = member_client.get(self._url(team_with_users, archived_pipeline))
+
+        assert response.status_code == 200
+        assert response.json()["pipeline"]["id"] == archived_pipeline.id
+        assert len(response.json()["pipeline"]["data"]["nodes"]) == node_count
+
+    @pytest.mark.parametrize(
+        ("method", "payload"),
+        [
+            pytest.param("post", {"name": "Renamed", "data": {"nodes": [], "edges": []}}, id="full-save"),
+            pytest.param("patch", {"base_revision": 0}, id="incremental-save"),
+        ],
+    )
+    def test_refuses_to_save_an_archived_pipeline(
+        self, method, payload, member_client, team_with_users, archived_pipeline
+    ):
+        response = getattr(member_client, method)(
+            self._url(team_with_users, archived_pipeline), data=json.dumps(payload), content_type="application/json"
+        )
+
+        assert response.status_code == 404
+
+
 @pytest.mark.django_db()
 class TestGetWidgetPageContext:
     def test_returns_empty_dict_when_pipeline_is_none(self):
@@ -111,11 +158,6 @@ class TestGetWidgetPageContext:
 
 @pytest.mark.django_db()
 class TestSimplePipelineMessage:
-    @pytest.fixture()
-    def member_client(self, client, team_with_users):
-        client.force_login(team_with_users.members.first())
-        return client
-
     def _post(self, client, team, pipeline):
         url = reverse("pipelines:pipeline_message", kwargs={"team_slug": team.slug, "pipeline_pk": pipeline.id})
         return client.post(url, data=json.dumps({"message": "hi"}), content_type="application/json")

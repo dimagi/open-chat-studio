@@ -980,9 +980,11 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
     @transaction.atomic()
     def archive(self) -> bool:
-        """
-        Archive the experiment and all versions in the case where this is the working version. The
-        linked pipeline for the working version should not be archived.
+        """Archive the experiment, its triggers and its pipeline; a working version takes its versions with it.
+
+        The pipeline is archived last, once this experiment no longer counts as live, so its own
+        reference check (``Pipeline.archive``) only sees other chatbots and static triggers. When
+        one of those still uses the pipeline it stays live and the experiment is archived anyway.
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
@@ -992,14 +994,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
             self.delete_experiment_channels()
             self.versions.update(is_archived=True, audit_action=AuditAction.AUDIT)
             self.scheduled_messages.all().delete()
-        else:
-            if self.pipeline:
-                self.pipeline.archive()
+        if self.pipeline:
+            self.pipeline.archive()
         return True
 
     @transaction.atomic()
     def unarchive(self):
-        """Reverse of archive(): the experiment, its triggers, and — for the working version — its versions."""
+        """Reverse of archive(): the experiment, its triggers and pipeline, and for the working version its versions."""
         super().unarchive()
         # The related manager excludes archived rows; get_all() reaches them.
         self.static_triggers.get_all().update(is_archived=False)
@@ -1007,8 +1008,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if self.is_working_version:
             for version in self.versions.get_all().filter(is_archived=True):
                 version.unarchive()
-        elif self.pipeline:
-            # Mirrors archive(), which leaves the working version's pipeline alone.
+        if self.pipeline:
             self.pipeline.unarchive()
 
     def delete_experiment_channels(self):

@@ -5186,6 +5186,8 @@ components:
           format: double
         is_archived:
           type: boolean
+        archived_with_pipeline:
+          type: boolean
         working_version:
           type: integer
           nullable: true
