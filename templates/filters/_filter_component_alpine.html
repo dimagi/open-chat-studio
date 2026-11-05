@@ -185,7 +185,7 @@
           url.searchParams.set('q', filter.optionsQuery);
         }
         if (append) {
-          url.searchParams.set('after', filter.filteredOptions.at(-1));
+          url.searchParams.set('after', filter.optionsCursor);
         }
         fetch(url.toString(), {
           method: 'GET',
@@ -202,10 +202,18 @@
           .then(data => {
             if (filter.optionsRequestId !== requestId || this.serverOptionFields[filter.column] !== field) return;
             if (append) {
-              filter.filteredOptions.push(...data.values);
+              const shown = new Set(filter.filteredOptions);
+              filter.filteredOptions.push(...data.values.filter(value => !shown.has(value)));
             } else {
-              filter.filteredOptions = data.values;
+              // Selected values may be beyond the first page, so list them first to keep them visible and checked
+              const page = new Set(data.values);
+              const query = filter.optionsQuery.toLowerCase();
+              const selected = (filter.selectedValues || []).filter(
+                value => !page.has(value) && String(value).toLowerCase().includes(query)
+              );
+              filter.filteredOptions = [...selected, ...data.values];
             }
+            filter.optionsCursor = data.values.at(-1);
             filter.optionsHasMore = data.has_more;
           })
           .catch(err => console.error("Failed to load filter options", err))
