@@ -296,7 +296,7 @@ def get_filter_schema(filter_class: type[MultiColumnFilter], team=None) -> dict[
             "label": f.label,
             "type": f.type,
             "description": f.description,
-            "operators": [op.value for op in FIELD_TYPE_FILTERS[f.type]],
+            "operators": [op.value for op in f.operators],
         }
         if isinstance(f, ChoiceColumnFilter) and f.options:
             entry["options"] = [

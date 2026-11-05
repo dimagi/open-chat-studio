@@ -66,6 +66,19 @@ def test_string_columns_offer_any_of_only_when_allowed(filter_class, query_param
     assert (Operators.ANY_OF in column.model_dump()["operators"]) is has_any_of
 
 
+@pytest.mark.parametrize(
+    ("query_param", "has_any_of"),
+    [
+        pytest.param("participant", True, id="participant"),
+        pytest.param("session_id", False, id="session-id"),
+    ],
+)
+def test_filter_schema_offers_any_of_only_when_allowed(query_param, has_any_of):
+    schema = get_filter_schema(ExperimentSessionFilter)
+
+    assert (Operators.ANY_OF.value in schema[query_param]["operators"]) is has_any_of
+
+
 class _FlagGatedFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         StringColumnFilter(query_param="open", label="Open", columns=["external_id"]),
