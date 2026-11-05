@@ -2,6 +2,7 @@ from apps.experiments.filters import ChatMessageFilter, ExperimentSessionFilter
 from apps.web.dynamic_filters.base import (
     FIELD_TYPE_FILTERS,
     MultiColumnFilter,
+    Operators,
     StringColumnFilter,
     get_filter_registry,
     get_filter_schema,
@@ -27,7 +28,9 @@ class TestGetFilterSchema:
         assert schema["name"]["label"] == "Name"
         assert schema["name"]["type"] == "string"
         assert schema["name"]["description"] == "Filter by name"
-        assert schema["name"]["operators"] == [op.value for op in FIELD_TYPE_FILTERS["string"]]
+        assert schema["name"]["operators"] == [
+            op.value for op in FIELD_TYPE_FILTERS["string"] if op != Operators.ANY_OF
+        ]
 
     def test_schema_keys_are_query_params(self):
         schema = get_filter_schema(_TestFilter)
