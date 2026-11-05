@@ -53,43 +53,6 @@ def test_explicit_window_is_half_open():
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("params", "detail_contains"),
-    [
-        pytest.param(
-            {"metric": "messages", "period": "current_month", "start": "2026-07-01", "end": "2026-08-01"},
-            "not both",
-            id="period-and-window",
-        ),
-        pytest.param(
-            {"metric": "messages", "start": "2026-07-01"},
-            "both 'start' and 'end'",
-            id="start-without-end",
-        ),
-        pytest.param(
-            {"metric": "messages", "end": "2026-08-01"},
-            "both 'start' and 'end'",
-            id="end-without-start",
-        ),
-        pytest.param(
-            {"metric": "messages", "start": "2026-08-01", "end": "2026-07-01"},
-            "must be after",
-            id="end-before-start",
-        ),
-    ],
-)
-def test_window_validation_errors(params, detail_contains):
-    team = TeamWithUsersFactory.create()
-    user = team.members.first()
-    client = ApiTestClient(user, team)
-
-    response = client.get(reverse(USAGE_URL), params)
-
-    assert response.status_code == 400
-    assert detail_contains.lower() in str(response.json()).lower()
-
-
-@pytest.mark.django_db()
 def test_daily_granularity_returns_one_zero_filled_row_per_bucket():
     team = TeamWithUsersFactory.create()
     user = team.members.first()

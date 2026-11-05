@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.utils import timezone
 from langfuse import LangfuseOtelSpanAttributes, propagate_attributes
-from langfuse._client.resource_manager import LangfuseResourceManager
+from langfuse._client.resource_manager import LangfuseResourceManager  # noqa: PLC2701
 from langfuse.langchain import CallbackHandler
 from opentelemetry import trace as otel_trace_api
 from opentelemetry.sdk.trace import TracerProvider

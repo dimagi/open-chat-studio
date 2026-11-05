@@ -15,13 +15,13 @@ from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
-from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
+from apps.channels.datamodels import RawAttachment, SkippedAttachment
 from apps.channels.deduplication import is_duplicate_delivery
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.sender import ChannelSender
 from apps.channels.text_utils import append_skipped_attachment_notes
-from apps.channels.utils import is_email_domain_allowed
+from apps.channels.utils import is_email_domain_allowed, trim_email_references
 from apps.experiments.models import ExperimentSession
 from apps.files.content_type import detect_content_type
 from apps.files.models import File, FilePurpose
@@ -62,13 +62,11 @@ class EmailThreadContext:
         references = list(message.references)
         if message.message_id and message.message_id not in references:
             references.append(message.message_id)
-        if len(references) > _MAX_REFERENCES:
-            references = [references[0], *references[-(_MAX_REFERENCES - 1) :]]
 
         return cls(
             subject=subject,
             in_reply_to=message.message_id or None,
-            references=references,
+            references=trim_email_references(references),
         )
 
 

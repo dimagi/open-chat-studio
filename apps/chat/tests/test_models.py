@@ -1,8 +1,12 @@
 import pytest
+from django.db.models.fields.json import KeyTextTransform
+from pydantic import ValidationError
 
 from apps.annotations.models import TagCategories
-from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
+from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.pipelines.models import PipelineChatHistoryModes
+from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
@@ -102,6 +106,43 @@ class TestEmptyHumanMessageReplay:
         assert [m.content for m in messages] == [EMPTY_MESSAGE_PLACEHOLDER, "How can I help?"]
 
 
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_type", "status", "expected"),
+    [
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.FLAGGED, True, id="flagged_human"),
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.PASSED, False, id="passed_human"),
+        pytest.param(ChatMessageType.HUMAN, ModerationStatus.SKIPPED, False, id="skipped_human"),
+        pytest.param(ChatMessageType.HUMAN, None, False, id="unmoderated_human"),
+        pytest.param(ChatMessageType.AI, ModerationStatus.FLAGGED, False, id="flagged_ai"),
+    ],
+)
+def test_flagged_human_message_is_excluded_from_history(message_type, status, expected):
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(
+        chat=session.chat, message_type=message_type, content="text", moderation_status=status
+    )
+
+    assert message.is_excluded_from_history is expected
+
+
+@pytest.mark.django_db()
+def test_flagged_human_message_is_skipped_on_replay():
+    session = ExperimentSessionFactory.create()
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="fine")
+    ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        content="bad",
+        moderation_status=ModerationStatus.FLAGGED,
+    )
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="I can't answer that.")
+
+    messages = session.chat.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
+
+    assert [m.content for m in messages] == ["fine", "I can't answer that."]
+
+
 def test_model_refused_is_an_internal_metadata_key():
     assert ChatMessageMetadataKeys.MODEL_REFUSED in ChatMessageMetadataKeys.internal_keys()
     assert ChatMessageMetadataKeys.MODEL_REFUSED not in ChatMessageMetadataKeys.attachment_keys()
@@ -165,3 +206,86 @@ class TestHistoryExcludesFilteredHumanMessages:
         messages = session.chat.get_langchain_messages()
 
         assert [m.content for m in messages] == ["fine", "ok", "reply"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("status", "detail"),
+    [
+        pytest.param(
+            ModerationStatus.FLAGGED,
+            ModerationDetail(
+                output=ModerationOutput.model_validate(
+                    {
+                        "illicit/violent": {"flagged": True, "score": 0.84},
+                        "hate": {"flagged": False, "score": 0.02},
+                    }
+                ),
+                rules=["markup"],
+            ),
+            id="output_and_rules",
+        ),
+        pytest.param(ModerationStatus.SKIPPED, ModerationDetail(skip_reason="rate_limited"), id="skip_reason"),
+        pytest.param(None, None, id="unmoderated"),
+    ],
+)
+def test_moderation_columns_round_trip(status, detail):
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        content="Hi",
+        moderation_status=status,
+        moderation_detail=detail,
+    )
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_status == status
+    assert message.moderation_detail == detail
+
+
+@pytest.mark.django_db()
+def test_moderation_columns_default_to_null():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_status is None
+    assert message.moderation_detail is None
+
+
+@pytest.mark.django_db()
+def test_skip_reason_is_stored_as_its_plain_value():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.HUMAN,
+        content="Hi",
+        moderation_detail=ModerationDetail(skip_reason=ModerationSkipReason.RATE_LIMITED),
+    )
+
+    stored = ChatMessage.objects.filter(id=message.id).values_list(
+        KeyTextTransform("skip_reason", "moderation_detail"), flat=True
+    )
+
+    assert list(stored) == ["rate_limited"]
+
+
+@pytest.mark.django_db()
+def test_skip_reason_written_as_a_plain_string_loads_as_the_choice():
+    session = ExperimentSessionFactory.create()
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
+    ChatMessage.objects.filter(id=message.id).update(
+        moderation_detail={"output": None, "skip_reason": "timeout", "rules": []}
+    )
+
+    message = ChatMessage.objects.get(id=message.id)
+
+    assert message.moderation_detail.skip_reason is ModerationSkipReason.TIMEOUT
+
+
+def test_moderation_detail_rejects_unknown_skip_reason():
+    with pytest.raises(ValidationError):
+        ModerationDetail.model_validate({"skip_reason": "unknown"})

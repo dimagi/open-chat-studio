@@ -18,7 +18,7 @@
       ]
     },
     {
-      "matching_content_path": "*/**",
+      "matching_content_path": "**",
       "matching_content_path_doc": "Production code. Thresholds tuned for Python/Django patterns.",
       "thresholds": [
         {"name": "function_max_arguments", "value": 6},

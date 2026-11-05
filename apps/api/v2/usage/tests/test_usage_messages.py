@@ -7,8 +7,8 @@ import time_machine
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient
 
-from apps.api.v2.usage.param_serializers import UsageQuerySerializer
-from apps.api.v2.usage.services import PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH, _month_bounds
+from apps.api.v2.usage.param_serializers import UsageQuerySerializer, month_bounds
+from apps.api.v2.usage.services import PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
@@ -227,6 +227,26 @@ def test_tz_shifts_month_boundary():
             "only one of",
             id="all-participant-filters",
         ),
+        pytest.param(
+            {"metric": "messages", "period": "current_month", "start": "2026-07-01", "end": "2026-08-01"},
+            "not both",
+            id="period-and-window",
+        ),
+        pytest.param(
+            {"metric": "messages", "start": "2026-07-01"},
+            "both 'start' and 'end'",
+            id="start-without-end",
+        ),
+        pytest.param(
+            {"metric": "messages", "end": "2026-08-01"},
+            "both 'start' and 'end'",
+            id="end-without-start",
+        ),
+        pytest.param(
+            {"metric": "messages", "start": "2026-08-01", "end": "2026-07-01"},
+            "must be after",
+            id="end-before-start",
+        ),
     ],
 )
 def test_invalid_params_return_400(params, detail_contains):
@@ -292,6 +312,6 @@ def test_repeated_metric_params_are_deduplicated():
 )
 def test_month_bounds_handles_year_rollover(now, period, expected_start, expected_end):
     with time_machine.travel(now):
-        start, end = _month_bounds(period, ZoneInfo("UTC"))
+        start, end = month_bounds(period, ZoneInfo("UTC"))
     assert start == expected_start
     assert end == expected_end

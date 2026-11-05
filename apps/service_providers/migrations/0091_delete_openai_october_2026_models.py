@@ -12,8 +12,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration() and load_pricing_data() moved to 0092_auto_model_sync_20261014 so
-        # they run only once per deploy.
         RunDataMigration("remove_deprecated_models", command_options={"force": True}),
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]

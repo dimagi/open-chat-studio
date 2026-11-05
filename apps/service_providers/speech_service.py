@@ -314,20 +314,8 @@ class ElevenLabsSpeechService(SpeechService):
         return result.text
 
 
-class OpenAIVoiceEngineSpeechService(SpeechService):
+class OpenAIVoiceEngineSpeechService(OpenAISpeechService):
     _type: ClassVar[str] = SyntheticVoice.OpenAIVoiceEngine
-    supports_transcription: ClassVar[bool] = True
-    openai_api_key: pydantic.SecretStr
-    openai_api_base: str | None = None
-    openai_organization: str | None = None
-
-    @property
-    def _client(self) -> "OpenAI":
-        return OpenAI(
-            api_key=self.openai_api_key.get_secret_value(),
-            organization=self.openai_organization,
-            base_url=self.openai_api_base,
-        )
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
         """
@@ -357,13 +345,6 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         else:
             msg = f"Error synthesizing voice with OpenAI Voice Engine. Response status: {response.status_code}."
             raise AudioSynthesizeException(msg)
-
-    def _transcribe_audio(self, audio: IO[bytes]) -> str:
-        transcript = self._client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=audio,
-        )
-        return transcript.text
 
 
 class IntronSpeechService(SpeechService):

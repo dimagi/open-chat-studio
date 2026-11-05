@@ -106,6 +106,7 @@ class RegisterApplicationForm(forms.ModelForm):
             # Only client-credentials applications are pinned to chatbots; an authorization-code token
             # carries a user, so it keeps team-membership semantics and a stored list would mislead.
             cleaned_data["allowed_chatbots"] = Experiment.objects.none()
+            cleaned_data["all_data"] = False
         return cleaned_data
 
     def save(self, commit=True):
@@ -133,6 +134,7 @@ class RegisterApplicationForm(forms.ModelForm):
             "post_logout_redirect_uris",
             "allowed_origins",
             "algorithm",
+            "all_data",
             "allowed_chatbots",
         ]
         widgets = {
@@ -144,9 +146,16 @@ class RegisterApplicationForm(forms.ModelForm):
             "allowed_origins": "Enter one origin per line. Optional CORS allowed origins.",
             "algorithm": "Algorithm for signing tokens.",
             "allowed_chatbots": (
-                "Chatbots this application may start chat sessions with. Empty means none. Applies to "
-                "client-credentials applications only."
+                "Chatbots this application may start chat sessions with. Empty means none. Ignored when "
+                "access to all chatbots is on. Applies to client-credentials applications only."
             ),
+            "all_data": (
+                "Reach every chatbot in the team and the source material and consent forms they share, instead of "
+                "only the chatbots listed below. Applies to client-credentials applications only."
+            ),
+        }
+        labels = {
+            "all_data": "Access all chatbots",
         }
 
 
@@ -164,9 +173,11 @@ class RegisterGlobalApplicationForm(RegisterApplicationForm):
     )
 
     class Meta(RegisterApplicationForm.Meta):
-        # No allowed_chatbots: the field only means anything for client-credentials applications, and
+        # No chatbot access fields: they only mean anything for client-credentials applications, and
         # a global application has no team whose chatbots could be offered.
-        fields = [field for field in RegisterApplicationForm.Meta.fields if field != "allowed_chatbots"]
+        fields = [
+            field for field in RegisterApplicationForm.Meta.fields if field not in ("all_data", "allowed_chatbots")
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

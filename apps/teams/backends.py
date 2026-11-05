@@ -81,6 +81,7 @@ CONTENT_TYPES = {
         "messagingprovider",
         "traceprovider",
         "embeddingprovidermodel",
+        "moderationprovider",
     ],
     "teams": ["invitation", "membership", "team"],
     "annotations": ["tag", "customtaggeditem", "usercomment"],
@@ -112,6 +113,7 @@ CONTENT_TYPES = {
         "eventuser",
     ],
     "cost_tracking": ["pricingrule", "usagerecord"],
+    "moderation": ["deniedparticipant"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}

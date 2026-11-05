@@ -94,7 +94,7 @@ def test_vertex_deprecated_model_uses_explicit_replacement(provider_type, model_
     in issue #4509.
 
     The real config has e.g.:
-        Model("gemini-2.5-pro", ..., deprecated=True, replacement="gemini-3.6-flash")
+        Model("gemini-2.5-pro", ..., deprecated=True, replacement="gemini-3.8-flash")
         Model("gemini-3.5-flash", ..., is_default=True)
 
     The old code returned "gemini-3.5-flash" (the provider default) instead of

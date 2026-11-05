@@ -1,10 +1,11 @@
+import logging
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Self, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.db.models import JSONField, Q
 from django.urls import reverse
 from django.utils import timezone
@@ -18,6 +19,8 @@ from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import flag_is_active_for_team
 from apps.web.meta import absolute_url
+
+log = logging.getLogger("ocs.channels")
 
 if TYPE_CHECKING:
     from apps.channels.webhooks import WebhookManager
@@ -64,6 +67,7 @@ class ChannelPlatform(models.TextChoices):
         platform_availability = {platform: False for platform in all_platforms}
         platform_availability[cls.TELEGRAM] = True
         platform_availability[cls.EMBEDDED_WIDGET] = True
+        platform_availability[cls.PUBLIC] = True
 
         for provider in MessagingProvider.objects.filter(team=team):
             for platform in provider.get_messaging_service().supported_platforms:
@@ -77,8 +81,7 @@ class ChannelPlatform(models.TextChoices):
         elif settings.COMMCARE_CONNECT_ENABLED:
             platform_availability[cls.COMMCARE_CONNECT] = True
 
-        cls._gate_by_flag(platform_availability, team, cls.EMAIL, "flag_email_channel")
-        cls._gate_by_flag(platform_availability, team, cls.PUBLIC, "flag_public_channel")
+        cls._offer_email(platform_availability, team)
 
         # Platforms already used should not be displayed
         for platform in used_platforms:
@@ -87,15 +90,12 @@ class ChannelPlatform(models.TextChoices):
         return cast("dict[Self, bool]", platform_availability)
 
     @classmethod
-    def _gate_by_flag(cls, platform_availability: dict, team, platform, flag_name: str) -> None:
-        """Offer `platform` only when its flag is on for the team (and, for email, domains are configured)."""
-        offered = flag_is_active_for_team(team, flag_name)
-        if platform == cls.EMAIL:
-            offered = offered and bool(settings.EMAIL_CHANNEL_ALLOWED_DOMAINS)
-        if offered:
-            platform_availability[platform] = True
+    def _offer_email(cls, platform_availability: dict, team) -> None:
+        """Email is offered only when its flag is on for the team and sender domains are configured."""
+        if flag_is_active_for_team(team, "flag_email_channel") and settings.EMAIL_CHANNEL_ALLOWED_DOMAINS:
+            platform_availability[cls.EMAIL] = True
         else:
-            platform_availability.pop(platform, None)
+            platform_availability.pop(cls.EMAIL, None)
 
     def form(self, experiment: Experiment):
         from apps.channels.forms import ChannelForm  # noqa: PLC0415 - circular: channels.forms imports channels.models
@@ -545,3 +545,19 @@ class ExperimentChannel(BaseTeamModel):
             self.end_live_sessions()
         self.deleted = True
         self.save()
+
+    def restore(self):
+        """Reverse of soft_delete(). Sessions ended with the channel stay ended."""
+        self.deleted = False
+        self.save(update_fields=["deleted"])
+        transaction.on_commit(self._set_remote_webhook)
+
+    def _set_remote_webhook(self):
+        """Best-effort re-registration of this channel's webhook at the upstream provider."""
+        try:
+            manager = self.get_webhook_manager()
+            if not manager or not manager.supports_webhook_management:
+                return
+            manager.set_incoming_webhook(self.extra_data or {}, self.webhook_url)
+        except Exception:
+            log.exception("Error restoring webhook for channel %s", self.id)

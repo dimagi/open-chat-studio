@@ -28,6 +28,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import CodeNode
 from apps.pipelines.repository import InMemoryPipelineRepository
+from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
@@ -522,6 +523,7 @@ class TestRunAgentView:
         assert "response" in data
         assert data["response"]["code"] == valid_code
 
+    @pytest.mark.django_db()
     @mock.patch("apps.help.agents.filter.Team")
     @mock.patch("apps.help.agents.filter.build_system_agent")
     def test_successful_filter_agent_call(self, mock_build, mock_team_cls):
@@ -529,7 +531,7 @@ class TestRunAgentView:
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
         mock_build.return_value = mock_agent
-        mock_team_cls.objects.get.return_value = mock.Mock(id=1)
+        mock_team_cls.objects.get.return_value = TeamFactory.build(id=1)
 
         inner = run_agent.__wrapped__.__wrapped__
         request = RequestFactory().post(

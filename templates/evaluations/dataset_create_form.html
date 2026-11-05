@@ -72,9 +72,6 @@
             <div x-show="sessionScope === 'all_matching'" x-cloak class="text-sm text-base-content/60 mt-2">
               {% translate "Every session matching the current filters will be cloned. Row selections do not affect this mode." %}
             </div>
-            <div x-show="overMessageModeLimit()" x-cloak class="text-sm text-warning mt-2">
-              {% blocktranslate with limit=message_mode_all_matching_limit %}Cloning every match is limited to {{ limit }} sessions for message-level datasets. Narrow the filters, select sessions individually, or use a session-level dataset.{% endblocktranslate %}
-            </div>
           </div>
 
           <div id="sessions-table"
@@ -332,8 +329,7 @@
       // Extend the shared datasetModeSelector with create-specific functionality
       const baseComponent = window.datasetModeSelector({
         defaultMode: 'clone',
-        sessionCountUrl: "{% url 'evaluations:dataset_sessions_selection_count' team.slug %}",
-        messageModeLimit: {{ message_mode_all_matching_limit|default:0 }}
+        sessionCountUrl: "{% url 'evaluations:dataset_sessions_selection_count' team.slug %}"
       });
 
       return {

@@ -24,6 +24,7 @@ from apps.api.v2.write.serializers import (
     ChatbotWriteSerializer,
 )
 from apps.experiments.models import Experiment
+from apps.experiments.services import last_activity_subquery
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.teams.models import Team
 
@@ -63,7 +64,12 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return self.request.team
 
     def get_queryset(self) -> QuerySet[Experiment]:
-        return working_chatbots(self.team).select_related("team").prefetch_related("versions")
+        return (
+            working_chatbots(self.team)
+            .select_related("team")
+            .prefetch_related("versions")
+            .annotate(last_activity_at=last_activity_subquery())
+        )
 
     def get_serializer_class(self) -> type[serializers.BaseSerializer]:
         # The actions below build their serializers directly, but any `self.get_serializer()` call
@@ -174,7 +180,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
             # naming different fields would silently clobber one another.
             chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application was pinned to. Checked after
+            # A machine token reaches only the chatbots its application allows. Checked after
             # resolution because the allowlist is keyed on the chatbot, and before any write, so the
             # refusal costs nothing but the lock this block releases on the way out.
             enforce_application_chatbot_write(request, chatbot)
@@ -233,7 +239,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         # working-chatbot predicate against the committed `is_archived` and answers 404.
         with transaction.atomic():
             chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application was pinned to. Checked
+            # A machine token reaches only the chatbots its application allows. Checked
             # after resolution because the allowlist is keyed on the chatbot, and before anything
             # is written.
             enforce_application_chatbot_write(request, chatbot)

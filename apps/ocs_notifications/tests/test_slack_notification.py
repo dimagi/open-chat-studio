@@ -3,13 +3,11 @@ from unittest.mock import Mock, patch
 import pytest
 from django.db import transaction
 from django.test import override_settings
-from waffle.testutils import override_flag
 
 from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.slack import build_slack_message, send_slack_notification
 from apps.ocs_notifications.tasks import send_slack_notification_async
 from apps.ocs_notifications.utils import create_notification, get_slack_notification_channels
-from apps.teams.flags import Flags
 from apps.utils.factories.notifications import NotificationChannelFactory, NotificationEventFactory
 from apps.utils.factories.team import TeamFactory
 from apps.web.meta import absolute_url
@@ -26,17 +24,12 @@ class TestGetSlackNotificationChannels:
         with override_settings(SLACK_ENABLED=False):
             assert get_slack_notification_channels(team_with_users, LevelChoices.WARNING).count() == 0
 
-    def test_flag_inactive_returns_none_even_when_enabled(self, team_with_users):
-        NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.INFO)
-        with override_settings(SLACK_ENABLED=True):
-            assert get_slack_notification_channels(team_with_users, LevelChoices.WARNING).count() == 0
-
     def test_ignores_disabled_channel_and_excludes_lower_level(self, team_with_users):
         NotificationChannelFactory.create(team=team_with_users, enabled=False, level=LevelChoices.INFO)
         NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.ERROR)
         matching = NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.WARNING)
 
-        with override_settings(SLACK_ENABLED=True), override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True):
+        with override_settings(SLACK_ENABLED=True):
             channels = get_slack_notification_channels(team_with_users, LevelChoices.WARNING)
 
         assert list(channels) == [matching]
@@ -46,7 +39,7 @@ class TestGetSlackNotificationChannels:
         NotificationChannelFactory.create(team=other_team, enabled=True, level=LevelChoices.INFO)
         NotificationChannelFactory.create(team=team_with_users, enabled=True, level=LevelChoices.INFO)
 
-        with override_settings(SLACK_ENABLED=True), override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True):
+        with override_settings(SLACK_ENABLED=True):
             assert get_slack_notification_channels(team_with_users, LevelChoices.ERROR).count() == 1
 
 

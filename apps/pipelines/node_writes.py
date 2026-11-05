@@ -23,7 +23,7 @@ def content_nodes_from_data(node_data: dict[str, FlowNode | None], membership_on
     """The entries of ``node_data`` that carry content, keyed by flow_id."""
     content_nodes = {}
     for flow_id, node in node_data.items():
-        if flow_id in membership_only:
+        if node is None or flow_id in membership_only:
             continue
         if node.id != flow_id:
             # The key is the flow_id the content is written under, so a mismatch would
@@ -80,7 +80,7 @@ def _create_node(pipeline: Pipeline, node: FlowNode) -> Node:
         pipeline=pipeline,
         flow_id=node.id,
         type=content.type,
-        params=content.params,
+        params=content.node_type.params_to_store(content.params),
         label=content.label,
         **node_position_fields(node.position),
     )
@@ -89,9 +89,10 @@ def _create_node(pipeline: Pipeline, node: FlowNode) -> Node:
 def _apply_content(existing: Node, node: FlowNode, update_fields: set[str], now) -> bool:
     """Copy ``node``'s content onto ``existing`` in memory; True when its resources may have changed."""
     content = node.data
-    resources_changed = existing.type != content.type or existing.params != content.params
+    params = content.node_type.params_to_store(content.params)
+    resources_changed = existing.type != content.type or existing.params != params
     existing.type = content.type
-    existing.params = content.params
+    existing.params = params
     existing.label = content.label
     for field_name, value in node_position_fields(node.position).items():
         setattr(existing, field_name, value)

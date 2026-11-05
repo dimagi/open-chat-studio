@@ -1,6 +1,4 @@
 import base64
-import hashlib
-import hmac
 import json
 import os
 import uuid
@@ -719,7 +717,7 @@ class TestConnectApis:
         assert "Multiple ParticipantData rows" in caplog.text
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
-    def test_consent_with_duplicate_rows_updates_oldest(self, client, experiment, caplog):
+    def test_consent_with_duplicate_rows_updates_oldest(self, client, experiment, caplog, connect_request_headers):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
         oldest = _setup_participant_data(
@@ -739,7 +737,7 @@ class TestConnectApis:
         response = client.post(
             reverse("api:commcare-connect:consent"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
 
@@ -769,7 +767,7 @@ class TestConnectApis:
             self._make_key_request(client=client, data={"channel_id": "123"})
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
-    def test_user_consented(self, client, experiment):
+    def test_user_consented(self, client, experiment, connect_request_headers):
         connect_id = uuid.uuid4().hex
         commcare_connect_channel_id = uuid.uuid4().hex
         participant_data = _setup_participant_data(
@@ -782,7 +780,7 @@ class TestConnectApis:
         response = client.post(
             reverse("api:commcare-connect:consent"),
             json.dumps(payload),
-            headers=self._get_request_headers(payload),
+            headers=connect_request_headers(payload),
             content_type="application/json",
         )
         assert response.status_code == 200
@@ -790,14 +788,6 @@ class TestConnectApis:
         assert participant_data.system_metadata == {
             "commcare_connect_channel_id": commcare_connect_channel_id,
             "consent": True,
-        }
-
-    def _get_request_headers(self, payload: dict) -> dict:
-        msg = json.dumps(payload).encode("utf-8")
-        key = settings.COMMCARE_CONNECT_SERVER_SECRET.encode()
-        digest = hmac.new(key=key, msg=msg, digestmod=hashlib.sha256).digest()
-        return {
-            "X-MAC-DIGEST": base64.b64encode(digest),
         }
 
     def test_invalid_hmac_signature(self, client):
@@ -812,9 +802,9 @@ class TestConnectApis:
         )
         assert response.status_code == 401
 
-    def test_empty_request_body(self, client):
+    def test_empty_request_body(self, client, connect_request_headers):
         """Test that empty request bodies are rejected."""
-        headers = self._get_request_headers({})
+        headers = connect_request_headers({})
         response = client.post(
             reverse("api:commcare-connect:consent"),
             "",

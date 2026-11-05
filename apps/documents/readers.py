@@ -139,9 +139,9 @@ def default_read(file_obj) -> Document:
 
 def markitdown_read(file_obj) -> Document:
     # markitdown supports text, pdf, docx, xlsx, xls, outlook, pptx which will be handled by the default text reader
-    from markitdown import MarkItDown  # noqa: PLC0415 - TID253: heavy lib, slow startup
-    from markitdown._exceptions import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
+    from markitdown import (  # noqa: PLC0415 - TID253: heavy lib, slow startup
         FileConversionException,
+        MarkItDown,
         UnsupportedFormatException,
     )
 

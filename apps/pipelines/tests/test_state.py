@@ -24,6 +24,21 @@ def test_pipline_state_json_serializable():
     assert json.dumps(state, cls=DjangoJSONEncoder)
 
 
+def test_json_safe_does_not_change_the_original_state():
+    attachment = Attachment(file_id=1, type="code_interpreter", name="file1", size=5, download_link="")
+    state = PipelineState(
+        messages=["a"],
+        experiment_session=ExperimentSession(id=1),
+        temp_state={"attachments": [attachment]},
+    )
+
+    safe = state.json_safe()
+
+    assert safe["temp_state"]["attachments"] == [attachment.model_dump()]
+    assert state["temp_state"]["attachments"] == [attachment]
+    assert state["experiment_session"].id == 1
+
+
 def test_route_info():
     state = PipelineState(
         messages=["a", "b", "c"],

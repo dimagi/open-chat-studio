@@ -4,14 +4,14 @@ import pytest
 from langchain_core.messages import ToolMessage
 
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
-from apps.chat.tests.test_openapi_tool import _make_openapi_schema
+from apps.chat.tests.openapi_helpers import make_openapi_schema
 from apps.service_providers.auth_service import anonymous_auth_service
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.openapi import OpenAPISpec
 
 
 def test_openapi_tool_query_params(httpx_mock):
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -34,7 +34,7 @@ def test_openapi_tool_query_params(httpx_mock):
 
 
 def test_openapi_tool_path_params(httpx_mock):
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -52,7 +52,7 @@ def test_openapi_tool_path_params(httpx_mock):
 
 
 def test_openapi_tool_body(httpx_mock):
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "requestBody": {
                 "content": {
@@ -74,7 +74,7 @@ def test_openapi_tool_body(httpx_mock):
 
 
 def test_openapi_tool_headers(httpx_mock):
-    spec = _make_openapi_schema(
+    spec = make_openapi_schema(
         {
             "parameters": [
                 {
@@ -91,7 +91,7 @@ def test_openapi_tool_headers(httpx_mock):
 
 
 def test_openapi_tool_response_content_disposition_inline(httpx_mock):
-    spec = _make_openapi_schema({"parameters": []})
+    spec = make_openapi_schema({"parameters": []})
     httpx_mock.add_response(
         url="https://example.com/test",
         content=b"content from API call",
@@ -103,7 +103,7 @@ def test_openapi_tool_response_content_disposition_inline(httpx_mock):
 
 @pytest.mark.parametrize("filename", ["", "; filename=example.txt"])
 def test_openapi_tool_response_content_disposition_attachment(httpx_mock, filename):
-    spec = _make_openapi_schema({"parameters": []})
+    spec = make_openapi_schema({"parameters": []})
     httpx_mock.add_response(
         url="https://example.com/test",
         content=b"content from API call",
@@ -139,7 +139,7 @@ def test_openapi_tool_oauth_client_credentials_auth(mock_validate, httpx_mock, t
     )
     httpx_mock.add_response(url="https://example.com/test", json={"ok": True})
 
-    spec = OpenAPISpec.from_spec_dict(_make_openapi_schema({"parameters": []}))
+    spec = OpenAPISpec.from_spec_dict(make_openapi_schema({"parameters": []}))
     path = next(iter(spec.paths))
     function_def = openapi_spec_op_to_function_def(spec, path, "get")
     tool = function_def.build_tool(auth_service=provider.get_auth_service(), custom_action=Mock())

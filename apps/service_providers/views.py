@@ -32,15 +32,20 @@ from apps.service_providers.forms import (
     LlmProviderModelForm,
     PricingOverrideForm,
     WhatsappTestMessageForm,
+    has_config_changed,
+    normalize_config,
     whatsapp_number_label,
 )
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
+    AuthProvider,
+    AuthProviderType,
     EmbeddingProviderModel,
     LlmProvider,
     LlmProviderModel,
     MessagingProvider,
     MessagingProviderType,
+    ModerationProvider,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -51,8 +56,9 @@ from ..generics.chips import Chip
 from ..generics.referenced_objects import render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
+from .oauth_views import _oauth_redirect_uri, is_reconnect_required
 from .usages import get_provider_usages
-from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms
+from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms, is_provider_enabled
 
 log = logging.getLogger("ocs.service_providers")
 
@@ -74,11 +80,21 @@ def _lookup_subtype_by_slug(subtype_enum, slug):
     raise KeyError(slug)
 
 
+def _get_provider_type(request, slug: str) -> ServiceProvider:
+    """The provider type named in the URL. Raises Http404 if it is unknown or not enabled for the request."""
+    try:
+        provider = ServiceProvider[slug]
+    except KeyError:
+        raise Http404(f"Unknown provider type: {slug}") from None
+    if not is_provider_enabled(provider=provider, request=request):
+        raise Http404("Provider type is not enabled")
+    return provider
+
+
 class ServiceProviderMixin:
     @property
     def provider_type(self) -> ServiceProvider:
-        type_ = self.kwargs["provider_type"]
-        return ServiceProvider[type_]
+        return _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
 
 
 class ServiceProviderUsagesMixin(LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin):
@@ -140,10 +156,16 @@ def _experiment_chip_label(experiment) -> str:
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
-    provider = ServiceProvider[provider_type]
+    provider = _get_provider_type(request=request, slug=provider_type)
     if not request.user.has_perm(provider.get_permission("delete")):
         raise PermissionDenied()
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
+    if (
+        isinstance(service_config, ModerationProvider)
+        and request.team.moderation_enabled
+        and request.team.moderation_provider_id == service_config.id
+    ):
+        return render_referenced_objects_modal("service provider", team_settings=[_("Message moderation")])
     related_objects = get_related_objects(service_config)
 
     if related_objects:
@@ -171,14 +193,14 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
 class AddFileToProvider(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
-        provider = ServiceProvider[self.kwargs["provider_type"]]
+        provider = _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
         provider = get_object_or_404(provider.model, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         provider.add_files([file])
         return file
 
     def get_delete_url(self, file):
-        provider = ServiceProvider[self.kwargs["provider_type"]]
+        provider = _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
         return reverse(
             "service_providers:delete_file",
             kwargs={
@@ -194,23 +216,10 @@ class AddFileToProvider(BaseAddFileHtmxView):
 @permission_required("files.delete_file")
 @transaction.atomic()
 def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: int):
-    provider = ServiceProvider[provider_type]
+    provider = _get_provider_type(request=request, slug=provider_type)
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     service_config.remove_file(file_id)
     return HttpResponse()
-
-
-def _normalize_config(config: dict) -> dict:
-    """Drops blank optional fields cleaned_data fills in even when the user never touched
-    them, so an untouched field doesn't look like a change against an older, sparser saved
-    config."""
-    return {k: v for k, v in config.items() if v}
-
-
-def _has_config_changed(is_create: bool, old_config: dict | None, obj) -> bool:
-    """Whether obj's current config differs from old_config. Always True for a create -
-    there's nothing to compare against yet."""
-    return is_create or old_config != _normalize_config(obj.config)
 
 
 def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bool:
@@ -223,7 +232,7 @@ def _should_test_connection(obj, is_create: bool, old_config: dict | None) -> bo
     """
     if not isinstance(obj, LlmProvider) or not obj.supports_connection_test:
         return False
-    return _has_config_changed(is_create, old_config, obj) or not obj.credentials_verified
+    return is_create or has_config_changed(old_config=old_config, new_config=obj.config) or not obj.credentials_verified
 
 
 def _can_verify_credentials(provider_type, subtype) -> bool:
@@ -238,7 +247,7 @@ def _should_run_post_create_hook(obj, is_create: bool) -> bool:
 
 
 class CreateServiceProvider(
-    LoginAndTeamRequiredMixin, django_views.View, ServiceProviderMixin, PermissionRequiredMixin
+    LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin, django_views.View
 ):
     template_name = "service_providers/provider_form.html"
 
@@ -297,7 +306,7 @@ class CreateServiceProvider(
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
             obj, had_connection_test_warning = self._save_provider(request, primary_form, config_form, file_formset)
-            return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
+            return self.saved_response(obj=obj, had_connection_test_warning=had_connection_test_warning)
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
@@ -318,7 +327,7 @@ class CreateServiceProvider(
             # Captured before config_form.save() overwrites obj.config, so the check below
             # can tell whether credentials actually changed - re-testing on an unrelated
             # edit (e.g. renaming the provider) wastes an external call for no reason.
-            old_config = None if is_create else _normalize_config(obj.config)
+            old_config = None if is_create else normalize_config(obj.config)
             config_form.save(obj)
             obj.save()
             if file_formset:
@@ -397,6 +406,19 @@ class CreateServiceProvider(
                 "service_providers:whatsapp_status",
                 kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
+        if subtype == AuthProviderType.oauth_authorization_code:
+            ctx["oauth_redirect_uri"] = _oauth_redirect_uri(self.request)
+            if isinstance(instance, AuthProvider):
+                ctx["oauth_status"] = (
+                    "reconnect required"
+                    if is_reconnect_required(instance)
+                    else ("connected" if instance._auth_data.get("access_token") else "not connected")
+                )
+                ctx["oauth_connected_by"] = (instance.extra_data or {}).get("connected_by")
+                ctx["oauth_connect_url"] = reverse(
+                    "service_providers:oauth_connect",
+                    kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
+                )
         if self.provider_type == ServiceProvider.llm:
             ctx["can_verify_credentials"] = bool(instance) and _can_verify_credentials(self.provider_type, subtype)
             ctx["new_model_form"] = LlmProviderModelForm(self.request.team)
@@ -406,6 +428,10 @@ class CreateServiceProvider(
                 ctx["credentials_checked_at"] = instance.credentials_checked_at
             ctx.update(llm_models_context(self.request.team, subtype))
         return ctx
+
+    def saved_response(self, *, obj, had_connection_test_warning: bool) -> HttpResponse:
+        """The response after a successful save."""
+        return HttpResponseRedirect(self.get_success_url(obj, had_connection_test_warning))
 
     def get_success_url(self, obj=None, redirect_to_own_edit_page=False):
         """Normally back to the team list, same as every save today. The one exception: a

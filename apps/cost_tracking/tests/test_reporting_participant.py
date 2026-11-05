@@ -12,20 +12,13 @@ from django.test.utils import CaptureQueriesContext
 
 from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_participant
-from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.cost_tracking.tests.utils import make_usage
 from apps.utils.factories.experiment import ParticipantFactory
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 # The 30-day window most tests read over, named where a test needs it inside a lambda.
 _START = _NOW - timedelta(days=30)
-
-
-def _usage(team, *, cost, when, **kwargs):
-    """Thin wrapper around UsageRecordFactory that coerces `cost` to Decimal
-    and forwards optional kwargs (confidence, experiment, session, quantity).
-    """
-    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
 
 
 @pytest.mark.django_db()
@@ -37,8 +30,8 @@ class TestCostsByParticipant:
         team = TeamFactory.create()
         first = ParticipantFactory.create(team=team)
         second = ParticipantFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=first)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), participant=second)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=first)
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=2), participant=second)
 
         with CaptureQueriesContext(connection) as ctx:
             costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW)
@@ -49,8 +42,8 @@ class TestCostsByParticipant:
     def test_aggregates_per_participant(self):
         team = TeamFactory.create()
         participant = ParticipantFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=participant)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), participant=participant)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=participant)
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=2), participant=participant)
 
         costs = costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW)
 
@@ -58,15 +51,15 @@ class TestCostsByParticipant:
 
     def test_excludes_records_with_null_participant(self):
         team = TeamFactory.create()
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=None)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=None)
 
         assert costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
     def test_excludes_evaluation_spend(self):
         team = TeamFactory.create()
         participant = ParticipantFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=participant)
-        _usage(
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=participant)
+        make_usage(
             team,
             cost="9.00",
             when=_NOW - timedelta(days=1),
@@ -81,7 +74,7 @@ class TestCostsByParticipant:
     def test_excludes_records_outside_window(self):
         team = TeamFactory.create()
         participant = ParticipantFactory.create(team=team)
-        _usage(team, cost="9.99", when=_NOW - timedelta(days=40), participant=participant)
+        make_usage(team, cost="9.99", when=_NOW - timedelta(days=40), participant=participant)
 
         assert costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
@@ -89,7 +82,7 @@ class TestCostsByParticipant:
         team = TeamFactory.create()
         other = TeamFactory.create()
         participant_other = ParticipantFactory.create(team=other)
-        _usage(other, cost="999.00", when=_NOW - timedelta(days=1), participant=participant_other)
+        make_usage(other, cost="999.00", when=_NOW - timedelta(days=1), participant=participant_other)
 
         assert costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
@@ -98,8 +91,8 @@ class TestCostsByParticipant:
         team = TeamFactory.create()
         wanted = ParticipantFactory.create(team=team)
         unwanted = ParticipantFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=wanted)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=1), participant=unwanted)
+        make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=wanted)
+        make_usage(team, cost="2.00", when=_NOW - timedelta(days=1), participant=unwanted)
 
         costs = costs_by_participant(
             team,

@@ -1,0 +1,26 @@
+# API Documentation
+
+The OCS REST API is primarily documented via its OpenAPI schema. The schema is created using [drf-spectacular](https://drf-spectacular.readthedocs.io/en/latest/).
+
+The current production schema is available at https://www.openchatstudio.com/api/schema/. It is also kept in the code repository in the `api-schemas/v1.yml` file. This file serves two purposes:
+
+- Provide an easy way to visually inspect changes to the schema.
+- Provide a reference for generating API documentation in the docs repo (see below).
+
+The schema can be generated locally by running:
+
+```bash
+inv schema
+# OR
+python manage.py spectacular --file api-schemas/v1.yml --validate
+```
+
+## API Schema updates
+
+Whenever changes are made that impact the API schema, the `api-schemas/v1.yml` file must also be updated. This is enforced by a test which will fail if the schema file is out of date. Ensuring that this file is up to date also allows us to use it as a trigger for updating the API docs in the docs repo:
+
+1. `api-schemas/v1.yml` file changes in the `main` branch.
+2. `api-schema-dispatch.yml` GitHub action runs which sends a dispatch event to the OCS docs repo.
+3. A GitHub action in the OCS docs repo runs and creates a PR with any updated API docs.
+
+This is one of two ways docs/changelog updates get triggered from a merged PR — see [User Documentation and Changelog Process](index.md) for the other (manual PR-description-driven) path and how the two relate.

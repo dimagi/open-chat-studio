@@ -379,9 +379,11 @@ class VersionsMixin:
         """Returns a list of fields that should be excluded when comparing two versions."""
         return self.DEFAULT_EXCLUDED_KEYS
 
-    def archive(self):
+    def archive(self) -> bool:
+        """Archive this record. Returns False when the archive is refused."""
         self.is_archived = True
         self.save(update_fields=["is_archived"])
+        return True
 
     def unarchive(self):
         self.is_archived = False
@@ -418,8 +420,15 @@ class VersionsObjectManagerMixin:
     """A manager mixin that needs to be added to the model manager that will be versioned"""
 
     def get_all(self):
-        """A method to return all experiments whether it is deprecated or not"""
-        return super().get_queryset()
+        """Every row, archived or not, scoped to the parent row when called on a related manager."""
+        queryset = super().get_queryset()
+        # Django's related manager scopes to the parent in its get_queryset(), which this bypasses to
+        # drop the archived filter, so the scoping is applied here. Every Django related manager sets
+        # core_filters; calling _apply_rel_filters directly raises if Django renames it, rather than
+        # returning rows of every parent.
+        if hasattr(self, "core_filters"):
+            queryset = self._apply_rel_filters(queryset)
+        return queryset
 
     def get_queryset(self):
         query = (

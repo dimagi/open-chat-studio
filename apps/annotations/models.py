@@ -55,6 +55,15 @@ class Tag(TagBase, BaseTeamModel):
     def label(self):
         return TagCategories(self.category).label if self.category else "User Defined"
 
+    def slugify(self, tag, i=None):
+        """Keep the slug within its column when taggit appends a "_<i>" suffix to make it unique."""
+        # Tag slugs are unique across all teams. When a slug is taken, taggit tries "<slug>_1", "<slug>_2"
+        # and so on, skipping the suffixed slugs it finds by searching for slugs that start with <slug>.
+        # That search only finds them if each suffix is appended to the whole unsuffixed slug, so every
+        # slug is cut to 95 characters, leaving room for suffixes up to "_9999" in the 100-character column.
+        slug = super().slugify(tag)[: self._meta.get_field("slug").max_length - 5]
+        return slug if i is None else f"{slug}_{i}"
+
 
 @audit_fields(
     "user",
@@ -109,13 +118,13 @@ class TaggedModelMixin(models.Model, AnnotationMixin):
             self.add_tag(tag, team, added_by)
 
     def create_and_add_tag(self, tag: str, team: Team, tag_category: TagCategories, added_by: CustomUser | None = None):
-        tag, _ = Tag.objects.get_or_create(
-            name=tag,
+        tag_obj, _ = Tag.objects.get_or_create(
+            name=tag[: Tag._meta.get_field("name").max_length],
             team=team,
             is_system_tag=bool(tag_category),
             category=tag_category or "",
         )
-        self.add_tag(tag, team=team, added_by=added_by)
+        self.add_tag(tag_obj, team=team, added_by=added_by)
 
     def add_tag(self, tag: Tag, team: Team, added_by: CustomUser | None = None):
         self.tags.add(tag, through_defaults={"team": team, "user": added_by})
@@ -201,6 +210,10 @@ class UserCommentsMixin(models.Model, AnnotationMixin):
         ordering = ["created_at"]
 
     def get_user_comments(self) -> UserComment:
+        if "comments" in getattr(self, "_prefetched_objects_cache", {}):
+            # Use the prefetched comments; chaining prefetch_related() would discard the cache
+            # and issue a fresh query.
+            return self.comments.all()
         return self.comments.prefetch_related("user").all()
 
     @property

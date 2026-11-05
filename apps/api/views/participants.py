@@ -7,10 +7,11 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
-from rest_framework.exceptions import APIException, NotFound, ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.api.exceptions import ChannelCreationError
 from apps.api.pagination import CursorPagination
 from apps.api.permissions import (
     IsAuthenticatedOrMachineToken,
@@ -30,14 +31,6 @@ from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 logger = logging.getLogger("ocs.api")
-
-
-class ChannelCreationError(APIException):
-    """Channel-creation failure carrying the status code mapped from the upstream error."""
-
-    def __init__(self, detail, status_code):
-        self.status_code = status_code
-        super().__init__(detail)
 
 
 class ParticipantView(APIView):

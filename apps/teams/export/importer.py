@@ -214,6 +214,15 @@ def _match_existing_tagged_item(model, row: dict, store: FKTranslationStore, tar
     return model._base_manager.filter(content_type=content_type, object_id=target_object, tag_id=target_tag).first()
 
 
+def _match_existing_event_type(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """Map onto the target's event type with the same identifier rather than violating the per-team
+    unique constraint. The identifier is a hash of the notification's content, so the same notification
+    raised on both servers (e.g. by a migration that ran on each) produces the same identifier."""
+    if not row["identifier"] or target_team is None:
+        return None
+    return model._base_manager.filter(team=target_team, identifier=row["identifier"]).first()
+
+
 def _adopt_participant(
     model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
 ) -> models.Model | None:
@@ -230,22 +239,36 @@ def _adopt_participant_data(
     return model._base_manager.filter(participant_id=participant, experiment_id=experiment).first()
 
 
-# Rows the target can create on its own once a channel is switched to it, while the source still
-# holds the same participant from before the switch. A source row that matches one by its unique
-# key is mapped onto it and the target's row is kept as it is, since it is the newer of the two.
+def _adopt_event_user(
+    model: type[models.Model], row: dict, store: FKTranslationStore, target_team: Team
+) -> models.Model | None:
+    event_type = store.get_target("ocs_notifications.eventtype", row["event_type"])
+    user = store.get_target("users.customuser", row["user"])
+    if event_type is None or user is None:
+        return None
+    return model._base_manager.filter(event_type_id=event_type, user_id=user).first()
+
+
+# Rows the target can create on its own while the source holds the same row: a participant once a
+# channel is switched to the target, or a notification's recipient when both servers raise the same
+# notification. A source row that matches one by its unique key is mapped onto it and the target's
+# row is kept as it is, since it is the newer of the two.
 _ADOPT_EXISTING = {
     "experiments.participant": _adopt_participant,
     "experiments.participantdata": _adopt_participant_data,
+    "ocs_notifications.eventuser": _adopt_event_user,
 }
 
-# Rows the target edits itself once a channel is switched to it. While the source still finishes work
-# it had queued for that conversation, a later source revision would overwrite the target's newer
-# edit, so a row edited on the target since the sync wrote it is kept as it is.
+# Rows the target edits itself once a channel is switched to it, or adopted (see ``_ADOPT_EXISTING``).
+# While the source still finishes work it had queued for that conversation, a later source revision
+# would overwrite the target's newer edit, so a row edited on the target since the sync wrote it is
+# kept as it is.
 _KEEP_TARGET_EDITS = {
     "experiments.participant",
     "experiments.participantdata",
     "experiments.experimentsession",
     "chat.chat",
+    "ocs_notifications.eventuser",
 }
 
 # Rows matched to a pre-existing target row by natural key instead of created.
@@ -255,6 +278,7 @@ _MATCH_EXISTING = {
     "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
     "assessments.score": _match_existing_score,
     "annotations.customtaggeditem": _match_existing_tagged_item,
+    "ocs_notifications.eventtype": _match_existing_event_type,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator

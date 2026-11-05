@@ -24,7 +24,6 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython.PrintCollector import PrintCollector
 
-from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import BuiltInTools
 from apps.files.models import FilePurpose
@@ -38,6 +37,7 @@ from apps.pipelines.jinja_utils import parse_jinja_template
 from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
+from apps.pipelines.nodes import router_prompts
 from apps.pipelines.nodes.base import (
     Intents,
     NodeSchema,
@@ -53,6 +53,7 @@ from apps.pipelines.nodes.base import (
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
+from apps.pipelines.nodes.restricted_http import RestrictedHttpClient
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
 from apps.service_providers.llm_service.outcomes import provider_reason
@@ -65,7 +66,6 @@ from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
-from apps.utils.restricted_http import RestrictedHttpClient
 
 from .mixins import (
     HISTORY_TYPE_DESCRIPTION,
@@ -74,6 +74,7 @@ from .mixins import (
     LLMResponseMixin,
     OutputMessageTagMixin,
     RouterMixin,
+    RouteTagMixin,
     StructuredDataSchemaValidatorMixin,
 )
 
@@ -473,10 +474,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         all_are_remote = all(is_remote_flags)
         if not all_are_remote and any(is_remote_flags):
             remote_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if collection.is_remote_index
             ]
             local_collections = [
-                f"{collection.name}" for cid, collection in collections.items() if not collection.is_remote_index
+                f"{collection.name}" for collection in collections.values() if not collection.is_remote_index
             ]
             raise PydanticCustomError(
                 "mixed_collection_types",
@@ -650,17 +651,14 @@ class EndNode(Passthrough):
 
 
 @deprecated_node(message="Use the 'Router' node instead.")
-class BooleanNode(PipelineRouterNode):
+class BooleanNode(RouteTagMixin, PipelineRouterNode):
     """Branches based whether the input matches a certain value"""
 
-    model_config = ConfigDict(json_schema_extra=NodeSchema(label="Conditional Node"))
+    model_config = ConfigDict(
+        json_schema_extra=NodeSchema(label="Conditional Node", field_order=["input_equals", "tag_output_message"])
+    )
 
     input_equals: str
-    tag_output_message: bool = Field(
-        default=False,
-        description="Tag the output message with the selected route",
-        json_schema_extra=UiSchema(widget=Widgets.toggle),
-    )
 
     def _process_conditional(self, context: "NodeContext") -> tuple[Literal["true", "false"], bool]:
         if self.input_equals == context.input:
@@ -671,17 +669,13 @@ class BooleanNode(PipelineRouterNode):
         """A mapping from the output handles on the frontend to the return values of _process_conditional"""
         return {"output_0": "true", "output_1": "false"}
 
-    def get_output_tags(self, selected_route, is_default_keyword: bool) -> list[tuple[str, str]]:
-        if self.tag_output_message:
-            tag_name = f"{self.name}:{selected_route}"
-            tag_category = TagCategories.ERROR if is_default_keyword else TagCategories.BOT_RESPONSE
-            if is_default_keyword:
-                tag_name += ":default"
-            return [(tag_name, tag_category)]
-        return []
+
+class RouterPromptMode(TextChoices):
+    STANDARD = "standard", "Standard"
+    CUSTOM = "custom", "Custom (Advanced)"
 
 
-class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
+class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     """Routes the input to one of the linked nodes using an LLM"""
 
     model_config = ConfigDict(
@@ -693,41 +687,130 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
                 "llm_provider_id",
                 "llm_temperature",
                 "history_type",
+                "prompt_mode",
+                "custom_context",
                 "prompt",
                 "keywords",
                 "tag_output_message",
             ],
         )
     )
+    prompt_mode: RouterPromptMode = Field(
+        RouterPromptMode.STANDARD,
+        title="Prompt Mode",
+        description=(
+            "How the router's prompt is built. `standard` builds it from the routes, their "
+            "`route_descriptions` and `custom_context`; `custom` sends `prompt` instead."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.router_prompt_mode, enum_labels=RouterPromptMode.labels),
+    )
+    custom_context: str = Field(
+        default="",
+        title="Additional Context",
+        description=(
+            "Instructions added to the standard prompt in `standard` mode, such as which route to prefer "
+            "in a borderline case. Left out of the prompt when blank. Takes the same template variables "
+            "as `prompt`."
+        ),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor,
+            options_source=OptionsSource.router_prompt_variables,
+            visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.STANDARD.value),
+            keep_value_when_hidden=True,
+        ),
+    )
     prompt: str = Field(
         default="You are an extremely helpful router",
-        min_length=1,
         description=(
-            "Instructions telling the LLM how to choose between `keywords`. The model is constrained "
-            "to return one of them, so describe when each applies rather than asking for free text. "
-            "A narrower set of template variables is available here than on an LLM node."
+            "Instructions telling the LLM how to choose between `keywords`, used in `custom` mode. The "
+            "model is constrained to return one of them, so describe when each applies rather than asking "
+            "for free text. The only template variables available are `{participant_data}`, `{temp_state}`, "
+            "`{session_state}`, `{routes}` and `{routes_list}`, in single braces. `{routes}` lists each "
+            "keyword with its entry in `route_descriptions`; `{routes_list}` lists the keywords alone."
         ),
-        json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.router_prompt_variables),
+        json_schema_extra=UiSchema(
+            widget=Widgets.text_editor,
+            options_source=OptionsSource.router_prompt_variables,
+            visible_when=VisibleWhen(field="prompt_mode", value=RouterPromptMode.CUSTOM.value),
+            keep_value_when_hidden=True,
+        ),
+    )
+    prompt_template_version: str = Field(
+        default=router_prompts.LATEST_ROUTER_PROMPT_VERSION,
+        description=(
+            "The version of the standard prompt this router uses in `standard` mode. New routers get the "
+            "latest version. A router keeps its version until it is changed, so a newer standard prompt "
+            "never changes how an existing router routes."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NODE,
         description=HISTORY_TYPE_DESCRIPTION,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
+    route_descriptions: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "What each route is for, keyed by keyword. Rendered into the prompt by the `{routes}` "
+            "variable. Keys are uppercased on save. An entry for a keyword not in `keywords` is kept but not used."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
+    )
+
+    @field_validator("route_descriptions", mode="before")
+    @classmethod
+    def ensure_route_description_keys_are_uppercase(cls, value):
+        if not isinstance(value, dict):
+            return {}
+        descriptions = {}
+        for key, description in value.items():
+            keyword = str(key).upper()
+            if keyword in descriptions:
+                raise PydanticCustomError(
+                    "invalid_route_descriptions", "Route {keyword} has more than one description", {"keyword": keyword}
+                )
+            descriptions[keyword] = description
+        return descriptions
+
+    @classmethod
+    def params_to_store(cls, params: dict) -> dict:
+        """A builder tab or export from before prompt modes existed sends no mode, and its prompt is the user's own."""
+        if params.get("prompt_mode"):
+            return params
+        return {**params, "prompt_mode": RouterPromptMode.CUSTOM.value}
+
+    @field_validator("prompt_template_version", mode="before")
+    @classmethod
+    def ensure_prompt_template_version_exists(cls, value):
+        if not value:
+            return router_prompts.LATEST_ROUTER_PROMPT_VERSION
+        if value not in router_prompts.ROUTER_PROMPT_TEMPLATES:
+            raise PydanticCustomError(
+                "invalid_prompt_template_version",
+                "Unknown router prompt template version: {version}",
+                {"version": value},
+            )
+        return value
 
     @model_validator(mode="after")
     def check_prompt_variables(self) -> Self:
-        context = {
-            "prompt": self.prompt,
-        }
+        if self.prompt_mode == RouterPromptMode.CUSTOM:
+            if not self.prompt:
+                raise PydanticCustomError("invalid_prompt", "Prompt cannot be empty", {"field": "prompt"})
+            self._check_template_variables("prompt", self.prompt)
+        else:
+            self._check_template_variables("custom_context", self.custom_context)
+        return self
+
+    def _check_template_variables(self, field: str, text: str) -> None:
         try:
-            validate_prompt_variables(context=context, prompt_key="prompt", known_vars=PromptVars.router_node_vars())
-            return self
+            validate_prompt_variables(context={field: text}, prompt_key=field, known_vars=PromptVars.router_node_vars())
         except ValidationError as e:
             raise PydanticCustomError(
                 "invalid_prompt",
-                e.error_dict["prompt"][0].message,  # ty: ignore[not-subscriptable]
-                {"field": "prompt"},
+                e.error_dict[field][0].message,  # ty: ignore[not-subscriptable]
+                {"field": field},
             ) from None
 
     def _process_conditional(self, context: "NodeContext"):
@@ -737,13 +820,15 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         extra_prompt_context = {
             "temp_state": context.state.temp,
             "session_state": context.state.session_state,
+            "routes": self._format_routes(),
+            "routes_list": ", ".join(self.keywords),
         }
         participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(
             session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
         )
         system_message = get_system_message(
-            prompt_template=f"{self.prompt}\nThe default routing destination is: {default_keyword}",
+            prompt_template=self._system_prompt_template(default_keyword),
             prompt_context=template_context,
         )
 
@@ -783,6 +868,21 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             self.save_history(node_input, keyword)
         return keyword, is_default_keyword
 
+    def _system_prompt_template(self, default_keyword: str | None) -> str:
+        if self.prompt_mode == RouterPromptMode.CUSTOM:
+            return f"{self.prompt}\nThe default routing destination is: {default_keyword}"
+        return router_prompts.render_router_prompt(
+            self.prompt_template_version, self.custom_context, default_keyword or ""
+        )
+
+    def _format_routes(self) -> str:
+        """One `- KEYWORD: description` line per route; a route with no description is the bare keyword."""
+        lines = []
+        for keyword in self.keywords:
+            description = self.route_descriptions.get(keyword, "").strip()
+            lines.append(f"- {keyword}: {description}" if description else f"- {keyword}")
+        return "\n".join(lines)
+
     def _route_from_agent_result(self, result: dict) -> str | None:
         """Return the route the model chose in upper case, or None when it chose none."""
         structured_response = result.get("structured_response")
@@ -794,7 +894,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
         return None
 
 
-class StaticRouterNode(RouterMixin, PipelineRouterNode):
+class StaticRouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode):
     """Routes the input to a linked node using the temp state of the pipeline or participant data"""
 
     class DataSource(TextChoices):

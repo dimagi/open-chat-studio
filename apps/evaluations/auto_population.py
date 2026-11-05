@@ -8,6 +8,7 @@ from django.db.models import F
 from django.http import QueryDict
 from django.utils import timezone
 
+from apps.evaluations.evaluation_messages import iter_session_evaluation_messages_for_sessions
 from apps.evaluations.exceptions import NoActiveEvaluatorsError
 from apps.evaluations.models import (
     AutoPopulationRunStatus,
@@ -17,7 +18,6 @@ from apps.evaluations.models import (
     EvaluationRunType,
 )
 from apps.evaluations.notifications import auto_population_rule_disabled_notification
-from apps.evaluations.utils import iter_session_evaluation_messages_for_sessions
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.utils.celery import Queues

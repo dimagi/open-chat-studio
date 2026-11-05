@@ -61,14 +61,6 @@ def manager():
     manager.shutdown()
 
 
-@pytest.fixture()
-def mock_session():
-    session = mock.MagicMock()
-    session.external_id = "ext-session-id"
-    session.participant = mock.MagicMock(identifier="participant-1")
-    return session
-
-
 def _prune_all(manager):
     for entry in manager._entries.values():
         entry.last_used -= manager.stale_timeout + 1
@@ -109,7 +101,7 @@ def test_pruning_a_client_stops_every_thread_it_started(manager, config):
     ],
 )
 def test_each_chatbot_is_sampled_at_its_own_rate(
-    config, exporter, mock_session, first_rate, second_rate, expected_traced
+    config, exporter, langfuse_session, first_rate, second_rate, expected_traced
 ):
     """Two chatbots share a trace provider (one public_key) but set different sample rates.
     The chatbot whose client was built first used to fix the rate for both.
@@ -117,10 +109,10 @@ def test_each_chatbot_is_sampled_at_its_own_rate(
     first_chatbot = LangFuseTracer("langfuse", {**config, "sample_rate": first_rate})
     second_chatbot = LangFuseTracer("langfuse", {**config, "sample_rate": second_rate})
 
-    with first_chatbot.trace(TraceContext(id=1, name="first-chatbot"), session=mock_session):
+    with first_chatbot.trace(TraceContext(id=1, name="first-chatbot"), session=langfuse_session):
         pass
     for i in range(10):
-        with second_chatbot.trace(TraceContext(id=i, name="second-chatbot"), session=mock_session):
+        with second_chatbot.trace(TraceContext(id=i, name="second-chatbot"), session=langfuse_session):
             pass
 
     assert exporter.span_names.count("second-chatbot") == expected_traced
@@ -144,10 +136,10 @@ def _rotate_secret(manager, config):
         pytest.param(_rotate_secret, id="secret-rotation"),
     ],
 )
-def test_a_trace_is_exported_when_its_client_is_evicted_mid_trace(manager, config, exporter, mock_session, evict):
+def test_a_trace_is_exported_when_its_client_is_evicted_mid_trace(manager, config, exporter, langfuse_session, evict):
     tracer = LangFuseTracer("langfuse", config)
 
-    with tracer.trace(TraceContext(id=1, name="in-flight"), session=mock_session):
+    with tracer.trace(TraceContext(id=1, name="in-flight"), session=langfuse_session):
         evict(manager, config)
         with tracer.span(TraceContext(id=2, name="after-eviction"), inputs={}):
             pass
@@ -156,11 +148,11 @@ def test_a_trace_is_exported_when_its_client_is_evicted_mid_trace(manager, confi
     assert exporter.span_names.count("after-eviction") == 1
 
 
-def test_a_client_retired_mid_trace_is_shut_down_when_the_trace_ends(manager, config, mock_session):
+def test_a_client_retired_mid_trace_is_shut_down_when_the_trace_ends(manager, config, langfuse_session):
     threads_before = set(threading.enumerate())
     tracer = LangFuseTracer("langfuse", config)
 
-    with tracer.trace(TraceContext(id=1, name="in-flight"), session=mock_session):
+    with tracer.trace(TraceContext(id=1, name="in-flight"), session=langfuse_session):
         _rotate_secret(manager, config)
     manager.shutdown()
 

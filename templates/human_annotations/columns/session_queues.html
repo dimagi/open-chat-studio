@@ -1,0 +1,5 @@
+<div class="flex flex-wrap gap-1">
+  {% for item in record.prefetched_annotation_items %}
+    <span class="badge badge-sm badge-soft whitespace-nowrap {% if item.status == 'completed' %}badge-success{% elif item.status == 'in_progress' %}badge-info{% elif item.status == 'flagged' or item.status == 'awaiting_resolution' %}badge-warning{% else %}badge-ghost{% endif %}">{{ item.queue.name }} · {{ item.get_status_display }}</span>
+  {% endfor %}
+</div>

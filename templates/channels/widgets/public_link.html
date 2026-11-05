@@ -11,12 +11,14 @@
     </div>
     <p class="text-sm opacity-70 mt-2">Anyone with this link can chat with the published version of this chatbot.</p>
     <button type="button" class="btn btn-warning btn-sm mt-2 self-start"
+            id="regenerate-public-link-button"
             hx-post="{{ widget.edit_url }}"
             hx-include="closest form"
             hx-vals='{"regenerate_link": "1"}'
             hx-target="#channel_create_edit_modal_placeholder"
             hx-swap="innerHTML"
-            hx-confirm="Regenerate the link? The current link stops working immediately and every live conversation on it is ended.">
+            hx-trigger="confirmed"
+            onclick="confirmThenTrigger('regenerate-public-link-button', 'Regenerate the link? The current link stops working immediately and every live conversation on it is ended.')">
       <i class="fa-solid fa-rotate"></i> Regenerate link
     </button>
     <input type="hidden" name="{{ widget.name }}" value="{{ widget.value }}">

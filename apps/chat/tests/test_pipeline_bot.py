@@ -4,19 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.chat.bots import PipelineBot
+from apps.chat.bots import EvalsBot, PipelineBot
 from apps.pipelines.nodes.base import PipelineState
-
-
-def test_save_outputs_saves_ai_message():
-    session = mock.Mock()
-    bot = PipelineBot(session, mock.Mock(), None)
-    bot._save_message_to_history = mock.Mock()
-    bot._save_outputs(
-        input_state=PipelineState(messages=["hi"]),
-        output=PipelineState(messages=["Hello"]),
-    )
-    bot._save_message_to_history.assert_called_once()
 
 
 class TestPersistPipelineState:
@@ -52,6 +41,7 @@ class TestPersistPipelineState:
         )
         assert participant_data.data == {"test": "demo"}
         participant_data.save.assert_called()
+        session.participant.update_name_from_data.assert_called_once_with({"test": "demo"})
 
     def test_computes_and_sets_participant_data_diff(self):
         session = mock.Mock()
@@ -90,21 +80,6 @@ class TestPersistPipelineState:
         )
 
         trace_service.set_participant_data_diff.assert_not_called()
-
-    def test_no_diff_when_no_trace_service(self):
-        session = mock.Mock()
-        bot = PipelineBot(session, mock.Mock(), None)
-        participant_data = mock.Mock()
-        participant_data.data = None
-        bot.__dict__["participant_data"] = participant_data
-
-        bot._persist_pipeline_state(
-            input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
-            output=PipelineState(messages=["Hello"], participant_data={"plan": "pro"}),
-        )
-
-        # Should not raise even without trace_service
-        assert participant_data.data == {"plan": "pro"}
 
     def test_no_save_when_state_unchanged(self):
         session = mock.Mock()
@@ -199,3 +174,50 @@ def test_pipeline_execution_failure_propagates_exception():
         with patch("apps.pipelines.graph.PipelineGraph.build_from_pipeline"):
             with pytest.raises(Exception, match="Pipeline failed"):
                 bot.process_input(user_input="hello")
+
+
+class TestEvalsBotPersistPipelineState:
+    """An eval run keeps what the pipeline did to participant data for its evaluators and writes none of it:
+    the row belongs to the team-wide evaluations participant, and a name key would rename it."""
+
+    def _bot(self):
+        bot = EvalsBot(mock.Mock(), mock.Mock(), mock.Mock(), participant_data={"plan": "free"})
+        bot.__dict__["participant_data"] = mock.Mock()
+        return bot
+
+    def test_keeps_the_diff_and_writes_nothing(self):
+        bot = self._bot()
+        bot._persist_pipeline_state(
+            input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
+            output=PipelineState(messages=["Hello"], participant_data={"plan": "pro", "name": "Ada"}),
+        )
+        assert ("change", "plan", ("free", "pro")) in bot.participant_data_diff
+        assert ("add", "", [("name", "Ada")]) in bot.participant_data_diff
+        bot.trace_service.set_participant_data_diff.assert_called_once_with(bot.participant_data_diff)
+        bot.__dict__["participant_data"].save.assert_not_called()
+        bot.session.participant.update_name_from_data.assert_not_called()
+
+    def test_unchanged_participant_data_leaves_no_diff(self):
+        bot = self._bot()
+        bot._persist_pipeline_state(
+            input_state=PipelineState(messages=["hi"], participant_data={"plan": "free"}),
+            output=PipelineState(messages=["Hello"], participant_data={"plan": "free"}),
+        )
+        assert bot.participant_data_diff == []
+        bot.trace_service.set_participant_data_diff.assert_not_called()
+
+    def test_still_persists_session_tags_and_state(self):
+        bot = self._bot()
+        bot._persist_pipeline_state(
+            input_state=PipelineState(messages=["hi"]),
+            output=PipelineState(messages=["Hello"], session_tags=[("needs-review", "")], session_state={"step": 2}),
+        )
+        bot.session.chat.create_and_add_tag.assert_called_with("needs-review", bot.session.team, tag_category="")
+        assert bot.session.state == {"step": 2}
+        bot.session.save.assert_called_with(update_fields=["state"])
+
+    def test_keeps_the_final_pipeline_state(self):
+        bot = self._bot()
+        output = PipelineState(messages=["Hello"], outputs={"end": {"message": "Hello", "node_id": "e"}})
+        bot._persist_pipeline_state(input_state=PipelineState(messages=["hi"]), output=output)
+        assert bot.pipeline_output is output

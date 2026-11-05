@@ -9,7 +9,7 @@
 {% endcomment %}
 <li{% if group.hidden_versions %} x-data="{ expanded: false }"{% endif %}>
   {% with head_url=group.head.get_absolute_url|default_if_none:"" %}
-    {% include "generic/chip_button.html" with url=head_url label=group.name %}
+    <c-ui.chip :url="head_url" :label="group.name" />
   {% endwith %}
   {% for member in group.visible_versions %}{% usage_version_pill member %}{% endfor %}
   {% if group.hidden_versions %}

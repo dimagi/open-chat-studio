@@ -33,7 +33,7 @@ def manage_applications_url(team_slug: str) -> str:
     return section_url(team_slug=team_slug, section_key="developer", fragment="oauth-applications")
 
 
-@audit_fields("allowed_chatbots")
+@audit_fields("allowed_chatbots", "all_data")
 class OAuth2Application(AbstractApplication):
     # The team is pinned here at registration and every token the application issues is scoped to it.
     # Null means the application is *global*: only superusers may register those (from the site admin
@@ -51,6 +51,13 @@ class OAuth2Application(AbstractApplication):
         blank=True,
         related_name="oauth_applications",
         help_text="Chatbots this application may start chat sessions with. Empty means none.",
+    )
+    # Overrides `allowed_chatbots`: a client-credentials application with this set reaches every chatbot
+    # in its team, and may also write the resources those chatbots share (ADR-0070).
+    all_data = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Reach every chatbot in the team and the resources they share, instead of only the allowed chatbots.",
     )
 
     objects = ApplicationManager()

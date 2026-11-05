@@ -10,7 +10,7 @@ from apps.api.v2.inspect.serializers import (
     OutputHandleSerializer,
     PipelineBuildErrorsSerializer,
 )
-from apps.api.v2.write.base import RejectsUnknownKeys
+from apps.api.v2.write.base import RejectsUnwritableKeys
 from apps.pipelines.models import Node
 
 from .graph_editor import settable_params
@@ -55,7 +55,7 @@ class RejectsServerAssignedKeys:
         return super().to_internal_value(data)
 
 
-class NodeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):
+class NodeCreateSerializer(RejectsServerAssignedKeys, RejectsUnwritableKeys, serializers.Serializer):
     """The POST body: a node type, and what to start it off with.
 
     ``type`` alone is enough — the server fills in the type's defaults, and whatever is still
@@ -107,7 +107,7 @@ class WrittenNodeSerializer(serializers.Serializer):
         return node.output_handles()
 
 
-class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):
+class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnwritableKeys, serializers.Serializer):
     """The PATCH body: the params and label to change, and nothing else.
 
     ``type`` is absent on purpose — a node's type decides what its params mean, so changing it in
@@ -184,7 +184,7 @@ WIRES_FIELD = "wires"
 MAX_WIRES_PER_CALL = 100
 
 
-class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):
+class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnwritableKeys, serializers.Serializer):
     """One entry of the body's ``wires``: which two nodes to wire, and from which handle.
 
     ``source`` and ``target`` are all that is required. A handle left out (or sent as null, the way
@@ -222,7 +222,7 @@ class EdgeCreateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serial
     )
 
 
-class WireBodySerializer(RejectsUnknownKeys, serializers.Serializer):
+class WireBodySerializer(RejectsUnwritableKeys, serializers.Serializer):
     """The POST body: the wires to add, under one key.
 
     ``wires`` holds a list even for a single wire, so a client wiring the node it has just created

@@ -202,7 +202,7 @@
                         <i class="fa-solid fa-code-compare mr-1"></i> Changes during this trace
                     </h4>
                     <div class="space-y-1">
-                        {% include "generic/components/participant_data_diff_changes.html" with changes=changes %}
+                        <c-app.participant-data-diff-changes :changes="changes" />
                     </div>
                 </div>
             {% endif %}

@@ -23,6 +23,12 @@ def _clear_rate_limit_cache():
     default_cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _fixed_clock(monkeypatch):
+    """Keeps every request in one counting window; a real clock can cross a window boundary mid-test."""
+    monkeypatch.setattr("apps.utils.rate_limit._now", lambda: 1_000_000)
+
+
 @pytest.mark.django_db()
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
 def test_repeated_invalid_keys_are_throttled(client):

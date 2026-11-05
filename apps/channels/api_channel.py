@@ -9,6 +9,8 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.sender import ChannelSender
 from apps.channels.stages.core import (
+    AbuseRulesStage,
+    BlockedParticipantStage,
     BotInteractionStage,
     ChannelDisabledStage,
     ChatMessageCreationStage,
@@ -23,7 +25,7 @@ from apps.channels.stages.core import (
     SessionActivationStage,
     SessionResolutionStage,
 )
-from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.stages.terminal import ActivityTrackingStage, ModerationResultStage, PersistenceStage
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus
@@ -55,7 +57,7 @@ class ApiChannel(ChannelBase):
     """
 
     voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
+    supported_message_types = (MESSAGE_TYPES.TEXT,)
 
     def __init__(
         self,
@@ -94,6 +96,7 @@ class ApiChannel(ChannelBase):
             core_stages=[
                 ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
+                BlockedParticipantStage(),
                 ConsentCheckStage(),
                 ChannelDisabledStage(),
                 SessionResolutionStage(),
@@ -102,11 +105,13 @@ class ApiChannel(ChannelBase):
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 ErrorGuardStage(),
+                AbuseRulesStage(),
                 ConsentFlowStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
+                ModerationResultStage(),
                 PersistenceStage(),
                 ActivityTrackingStage(),
             ],

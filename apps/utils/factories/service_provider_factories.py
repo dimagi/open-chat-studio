@@ -10,6 +10,8 @@ from apps.service_providers.models import (
     LlmProviderTypes,
     MessagingProvider,
     MessagingProviderType,
+    ModerationProvider,
+    ModerationProviderType,
     TraceProvider,
     TraceProviderType,
     VoiceProvider,
@@ -102,3 +104,13 @@ class TraceProviderFactory(factory.django.DjangoModelFactory):
             "host": "https://example.com",
         }
     )
+
+
+class ModerationProviderFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ModerationProvider
+
+    team = factory.SubFactory(TeamFactory)
+    name = factory.Sequence(lambda n: f"Test Moderation Provider {n}")
+    type = ModerationProviderType.openai
+    config = factory.Dict({"openai_api_key": factory.Sequence(lambda n: f"test-openai-api-key-{n}")})

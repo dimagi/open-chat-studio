@@ -100,6 +100,7 @@ def public_link_page(request, token: str):
             "welcome_json": json.dumps(channel.extra_data.get("welcome_messages", [])),
             "starters_json": json.dumps(channel.extra_data.get("starter_questions", [])),
             "user": request.user if member else None,
+            "allow_attachments": bool(shown and shown.file_uploads_enabled),
             "widget_enabled": state.live or (member and state.code != "disabled"),
         },
     )

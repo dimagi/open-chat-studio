@@ -65,6 +65,15 @@
               </div>
             {% endwith %}
           </div>
+          {% if block_form %}
+            <div class="grid grid-rows-subgrid row-span-2 gap-1 pe-8 border-e border-base-300">
+              <div class="text-lg font-extrabold self-end" id="participant-strikes">{{ participant.strikes }}</div>
+              <div class="stat-title-upper tooltip tooltip-bottom"
+                   data-tip="{% blocktranslate %}Flagged messages since the participant was last unblocked. Counted only while auto-block is on.{% endblocktranslate %}">
+                {% translate "Strikes" %}
+              </div>
+            </div>
+          {% endif %}
           <div class="grid grid-rows-subgrid row-span-2 gap-1">
             <div class="self-end">
               <div class="w-36 h-10">
@@ -77,11 +86,49 @@
           </div>
         </div>
       </div>
-      {% if trigger_bot_form and perms.experiments.change_participant %}
-        <button class="btn btn-sm btn-primary"
-                onclick="trigger_message_dialog.showModal()">{% translate "Trigger Bot Message" %}</button>
+      {% if perms.experiments.change_participant %}
+        <div class="flex items-center gap-2">
+          {% if block_form %}
+            {% if denial %}
+              {% translate "Unblock this participant? They will be able to use your chatbots again." as unblock_confirm %}
+              <button id="unblock-participant-button"
+                      class="btn btn-sm tooltip tooltip-left"
+                      data-tip="{% translate "Let this participant use this team's chatbots again" %}"
+                      hx-post="{% url 'participants:unblock_participant' request.team.slug participant.id %}"
+                      hx-trigger="confirmed"
+                      onclick="confirmThenTrigger('unblock-participant-button', '{{ unblock_confirm|escapejs }}')">
+                {% translate "Unblock" %}
+              </button>
+            {% elif can_block %}
+              <button class="btn btn-sm btn-error btn-outline tooltip tooltip-left"
+                      data-tip="{% translate "Stop this participant from getting replies from this team's chatbots" %}"
+                      onclick="block_participant_dialog.showModal()">{% translate "Block" %}</button>
+            {% else %}
+              <span class="tooltip tooltip-left"
+                    data-tip="{% translate "Team members cannot be blocked" %}">
+                <button class="btn btn-sm btn-error btn-outline" disabled>{% translate "Block" %}</button>
+              </span>
+            {% endif %}
+          {% endif %}
+          {% if trigger_bot_form %}
+            <button class="btn btn-sm btn-primary"
+                    onclick="trigger_message_dialog.showModal()">{% translate "Trigger Bot Message" %}</button>
+          {% endif %}
+        </div>
       {% endif %}
     </div>
+    {% if denial %}
+      <div role="alert" class="alert alert-error alert-soft mt-4 text-sm">
+        <i class="fa-solid fa-ban"></i>
+        <div>
+          <div class="font-semibold">
+            {% blocktranslate with source=denial.get_source_display date=denial.created_at|date:"M j, Y" %}Blocked · {{ source }} · {{ date }}{% endblocktranslate %}
+            {% if denial.created_by %}· {{ denial.created_by.get_display_name }}{% endif %}
+          </div>
+          {% if denial.reason %}<div class="whitespace-pre-line">{{ denial.reason }}</div>{% endif %}
+        </div>
+      </div>
+    {% endif %}
     <div class="mt-4 border-t pt-3" x-data="{showDetails: false}">
       <button class="btn btn-ghost btn-sm pl-0" @click="showDetails = !showDetails">
         <i class="fa-solid fa-chevron-down transition-transform"
@@ -109,7 +156,7 @@
           <dd class="text-xs mt-1 flex items-center gap-1">
             <code class="truncate max-w-32 inline-block"
                   title="{{ participant.public_id }}">{{ participant.public_id }}</code>
-            {% include "generic/copy_chip.html" with copy_element_id="participant-public-id" copy_value=participant.public_id show_value=0 action_text="" extra_styles="btn-ghost btn-xs px-1" %}
+            <c-ui.copy-chip target="participant-public-id" :value="participant.public_id" :show_value="False" text="" class="btn-ghost btn-xs px-1" />
           </dd>
         </div>
         <div>
@@ -202,6 +249,29 @@
         </form>
         <div class="modal-action">
           <button type="submit" form="trigger_bot_form_id" class="btn btn-primary">{% translate "Trigger Bot" %}</button>
+          <form method="dialog">
+            <button class="btn">{% translate "Close" %}</button>
+          </form>
+        </div>
+      </div>
+    </dialog>
+  {% endif %}
+  {% if can_block and perms.experiments.change_participant %}
+    <dialog id="block_participant_dialog" class="modal">
+      <div class="modal-box">
+        <h3 class="text-lg font-bold">{% translate "Block participant" %}</h3>
+        <form id="block_participant_form_id"
+              method="post"
+              class="my-2"
+              action="{% url 'participants:block_participant' request.team.slug participant.id %}">
+          {% csrf_token %}
+          {% render_form_fields block_form %}
+          <div class="prose prose-sm prose-light">
+            <p>{% translate "The participant gets no replies from any of this team's chatbots until they are unblocked." %}</p>
+          </div>
+        </form>
+        <div class="modal-action">
+          <button type="submit" form="block_participant_form_id" class="btn btn-error">{% translate "Block" %}</button>
           <form method="dialog">
             <button class="btn">{% translate "Close" %}</button>
           </form>

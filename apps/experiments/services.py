@@ -1,5 +1,6 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import DateTimeField, F, OuterRef, Q, Subquery
+from field_audit.models import AuditAction
 
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -95,3 +96,31 @@ def start_experiment_session(
             enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
         enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
     return session
+
+
+def publish_version(version: Experiment) -> None:
+    """Make ``version`` the published version of its chatbot, unpublishing the version that held it.
+
+    Locks the working chatbot so two concurrent publishes cannot each unpublish the other's version
+    and leave the chatbot with none.
+    """
+    if version.is_default_version:
+        return
+    with transaction.atomic():
+        Experiment.objects.select_for_update().filter(id=version.working_version_id).first()
+        Experiment.objects.filter(working_version_id=version.working_version_id, is_default_version=True).update(
+            is_default_version=False, audit_action=AuditAction.AUDIT
+        )
+        version.is_default_version = True
+        version.save(update_fields=["is_default_version"])
+
+
+def last_activity_subquery() -> Subquery:
+    """Annotation for an ``Experiment`` queryset: the latest ``last_activity_at`` of its non-evaluation sessions."""
+    return Subquery(
+        ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
+        .exclude(platform=ChannelPlatform.EVALUATIONS)
+        .order_by(F("last_activity_at").desc(nulls_last=True))
+        .values("last_activity_at")[:1],
+        output_field=DateTimeField(),
+    )

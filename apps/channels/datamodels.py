@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.deduplication import external_ids_for
 from apps.channels.models import ChannelPlatform
+from apps.channels.utils import trim_email_references
 from apps.documents.readers import Document
 from apps.files.models import File
 
@@ -476,18 +477,8 @@ def _extract_raw_attachments(inbound) -> list[RawAttachment]:
     return raw
 
 
-_MAX_REFERENCES = 50
-
-
 def _parse_references(refs: str) -> list[str]:
-    """Parse space-separated Message-ID list from References header.
-
-    Keeps the first reference (root message / session anchor) plus the
-    most recent ones to prevent unbounded growth in long email threads.
-    """
+    """Parse space-separated Message-ID list from References header."""
     if not refs:
         return []
-    parsed = [r.strip() for r in refs.split() if r.strip()]
-    if len(parsed) <= _MAX_REFERENCES:
-        return parsed
-    return [parsed[0], *parsed[-(_MAX_REFERENCES - 1) :]]
+    return trim_email_references([r.strip() for r in refs.split() if r.strip()])

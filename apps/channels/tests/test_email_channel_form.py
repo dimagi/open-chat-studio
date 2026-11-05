@@ -2,24 +2,7 @@ import pytest
 from django.test import override_settings
 
 from apps.channels.forms import EmailChannelForm
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.utils.factories.experiment import ExperimentFactory
-
-
-def _make_email_channel(team, experiment=None, email_address="bot@chat.openchatstudio.com", is_default=False):
-    """Helper to create an email ExperimentChannel."""
-    if experiment is None:
-        experiment = ExperimentFactory(team=team)
-    extra = {"email_address": email_address}
-    if is_default:
-        extra["is_default"] = True
-    return ExperimentChannel.objects.create(
-        team=team,
-        experiment=experiment,
-        platform=ChannelPlatform.EMAIL,
-        extra_data=extra,
-        name=f"email-{email_address}",
-    )
+from apps.channels.tests.email_helpers import make_email_channel
 
 
 @pytest.mark.django_db()
@@ -57,7 +40,7 @@ class TestEmailChannelForm:
 
     def test_duplicate_default_rejected(self, experiment):
         """Only one default email channel per team."""
-        _make_email_channel(experiment.team, email_address="first@chat.openchatstudio.com", is_default=True)
+        make_email_channel(experiment.team, email_address="first@chat.openchatstudio.com", is_default=True)
 
         form = EmailChannelForm(
             experiment=experiment,
@@ -73,7 +56,7 @@ class TestEmailChannelForm:
     @override_settings(EMAIL_CHANNEL_ALLOWED_DOMAINS=["chat.openchatstudio.com"])
     def test_duplicate_default_allowed_when_editing_same_channel(self, experiment):
         """Editing the existing default channel should not trigger uniqueness error."""
-        channel = _make_email_channel(
+        channel = make_email_channel(
             experiment.team, experiment=experiment, email_address="first@chat.openchatstudio.com", is_default=True
         )
 

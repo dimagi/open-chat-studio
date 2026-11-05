@@ -527,11 +527,23 @@ paths:
                     llm_provider_model_id: 12
                     llm_model_parameters:
                       temperature: 0.0
-                    prompt: Route on what {participant_data} is asking for.
+                    prompt_mode: standard
+                    custom_context: A request to change an existing booking is a reschedule,
+                      not a new booking.
+                    prompt_template_version: v1
+                    prompt: |-
+                      Route on what {participant_data} is asking for.
+
+                      Routes:
+                      {routes}
                     keywords:
                     - schedule
                     - reschedule
                     - cancel
+                    route_descriptions:
+                      SCHEDULE: Booking a new appointment
+                      RESCHEDULE: Moving an existing appointment
+                      CANCEL: Cancelling an appointment
                     default_keyword_index: 2
                     tag_output_message: true
                     history_type: named
@@ -540,7 +552,10 @@ paths:
                     user_max_token_limit: 4000
                     max_history_length: 25
                 summary: 'RouterNode: `keywords[i]` routes to handle `output_i`; keywords
-                  are uppercased on save.'
+                  are uppercased on save. The standard prompt lists each keyword with
+                  its `route_descriptions` entry; `custom_context` adds to it, and
+                  `prompt` is used only when `prompt_mode` is `custom`. `prompt_template_version`
+                  picks the standard prompt version; omit it for the latest.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -759,6 +774,459 @@ paths:
         '409':
           description: The node is part of the pipeline's structure and cannot be
             deleted.
+  /api/v2/chatbots/{id}/scheduled-triggers/:
+    post:
+      operationId: chatbot_scheduled_trigger_create
+      description: |-
+        A scheduled trigger runs its action once, at a set date and time, for every open session of the published version (or only those active within `active_session_window_days`). The date and time must be in the future.
+
+        Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the `params` field's description lists the keys each type takes.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Add a Scheduled trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbot Triggers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledTriggerWrite'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTriggerWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint accepts. Errors are keyed
+            by the field at fault, with the action's errors under `action` and its
+            params' errors under `action.params`; an error about the combination of
+            trigger and action is under `action.non_field_errors`. Nothing is saved.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such working chatbot in this team.
+  /api/v2/chatbots/{id}/scheduled-triggers/{trigger_id}/:
+    patch:
+      operationId: chatbot_scheduled_trigger_update
+      description: |-
+        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. A read-only field may be sent only with its current value, so a response can be sent back as it is.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Update a Scheduled trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
+          endpoint.
+        required: true
+      tags:
+      - Chatbot Triggers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedScheduledTriggerWrite'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTriggerWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint accepts. Errors are keyed
+            by the field at fault, with the action's errors under `action` and its
+            params' errors under `action.params`; an error about the combination of
+            trigger and action is under `action.non_field_errors`. Nothing is saved.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
+    delete:
+      operationId: chatbot_scheduled_trigger_archive
+      description: |-
+        Archive the scheduled trigger. This is a soft delete: a person can restore it in the web app. A repeat of this call answers `404`, which makes it safe to retry.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Archive a Scheduled trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
+          endpoint.
+        required: true
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceArchived'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
+  /api/v2/chatbots/{id}/static-triggers/:
+    post:
+      operationId: chatbot_static_trigger_create
+      description: |-
+        A static trigger runs its action when a conversation event happens, such as a conversation starting or a participant sending a message. Two combinations are refused: a `new_bot_message` trigger cannot run `send_message_to_bot` or `schedule_trigger`, and a trigger on a conversation ending cannot run `end_conversation`.
+
+        Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the `params` field's description lists the keys each type takes.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Add a Static trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbot Triggers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaticTriggerWrite'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticTriggerWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint accepts. Errors are keyed
+            by the field at fault, with the action's errors under `action` and its
+            params' errors under `action.params`; an error about the combination of
+            trigger and action is under `action.non_field_errors`. Nothing is saved.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such working chatbot in this team.
+  /api/v2/chatbots/{id}/static-triggers/{trigger_id}/:
+    patch:
+      operationId: chatbot_static_trigger_update
+      description: |-
+        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. A read-only field may be sent only with its current value, so a response can be sent back as it is.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Update a Static trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
+          endpoint.
+        required: true
+      tags:
+      - Chatbot Triggers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStaticTriggerWrite'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticTriggerWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint accepts. Errors are keyed
+            by the field at fault, with the action's errors under `action` and its
+            params' errors under `action.params`; an error about the combination of
+            trigger and action is under `action.non_field_errors`. Nothing is saved.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
+    delete:
+      operationId: chatbot_static_trigger_archive
+      description: |-
+        Archive the static trigger. This is a soft delete: a person can restore it in the web app. A repeat of this call answers `404`, which makes it safe to retry.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Archive a Static trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
+          endpoint.
+        required: true
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceArchived'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
+  /api/v2/chatbots/{id}/timeout-triggers/:
+    post:
+      operationId: chatbot_timeout_trigger_create
+      description: |-
+        A timeout trigger runs its action after the participant has been inactive for `delay` seconds, up to `total_num_triggers` times in one session.
+
+        Each trigger runs one action. `action.params` depends on `action.action_type`; the table in the `params` field's description lists the keys each type takes.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Add a Timeout trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbot Triggers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeoutTriggerWrite'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeoutTriggerWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint accepts. Errors are keyed
+            by the field at fault, with the action's errors under `action` and its
+            params' errors under `action.params`; an error about the combination of
+            trigger and action is under `action.non_field_errors`. Nothing is saved.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such working chatbot in this team.
+  /api/v2/chatbots/{id}/timeout-triggers/{trigger_id}/:
+    patch:
+      operationId: chatbot_timeout_trigger_update
+      description: |-
+        Only the fields you send change. If you send `action`, its `params` replace the stored params, so send every param the action needs; leave `action_type` out to keep the current one. A read-only field may be sent only with its current value, so a response can be sent back as it is.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Update a Timeout trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
+          endpoint.
+        required: true
+      tags:
+      - Chatbot Triggers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTimeoutTriggerWrite'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeoutTriggerWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint accepts. Errors are keyed
+            by the field at fault, with the action's errors under `action` and its
+            params' errors under `action.params`; an error about the combination of
+            trigger and action is under `action.non_field_errors`. Nothing is saved.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
+    delete:
+      operationId: chatbot_timeout_trigger_archive
+      description: |-
+        Archive the timeout trigger. This is a soft delete: a person can restore it in the web app. A repeat of this call answers `404`, which makes it safe to retry.
+
+        The change applies to the working (draft) version; publish the chatbot for it to reach participants of the published version.
+      summary: Archive a Timeout trigger
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: trigger_id
+        schema:
+          type: integer
+        description: The trigger's id, as returned by a create or by the `chatbot_inspect`
+          endpoint.
+        required: true
+      tags:
+      - Chatbot Triggers
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceArchived'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a read-only key, or a machine (client-credentials) token whose application
+            is not authorised for this chatbot.'
+        '404':
+          description: No such chatbot, or no trigger of this kind with this id on
+            its working version. A published version's triggers and archived triggers
+            are not reachable.
   /api/v2/chatbots/{id}/versions/:
     post:
       operationId: chatbot_version_create
@@ -965,6 +1433,164 @@ paths:
             for this chatbot.'
         '404':
           description: No such chatbot, or it has never created a version.
+  /api/v2/consent-forms/:
+    get:
+      operationId: consent_form_list
+      description: List the team's consent forms. Archived ones are not listed.
+      summary: List Consent Forms
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConsentFormResourceList'
+          description: ''
+    post:
+      operationId: consent_form_create
+      description: A key that is not listed below is rejected rather than ignored.
+        A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
+      summary: Create Consent Form
+      tags:
+      - Consent Forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentFormResource'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+  /api/v2/consent-forms/{id}/:
+    get:
+      operationId: consent_form_retrieve
+      description: Retrieve the consent form with this ID. An archived one answers
+        `404`.
+      summary: Retrieve Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+    patch:
+      operationId: consent_form_update
+      description: Only the keys you send are changed, and a key that is not listed
+        below is rejected rather than ignored. Published chatbot versions keep the
+        content they were published with; publish the chatbot again to pick up the
+        edit. A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
+      summary: Update Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedConsentFormResource'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormResource'
+          description: ''
+    delete:
+      operationId: consent_form_archive
+      description: 'Archive the consent form. This is a soft delete: it is hidden
+        rather than destroyed, and a person can restore it in the web app. A repeat
+        of this call answers `404`, which makes it safe to retry. Every chatbot draft
+        using the form is moved onto the team''s default consent form; published versions
+        keep the form they were published with. The default form itself cannot be
+        archived and answers `409`. A client-credentials token can write only when
+        its application has access to all chatbots; otherwise its writes answer `403`.'
+      summary: Archive Consent Form
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Consent Form ID
+        required: true
+      tags:
+      - Consent Forms
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceArchived'
+          description: ''
+        '404':
+          description: No such resource, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: ''
   /api/v2/me/:
     get:
       operationId: me
@@ -1013,7 +1639,7 @@ paths:
                   - type: RouterNode
                     description: Routes the input to one of the linked nodes using
                       an LLM
-                    documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
+                    documentation_url: https://docs.openchatstudio.com/how-to/routers/
                     outputs:
                       kind: per_keyword
                       handles: null
@@ -1075,7 +1701,7 @@ paths:
                     type: RouterNode
                     description: Routes the input to one of the linked nodes using
                       an LLM
-                    documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
+                    documentation_url: https://docs.openchatstudio.com/how-to/routers/
                     outputs:
                       kind: per_keyword
                       handles: null
@@ -1230,6 +1856,164 @@ paths:
                 $ref: '#/components/schemas/NodeTypeNotFound'
           description: No such node type, or the type is deprecated and therefore
             not listed.
+  /api/v2/source-material/:
+    get:
+      operationId: source_material_list
+      description: List the team's source material. Archived ones are not listed.
+      summary: List Source Material
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSourceMaterialResourceList'
+          description: ''
+    post:
+      operationId: source_material_create
+      description: A key that is not listed below is rejected rather than ignored.
+        A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
+      summary: Create Source Material
+      tags:
+      - Source Material
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceMaterialResource'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+  /api/v2/source-material/{id}/:
+    get:
+      operationId: source_material_retrieve
+      description: Retrieve the source material with this ID. An archived one answers
+        `404`.
+      summary: Retrieve Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+    patch:
+      operationId: source_material_update
+      description: Only the keys you send are changed, and a key that is not listed
+        below is rejected rather than ignored. Published chatbot versions keep the
+        content they were published with; publish the chatbot again to pick up the
+        edit. A client-credentials token can write only when its application has access
+        to all chatbots; otherwise its writes answer `403`.
+      summary: Update Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSourceMaterialResource'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialResource'
+          description: ''
+    delete:
+      operationId: source_material_archive
+      description: 'Archive the source material. This is a soft delete: it is hidden
+        rather than destroyed, and a person can restore it in the web app. A repeat
+        of this call answers `404`, which makes it safe to retry. It is refused with
+        `409` while a pipeline node or a live chatbot version still uses it. The response
+        lists each chatbot version and node that uses it. A client-credentials token
+        can write only when its application has access to all chatbots; otherwise
+        its writes answer `403`.'
+      summary: Archive Source Material
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Source Material ID
+        required: true
+      tags:
+      - Source Material
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceArchived'
+          description: ''
+        '404':
+          description: No such resource, or it is archived already.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialInUse'
+          description: ''
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message
@@ -1326,8 +2110,9 @@ paths:
           content:
             application/json:
               schema:
-                description: The OAuth application is not authorized for this chatbot
-          description: ''
+                $ref: '#/components/schemas/ForbiddenOrParticipantBlocked'
+          description: The OAuth application is not authorized for this chatbot, or
+            the participant is blocked (`code` is `participant_blocked`)
         '404':
           content:
             application/json:
@@ -1336,7 +2121,7 @@ paths:
               examples:
                 ExperimentNotFound:
                   value:
-                    detail: No Experiment matches the given query.
+                    detail: No chatbot matches the given query.
                   summary: No experiment with the given ID exists in the team
           description: ''
   /api/v2/usage/:
@@ -1768,8 +2553,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChatbotVersion'
+        last_activity_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When a participant last sent a message in any of this chatbot's
+            sessions. Evaluation runs are not counted. Null if the chatbot has no
+            participant activity.
       required:
       - id
+      - last_activity_at
       - name
       - url
       - versions
@@ -2110,6 +2904,36 @@ components:
       - consent_text
       - id
       - name
+    ConsentFormResource:
+      type: object
+      description: The consent form fields that channels show, plus the id a chatbot
+        references it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_default:
+          type: boolean
+          readOnly: true
+          description: Whether this is the team's default consent form. The default
+            cannot be archived, and chatbots using an archived form are moved onto
+            it.
+      required:
+      - consent_text
+      - id
+      - is_default
+      - name
+      additionalProperties: false
     Cost:
       type: object
       properties:
@@ -2262,6 +3086,14 @@ components:
       - pipeline_errors
       - pipeline_valid
       - unwired_handles
+    ErrorDetail:
+      type: object
+      description: An error response with a single human-readable message.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     ExtractParticipantDataParams:
       type: object
       properties:
@@ -2392,6 +3224,10 @@ components:
           nullable: true
           description: Use the provider's neural (higher-quality) voice engine, where
             supported.
+    ForbiddenOrParticipantBlocked:
+      oneOf:
+      - $ref: '#/components/schemas/PermissionDeniedResponse'
+      - $ref: '#/components/schemas/ParticipantBlockedResponse'
     GroupedUsageResponse:
       type: object
       description: |-
@@ -2492,11 +3328,12 @@ components:
     InspectEvents:
       type: object
       description: |-
-        A chatbot's static and timeout triggers, excluding archived ones.
+        A chatbot's static, timeout and scheduled triggers, excluding archived ones.
 
         ``static_triggers`` fire on conversation events (start, end, a new message, …); ``timeout_triggers``
         fire after a period of inactivity. The two overlap at the end of a conversation: a ``last_timeout``
-        static trigger fires once the final timeout has elapsed.
+        static trigger fires once the final timeout has elapsed. ``scheduled_triggers`` fire once, at a set
+        date and time, for the published version's open sessions.
       properties:
         static_triggers:
           type: array
@@ -2508,7 +3345,13 @@ components:
           items:
             $ref: '#/components/schemas/InspectTimeoutTrigger'
           readOnly: true
+        scheduled_triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectScheduledTrigger'
+          readOnly: true
       required:
+      - scheduled_triggers
       - static_triggers
       - timeout_triggers
     InspectFile:
@@ -2726,6 +3569,52 @@ components:
       - id
       - name
       - nodes
+    InspectScheduledTrigger:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        trigger_date:
+          type: string
+          format: date
+          description: The date the trigger fires on (YYYY-MM-DD), in `timezone`.
+        trigger_time:
+          type: string
+          format: time
+          description: The time the trigger fires at (HH:MM:SS), in `timezone`.
+        timezone:
+          type: string
+          description: The IANA timezone name the date and time are in, e.g. `Africa/Nairobi`.
+          maxLength: 64
+        active_session_window_days:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Fire only for sessions with participant activity in this many
+            past days. Null fires for every open session.
+        scheduled_at:
+          type: string
+          format: date-time
+          description: When the trigger fires, in UTC.
+        fired_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the trigger fired, or null if it has not. Changing the
+            schedule resets it.
+        is_active:
+          type: boolean
+        action:
+          $ref: '#/components/schemas/InspectTriggerAction'
+      required:
+      - action
+      - id
+      - scheduled_at
+      - timezone
+      - trigger_date
+      - trigger_time
     InspectSettings:
       type: object
       description: The chatbot's non-secret settings, read directly off the experiment.
@@ -2763,7 +3652,7 @@ components:
           readOnly: true
         type:
           allOf:
-          - $ref: '#/components/schemas/InspectStaticTriggerTypeEnum'
+          - $ref: '#/components/schemas/StaticTriggerTypeEnum'
           description: |-
             The conversation event that fires this trigger
 
@@ -2786,39 +3675,13 @@ components:
       - action
       - id
       - type
-    InspectStaticTriggerTypeEnum:
-      enum:
-      - conversation_end
-      - conversation_ended_by_user
-      - conversation_ended_by_bot
-      - conversation_ended_via_api
-      - conversation_ended_by_event
-      - conversation_ended_manually
-      - last_timeout
-      - conversation_start
-      - new_human_message
-      - new_bot_message
-      - participant_joined
-      type: string
-      description: |-
-        * `conversation_end` - The conversation has ended (by any means)
-        * `conversation_ended_by_user` - The conversation is ended by the participant
-        * `conversation_ended_by_bot` - The conversation is ended by the bot
-        * `conversation_ended_via_api` - The conversation is ended via the API
-        * `conversation_ended_by_event` - The conversation is ended by an event
-        * `conversation_ended_manually` - The conversation is manually ended by an admin
-        * `last_timeout` - The last timeout occurs
-        * `conversation_start` - A new conversation is started
-        * `new_human_message` - A new human message is received
-        * `new_bot_message` - A new bot message is received
-        * `participant_joined` - A new participant joined the experiment
     InspectTimeoutTrigger:
       type: object
       properties:
         id:
           type: integer
           readOnly: true
-        delay_seconds:
+        delay:
           type: integer
           description: Seconds of inactivity before the trigger fires.
         total_num_triggers:
@@ -2834,7 +3697,7 @@ components:
           $ref: '#/components/schemas/InspectTriggerAction'
       required:
       - action
-      - delay_seconds
+      - delay
       - id
       - total_num_triggers
       - trigger_from_first_message
@@ -2846,9 +3709,9 @@ components:
         The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline exists in the
         team.
       properties:
-        type:
+        action_type:
           allOf:
-          - $ref: '#/components/schemas/InspectTriggerActionTypeEnum'
+          - $ref: '#/components/schemas/TriggerActionTypeEnum'
           description: |-
             What the trigger runs
 
@@ -2861,28 +3724,15 @@ components:
           type: object
           additionalProperties: {}
           readOnly: true
-          description: Action parameters; keys depend on the action ``type``.
+          description: Action parameters, as the trigger write endpoints take them;
+            keys depend on `action_type`.
         pipeline:
           allOf:
           - $ref: '#/components/schemas/InspectPipeline'
           readOnly: true
       required:
+      - action_type
       - params
-      - type
-    InspectTriggerActionTypeEnum:
-      enum:
-      - log
-      - end_conversation
-      - send_message_to_bot
-      - schedule_trigger
-      - pipeline_start
-      type: string
-      description: |-
-        * `log` - Log the last message
-        * `end_conversation` - End the conversation
-        * `send_message_to_bot` - Prompt the bot to message the user
-        * `schedule_trigger` - Trigger a schedule
-        * `pipeline_start` - Start a pipeline
     KindEnum:
       enum:
       - single
@@ -3231,6 +4081,66 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    PaginatedConsentFormResourceList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsentFormResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
+    PaginatedSourceMaterialResourceList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cD00ODY%3D
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMaterialResource'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
+    ParticipantBlockedResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Always `participant_blocked`.
+        detail:
+          type: string
+          description: A message that can be shown to the participant.
+      required:
+      - code
+      - detail
     ParticipantIdentity:
       type: object
       properties:
@@ -3308,6 +4218,31 @@ components:
           type: boolean
           description: Enables file attachments in the web chat interface.
       additionalProperties: false
+    PatchedConsentFormResource:
+      type: object
+      description: The consent form fields that channels show, plus the id a chatbot
+        references it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_default:
+          type: boolean
+          readOnly: true
+          description: Whether this is the team's default consent form. The default
+            cannot be archived, and chatbots using an archived form are moved onto
+            it.
+      additionalProperties: false
     PatchedNodeUpdate:
       type: object
       description: |-
@@ -3345,6 +4280,135 @@ components:
             one. Create a new version that goes live, or make a different version
             the published one, to move it off.
       additionalProperties: false
+    PatchedScheduledTriggerWrite:
+      type: object
+      description: A chatbot trigger and the action it runs.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        trigger_date:
+          type: string
+          format: date
+          description: The date the trigger fires on (YYYY-MM-DD), in `timezone`.
+        trigger_time:
+          type: string
+          format: time
+          description: The time the trigger fires at (HH:MM:SS), in `timezone`.
+        timezone:
+          type: string
+          description: The IANA timezone name the date and time are in, e.g. `Africa/Nairobi`.
+          maxLength: 64
+        active_session_window_days:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Fire only for sessions with participant activity in this many
+            past days. Null fires for every open session.
+        scheduled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the trigger fires, in UTC.
+        fired_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the trigger fired, or null if it has not. Changing the
+            schedule resets it.
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Whether the trigger fires. It can only be switched off in the
+            web app.
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+    PatchedSourceMaterialResource:
+      type: object
+      description: The fields the web app's source material form edits, plus the id
+        nodes reference it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+      additionalProperties: false
+    PatchedStaticTriggerWrite:
+      type: object
+      description: A chatbot trigger and the action it runs.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/StaticTriggerTypeEnum'
+          description: |-
+            The conversation event that fires the trigger.
+
+            * `conversation_end` - The conversation has ended (by any means)
+            * `conversation_ended_by_user` - The conversation is ended by the participant
+            * `conversation_ended_by_bot` - The conversation is ended by the bot
+            * `conversation_ended_via_api` - The conversation is ended via the API
+            * `conversation_ended_by_event` - The conversation is ended by an event
+            * `conversation_ended_manually` - The conversation is manually ended by an admin
+            * `last_timeout` - The last timeout occurs
+            * `conversation_start` - A new conversation is started
+            * `new_human_message` - A new human message is received
+            * `new_bot_message` - A new bot message is received
+            * `participant_joined` - A new participant joined the experiment
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Whether the trigger fires. It can only be switched off in the
+            web app.
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+    PatchedTimeoutTriggerWrite:
+      type: object
+      description: A chatbot trigger and the action it runs.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        delay:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Seconds of participant inactivity before the trigger fires.
+        total_num_triggers:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: How many times the trigger fires in one session.
+        trigger_from_first_message:
+          type: boolean
+          description: Measure the delay from the participant's first message (true)
+            rather than their most recent one (false).
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Whether the trigger fires. It can only be switched off in the
+            web app.
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+    PermissionDeniedResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
@@ -3578,6 +4642,40 @@ components:
       - label
       - type
       - value
+    ReferencingChatbot:
+      type: object
+      description: A chatbot version whose pipeline uses the source material.
+      properties:
+        chatbot_id:
+          type: string
+          format: uuid
+          description: The chatbot's id, as the chatbot endpoints take it.
+        version_number:
+          type: integer
+        published:
+          type: boolean
+          description: True for the published version, whose nodes cannot be edited;
+            false for the draft.
+        node_ids:
+          type: array
+          items:
+            type: string
+          description: The nodes that use it, as the pipeline node endpoints take
+            them.
+      required:
+      - chatbot_id
+      - node_ids
+      - published
+      - version_number
+    ReferencingPipeline:
+      type: object
+      description: A pipeline outside any listed chatbot, such as an archived chatbot's,
+        that uses the source material.
+      properties:
+        name:
+          type: string
+      required:
+      - name
     RenderTemplateParams:
       type: object
       properties:
@@ -3587,6 +4685,16 @@ components:
         template_string:
           type: string
           description: Jinja2 template rendered against the node input.
+    ResourceArchived:
+      type: object
+      description: The archive response for a record whose archiving changes nothing
+        else.
+      properties:
+        archived:
+          type: boolean
+          description: Always true; the failure cases are status codes.
+      required:
+      - archived
     ResourceOption:
       type: object
       description: |-
@@ -3650,9 +4758,83 @@ components:
         tag_output_message:
           type: boolean
           description: Tag the output message with the selected route.
+        prompt_mode:
+          type: string
+          description: 'How the router''s prompt is built: ``standard`` from the routes,
+            their descriptions and ``custom_context``, or ``custom`` from ``prompt``.'
+        custom_context:
+          type: string
+          description: Instructions added to the standard prompt when ``prompt_mode``
+            is ``standard``; left out when blank.
+        prompt_template_version:
+          type: string
+          description: Version of the standard prompt the router uses in ``standard``
+            mode. New routers get the latest version; set the latest version to upgrade
+            a router.
         prompt:
           type: string
-          description: Prompt steering the LLM router's choice.
+          description: Prompt steering the LLM router's choice, used when ``prompt_mode``
+            is ``custom``.
+        route_descriptions:
+          type: object
+          additionalProperties:
+            type: string
+          description: What each route is for, keyed by keyword. The ``{routes}``
+            prompt variable renders each keyword with its description.
+    ScheduledTriggerWrite:
+      type: object
+      description: A chatbot trigger and the action it runs.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        trigger_date:
+          type: string
+          format: date
+          description: The date the trigger fires on (YYYY-MM-DD), in `timezone`.
+        trigger_time:
+          type: string
+          format: time
+          description: The time the trigger fires at (HH:MM:SS), in `timezone`.
+        timezone:
+          type: string
+          description: The IANA timezone name the date and time are in, e.g. `Africa/Nairobi`.
+          maxLength: 64
+        active_session_window_days:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Fire only for sessions with participant activity in this many
+            past days. Null fires for every open session.
+        scheduled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the trigger fires, in UTC.
+        fired_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the trigger fired, or null if it has not. Changing the
+            schedule resets it.
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Whether the trigger fires. It can only be switched off in the
+            web app.
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+      required:
+      - action
+      - fired_at
+      - id
+      - is_active
+      - scheduled_at
+      - timezone
+      - trigger_date
+      - trigger_time
     SendEmailParams:
       type: object
       properties:
@@ -3687,6 +4869,47 @@ components:
       - id
       - material
       - topic
+    SourceMaterialInUse:
+      type: object
+      description: 'The source material archive 409: where it is still used.'
+      properties:
+        detail:
+          type: string
+        chatbots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferencingChatbot'
+        other_pipelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferencingPipeline'
+          description: Only a person can remove these references, in the web app.
+      required:
+      - chatbots
+      - detail
+      - other_pipelines
+    SourceMaterialResource:
+      type: object
+      description: The fields the web app's source material form edits, plus the id
+        nodes reference it by.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+      required:
+      - id
+      - material
+      - topic
+      additionalProperties: false
     StaticRouterNodeParams:
       type: object
       properties:
@@ -3710,6 +4933,68 @@ components:
           type: string
           nullable: true
           description: Key within the data source whose value selects the route.
+    StaticTriggerTypeEnum:
+      enum:
+      - conversation_end
+      - conversation_ended_by_user
+      - conversation_ended_by_bot
+      - conversation_ended_via_api
+      - conversation_ended_by_event
+      - conversation_ended_manually
+      - last_timeout
+      - conversation_start
+      - new_human_message
+      - new_bot_message
+      - participant_joined
+      type: string
+      description: |-
+        * `conversation_end` - The conversation has ended (by any means)
+        * `conversation_ended_by_user` - The conversation is ended by the participant
+        * `conversation_ended_by_bot` - The conversation is ended by the bot
+        * `conversation_ended_via_api` - The conversation is ended via the API
+        * `conversation_ended_by_event` - The conversation is ended by an event
+        * `conversation_ended_manually` - The conversation is manually ended by an admin
+        * `last_timeout` - The last timeout occurs
+        * `conversation_start` - A new conversation is started
+        * `new_human_message` - A new human message is received
+        * `new_bot_message` - A new bot message is received
+        * `participant_joined` - A new participant joined the experiment
+    StaticTriggerWrite:
+      type: object
+      description: A chatbot trigger and the action it runs.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/StaticTriggerTypeEnum'
+          description: |-
+            The conversation event that fires the trigger.
+
+            * `conversation_end` - The conversation has ended (by any means)
+            * `conversation_ended_by_user` - The conversation is ended by the participant
+            * `conversation_ended_by_bot` - The conversation is ended by the bot
+            * `conversation_ended_via_api` - The conversation is ended via the API
+            * `conversation_ended_by_event` - The conversation is ended by an event
+            * `conversation_ended_manually` - The conversation is manually ended by an admin
+            * `last_timeout` - The last timeout occurs
+            * `conversation_start` - A new conversation is started
+            * `new_human_message` - A new human message is received
+            * `new_bot_message` - A new bot message is received
+            * `participant_joined` - A new participant joined the experiment
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Whether the trigger fires. It can only be switched off in the
+            web app.
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+      required:
+      - action
+      - id
+      - is_active
+      - type
     SyntheticVoiceOption:
       type: object
       description: A voice, and the voice provider that speaks it.
@@ -3749,6 +5034,39 @@ components:
       required:
       - name
       - slug
+    TimeoutTriggerWrite:
+      type: object
+      description: A chatbot trigger and the action it runs.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        delay:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Seconds of participant inactivity before the trigger fires.
+        total_num_triggers:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: How many times the trigger fires in one session.
+        trigger_from_first_message:
+          type: boolean
+          description: Measure the delay from the participant's first message (true)
+            rather than their most recent one (false).
+        is_active:
+          type: boolean
+          readOnly: true
+          description: Whether the trigger fires. It can only be switched off in the
+            web app.
+        action:
+          $ref: '#/components/schemas/TriggerAction'
+      required:
+      - action
+      - delay
+      - id
+      - is_active
     Tokens:
       type: object
       properties:
@@ -3780,6 +5098,48 @@ components:
       required:
       - label
       - value
+    TriggerAction:
+      type: object
+      description: What a trigger does when it fires.
+      properties:
+        action_type:
+          allOf:
+          - $ref: '#/components/schemas/TriggerActionTypeEnum'
+          description: |-
+            What the trigger does. Required when adding a trigger; on update, leave it out to keep the current one.
+
+            * `log` - Log the last message
+            * `end_conversation` - End the conversation
+            * `send_message_to_bot` - Prompt the bot to message the user
+            * `schedule_trigger` - Trigger a schedule
+            * `pipeline_start` - Start a pipeline
+        params:
+          type: object
+          additionalProperties: {}
+          description: |-
+            The action's settings. Which keys it takes depends on `action_type`. On update, the params sent replace the stored ones rather than merging with them.
+
+            | `action_type` | `params` |
+            | --- | --- |
+            | `log` | `{}` |
+            | `send_message_to_bot` | `message_to_bot` (string, optional) Left out or empty, a default prompt is used. |
+            | `end_conversation` | `{}` |
+            | `schedule_trigger` | `name` (string, required) Descriptive name for this schedule.<br>`prompt_text` (string, required) Instructions for the bot to formulate a response.<br>`frequency` (integer, required, at least 1)<br>`time_period` (one of `minutes` / `hours` / `days` / `weeks` / `months`, required)<br>`repetitions` (integer, required, at least 0) Indicates how many times this should go on for. Specify '0' for a one time event. |
+            | `pipeline_start` | `pipeline_id` (integer id, required) A pipeline in this team that is not a chatbot's own pipeline. Any other id is refused with `400`.<br>`input_type` (one of `full_history` / `history_last_summary` / `last_message`, required) |
+    TriggerActionTypeEnum:
+      enum:
+      - log
+      - end_conversation
+      - send_message_to_bot
+      - schedule_trigger
+      - pipeline_start
+      type: string
+      description: |-
+        * `log` - Log the last message
+        * `end_conversation` - End the conversation
+        * `send_message_to_bot` - Prompt the bot to message the user
+        * `schedule_trigger` - Trigger a schedule
+        * `pipeline_start` - Start a pipeline
     TriggerBotChannel:
       type: object
       description: |-
@@ -4162,6 +5522,9 @@ tags:
   description: Trigger bot messages or deliver messages directly to users on a channel.
 - name: Chatbots
   description: List, retrieve and inspect chatbots (v2; formerly 'experiments').
+- name: Chatbot Triggers
+  description: Add, change and archive the triggers that run an action on a conversation
+    event, after inactivity, or at a set time.
 - name: Me
   description: Information about the authenticated user and the team the token is
     scoped to.

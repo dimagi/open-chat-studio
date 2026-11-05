@@ -17,7 +17,7 @@ from apps.api.v2.write.fields import TeamScopedRelatedField
 from apps.api.v2.write.serializers import (
     ChatbotCreateSerializer,
     ChatbotWriteSerializer,
-    RejectsUnknownKeys,
+    RejectsUnwritableKeys,
 )
 from apps.chatbots.forms import ChatbotSettingsForm
 from apps.experiments.models import Experiment
@@ -81,12 +81,12 @@ def _v2_components(pytestconfig) -> dict:
     ],
 )
 def test_the_schema_closes_each_body_that_rejects_unknown_keys(pytestconfig, component, serializer):
-    """`RejectsUnknownKeys` 400s on a key it does not declare, but OpenAPI permits extra properties
+    """`RejectsUnwritableKeys` 400s on a key it does not declare, but OpenAPI permits extra properties
     by default -- so left open, a generated client or a validator would accept a body the API
     refuses, and the consumer this API is built for reads the schema rather than the prose.
 
-    The declared properties are compared against `serializer().fields`, which is the set
-    `RejectsUnknownKeys` itself checks against, so the two cannot drift apart.
+    Every field on these serializers is writable, so `serializer().fields` is the set
+    `RejectsUnwritableKeys` accepts, and comparing against it keeps the two from drifting apart.
     """
     schema = _v2_components(pytestconfig)[component]
 
@@ -103,5 +103,5 @@ def test_every_serializer_that_rejects_unknown_keys_is_closed_in_the_schema(pyte
     }
 
     assert {name.removeprefix("Patched") for name in closed} == {
-        cls.__name__.removesuffix("Serializer") for cls in RejectsUnknownKeys.__subclasses__()
+        cls.__name__.removesuffix("Serializer") for cls in RejectsUnwritableKeys.__subclasses__()
     }

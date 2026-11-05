@@ -3,7 +3,7 @@ from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework.views import APIView
 
 from apps.api.permissions import CanTriggerBotMessage, IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission
-from apps.api.serializers import TriggerBotMessageRequest
+from apps.api.serializers import OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE, TriggerBotMessageRequest
 from apps.api.v2.serializers import TriggerBotMessageResponse
 from apps.api.views.channels import handle_trigger_bot_message
 from apps.oauth.permissions import TokenHasOAuthScope
@@ -42,7 +42,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
-            403: {"description": "The OAuth application is not authorized for this chatbot"},
+            403: OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE,
             404: {"description": "Not Found"},
         },
         examples=[
@@ -101,7 +101,7 @@ class TriggerBotMessageView(APIView):
             OpenApiExample(
                 name="ExperimentNotFound",
                 summary="No experiment with the given ID exists in the team",
-                value={"detail": "No Experiment matches the given query."},
+                value={"detail": "No chatbot matches the given query."},
                 response_only=True,
                 status_codes=[404],
             ),

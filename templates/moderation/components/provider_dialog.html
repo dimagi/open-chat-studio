@@ -1,0 +1,25 @@
+{% load form_tags i18n %}
+<h3 class="text-lg font-bold">
+  {% if object %}
+    {% blocktranslate with name=object.name %}Edit {{ name }}{% endblocktranslate %}
+  {% else %}
+    {% blocktranslate with type=subtype.label %}New {{ type }} moderation provider{% endblocktranslate %}
+  {% endif %}
+</h3>
+<form id="moderation-provider-form" class="my-2"
+      hx-post="{{ request.path }}"
+      hx-target="#moderation-provider-dialog-body"
+      hx-swap="innerHTML"
+      hx-include="#moderation-settings-form"
+      hx-disabled-elt="find button[type='submit']">
+  {% csrf_token %}
+  {% render_form_fields primary_form %}
+  {% render_form_fields config_form %}
+  <div class="modal-action">
+    <button type="button" class="btn" onclick="moderation_provider_dialog.close()">{% translate "Cancel" %}</button>
+    <button type="submit" class="btn btn-primary">
+      <span class="loading loading-spinner loading-xs htmx-show"></span>
+      {% if object %}{% translate "Save and select" %}{% else %}{% translate "Create and select" %}{% endif %}
+    </button>
+  </div>
+</form>

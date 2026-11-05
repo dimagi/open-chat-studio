@@ -39,16 +39,6 @@ def meta_cloud_api_provider():
     )
 
 
-@pytest.fixture()
-def meta_cloud_api_channel(meta_cloud_api_provider):
-    return ExperimentChannelFactory.create(
-        platform=ChannelPlatform.WHATSAPP,
-        messaging_provider=meta_cloud_api_provider,
-        experiment__team=meta_cloud_api_provider.team,
-        extra_data={"number": "+15551234567", "phone_number_id": "12345"},
-    )
-
-
 class TestMetaCloudAPIWebhookVerifySignature:
     def test_valid_signature(self):
         payload = b'{"test": "data"}'
@@ -157,21 +147,21 @@ class TestNewMetaCloudApiMessage:
         return MetaCloudAPIWebhookView.as_view()(request)
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
-    def test_valid_message_returns_200(self, mock_delay, meta_cloud_api_channel):
+    def test_valid_message_returns_200(self, mock_delay, meta_cloud_api_whatsapp_channel):
         response = self._post(meta_cloud_api_messages.text_message())
         assert response.status_code == 200
         mock_delay.assert_called_once()
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
-    def test_task_dispatched_with_correct_args(self, mock_delay, meta_cloud_api_channel):
+    def test_task_dispatched_with_correct_args(self, mock_delay, meta_cloud_api_whatsapp_channel):
         self._post(meta_cloud_api_messages.text_message())
         mock_delay.assert_called_once_with(
-            channel_id=meta_cloud_api_channel.id,
-            team_slug=meta_cloud_api_channel.team.slug,
+            channel_id=meta_cloud_api_whatsapp_channel.id,
+            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
             message_data=meta_cloud_api_messages.text_message_value(),
         )
 
-    def test_invalid_signature_returns_200(self, meta_cloud_api_channel):
+    def test_invalid_signature_returns_200(self, meta_cloud_api_whatsapp_channel):
         """Invalid signature returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
         body = json.dumps(meta_cloud_api_messages.text_message()).encode()
@@ -184,7 +174,7 @@ class TestNewMetaCloudApiMessage:
         response = MetaCloudAPIWebhookView.as_view()(request)
         assert response.status_code == 200
 
-    def test_missing_signature_header_returns_200(self, meta_cloud_api_channel):
+    def test_missing_signature_header_returns_200(self, meta_cloud_api_whatsapp_channel):
         """Missing signature header returns 200 to prevent Meta from retrying."""
         factory = RequestFactory()
         body = json.dumps(meta_cloud_api_messages.text_message()).encode()
@@ -198,7 +188,7 @@ class TestNewMetaCloudApiMessage:
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
     def test_multi_phone_number_payload_routes_to_correct_channels(
-        self, mock_delay, meta_cloud_api_channel, meta_cloud_api_provider
+        self, mock_delay, meta_cloud_api_whatsapp_channel, meta_cloud_api_provider
     ):
         """Messages for different phone numbers must be routed to their own channels, not all to the first."""
         # Both channels share the same provider (same app, same app_secret) — only the phone number differs.
@@ -232,10 +222,10 @@ class TestNewMetaCloudApiMessage:
         assert response.status_code == 200
         assert mock_delay.call_count == 2
         called_channel_ids = {call.kwargs["channel_id"] for call in mock_delay.call_args_list}
-        assert called_channel_ids == {meta_cloud_api_channel.id, second_channel.id}
+        assert called_channel_ids == {meta_cloud_api_whatsapp_channel.id, second_channel.id}
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
-    def test_unknown_phone_number_in_multi_payload_skipped(self, mock_delay, meta_cloud_api_channel):
+    def test_unknown_phone_number_in_multi_payload_skipped(self, mock_delay, meta_cloud_api_whatsapp_channel):
         """A value with an unknown phone_number_id is skipped; other values are still dispatched."""
         payload = {
             "object": "whatsapp_business_account",
@@ -259,13 +249,13 @@ class TestNewMetaCloudApiMessage:
         assert response.status_code == 200
         assert mock_delay.call_count == 1
         mock_delay.assert_called_once_with(
-            channel_id=meta_cloud_api_channel.id,
-            team_slug=meta_cloud_api_channel.team.slug,
+            channel_id=meta_cloud_api_whatsapp_channel.id,
+            team_slug=meta_cloud_api_whatsapp_channel.team.slug,
             message_data=meta_cloud_api_messages.text_message_value("12345"),
         )
 
     @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
-    def test_cross_provider_payload_is_rejected(self, mock_delay, meta_cloud_api_channel):
+    def test_cross_provider_payload_is_rejected(self, mock_delay, meta_cloud_api_whatsapp_channel):
         """An attacker with their own legitimate channel cannot forge messages for a victim's
         phone number by including it in a payload signed with their own app_secret."""
         attacker_secret = "attacker_app_secret"
@@ -317,7 +307,7 @@ class TestNewMetaCloudApiMessage:
             meta_cloud_api_messages.unsupported_message(),
         ],
     )
-    def test_non_conversational_messages_not_dispatched(self, mock_delay, payload, meta_cloud_api_channel):
+    def test_non_conversational_messages_not_dispatched(self, mock_delay, payload, meta_cloud_api_whatsapp_channel):
         """Regression test for the KeyError: system/unsupported payloads have a
         "messages" array but no "contacts", so the webhook must skip them in the
         dispatch loop instead of queuing a task that would crash on the missing key."""

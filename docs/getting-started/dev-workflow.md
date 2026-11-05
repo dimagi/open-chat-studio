@@ -17,7 +17,7 @@ flowchart TD
     E -- findings to fix --> C
     E -- clean --> F["5. Open a draft PR<br/>/create-pr, then read your own diff"]
     F --> G["6. Iterate<br/>/iterate-pr for CI + feedback"]
-    G --> H["Mark ready for review<br/>AI review round 2"]
+    G --> H["Mark ready for review<br/>final AI review"]
     H --> I([Assign a human reviewer])
 ```
 
@@ -222,7 +222,7 @@ Pull before you push again, or you'll hit a conflict. Note that it does not run 
 ### Then hand it over
 
 1. Once the first round of fixes has landed, mark the PR **Ready for review**.
-2. Wait for the second round of automated review — Claude posts inline findings on the diff, and
+2. Wait for the automated review of the final push — OpenCodeReview and Claude post inline findings on the diff, and
    Sentry flags issues from its own analysis. See
    [Claude GitHub Automation](../developer_guides/claude_github_automation.md).
 3. Resolve everything the AI reviewers raised — either fix it, or reply explaining why it stands.

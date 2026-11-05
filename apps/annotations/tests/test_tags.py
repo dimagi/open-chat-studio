@@ -194,24 +194,14 @@ def test_unlink_tag(tag, chat, client):
 
 
 @pytest.mark.django_db()
-def test_link_tag_returns_404(tag, client):
+@pytest.mark.parametrize("url_name", [pytest.param("link_tag", id="link"), pytest.param("unlink_tag", id="unlink")])
+def test_tag_view_returns_404_for_unknown_object(tag, client, url_name):
     team = tag.team
     user = team.members.first()
     client.login(username=user.username, password="password")
     object_info_json = json.dumps({"app": "non-existent", "model_name": "chat", "id": 1})
     data = {"tag_name": tag.name, "object_info": object_info_json}
-    response = client.post(reverse("annotations:link_tag", kwargs={"team_slug": tag.team.slug}), data=data)
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db()
-def test_unlink_tag_returns_404(tag, client):
-    team = tag.team
-    user = team.members.first()
-    client.login(username=user.username, password="password")
-    object_info_json = json.dumps({"app": "non-existent", "model_name": "chat", "id": 1})
-    data = {"tag_name": tag.name, "object_info": object_info_json}
-    response = client.post(reverse("annotations:unlink_tag", kwargs={"team_slug": tag.team.slug}), data=data)
+    response = client.post(reverse(f"annotations:{url_name}", kwargs={"team_slug": tag.team.slug}), data=data)
     assert response.status_code == 404
 
 
@@ -248,3 +238,19 @@ def test_unicode_normalization_prevents_duplicates(client):
     assert "A tag with this name already exists" in response.content.decode()
 
     assert Tag.objects.filter(name=unicodedata.normalize("NFC", "café"), team=team).count() == 1
+
+
+@pytest.mark.django_db()
+def test_create_and_add_tag_truncates_long_name(chat):
+    chat.create_and_add_tag("x" * 128, team=chat.team, tag_category="")
+
+    assert [tag.name for tag in chat.tags.all()] == ["x" * 100]
+
+
+@pytest.mark.django_db()
+def test_tags_with_same_long_name_in_different_teams_get_unique_slugs():
+    name = "x" * 100
+    tags = [Tag.objects.create(name=name, team=TeamWithUsersFactory.create()) for _ in range(3)]
+
+    assert len({tag.slug for tag in tags}) == 3
+    assert all(len(tag.slug) <= 100 for tag in tags)

@@ -1,0 +1,11 @@
+{% comment %}
+A session's external id, truncated, with a copy button.
+
+  <c-ui.session-id-chip :external_id="session.external_id" />
+  <c-ui.session-id-chip :external_id="session.external_id" id_prefix="session-external-id" />   (when the page shows more than one)
+{% endcomment %}
+<c-vars external_id="" id_prefix="session-id" />
+<span {{ attrs|with_classes:"inline-flex items-center gap-1" }}>
+  <code class="truncate max-w-32 inline-block" title="{{ external_id }}">{{ external_id }}</code>
+  <c-ui.copy-chip target="{{ id_prefix }}-{{ external_id }}" :value="external_id" :show_value="False" class="btn-ghost btn-xs px-1" />
+</span>

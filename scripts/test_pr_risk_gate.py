@@ -130,6 +130,20 @@ def test_adding_a_new_adr_is_low():
     assert classify([pr_file("docs/adr/0065-new.md", status="added")]).risk == LOW
 
 
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        pytest.param(".github/workflows/deploy.yml", HIGH, id="workflow"),
+        pytest.param(".github/workflows/README-claude-workflows.md", HIGH, id="workflow-readme"),
+        pytest.param(".github/pull_request_template.md", LOW, id="pr-template"),
+        pytest.param(".github/ISSUE_TEMPLATE/feature_deprecation.md", LOW, id="issue-template"),
+        pytest.param(".github/dependabot.yml", MEDIUM, id="dependabot-config"),
+    ],
+)
+def test_only_workflows_under_dot_github_are_blocked(filename, expected):
+    assert classify([pr_file(filename)]).risk == expected
+
+
 def test_deleting_an_adr_is_high():
     files = [pr_file("docs/adr/0001-example.md", status="removed", patch="-gone")]
     assert classify(files).risk == HIGH

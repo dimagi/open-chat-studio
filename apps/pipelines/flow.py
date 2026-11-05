@@ -30,6 +30,11 @@ class FlowNode(pydantic.BaseModel):
     data: FlowNodeData | None = None
 
 
+def react_flow_edge_id(source: str, source_handle: str, target: str, target_handle: str) -> str:
+    """The id the pipeline builder's react-flow ``getEdgeId`` gives an edge between these handles."""
+    return f"reactflow__edge-{source}{source_handle}-{target}{target_handle}"
+
+
 class FlowEdge(pydantic.BaseModel):
     id: str
     source: str

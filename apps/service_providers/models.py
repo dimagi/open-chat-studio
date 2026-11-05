@@ -21,9 +21,10 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
-from apps.service_providers.auth_service.oauth import OAuthTokenManager
+from apps.service_providers.auth_service.oauth import OAuthTokenManager, authorization_code_config_changed
 from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.service_providers.minimax import build_minimax_synthetic_voices
+from apps.service_providers.moderation_service import ModerationService, OpenAIModerationService
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -841,6 +842,7 @@ class AuthProviderType(models.TextChoices):
     bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
     oauth_client_credentials = "oauth_client_credentials", _("OAuth (Client Credentials)")
+    oauth_authorization_code = "oauth_authorization_code", _("OAuth (Authorization Code)")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -857,6 +859,8 @@ class AuthProviderType(models.TextChoices):
                 return forms.CommCareAuthConfigForm
             case AuthProviderType.oauth_client_credentials:
                 return forms.OAuthClientCredentialsConfigForm
+            case AuthProviderType.oauth_authorization_code:
+                return forms.OAuthAuthorizationCodeConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
@@ -883,6 +887,7 @@ class AuthProvider(BaseTeamModel):
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
     _auth_data = encrypt(models.JSONField(default=dict))
+    extra_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ("type", "name")
@@ -894,8 +899,42 @@ class AuthProvider(BaseTeamModel):
     def type_enum(self):
         return AuthProviderType(self.type)
 
+    @property
+    def credentials_verified(self) -> bool:
+        return (
+            self.type_enum == AuthProviderType.oauth_authorization_code
+            and (self.extra_data or {}).get("verified_credentials") is True
+            and bool(self._auth_data.get("access_token"))
+            and not self._auth_data.get("reconnect_required")
+            and not authorization_code_config_changed(self)
+        )
+
+    @property
+    def verification_error(self) -> str:
+        if self.type_enum == AuthProviderType.oauth_authorization_code:
+            if authorization_code_config_changed(self):
+                return "OAuth configuration changed; connect the provider again."
+            if self._auth_data.get("reconnect_required"):
+                return "The OAuth connection needs to be renewed; connect the provider again."
+        return (self.extra_data or {}).get("verification_error", "")
+
+    @property
+    def credentials_checked_at(self) -> datetime | None:
+        checked_at = (self.extra_data or {}).get("credentials_checked_at")
+        return datetime.fromisoformat(checked_at) if checked_at else None
+
+    @property
+    def verification_state(self) -> Literal["verified", "failed", "no_model", "unchecked"]:
+        if self.credentials_verified:
+            return "verified"
+        if self.verification_error:
+            return "failed"
+        if self.credentials_checked_at:
+            return "no_model"
+        return "unchecked"
+
     def get_auth_service(self) -> auth_service.AuthService:
-        if self.type_enum == AuthProviderType.oauth_client_credentials:
+        if self.type_enum in (AuthProviderType.oauth_client_credentials, AuthProviderType.oauth_authorization_code):
             token = OAuthTokenManager(self).get_valid_access_token()
             return auth_service.BearerTokenAuthService(token=token)
         return self.type_enum.get_auth_service(self.config)
@@ -976,6 +1015,51 @@ class TraceProvider(BaseTeamModel):
             return None
         config = {**config, "sample_rate": effective_rate}
         return self.type_enum.get_service(config)
+
+
+class ModerationProviderType(models.TextChoices):
+    openai = "openai", _("OpenAI")
+
+    @property
+    def form_cls(self) -> type["ProviderTypeConfigForm"]:
+        from apps.service_providers import forms  # noqa: PLC0415 - circular: forms imports models
+
+        match self:
+            case ModerationProviderType.openai:
+                return forms.OpenAIModerationConfigForm
+        raise Exception(f"No config form configured for {self}")
+
+    def get_moderation_service(self, config: dict, **service_kwargs) -> ModerationService:
+        """Build the service from ``config``, ignoring empty values. ``service_kwargs`` are passed through as given."""
+        config = {key: value for key, value in config.items() if value}
+        try:
+            match self:
+                case ModerationProviderType.openai:
+                    return OpenAIModerationService(**config, **service_kwargs)
+        except ValidationError as e:
+            raise ServiceProviderConfigError(provider_type=self, message=str(e)) from e
+        raise ServiceProviderConfigError(provider_type=self, message="No moderation service configured")
+
+
+@audit_fields(*model_audit_fields.MODERATION_PROVIDER_FIELDS, audit_special_queryset_writes=True)
+class ModerationProvider(BaseTeamModel, ProviderMixin):
+    objects = AuditingManager()
+    type = models.CharField(max_length=255, choices=ModerationProviderType.choices)
+    name = models.CharField(max_length=255)
+    config = encrypt(models.JSONField(default=dict))
+
+    class Meta:
+        ordering = ("type", "name")
+
+    def __str__(self):
+        return f"{self.type_enum.label}: {self.name}"
+
+    @property
+    def type_enum(self):
+        return ModerationProviderType(self.type)
+
+    def get_moderation_service(self, **service_kwargs) -> ModerationService:
+        return self.type_enum.get_moderation_service(self.config, **service_kwargs)
 
 
 class EmbeddingProviderModelManager(models.Manager):

@@ -1,4 +1,4 @@
-import type { ChatConsent } from './chat-session-service';
+import { CONSENT_REQUIRED_CODE, GENERIC_FAILURE_MESSAGE, PARTICIPANT_BLOCKED_CODE, type ChatConsent } from './chat-session-service';
 
 export interface UploadedFile {
   id: number;
@@ -121,18 +121,20 @@ export class FileAttachmentManager {
       if (!response.ok) {
         const errorData = await this.safeJson(response);
         const body = (errorData && typeof errorData === 'object' ? errorData : {}) as { error?: string; code?: string; consent?: ChatConsent };
-        const errorMessage = body.error || 'Failed to upload files';
+        // A blocked participant sees a generic failure that does not reveal the block.
+        const blocked = response.status === 403 && body.code === PARTICIPANT_BLOCKED_CODE;
+        const errorMessage = blocked ? GENERIC_FAILURE_MESSAGE : body.error || 'Failed to upload files';
         // Files are left unmarked on a consent refusal: they are re-uploaded once consent is
         // recorded. A refusal that names consent but carries no block cannot raise the panel,
-        // so the files carry the error and stop the send. Either way it is not a token
-        // rejection.
-        const namesConsent = response.status === 403 && body.code === 'consent_required';
+        // so the files carry the error and stop the send. Neither a consent nor a block
+        // refusal is a token rejection.
+        const namesConsent = response.status === 403 && body.code === CONSENT_REQUIRED_CODE;
         const consentRefused = namesConsent && !!body.consent;
         return {
           selectedFiles: consentRefused ? existingFiles : this.markPendingFilesWithError(existingFiles, errorMessage),
           uploadedIds,
           errorMessage,
-          tokenRejected: response.status === 403 && !namesConsent,
+          tokenRejected: response.status === 403 && !namesConsent && !blocked,
           consent: consentRefused ? body.consent : undefined,
         };
       }

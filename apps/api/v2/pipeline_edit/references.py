@@ -19,6 +19,7 @@ from rest_framework.exceptions import ValidationError
 from apps.api.v2.discovery.node_types import parameter_option_mapping
 from apps.pipelines.node_type import NodeType
 from apps.teams.models import Team
+from apps.utils.fields import as_int
 
 from .node_params import is_list_param
 
@@ -69,11 +70,19 @@ def _reference_errors(team: Team, node_type: NodeType, params: dict[str, Any]) -
 def _is_not_allowed(item: Any, allowed: set) -> bool:
     """Whether ``item`` is none of the values the team may use.
 
-    Nothing type-checks params before this runs, so a list can arrive where a scalar id belongs. The
-    resolver has already declined to return such a value, so this only has to avoid raising on it in
-    turn: unhashable is no resource either way, so it counts as unknown.
+    ``allowed`` holds the database ids (or tool names) the resolver found, so an id sent as a numeric
+    string is matched through ``as_int``, the same parse the write path uses. A bool or float is no
+    id, even though ``True == 1`` and ``1.0 == 1`` would match one.
+
+    Nothing type-checks params before this runs, so a list can arrive where a scalar id belongs.
+    Unhashable is no resource either way, so it counts as unknown.
     """
+    if isinstance(item, bool | float):
+        return True
     try:
-        return item not in allowed
+        if item in allowed:
+            return False
     except TypeError:
         return True
+    parsed = as_int(item)
+    return parsed is None or parsed not in allowed

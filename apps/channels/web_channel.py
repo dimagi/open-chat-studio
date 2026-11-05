@@ -12,6 +12,8 @@ from apps.channels.const import MESSAGE_TYPES
 from apps.channels.models import ExperimentChannel
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.stages.core import (
+    AbuseRulesStage,
+    BlockedParticipantStage,
     BotInteractionStage,
     ChannelDisabledStage,
     ChatMessageCreationStage,
@@ -22,7 +24,7 @@ from apps.channels.stages.core import (
     ResponseFormattingStage,
     SessionActivationStage,
 )
-from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.stages.terminal import ActivityTrackingStage, ModerationResultStage, PersistenceStage
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus
@@ -46,7 +48,7 @@ class WebChannel(ChannelBase):
     the channel class unchanged.
     """
 
-    supported_message_types = [MESSAGE_TYPES.TEXT]
+    supported_message_types = (MESSAGE_TYPES.TEXT,)
 
     def __init__(
         self,
@@ -76,6 +78,7 @@ class WebChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantIdentifierStage(),
+                BlockedParticipantStage(),
                 # Embedded-widget sessions are served here, not by ApiChannel, so the
                 # admin's channel toggle has to be enforced on this pipeline too.
                 ChannelDisabledStage(),
@@ -86,10 +89,12 @@ class WebChannel(ChannelBase):
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 ErrorGuardStage(),
+                AbuseRulesStage(),
                 BotInteractionStage(),
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
+                ModerationResultStage(),
                 # No ResponseSendingStage or SendingErrorHandlerStage —
                 # responses returned via new_user_message()
                 PersistenceStage(),

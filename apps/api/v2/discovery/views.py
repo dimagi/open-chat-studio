@@ -60,7 +60,7 @@ class DiscoveryView(GenericAPIView):
 NODE_TYPE_EXAMPLE = {
     "type": "RouterNode",
     "description": "Routes the input to one of the linked nodes using an LLM",
-    "documentation_url": "https://docs.openchatstudio.com/how-to/pipelines/nodes/",
+    "documentation_url": "https://docs.openchatstudio.com/how-to/routers/",
     "outputs": {
         "kind": "per_keyword",
         "handles": None,

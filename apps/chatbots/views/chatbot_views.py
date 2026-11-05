@@ -7,8 +7,8 @@ from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect, StreamingHttpResponse
+from django.db.models import Case, Count, F, IntegerField, OuterRef, Q, Subquery, When
+from django.http import Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -25,7 +25,6 @@ from apps.api.session_tokens import issue_session_token
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
-from apps.channels.web_channel import WebChannel
 from apps.chatbots.breadcrumbs import chatbot_crumbs
 from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable, ParticipantSessionsTable
@@ -41,15 +40,16 @@ from apps.events.models import (
 )
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
-from apps.experiments.email import send_experiment_invitation
 from apps.experiments.export import EXPORT_COLUMNS, export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
+from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.experiments.services import last_activity_subquery
+from apps.experiments.sunsets import LEGACY_WEB_CHAT, LEGACY_WEB_CHAT_READ_ONLY_MESSAGE, legacy_web_chat_gone
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
@@ -62,6 +62,7 @@ from apps.generics import actions
 from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
+from apps.human_annotations.prefetch import attach_session_annotation_items
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.nodes.node_metadata import (
     get_node_default_values,
@@ -69,13 +70,17 @@ from apps.pipelines.nodes.node_metadata import (
     get_node_schemas,
     get_speakable_voices,
 )
+from apps.pipelines.nodes.router_prompts import router_prompt_templates_data
 from apps.pipelines.views import get_widget_page_context, llm_model_parameter_context
 from apps.teams.decorators import login_and_team_required, team_required
+from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
+from apps.utils.sunset import sunset_view
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
@@ -241,19 +246,12 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
             .values("count")
         )
 
-        last_activity_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .order_by(F("last_activity_at").desc(nulls_last=True))
-            .values("last_activity_at")[:1]
-        )
-
         # Add expensive annotations only to paginated data
         return queryset.annotate(
             session_count=Subquery(session_count_subquery, output_field=IntegerField()),
             participant_count=Subquery(participant_count_subquery, output_field=IntegerField()),
             interaction_count=Subquery(interaction_count_subquery, output_field=IntegerField()),
-            last_activity=Subquery(last_activity_subquery, output_field=DateTimeField()),
+            last_activity=last_activity_subquery(),
         ).order_by(F("last_activity").desc(nulls_last=True))
 
 
@@ -420,12 +418,14 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             "breadcrumbs": [*chatbot_crumbs(self.request.team.slug, experiment), (_("Edit"), None)],
             "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
             "default_values": get_node_default_values(self.request.team),
+            "router_prompt_templates": router_prompt_templates_data(),
             "allow_edit_name": False,
             "flags_enabled": [
                 name
                 for name in Flag.objects.values_list("name", flat=True)
                 if flag_is_active_for_team(self.request.team, name)
             ],
+            "read_only": experiment.is_archived,
             "widget_page_context": get_widget_page_context(experiment.pipeline, experiment),
             **llm_model_parameter_context(),
         }
@@ -438,6 +438,34 @@ def archive_chatbot(request, team_slug: str, pk: int):
     chatbot = get_object_or_404(Experiment, id=pk, team=request.team)
     chatbot.archive()
     return HttpResponseClientRedirect(reverse("chatbots:chatbots_home", kwargs={"team_slug": team_slug}))
+
+
+@require_POST
+@transaction.atomic
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def unarchive_chatbot(request, team_slug: str, pk: int):
+    """Restores an archived chatbot and its versions, and optionally its channels."""
+    chatbot = get_object_or_404(
+        Experiment.objects.get_all(),
+        id=pk,
+        team=request.team,
+        is_archived=True,
+        working_version__isnull=True,
+    )
+    chatbot.unarchive()
+    if request.POST.get("restore_channels"):
+        skipped = chatbot.restore_experiment_channels()
+        if skipped:
+            messages.warning(
+                request,
+                _("These channels have to be reconnected by hand: %(channels)s")
+                % {"channels": ", ".join(f"{channel.name} ({channel.platform_enum.label})" for channel in skipped)},
+            )
+    messages.success(request, _("Chatbot restored."))
+    return HttpResponseClientRedirect(
+        reverse("chatbots:single_chatbot_home", kwargs={"team_slug": team_slug, "experiment_id": pk})
+    )
 
 
 class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
@@ -661,6 +689,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     table_class = ChatbotSessionsTable
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
+    show_annotation_queues = True
 
     def extra_filters(self) -> Q:
         """Extra constraints applied to the base queryset, on top of the dynamic filter widget."""
@@ -675,18 +704,32 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         return session_filter.apply(query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
-        """Configure the table, then attach the tag prefetch to the paginated page only.
+        """Configure the table, then attach per-page prefetches and hide columns this page does not show.
 
         Hooking after `RequestConfig.configure` ensures the underlying queryset is sliced
-        with LIMIT before we evaluate it — so both the page rows and the CustomTaggedItem
-        lookup are bounded to a single page, not the full filtered set.
+        with LIMIT before we evaluate it, so the page rows and the tag and queue lookups are
+        bounded to a single page, not the full filtered set.
         """
         table = super().get_table(**kwargs)
-        if getattr(table, "page", None) is not None:
-            attach_chat_tagged_items(table.page.object_list)
-        if self.kwargs.get("experiment_id"):
-            table.exclude = ("chatbot",)
+        page_rows = table.page.object_list if getattr(table, "page", None) is not None else []
+        attach_chat_tagged_items(page_rows)
+        if self._show_annotation_queues():
+            attach_session_annotation_items(page_rows)
+        table.exclude = (*table.exclude, *self._hidden_columns())
         return table
+
+    def _show_annotation_queues(self) -> bool:
+        """Whether this page shows queue membership: the view opts in and the team has the flag."""
+        return self.show_annotation_queues and flag_is_active_for_team(self.request.team, Flags.HUMAN_ANNOTATIONS.slug)
+
+    def _hidden_columns(self) -> tuple[str, ...]:
+        """Columns this request leaves out of the table."""
+        hidden = []
+        if self.kwargs.get("experiment_id"):
+            hidden.append("chatbot")
+        if not self._show_annotation_queues():
+            hidden.append("annotation_queues")
+        return tuple(hidden)
 
 
 class ParticipantScopedSessionsTableView(ChatbotSessionsTableView):
@@ -698,6 +741,7 @@ class ParticipantScopedSessionsTableView(ChatbotSessionsTableView):
     """
 
     table_class = ParticipantSessionsTable
+    show_annotation_queues = False
 
     def extra_filters(self) -> Q:
         filters = Q(participant_id=self.kwargs.get("participant_id"))
@@ -809,6 +853,7 @@ def _end_session_from_request(session: ExperimentSession, request) -> None:
     session.end(**end_kwargs)
 
 
+@sunset(LEGACY_WEB_CHAT.sunset_at, successor_url=LEGACY_WEB_CHAT.successor_url)
 @login_and_team_required
 def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
@@ -850,80 +895,28 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
     )
 
 
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    try:
-        session = WebChannel.start_new_session(
-            working_experiment=experiment,
-            participant_user=request.user,
-            participant_identifier=request.user.email,
-            timezone=request.session.get("detected_tz", None),
-            version=version_number,
-        )
-    except ChannelDisabledException:
-        messages.error(request, "The web channel is disabled, so no new chat sessions can be started.")
-        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
-    return HttpResponseRedirect(
-        reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
-    )
-
-
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
 def chatbot_invitations(request, team_slug: str, experiment_id: int):
     chatbot = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    if request.method == "POST":
+        messages.warning(request, LEGACY_WEB_CHAT_READ_ONLY_MESSAGE)
+        return redirect("chatbots:chatbots_invitations", team_slug, experiment_id)
+
     chatbot_version = resolve_published_or_working(chatbot)
     sessions = chatbot.sessions.order_by("-created_at").filter(
         status__in=["setup", "pending"],
         participant__isnull=False,
     )
-
-    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
-    if request.method == "POST":
-        post_form = ExperimentInvitationForm(request.POST)
-        if post_form.is_valid():
-            if ExperimentSession.objects.filter(
-                team=request.team,
-                experiment_id=experiment_id,
-                status__in=["setup", "pending"],
-                participant__identifier=post_form.cleaned_data["email"],
-            ).exists():
-                participant_email = post_form.cleaned_data["email"]
-                messages.info(request, f"{participant_email} already has a pending invitation.")
-            else:
-                try:
-                    with transaction.atomic():
-                        session = WebChannel.start_new_session(
-                            chatbot,
-                            participant_identifier=post_form.cleaned_data["email"],
-                            session_status=SessionStatus.SETUP,
-                            timezone=request.session.get("detected_tz", None),
-                        )
-                except ChannelDisabledException:
-                    # Inviting someone to a channel that will not talk to them is worse than
-                    # refusing the invite.
-                    messages.error(request, "The web channel is disabled, so invitations cannot be sent.")
-                else:
-                    if post_form.cleaned_data["invite_now"]:
-                        send_experiment_invitation(session)
-        else:
-            form = post_form
-
-    version_specific_vars = {
-        "chatbot_name": chatbot_version.name,
-        "chatbot_description": chatbot_version.description,
-    }
     return TemplateResponse(
         request,
         "chatbots/chatbot_invitations.html",
         {
-            "invitation_form": form,
             "experiment": chatbot,
             "sessions": sessions,
             "breadcrumbs": [*chatbot_crumbs(team_slug, chatbot), (_("Invitations"), None)],
-            **version_specific_vars,
+            "chatbot_name": chatbot_version.name,
+            "chatbot_description": chatbot_version.description,
         },
     )
 
@@ -935,6 +928,7 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
+@sunset_view(LEGACY_WEB_CHAT, gone=legacy_web_chat_gone)
 @public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
@@ -1052,14 +1046,7 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templa
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
 def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
-    send_experiment_invitation(session)
-    return TemplateResponse(
-        request,
-        "chatbots/manage/invite_row.html",
-        context={"request": request, "experiment": experiment, "session": session},
-    )
+    return HttpResponseForbidden(LEGACY_WEB_CHAT_READ_ONLY_MESSAGE)
 
 
 def _get_events_context(experiment: Experiment, team_slug: str):

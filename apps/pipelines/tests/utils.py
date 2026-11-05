@@ -220,6 +220,7 @@ def router_node(provider_id: str, provider_model_id: str, keywords: list[str], n
         {
             "type": nodes.RouterNode.__name__,
             "params": {
+                "prompt_mode": "custom",
                 "prompt": "You are a router",
                 "keywords": keywords,
                 "llm_provider_id": provider_id,

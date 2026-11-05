@@ -29,9 +29,10 @@ Regardless of automated tests, ensure the quality of your changes:
 3. **Read your own diff on GitHub before anyone else does.**
 4. Address CI failures and the automated review feedback. CodeRabbit reviews drafts automatically;
    you can also request a pass with `@coderabbit review`.
-5. When it's clean, change PR state to "Ready for review". This triggers a
-   [Claude code review](../developer_guides/claude_github_automation.md#pr-code-review) — resolve
-   its findings too.
+5. When it's clean, change PR state to "Ready for review". Every push, drafts included, runs an
+   [automated code review](../developer_guides/claude_github_automation.md#pr-code-review): a fast
+   OpenCodeReview pass first, then a Claude review once that pass has no findings. Resolve the
+   findings from each.
 6. Only once the automated feedback is resolved, assign a human reviewer.
 7. Address reviewer feedback.
 8. Once approved, your changes can be merged.
@@ -49,8 +50,8 @@ The OCS team automates most of steps 3–6 — see the [Development Workflow](..
 ## Documentation Policy
 
 - **User-facing changes** follow these [guidelines](../developer_guides/user_docs/index.md)
-- **API changes**: If your changes affect the REST API schema, update the `api-schemas/v1.yml` file. See the [API Documentation guide](../developer_guides/api_documentation.md) for details.
-- **Operator-impacting changes** (migrations, new or changed settings, deployment shape, deprecations, removals, security fixes): check the "Self-hosted operators must know about or act on this change" box and add an entry under `[Unreleased]` in the repo-root `CHANGELOG.md`. See [two changelogs, two checkboxes](../developer_guides/user_docs/index.md#two-changelogs-two-checkboxes).
+- **API changes**: If your changes affect the REST API schema, update the `api-schemas/v1.yml` file. See the [API Documentation guide](../developer_guides/user_docs/api_documentation.md) for details.
+- **Operator-impacting changes** (a manual upgrade step, a migration that is locking, irreversible or needs a backfill, any new, renamed, retyped or removed setting configured through the process environment, deployment shape, deprecations, removals, security fixes): check the "Self-hosted operators must know about or act on this change" box and add an entry under `[Unreleased]` in the repo-root `CHANGELOG.md`. See [two changelogs, two checkboxes](../developer_guides/user_docs/index.md#two-changelogs-two-checkboxes).
 
 ## Communication
 

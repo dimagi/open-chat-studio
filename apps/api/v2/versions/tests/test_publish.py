@@ -151,10 +151,10 @@ class TestGoLiveGate:
 
         assert chatbot.versions.get().is_default_version is True
 
-    def test_unwired_handles_never_block_going_live(self, client, chatbot, dispatch, llm_provider):
+    def test_unwired_handles_never_block_going_live(self, client, chatbot, dispatch, llm):
         """A node wired to nothing is a normal state mid-build, so it is advisory and not an error.
         The gate rejects on the errors report and nothing else."""
-        provider, model = llm_provider
+        provider, model = llm
         island = client.post(
             nodes_url(chatbot),
             {
@@ -212,12 +212,12 @@ class TestNothingToPublish:
         assert publish(client, chatbot, make_default=True).status_code == 202
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    def test_a_pipeline_edit_since_the_last_version_may_be_published(self, client, chatbot, llm_provider):
+    def test_a_pipeline_edit_since_the_last_version_may_be_published(self, client, chatbot, llm):
         """The edit this API is mostly used for. A node added through the façade has to register as
         a difference, or every publish after the first would be refused."""
         publish(client, chatbot, make_default=True)
 
-        provider, model = llm_provider
+        provider, model = llm
         added = client.post(
             nodes_url(chatbot),
             {

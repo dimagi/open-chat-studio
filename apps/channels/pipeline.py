@@ -20,6 +20,8 @@ from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from apps.channels.callbacks import ChannelCallbacks
     from apps.channels.capabilities import ChannelCapabilities
     from apps.channels.datamodels import BaseMessage
@@ -70,6 +72,7 @@ class MessageProcessingContext:
     transcript: str | None = None
 
     human_message: ChatMessage | None = None  # DB record of the user's message
+    moderation_task_id: str | None = None
     bot_response: ChatMessage | None = None
     bot: PipelineBot | None = None  # Lazy -- created in BotInteractionStage
 
@@ -140,6 +143,45 @@ class MessageProcessingContext:
         if self.experiment_session is not None:
             return self.experiment_session.last_activity_at
         return timezone.now() if self.message is not None else None
+
+    def replace_response(self, text: str) -> None:
+        """Send `text` as the only reply, with no voice, extra text or files.
+
+        The caller saves `text` on `bot_response` first: it is sent on the normal response path, and the
+        channel returns `bot_response`.
+        """
+        self.formatted_message = text
+        self.voice_audio = None
+        self.additional_text_message = None
+        self.files_to_send = []
+        self.unsupported_files = []
+        self.early_exit_response = None
+
+
+def generate_user_message(
+    *,
+    ctx: MessageProcessingContext,
+    prompt: str,
+    trace_name: str,
+    fallback: str,
+    trace_metadata: dict | None = None,
+    log_failure: Callable[[], None] | None = None,
+) -> str:
+    """Ask EventBot for a participant-facing message; return `fallback` when it fails or returns nothing.
+
+    `log_failure` is called inside the exception handler when EventBot fails; by default the error is
+    logged with its traceback.
+    """
+    trace_info = TraceInfo(name=trace_name, metadata=trace_metadata or {})
+    event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
+    try:
+        return event_bot.get_user_message(prompt) or fallback
+    except Exception:
+        if log_failure is None:
+            logger.exception("EventBot failed to write the %s message, using the fallback", trace_name)
+        else:
+            log_failure()
+        return fallback
 
 
 # ---------------------------------------------------------------------------
@@ -333,18 +375,21 @@ class MessageProcessingPipeline:
 
     def _user_message(self, ctx: MessageProcessingContext, prompt: str, exception: Exception) -> str:
         """Ask EventBot for a participant-facing message, falling back to a reply that needs no model."""
-        metadata = {"error": str(exception), **getattr(exception, "trace_metadata", {})}
-        trace_info = TraceInfo(name="error", metadata=metadata)
-        event_bot = EventBot(ctx.experiment_session, ctx.experiment, trace_info, trace_service=ctx.trace_service)
-        try:
-            message = event_bot.get_user_message(prompt)
-        except Exception:
+
+        def log_failure() -> None:
             if isinstance(exception, UserActionableError):
                 logger.info("EventBot could not phrase a %s; replying with its text", type(exception).__name__)
-                return str(exception)
-            logger.exception("Failed to generate error message via EventBot, falling back to default")
-            return self.DEFAULT_ERROR_RESPONSE_TEXT
-        return message or self._fallback_reply(exception)
+            else:
+                logger.exception("Failed to generate error message via EventBot, falling back to default")
+
+        return generate_user_message(
+            ctx=ctx,
+            prompt=prompt,
+            trace_name="error",
+            trace_metadata={"error": str(exception), **getattr(exception, "trace_metadata", {})},
+            fallback=self._fallback_reply(exception),
+            log_failure=log_failure,
+        )
 
     def _fallback_reply(self, exception: Exception) -> str:
         """Return the exception's own message for a participant-actionable error, the canned text otherwise.

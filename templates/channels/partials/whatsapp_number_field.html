@@ -10,7 +10,7 @@
   <label class="label font-bold" for="id_number">
     <div>
       {{ form.fields.number.label }}
-      <small class="form-text text-muted">{% include "generic/help.html" with help_content=form.fields.number.help_text %}</small>
+      <small class="form-text text-muted"><c-ui.help>{{ form.fields.number.help_text|safe }}</c-ui.help></small>
     </div>
   </label>
 

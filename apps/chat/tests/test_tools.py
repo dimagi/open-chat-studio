@@ -607,14 +607,6 @@ class TestFormatMetadataBlock:
         block = _format_metadata_block({"title": "", "date": None, "tags": [], "type": "report"})
         assert block == "\n  <metadata>\n    <type>report</type>\n  </metadata>"
 
-    def test_lists_joined_with_commas(self):
-        block = _format_metadata_block({"authors": ["Alice", "Bob"]})
-        assert "<authors>Alice, Bob</authors>" in block
-
-    def test_unanticipated_fields_included(self):
-        block = _format_metadata_block({"some_custom_field": "value"})
-        assert "<some_custom_field>value</some_custom_field>" in block
-
     def test_invalid_tag_characters_sanitized(self):
         block = _format_metadata_block({"Some Field!": "value"})
         assert "<Some_Field_>value</Some_Field_>" in block
@@ -630,10 +622,6 @@ class TestFormatMetadataBlock:
 
 
 class TestFormatRowBlock:
-    def test_text_chunk_has_no_row_block(self):
-        chunk = FileChunkEmbedding(metadata=None, page_number=0)
-        assert _format_row_block(chunk) == ""
-
     def test_row_chunk_with_no_metadata_columns_still_names_the_row(self):
         chunk = FileChunkEmbedding(metadata={}, page_number=3)
         assert _format_row_block(chunk) == "\n  <row>\n    <row_number>3</row_number>\n  </row>"

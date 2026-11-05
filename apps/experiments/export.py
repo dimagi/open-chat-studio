@@ -6,7 +6,7 @@ import json
 import tempfile
 from collections import OrderedDict
 from collections.abc import Callable, Generator, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import dictdiffer
@@ -16,7 +16,11 @@ from apps.annotations.models import Tag, UserComment
 from apps.chat.models import ChatMessage
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
+from apps.human_annotations.models import AnnotationItem
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
+from apps.teams.flags import Flags
+from apps.teams.utils import flag_is_active_for_team
+from apps.utils.csv_export import neutralize_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
@@ -41,6 +45,12 @@ def _format_comments(user_comments: list[UserComment]) -> str:
     <username_1>: "user 1's comment" | <username_2>: "user 2's comment" | <username_1>: "user 1's comment"
     """
     return " | ".join([str(comment) for comment in user_comments])
+
+
+def _format_annotation_queues(items: Iterable[AnnotationItem]) -> str:
+    """Returns `items` as 'Queue A (Status), Queue B (Status)', ordered by queue name ignoring case."""
+    ordered = sorted(items, key=lambda item: item.queue.name.casefold())
+    return ", ".join(f"{item.queue.name} ({item.get_status_display()})" for item in ordered)
 
 
 def get_filtered_sessions(experiment, query_params, timezone):
@@ -103,6 +113,12 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         prefetch=("chat__tags",),
     ),
     ExportColumn(
+        key="annotation_queues",
+        label="Annotation Queues",
+        from_session=lambda s: neutralize_csv_formula(_format_annotation_queues(s.annotation_items.all())),
+        prefetch=("chat__experiment_session__annotation_items__queue",),
+    ),
+    ExportColumn(
         key="session_comments",
         label="Session Comments",
         from_session=lambda s: _format_comments(s.chat.comments.all()),
@@ -142,6 +158,11 @@ EXPORT_COLUMNS: list[ExportColumn] = [
         from_message=lambda m, e, t: json.dumps(_get_participant_data_for_message(m)),
         prefetch=("input_message_trace", "output_message_trace"),
     ),
+    ExportColumn(
+        key="moderation_status",
+        label="Moderation Status",
+        from_message=lambda m, e, t: m.moderation_status or "",
+    ),
 ]
 
 
@@ -154,6 +175,28 @@ def resolve_export_columns(keys: Iterable[str] | None = None) -> list[ExportColu
         return list(EXPORT_COLUMNS)
     selected = set(keys)
     return [column for column in EXPORT_COLUMNS if column.required or column.key in selected]
+
+
+_FLAG_GATED_COLUMNS = {
+    "annotation_queues": Flags.HUMAN_ANNOTATIONS.slug,
+    "moderation_status": Flags.ABUSE_DETECTION.slug,
+}
+
+
+def _gate_flagged_columns(columns: list[ExportColumn], experiment) -> list[ExportColumn]:
+    """Blank the cells, keeping the header, of each column whose feature flag is off for the team."""
+    return [_blank(column) if _is_gated_off(column, team=experiment.team) else column for column in columns]
+
+
+def _is_gated_off(column: ExportColumn, *, team) -> bool:
+    flag = _FLAG_GATED_COLUMNS.get(column.key)
+    return flag is not None and not flag_is_active_for_team(team, flag)
+
+
+def _blank(column: ExportColumn) -> ExportColumn:
+    if column.from_session is not None:
+        return replace(column, from_session=lambda s: "", prefetch=())
+    return replace(column, from_message=lambda m, e, t: "", prefetch=())
 
 
 def count_export_messages(sessions_queryset) -> int:
@@ -257,7 +300,7 @@ def generate_export_rows(
 
     ``columns`` is a list of column keys to include (see ``EXPORT_COLUMNS``); ``None`` includes all.
     """
-    export_columns = resolve_export_columns(columns)
+    export_columns = _gate_flagged_columns(resolve_export_columns(columns), experiment)
     yield _get_export_header(columns=export_columns, translation_language=translation_language)
 
     base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)

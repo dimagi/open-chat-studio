@@ -17,6 +17,7 @@ from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.outcomes import LENGTH_REASONS, classify_turn, raise_for_outcome
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
+    exclude_disabled_tools,
     format_multimodal_input,
     invoke_with_image_error_translation,
     populate_reference_section_from_citations,
@@ -192,10 +193,7 @@ def _get_configured_tools(node, session: ExperimentSession, tool_callbacks: Tool
     if search_tool := _get_search_tool(node):
         tools.append(search_tool)
 
-    if node.disabled_tools:
-        # Model builtin tools doesn't have a name attribute and are dicts
-        return [tool for tool in tools if hasattr(tool, "name") and tool.name not in node.disabled_tools]
-    return cast("list[dict | BaseTool]", tools)
+    return cast("list[dict | BaseTool]", exclude_disabled_tools(tools, node.disabled_tools))
 
 
 def _get_search_tool(node):

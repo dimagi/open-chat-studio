@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 
 import httpx
 from django.conf import settings
-from langchain_classic.chains.openai_functions.openapi import _format_url
+from langchain_classic.chains.openai_functions.openapi import _format_url  # noqa: PLC2701
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field

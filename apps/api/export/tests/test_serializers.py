@@ -1,8 +1,6 @@
 import json
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import connection
@@ -20,7 +18,7 @@ from apps.api.export.serializers import (
 from apps.assessments.models import Score
 from apps.chat.models import Chat
 from apps.documents.models import CollectionFile
-from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
@@ -42,16 +40,6 @@ from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 pytestmark = pytest.mark.django_db
-
-
-@pytest.fixture()
-def keypair():
-    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_pem = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return seal_mod.load_public_key(public_pem), private
 
 
 def _serialize(model, instance, public_key=None):
@@ -89,6 +77,13 @@ def test_team_endpoint_serializer_adds_status_fields(public_key, expected_has_pu
     assert data["has_public_key"] is expected_has_public_key  # a boolean presence flag, never the key material
     assert "public_key" not in data  # the raw key field must never appear alongside the boolean
     assert "members" not in data
+
+
+def test_participant_serializer_drops_strikes():
+    """The denylist is not exported, so strikes are left out and imported participants start at 0."""
+    data = _serialize(Participant, ParticipantFactory(strikes=2))
+    assert "strikes" not in data
+    assert "identifier" in data
 
 
 def test_customuser_serializer_drops_password_and_perms():

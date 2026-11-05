@@ -85,7 +85,7 @@
     <div class="divider"></div>
     <div class="modal-action">
         {% url 'experiments:archive-experiment' team_slug=team.slug experiment_id=experiment.working_version_id version_number=experiment.version_number as archive_url %}
-        <form method="post" action="{{ archive_url }}" onsubmit="return confirm('Are you sure you want to archive this experiment?');">
+        <form method="post" action="{{ archive_url }}" onsubmit="confirmThenSubmit(event, 'Are you sure you want to archive this experiment?')">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-warning" {% if experiment.is_default_version %}disabled{% endif %}>
                 Archive Version

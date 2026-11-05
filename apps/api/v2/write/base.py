@@ -1,13 +1,21 @@
 """Shared plumbing for the v2 chatbot write endpoints -- the settings surface and the pipeline façade."""
 
+from collections.abc import Iterable
 from typing import Any
 
 from django.http import Http404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 from rest_framework import exceptions, serializers
 from rest_framework.metadata import SimpleMetadata
 from rest_framework.request import clone_request
 
 from apps.api.permissions import RequiresTeamPermission
+
+#: The path parameter of every endpoint under ``/chatbots/{id}/``.
+CHATBOT_ID = OpenApiParameter(
+    name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+)
 
 
 class DescribesPatch(SimpleMetadata):
@@ -51,10 +59,10 @@ class ChatbotCompositionPermission(RequiresTeamPermission):
     required_permissions = ["experiments.change_experiment"]
 
 
-class RejectsUnknownKeys:
-    """Refuse a request body carrying keys this serializer does not declare.
+class RejectsUnwritableKeys:
+    """Refuse a request body carrying keys this serializer does not declare, or declares read-only.
 
-    DRF's default is to drop them silently, which for an agent is a 200 that wrote nothing. Hooked
+    DRF's default is to drop both silently, which for an agent is a 200 that wrote nothing. Hooked
     into ``to_internal_value`` rather than ``validate`` because that is where a serializer sees its
     own raw input wherever it is mounted -- ``validate`` would have to read ``initial_data``, which
     DRF sets on the root serializer alone.
@@ -62,10 +70,31 @@ class RejectsUnknownKeys:
 
     def to_internal_value(self, data: Any) -> Any:
         if isinstance(data, dict):
-            unknown = sorted(set(data) - set(self.fields))
-            if unknown:
-                accepted = ", ".join(sorted(self.fields))
+            writable = {name for name, field in self.fields.items() if not field.read_only}
+            refused = sorted(set(data) - writable)
+            if refused:
+                accepted = ", ".join(sorted(writable))
                 raise serializers.ValidationError(
-                    {key: f"Unrecognised field. Accepted here: {accepted}." for key in unknown}
+                    {
+                        key: (
+                            f"Read-only field. Accepted here: {accepted}."
+                            if key in self.fields
+                            else f"Unrecognised field. Accepted here: {accepted}."
+                        )
+                        for key in refused
+                    }
                 )
         return super().to_internal_value(data)
+
+
+def reject_unknown_keys(data: dict, accepted: Iterable[str], *, path: tuple[str, ...] = ()) -> None:
+    """Raise a ``ValidationError`` naming each key of ``data`` not in ``accepted``, nested under ``path``."""
+    accepted = sorted(accepted)
+    unknown = sorted(set(data) - set(accepted))
+    if not unknown:
+        return
+    accepted_text = ", ".join(accepted) or "none"
+    errors: dict = {key: f"Unrecognised field. Accepted here: {accepted_text}." for key in unknown}
+    for key in reversed(path):
+        errors = {key: errors}
+    raise serializers.ValidationError(errors)

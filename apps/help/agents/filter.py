@@ -13,7 +13,12 @@ from apps.help.agent import build_system_agent
 from apps.help.base import BaseHelpAgent
 from apps.help.registry import register_agent
 from apps.teams.models import Team
-from apps.web.dynamic_filters.base import ChoiceColumnFilter, get_filter_registry, get_filter_schema
+from apps.web.dynamic_filters.base import (
+    ChoiceColumnFilter,
+    MultiColumnFilter,
+    get_filter_registry,
+    get_filter_schema,
+)
 from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 logger = logging.getLogger(__name__)
@@ -22,6 +27,21 @@ logger = logging.getLogger(__name__)
 @functools.cache
 def _get_system_prompt():
     return (Path(__file__).parent.parent / "filter_system_prompt.md").read_text()
+
+
+def _get_filter_class(filter_slug: str) -> type[MultiColumnFilter]:
+    registry = get_filter_registry()
+    filter_class = registry.get(filter_slug)
+    if filter_class is None:
+        raise ValueError(f"Unknown filter slug: {filter_slug!r}. Available: {sorted(registry.keys())}")
+    return filter_class
+
+
+def _get_team(team_id: int) -> Team:
+    try:
+        return Team.objects.get(id=team_id)
+    except Team.DoesNotExist as e:
+        raise ValueError(f"Team with id {team_id} not found") from e
 
 
 def make_get_options_tool(filter_class, team):
@@ -49,7 +69,7 @@ def make_get_options_tool(filter_class, team):
             On error, returns {'error': '<message>'}.
         """
         filter_component = next(
-            (f for f in filter_class.filters if f.query_param == param),
+            (f for f in filter_class.available_filters(team) if f.query_param == param),
             None,
         )
         if filter_component is None:
@@ -116,33 +136,28 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
 
     @classmethod
     def get_system_prompt(cls, input: FilterInput) -> str:
-        registry = get_filter_registry()
-        filter_class = registry.get(input.filter_slug)
-        if filter_class is None:
-            raise ValueError(f"Unknown filter slug: {input.filter_slug!r}. Available: {sorted(registry.keys())}")
-        schema = get_filter_schema(filter_class)
-        date_range_column = filter_class.date_range_column
+        return cls._build_system_prompt(
+            filter_class=_get_filter_class(input.filter_slug), team=_get_team(input.team_id)
+        )
+
+    @classmethod
+    def _build_system_prompt(cls, *, filter_class: type[MultiColumnFilter], team: Team) -> str:
+        schema = get_filter_schema(filter_class, team=team)
         template = _get_system_prompt()
-        return template.format(schema=json.dumps(schema, indent=2), date_range_column=date_range_column)
+        return template.format(schema=json.dumps(schema, indent=2), date_range_column=filter_class.date_range_column)
 
     @classmethod
     def get_user_message(cls, input: FilterInput) -> str:
         return input.query
 
     def run(self) -> FilterOutput:
-        registry = get_filter_registry()
-        filter_class = registry.get(self.input.filter_slug)
-        if filter_class is None:
-            raise ValueError(f"Unknown filter slug: {self.input.filter_slug!r}. Available: {sorted(registry.keys())}")
-        try:
-            team = Team.objects.get(id=self.input.team_id)
-        except Team.DoesNotExist as e:
-            raise ValueError(f"Team with id {self.input.team_id} not found") from e
+        filter_class = _get_filter_class(self.input.filter_slug)
+        team = _get_team(self.input.team_id)
         options_tool = make_get_options_tool(filter_class, team)
         with self._trace({"query": self.get_user_message(self.input)}) as trace_config:
             agent = build_system_agent(
                 self.mode,
-                self.get_system_prompt(self.input),
+                self._build_system_prompt(filter_class=filter_class, team=team),
                 tools=[options_tool],
                 response_format=self._get_output_type(),
             )

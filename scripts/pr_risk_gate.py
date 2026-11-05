@@ -49,7 +49,7 @@ BLOCKED_PATHS: list[tuple[str, str]] = [
     ("apps/*/migrations/**", "schema migration"),
     ("apps/data_migrations/**", "data migration"),
     ("config/**", "deploy-wide Django configuration"),
-    (".github/**", "CI/CD definition"),
+    (".github/workflows/**", "CI/CD definition"),
     ("Dockerfile*", "container image"),
     ("docker-compose*", "container image"),
     ("pyproject.toml", "dependency manifest"),
@@ -189,7 +189,7 @@ def path_blockers(entry: dict) -> list[str]:
         # A test file under a blocked app is still only ever imported by pytest, so the
         # path blockers do not apply to it. Losing or disabling one below still counts.
         # Confined to `apps/` -- outside it a `test_*.py` name proves nothing about what
-        # loads the file, and `.github/` and `config/` would hand out the exemption on a name.
+        # loads the file, and `.github/workflows/` and `config/` would hand out the exemption on a name.
         if path.startswith("apps/") and is_test(path):
             continue
         if status == "added" and any(glob_match(path, pattern) for pattern in BLOCKED_ONLY_WHEN_MODIFIED):

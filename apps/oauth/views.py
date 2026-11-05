@@ -23,6 +23,11 @@ from .forms import AuthorizationForm, RegisterApplicationForm, RegisterGlobalApp
 from .models import OAuth2Application, manage_applications_url
 from .tables import GlobalOAuth2ApplicationTable, OAuth2ApplicationTable
 
+NEW_APPLICATION_INITIAL = {
+    "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
+    "algorithm": OAuth2Application.RS256_ALGORITHM,
+}
+
 
 class TeamScopedAuthorizationView(BaseAuthorizationView):
     """Authorization view that scopes the granted token to a team.
@@ -188,11 +193,7 @@ class CreateApplication(
         "button_text": "Register",
     }
 
-    def get_initial(self):
-        return {
-            "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
-            "algorithm": OAuth2Application.RS256_ALGORITHM,
-        }
+    initial = NEW_APPLICATION_INITIAL
 
     def get_form_kwargs(self):
         # The chatbots on offer are the team's, and `form_valid` sets the team too late to filter a
@@ -298,11 +299,7 @@ class CreateGlobalApplication(GlobalApplicationBreadcrumbsMixin, SuperuserRequir
         "button_text": "Register",
     }
 
-    def get_initial(self):
-        return {
-            "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
-            "algorithm": OAuth2Application.RS256_ALGORITHM,
-        }
+    initial = NEW_APPLICATION_INITIAL
 
     def form_valid(self, form):
         form.instance.user = self.request.user

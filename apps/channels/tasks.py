@@ -168,9 +168,10 @@ def handle_evaluation_message(
 ) -> EvaluationReply:
     """Synchronously handles the message coming from evaluations.
 
-    `usage_tracer` is the only tracer an eval run gets: it bills the LLM calls without
-    leaving a trace behind (see `UsageOnlyTracer`). Optional so a caller with nothing to
-    bill to can omit it; every evaluation run supplies one.
+    `usage_tracer` is the tracer that bills the LLM calls without leaving a trace behind
+    (see `UsageOnlyTracer`). Optional so a caller with nothing to bill to can omit it;
+    every evaluation run supplies one. The channel attaches its own capture tracer, whose
+    spans come back on the reply.
     """
     message = BaseMessage(participant_id=session.participant.identifier, message_text=message_text)
     channel = EvaluationChannel(
@@ -339,7 +340,7 @@ def ratchet_widget_auth_levels():
     for channel in channels:
         target = widget_versions.level_for_version(channel.widget_version)
 
-        if channel.auth_level_notified_at is None:
+        if channel.auth_level_notified_at is None or channel.pending_auth_level is None:
             # No bump pending yet. Start one only if the widget now implies a higher level.
             if target <= channel.required_auth_level:
                 continue

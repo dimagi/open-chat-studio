@@ -5,8 +5,10 @@ from datetime import datetime
 
 from django.utils.text import slugify
 
+from apps.chat.schemas import ModerationSkipReason
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.decorators import silence_exceptions
+from apps.utils.sunset import HttpSunset
 
 from .models import LevelChoices
 from .utils import create_notification
@@ -395,4 +397,65 @@ def deleted_model_notification(
         permissions=["service_providers.change_llmprovidermodel"],
         links=affected.links(),
         once_per_event_type=True,
+    )
+
+
+@silence_exceptions(logger, log_message="Failed to create HTTP sunset notification")
+def http_sunset_notification(spec: HttpSunset, team, experiments: list, milestone: str) -> None:
+    """Tell a team's channel admins that a surface their chatbots still use is being retired."""
+    create_notification(
+        title=spec.notification_title,
+        message=spec.build_message(experiments, milestone),
+        level=LevelChoices.WARNING,
+        team=team,
+        slug=spec.notification_slug,
+        # Keyed on the milestone so each one opens its own thread.
+        event_data={"sunset": spec.key, "milestone": milestone},
+        permissions=list(spec.audience_permissions),
+        links={**{e.name: e.get_absolute_url() for e in experiments}, "Migration guide": spec.successor_url},
+        once_per_event_type=True,
+    )
+
+
+@silence_exceptions(logger, log_message="Failed to create participant blocked notification")
+def participant_auto_blocked_notification(experiment, denial, reason: str) -> None:
+    """Notify a team that a participant reached the strike limit and was blocked by the `denial` row."""
+    participant = denial.participant
+    create_notification(
+        title="Participant blocked automatically",
+        message=(
+            f"Participant '{participant.identifier}' was blocked after repeated flagged messages to "
+            f"'{experiment.name}'. Flagged categories: {reason}."
+        ),
+        level=LevelChoices.WARNING,
+        team=experiment.team,
+        slug="participant-auto-blocked",
+        event_data={"participant_id": participant.id, "denied_participant_id": denial.id},
+        permissions=["experiments.change_experiment", "experiments.change_participant"],
+        links={"View Participant": participant.get_absolute_url(), "View Bot": experiment.get_absolute_url()},
+    )
+
+
+_MODERATION_SKIP_REASONS: dict[ModerationSkipReason, str] = {
+    ModerationSkipReason.RATE_LIMITED: "the moderation provider's rate limit was reached",
+    ModerationSkipReason.ERROR: "the moderation provider returned an error",
+    ModerationSkipReason.TIMEOUT: "no moderation result arrived in time",
+}
+
+
+@silence_exceptions(logger, log_message="Failed to create moderation skipped notification")
+def moderation_skipped_notification(experiment, session: ExperimentSession, reason: ModerationSkipReason) -> None:
+    """Notify a team that a participant's message was answered without moderation."""
+    create_notification(
+        title="Moderation skipped",
+        message=(
+            f"A message to '{experiment.name}' was answered without moderation because "
+            f"{_MODERATION_SKIP_REASONS[reason]}."
+        ),
+        level=LevelChoices.WARNING,
+        team=experiment.team,
+        slug="moderation-skipped",
+        event_data={"bot_id": experiment.id, "reason": reason},
+        permissions=["experiments.change_experiment", "experiments.change_participant"],
+        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
     )

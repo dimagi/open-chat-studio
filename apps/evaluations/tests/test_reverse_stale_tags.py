@@ -34,23 +34,6 @@ def evaluator(team):
     return EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
 
 
-@pytest.fixture()
-def tag_a(team):
-    return EvaluationTagFactory.create(team=team, name="tag-a")
-
-
-@pytest.fixture()
-def tag_rule(team, evaluator, tag_a):
-    return EvaluatorTagRuleFactory.create(
-        team=team,
-        evaluator=evaluator,
-        tag=tag_a,
-        field_name="sentiment",
-        condition_type=ConditionType.EQUALS,
-        condition_value={"value": "negative"},
-    )
-
-
 def _build_run(team, evaluator, messages, run_type=EvaluationRunType.FULL):
     dataset = EvaluationDatasetFactory.create(team=team, messages=messages)
     config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])

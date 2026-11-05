@@ -1,9 +1,10 @@
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.db.models import Q, QuerySet
+from django.db.models import Exists, OuterRef, Q, QuerySet
 
 from apps.experiments.models import Experiment, SessionStatus
+from apps.human_annotations.models import AnnotationItem, AnnotationQueue
 
 from .base import DATE_RANGE_OPTIONS, TYPE_TIMESTAMP, ChoiceColumnFilter, ColumnFilter, StringColumnFilter
 
@@ -54,6 +55,66 @@ class ExperimentFilter(ChoiceColumnFilter):
 
     def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
         return queryset.exclude(self._get_filter_clause(value))
+
+
+NOT_IN_ANY_QUEUE = "none"
+
+
+class AnnotationQueueFilter(ChoiceColumnFilter):
+    """Session filter on annotation queue membership, with a fixed 'Not in any queue' option."""
+
+    query_param: str = "annotation_queue"
+    column: str = "annotation_queue"
+    label: str = "Annotation Queue"
+    description: str = (
+        "Filter by annotation queue membership. Values are numeric queue IDs, or the fixed value "
+        f"'{NOT_IN_ANY_QUEUE}' for sessions that are in no queue. Call get_filter_options('annotation_queue') "
+        "to look up the ID for a queue name. Do NOT use the queue name string as a value."
+    )
+
+    def prepare(self, team, **_) -> "AnnotationQueueFilter":
+        """Offer 'Not in any queue' first, then this team's queues by name."""
+        queues = AnnotationQueue.objects.filter(team=team).values("id", "name").order_by("name")
+        options: list[str | dict] = [{"id": NOT_IN_ANY_QUEUE, "label": "Not in any queue"}]
+        options.extend({"id": queue["id"], "label": queue["name"]} for queue in queues)
+        return self.model_copy(update={"options": options})
+
+    def parse_query_value(self, value) -> list[int | str]:  # ty: ignore[invalid-method-override]
+        """Keep queue ids as ints and the 'none' sentinel; drop anything else."""
+        values: list[int | str] = []
+        for v in self.values_list(value):
+            if v == NOT_IN_ANY_QUEUE:
+                values.append(v)
+                continue
+            try:
+                values.append(int(v))
+            except (ValueError, TypeError):
+                continue
+        return values
+
+    def _membership_clause(self, values):
+        """EXISTS over the session's own items, so a session in several queues matches once."""
+        session_items = AnnotationItem.objects.filter(session_id=OuterRef("pk"), team_id=OuterRef("team_id"))
+        queue_ids = [v for v in values if v != NOT_IN_ANY_QUEUE]
+        clause = Exists(session_items.filter(queue_id__in=queue_ids)) if queue_ids else None
+        if NOT_IN_ANY_QUEUE in values:
+            in_no_queue = ~Exists(session_items)
+            clause = in_no_queue if clause is None else clause | in_no_queue
+        return clause
+
+    def apply_any_of(self, queryset, value, timezone=None) -> QuerySet:
+        """Sessions matching at least one ticked option."""
+        return queryset.filter(self._membership_clause(value))
+
+    def apply_all_of(self, queryset, value, timezone=None) -> QuerySet:
+        """Each ticked option must hold, so chain one membership clause per option."""
+        for single in value:
+            queryset = queryset.filter(self._membership_clause([single]))
+        return queryset
+
+    def apply_excludes(self, queryset, value, timezone=None) -> QuerySet:
+        """Sessions matching none of the ticked options."""
+        return queryset.exclude(self._membership_clause(value))
 
 
 class SessionStatusFilter(ChoiceColumnFilter):

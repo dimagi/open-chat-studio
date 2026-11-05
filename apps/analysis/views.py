@@ -118,7 +118,7 @@ class TranscriptAnalysisDetailView(BreadcrumbsMixin, LoginAndTeamRequiredMixin, 
             .filter(analyses=self.object)
             .prefetch_related(chat_tagged_items_prefetch())
         )
-        table = ChatbotSessionsTable(data=sessions)
+        table = ChatbotSessionsTable(data=sessions, exclude=("annotation_queues",))
         return RequestConfig(self.request).configure(table)
 
 

@@ -64,27 +64,19 @@ def tracer(public_key, exported_spans):
         yield tracer
 
 
-@pytest.fixture()
-def mock_session():
-    session = mock.MagicMock()
-    session.external_id = "ext-session-id"
-    session.participant = mock.MagicMock(identifier="participant-1")
-    return session
-
-
 def _span_by_name(exporter, name):
     spans = [span for span in exporter.get_finished_spans() if span.name == name]
     assert len(spans) == 1, f"expected exactly one {name!r} span, got {len(spans)}"
     return spans[0]
 
 
-def test_trace_tags_are_exported_on_the_root_observation(tracer, exported_spans, mock_session):
+def test_trace_tags_are_exported_on_the_root_observation(tracer, exported_spans, langfuse_session):
     """Tags are added from a nested span but must end up on the root observation, which is
     where Langfuse reads trace-level attributes from.
     """
     _client, exporter = exported_spans
 
-    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=mock_session):
+    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=langfuse_session):
         with tracer.span(span_context=TraceContext(id=2, name="Run Pipeline"), inputs={}):
             tracer.add_trace_tags(["safety_layer:blocked"])
 
@@ -95,13 +87,13 @@ def test_trace_tags_are_exported_on_the_root_observation(tracer, exported_spans,
     assert LangfuseOtelSpanAttributes.TRACE_TAGS not in nested.attributes
 
 
-def test_repeated_tag_calls_accumulate_instead_of_replacing(tracer, exported_spans, mock_session):
+def test_repeated_tag_calls_accumulate_instead_of_replacing(tracer, exported_spans, langfuse_session):
     """A trace can save more than one AI message, so the second call must not drop the tags
     the first one set.
     """
     _client, exporter = exported_spans
 
-    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=mock_session):
+    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=langfuse_session):
         tracer.add_trace_tags(["first"])
         tracer.add_trace_tags(["first", "second"])
 
@@ -109,36 +101,36 @@ def test_repeated_tag_calls_accumulate_instead_of_replacing(tracer, exported_spa
     assert root.attributes[LangfuseOtelSpanAttributes.TRACE_TAGS] == ("first", "second")
 
 
-def test_tags_repeated_within_one_call_are_exported_once(tracer, exported_spans, mock_session):
+def test_tags_repeated_within_one_call_are_exported_once(tracer, exported_spans, langfuse_session):
     """Langfuse trace tags are a set of strings; a repeat carries no meaning."""
     _client, exporter = exported_spans
 
-    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=mock_session):
+    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=langfuse_session):
         tracer.add_trace_tags(["dup", "other", "dup"])
 
     root = _span_by_name(exporter, "root-trace")
     assert root.attributes[LangfuseOtelSpanAttributes.TRACE_TAGS] == ("dup", "other")
 
 
-def test_tags_do_not_leak_between_traces(tracer, exported_spans, mock_session):
+def test_tags_do_not_leak_between_traces(tracer, exported_spans, langfuse_session):
     _client, exporter = exported_spans
 
-    with tracer.trace(trace_context=TraceContext(id=1, name="first-trace"), session=mock_session):
+    with tracer.trace(trace_context=TraceContext(id=1, name="first-trace"), session=langfuse_session):
         tracer.add_trace_tags(["only-on-first"])
 
-    with tracer.trace(trace_context=TraceContext(id=2, name="second-trace"), session=mock_session):
+    with tracer.trace(trace_context=TraceContext(id=2, name="second-trace"), session=langfuse_session):
         pass
 
     assert LangfuseOtelSpanAttributes.TRACE_TAGS not in _span_by_name(exporter, "second-trace").attributes
 
 
-def test_session_and_user_are_exported_on_every_observation(tracer, exported_spans, mock_session):
+def test_session_and_user_are_exported_on_every_observation(tracer, exported_spans, langfuse_session):
     """`propagate_attributes` is what binds a trace to a session; assert it survives the
     export rather than trusting the call was made.
     """
     _client, exporter = exported_spans
 
-    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=mock_session):
+    with tracer.trace(trace_context=TraceContext(id=1, name="root-trace"), session=langfuse_session):
         with tracer.span(span_context=TraceContext(id=2, name="Run Pipeline"), inputs={}):
             pass
 
@@ -148,7 +140,7 @@ def test_session_and_user_are_exported_on_every_observation(tracer, exported_spa
         assert span.attributes[LangfuseOtelSpanAttributes.TRACE_USER_ID] == "participant-1"
 
 
-def test_output_message_tags_reach_the_exported_trace_through_tracing_service(tracer, exported_spans, mock_session):
+def test_output_message_tags_reach_the_exported_trace_through_tracing_service(tracer, exported_spans, langfuse_session):
     """The production path: `bots.py` adds output message tags from inside the "Run Pipeline"
     span, and `TracingService` swallows tracer errors, so only the exported span shows
     whether the tags actually made it.
@@ -156,7 +148,7 @@ def test_output_message_tags_reach_the_exported_trace_through_tracing_service(tr
     _client, exporter = exported_spans
     service = TracingService([tracer], experiment_id=1, team_id=1)
 
-    with service.trace("chat-trace", session=mock_session):
+    with service.trace("chat-trace", session=langfuse_session):
         with service.span("Run Pipeline", inputs={}):
             service.add_output_message_tags_to_trace(["safety_layer:blocked"])
 

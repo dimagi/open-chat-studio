@@ -4,8 +4,8 @@ The SDK offers no public equivalent for any of them, so these assert the symbols
 there. An SDK upgrade that removes one fails here instead of silently breaking tracing.
 """
 
-from langfuse._client.resource_manager import LangfuseResourceManager
-from langfuse._utils.prompt_cache import PromptCache
+from langfuse._client.resource_manager import LangfuseResourceManager  # noqa: PLC2701
+from langfuse._utils.prompt_cache import PromptCache  # noqa: PLC2701
 from langfuse.langchain import CallbackHandler
 
 

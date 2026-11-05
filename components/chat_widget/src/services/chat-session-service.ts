@@ -65,6 +65,8 @@ export interface ChatAttachment {
   name: string;
   content_type: string;
   size: number;
+  /** Session-scoped download endpoint. Absent on messages from older backends and on the optimistic user message. */
+  download_url?: string;
 }
 
 export interface ChatMessage {
@@ -73,6 +75,8 @@ export interface ChatMessage {
   content: string;
   metadata?: unknown;
   attachments?: ChatAttachment[];
+  /** Set on notices and unconfirmed user messages the widget adds itself; the server never sends it. */
+  local?: boolean;
 }
 
 /**
@@ -162,11 +166,20 @@ export interface MessagePollingHandle {
   stop: () => void;
 }
 
+/** The 403 code for a participant who has not accepted the current consent form. */
+export const CONSENT_REQUIRED_CODE = 'consent_required';
+
 /** Refusal codes that carry a consent block and leave the session usable. */
-const CONSENT_REFUSAL_CODES = ['consent_required', 'consent_stale'];
+const CONSENT_REFUSAL_CODES = [CONSENT_REQUIRED_CODE, 'consent_stale'];
 
 /** The 403 code for a session token that has aged out; the only refusal renewal can answer. */
 const SESSION_EXPIRED_CODE = 'session_expired';
+
+/** The 403 code for a participant on the team's denylist. The widget reports a generic failure and keeps the session. */
+export const PARTICIPANT_BLOCKED_CODE = 'participant_blocked';
+
+/** Shown in place of the server's wording when the refusal must not reveal its reason. */
+export const GENERIC_FAILURE_MESSAGE = 'Something went wrong.';
 
 interface ErrorBody {
   message: string;
@@ -367,6 +380,15 @@ export class ChatSessionService {
     return response.json() as Promise<ChatTaskPollResponse>;
   }
 
+  /** Fetch an attachment from its `download_url` with the session's credentials, which a plain link cannot send. */
+  async downloadAttachment(sessionId: string, downloadUrl: string): Promise<Blob> {
+    if (!this.isApiUrl(downloadUrl)) {
+      throw new Error('Failed to download file: URL is not on the API origin');
+    }
+    const response = await this.sessionRequest(sessionId, downloadUrl, () => ({ headers: this.getCommonHeaders() }), 'Failed to download file');
+    return response.blob();
+  }
+
   pollTask(sessionId: string, taskId: string, callbacks: TaskPollingCallbacks): TaskPollingHandle {
     let attempts = 0;
     let cancelled = false;
@@ -558,6 +580,15 @@ export class ChatSessionService {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
+  /** Session credentials must only go to the API's own origin. */
+  private isApiUrl(url: string): boolean {
+    try {
+      return new URL(url).origin === new URL(this.apiBaseUrl).origin;
+    } catch {
+      return false;
+    }
+  }
+
   private parseSuccessorUrl(link: string | null): string | undefined {
     const match = link?.match(/<([^>]+)>\s*;\s*rel="?successor-version"?/);
     return match?.[1];
@@ -571,6 +602,9 @@ export class ChatSessionService {
     // Before the generic 403: a consent refusal keeps the session, a token refusal discards it.
     if (consent && CONSENT_REFUSAL_CODES.includes(code)) {
       return new ConsentRequiredError(consent, message);
+    }
+    if (code === PARTICIPANT_BLOCKED_CODE) {
+      return new Error(GENERIC_FAILURE_MESSAGE);
     }
     if (status === 403) {
       return new SessionAccessError(status, code, message);

@@ -1,11 +1,11 @@
 import pytest
+from django.test import override_settings
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.teams.backends import add_user_to_team, make_user_team_owner
-from apps.teams.flags import Flags
 from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.notifications import SlackMessagingProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -68,17 +68,7 @@ def test_data_nav_link_shown_for_admin(client, team, admin):
 
 
 @pytest.mark.django_db()
-def test_notifications_section_hidden_when_flag_off(client, team, admin):
-    client.force_login(admin)
-    response = client.get(reverse("single_team:manage_team", args=[team.slug]))
-
-    assert section_url(team_slug=team.slug, section_key="notifications").encode() not in response.content
-    assert client.get(section_url(team_slug=team.slug, section_key="notifications")).status_code == 404
-
-
-@pytest.mark.django_db()
-@override_flag(Flags.SLACK_NOTIFICATIONS.slug, active=True)
-def test_notifications_section_shown_when_flag_on(client, team, admin):
+def test_notifications_section_shown(client, team, admin):
     client.force_login(admin)
     response = client.get(reverse("single_team:manage_team", args=[team.slug]))
     assert section_url(team_slug=team.slug, section_key="notifications").encode() in response.content
@@ -86,6 +76,37 @@ def test_notifications_section_shown_when_flag_on(client, team, admin):
     section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
     assert section.status_code == 200
     assert b"btn-add-notification-channel" in section.content
+
+
+@pytest.mark.django_db()
+@override_settings(SLACK_ENABLED=True)
+def test_notifications_section_shows_notice_without_slack_workspace(client, team, admin):
+    client.force_login(admin)
+    section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
+
+    assert b"no-slack-workspace-notice" in section.content
+    assert b"Connect a Slack workspace" in section.content
+    assert b"disabled" in section.content.split(b"btn-add-notification-channel")[1].split(b">")[0]
+
+
+@pytest.mark.django_db()
+@override_settings(SLACK_ENABLED=False)
+def test_notifications_section_omits_connect_link_when_slack_disabled(client, team, admin):
+    client.force_login(admin)
+    section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
+
+    assert b"no-slack-workspace-notice" in section.content
+    assert b"Connect a Slack workspace" not in section.content
+
+
+@pytest.mark.django_db()
+def test_notifications_section_hides_notice_with_slack_workspace(client, team, admin):
+    SlackMessagingProviderFactory.create(team=team)
+    client.force_login(admin)
+    section = client.get(section_url(team_slug=team.slug, section_key="notifications"))
+
+    assert b"no-slack-workspace-notice" not in section.content
+    assert b"disabled" not in section.content.split(b"btn-add-notification-channel")[1].split(b">")[0]
 
 
 @pytest.mark.django_db()

@@ -291,7 +291,7 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     )
     is_archived = models.BooleanField(default=False)
 
-    objects = FileChunkEmbeddingObjectManager()
+    objects = FileChunkEmbeddingObjectManager()  # ty: ignore[invalid-assignment]
 
     class Meta:
         indexes = [
