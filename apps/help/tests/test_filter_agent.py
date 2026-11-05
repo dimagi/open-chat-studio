@@ -10,6 +10,7 @@ from apps.teams.flags import Flags
 from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import ParticipantFilter
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 @pytest.mark.django_db()
@@ -268,3 +269,28 @@ class TestFilterAgentRun:
         call_kwargs = mock_agent.invoke.call_args.kwargs
         assert call_kwargs["config"]["callbacks"] == [callback]
         assert tracer.trace.call_args.kwargs["metadata"] == {"team_id": "42"}
+
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_run_drops_filters_with_an_operator_the_column_does_not_offer(self, mock_build, mock_team_cls):
+        """Session ID offers no 'any of' (there is no list to pick from), so a generated 'any of' on it is dropped."""
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {
+            "structured_response": FilterOutput(
+                filters=[
+                    ColumnFilterData(column="session_id", operator="any of", value='["a", "b"]'),
+                    ColumnFilterData(column="session_id", operator="equals", value="a"),
+                    ColumnFilterData(column="participant", operator="any of", value='["x@test.com"]'),
+                ]
+            )
+        }
+        mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = TeamFactory.build(id=1)
+
+        agent = FilterAgent(input=FilterInput(query="sessions a or b", filter_slug="session", team_id=1))
+        result = agent.run()
+
+        assert [(f.column, f.operator) for f in result.filters] == [
+            ("session_id", "equals"),
+            ("participant", "any of"),
+        ]
