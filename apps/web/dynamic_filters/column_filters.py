@@ -14,6 +14,7 @@ class ParticipantFilter(StringColumnFilter):
     columns: list[str] = ["participant__identifier", "participant__name"]
     label: str = "Participant"
     description: str = "Filter by participant name or identifier"
+    allow_any_of: bool = True
 
 
 class ExperimentFilter(ChoiceColumnFilter):

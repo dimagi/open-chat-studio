@@ -476,38 +476,38 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
     return render(request, "table/table_row.html", {"row": table.rows[0]})
 
 
+PARTICIPANT_IDENTIFIER_LIMIT = 200
+PARTICIPANT_IDENTIFIER_FIELDS = ("identifier", "remote_id")
+
+
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
-    query = (
-        Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
-        .values_list("identifier", "remote_id")
-        .distinct()
-    )
-    return _get_identifiers_response(query)
+    participants = Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
+    return _get_identifiers_response(participants, request)
 
 
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
-    query = Participant.objects.filter(team=request.team).values_list("identifier", "remote_id").distinct()
-    return _get_identifiers_response(query)
+    participants = Participant.objects.filter(team=request.team)
+    return _get_identifiers_response(participants, request)
 
 
-def _get_identifiers_response(queryset):
-    identifiers, remote_ids = set(), set()
-    for ident, remote_id in queryset:
-        if ident:
-            identifiers.add(ident)
-        if remote_id:
-            remote_ids.add(remote_id)
-    return JsonResponse(
-        {
-            "identifiers": list(identifiers),
-            "remote_ids": list(remote_ids),
-        },
-        safe=False,
-    )
+def _get_identifiers_response(participants, request):
+    """Return one page of distinct values of the requested field, sorted, starting after the `after` value."""
+    field = request.GET.get("field")
+    if field not in PARTICIPANT_IDENTIFIER_FIELDS:
+        return JsonResponse({"error": f"field must be one of {', '.join(PARTICIPANT_IDENTIFIER_FIELDS)}"}, status=400)
+
+    queryset = participants.exclude(**{field: ""})
+    if search := request.GET.get("q", "").strip():
+        queryset = queryset.filter(**{f"{field}__icontains": search})
+    if after := request.GET.get("after"):
+        queryset = queryset.filter(**{f"{field}__gt": after})
+    limit = PARTICIPANT_IDENTIFIER_LIMIT
+    values = list(queryset.order_by(field).values_list(field, flat=True).distinct()[: limit + 1])
+    return JsonResponse({"values": values[:limit], "has_more": len(values) > limit})
 
 
 @permission_required(IMPORT_PERMISSIONS)
