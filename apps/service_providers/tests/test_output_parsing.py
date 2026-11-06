@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, FunctionMessage
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.main import LlmService, OpenAILlmService
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
+from apps.service_providers.llm_service.utils import populate_reference_section_from_citations
 from apps.utils.factories.files import FileFactory
 
 
@@ -162,6 +163,116 @@ class TestParseOutputForAnthropic:
         ]
         expected = LlmChatResponse(text="Text with incomplete citations [Complete](https://example.com/complete)")
         assert parse_output_for_anthropic(output, session=None) == expected
+
+
+@pytest.mark.django_db()
+class TestParseOutputForAnthropicOcsCitations:
+    """A `<CIT n />` marker for a team file must survive into a reference section, as it does for other providers."""
+
+    def test_marker_becomes_footnote_and_reference(self, team_with_users):
+        session = Mock(id=1, team_id=team_with_users.id)
+        file = FileFactory.create(team=team_with_users)
+
+        parsed = parse_output_for_anthropic(AIMessage(content=f"Fact <CIT {file.id} />."), session=session)
+        text = populate_reference_section_from_citations(parsed.text, cited_files=parsed.cited_files, session=session)
+
+        assert "<CIT" not in text
+        assert text.startswith("Fact [^1].")
+        assert f"[^1]: [{file.citation_text}]" in text
+
+    @pytest.mark.parametrize(
+        "content_template",
+        [
+            pytest.param("Fact <CIT {id} />.", id="string_content"),
+            pytest.param([{"type": "text", "text": "Fact <CIT {id} />."}], id="single_block"),
+            pytest.param(
+                [{"type": "text", "text": "Fact "}, {"type": "text", "text": "<CIT {id} />."}], id="separate_blocks"
+            ),
+            pytest.param(
+                [{"type": "text", "text": "Fact <CIT "}, {"type": "text", "text": "{id} />."}], id="split_marker"
+            ),
+        ],
+    )
+    def test_marker_populates_cited_files(self, team_with_users, content_template):
+        session = Mock(team_id=team_with_users.id)
+        file = FileFactory.create(team=team_with_users)
+        content = _format_content(content_template, file.id)
+
+        result = parse_output_for_anthropic(AIMessage(content=content), session=session)
+
+        assert result.cited_files == {file}
+
+    def test_marker_text_is_preserved(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+        file = FileFactory.create(team=team_with_users)
+        text = f"Fact <CIT {file.id} />."
+
+        result = parse_output_for_anthropic(AIMessage(content=text), session=session)
+
+        assert result.text == text
+
+    def test_repeated_marker_cites_file_once(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+        file = FileFactory.create(team=team_with_users)
+
+        result = parse_output_for_anthropic(
+            AIMessage(content=f"One <CIT {file.id} />. Two <CIT {file.id} />."), session=session
+        )
+
+        assert result.cited_files == {file}
+
+    def test_multiple_files(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+        file_1, file_2 = FileFactory.create_batch(2, team=team_with_users)
+
+        result = parse_output_for_anthropic(
+            AIMessage(content=f"One <CIT {file_1.id} />. Two <CIT {file_2.id} />."), session=session
+        )
+
+        assert result.cited_files == {file_1, file_2}
+
+    def test_file_from_another_team_is_not_cited(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+        other_team_file = FileFactory.create()
+
+        result = parse_output_for_anthropic(AIMessage(content=f"Fact <CIT {other_team_file.id} />."), session=session)
+
+        assert result.cited_files == set()
+
+    def test_unknown_file_id_is_not_cited(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+
+        result = parse_output_for_anthropic(AIMessage(content="Fact <CIT 999999999 />."), session=session)
+
+        assert result.cited_files == set()
+
+    def test_include_citations_false_leaves_cited_files_empty(self, team_with_users):
+        session = Mock(team_id=team_with_users.id)
+        file = FileFactory.create(team=team_with_users)
+
+        result = parse_output_for_anthropic(
+            AIMessage(content=f"Fact <CIT {file.id} />."), session=session, include_citations=False
+        )
+
+        assert result.cited_files == set()
+
+    def test_matches_default_parser(self, team_with_users):
+        """Providers must agree on which files a response cites."""
+        session = Mock(team_id=team_with_users.id)
+        file = FileFactory.create(team=team_with_users)
+        message = AIMessage(content=[{"type": "text", "text": f"Fact <CIT {file.id} />."}])
+
+        default_result = LlmService()._default_parser(message, session)
+        anthropic_result = parse_output_for_anthropic(message, session=session)
+
+        assert default_result.cited_files == {file}
+        assert anthropic_result.cited_files == default_result.cited_files
+
+
+def _format_content(template, file_id):
+    if isinstance(template, str):
+        return template.format(id=file_id)
+    return [{**block, "text": block["text"].format(id=file_id)} for block in template]
 
 
 @pytest.mark.django_db()
