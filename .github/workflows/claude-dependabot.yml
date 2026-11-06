@@ -10,7 +10,9 @@
 # Requirements: ANTHROPIC_API_KEY secret must be configured
 #
 # Notes:
-# - No concurrency group is set, so runs are independent of one another.
+# - Manual dispatch accepts any PR number, not only Dependabot's, which is
+#   how to test changes to the prompt.
+# - Has no concurrency group, so runs are independent of one another.
 
 name: Claude Dependabot PR Review
 

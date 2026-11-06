@@ -3,7 +3,7 @@
 # Runs Claude Code against issues and PR/issue conversations in two modes:
 # - Scheduled/manual (find-work + scheduled jobs): picks the oldest open
 #   issue labelled `claude` that doesn't already have an open PR, and
-#   implements its next unchecked task.
+#   implements its next unchecked, unblocked task.
 # - Event-driven (claude job): responds to an `@claude` mention in an issue
 #   comment, PR review comment, or PR review, or to an issue being labelled
 #   `claude`.
@@ -15,9 +15,9 @@
 # Notes:
 # - Applies the `claude` label to PRs it opens when instructed by the prompt
 #   (the scheduled/manual mode aims to create one PR per completed task).
-# - Runs are grouped per issue/PR (`cancel-in-progress: false`), so a
-#   second trigger for the same issue or PR waits for the in-progress run
-#   to finish rather than replacing it.
+# - A new run never cancels an in-progress one. Scheduled runs share one
+#   concurrency group, manual runs group by the `issue_number` input, and
+#   event runs group by issue or PR number.
 # - The `claude` job has no actor/permission gate of its own — it relies on
 #   claude-code-action's built-in check that the triggering user has write
 #   access to this repo. A mention or review from anyone without write
