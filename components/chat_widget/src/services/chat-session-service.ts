@@ -93,6 +93,8 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   /** Set on notices and unconfirmed user messages the widget adds itself; the server never sends it. */
   local?: boolean;
+  /** Render the content as plain text rather than markdown. Only set on local notices. */
+  plainText?: boolean;
 }
 
 /**

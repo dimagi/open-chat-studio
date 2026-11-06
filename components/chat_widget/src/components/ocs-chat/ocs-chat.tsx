@@ -321,8 +321,6 @@ export class OcsChat {
   @State() sessionEnded: boolean = false;
   /** The server refused a start, send or upload because the participant is blocked. */
   @State() participantBlocked: boolean = false;
-  /** The blocked notice, rendered as plain text because its wording comes from the server. */
-  private blockedNotice?: ChatMessage;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -516,13 +514,14 @@ export class OcsChat {
   }
 
   /** Notices carry the browser's clock, so they are kept out of the polling cursor. */
-  private addNotice(content: string, { persist = true }: { persist?: boolean } = {}): ChatMessage {
+  private addNotice(content: string, { persist = true, plainText = false }: { persist?: boolean; plainText?: boolean } = {}): ChatMessage {
     const notice: ChatMessage = {
       created_at: new Date().toISOString(),
       role: 'system',
       content,
       attachments: [],
       local: true,
+      ...(plainText && { plainText: true }),
     };
     this.messages = [...this.messages, notice];
     if (persist) {
@@ -684,7 +683,8 @@ export class OcsChat {
       this.clearSessionStorage();
     }
     const notice = error.detail || this.translationManager.get('status.participantBlocked', 'You can no longer send messages to this chatbot.');
-    this.blockedNotice = this.addNotice(notice, { persist: false });
+    // The wording comes from the server, so it is not rendered as markdown.
+    this.addNotice(notice, { persist: false, plainText: true });
   }
 
   private handleError(errorText: string): void {
@@ -2266,7 +2266,6 @@ export class OcsChat {
     this.isTyping = false;
     this.sessionEnded = false;
     this.participantBlocked = false;
-    this.blockedNotice = undefined;
     this.currentPollTaskId = '';
     // The stored acceptance stays: consent memory follows the persistence store, not the session.
     this.consent = undefined;
@@ -2434,7 +2433,7 @@ export class OcsChat {
   }
 
   private renderMessageContent(message: ChatMessage) {
-    if (message.role === 'user' || message === this.blockedNotice) {
+    if (message.role === 'user' || message.plainText) {
       return <div class="chat-plain-text">{message.content}</div>;
     }
     return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
