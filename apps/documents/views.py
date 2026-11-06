@@ -29,6 +29,7 @@ from apps.documents.forms import (
     ConfluenceDocumentSourceForm,
     DocumentSourceForm,
     GithubDocumentSourceForm,
+    GoogleDocsDocumentSourceForm,
     JSONCollectionDocumentSourceForm,
 )
 from apps.documents.models import (
@@ -257,6 +258,7 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
             SourceType.GITHUB: GithubDocumentSourceForm,
             SourceType.CONFLUENCE: ConfluenceDocumentSourceForm,
             SourceType.JSON_COLLECTION: JSONCollectionDocumentSourceForm,
+            SourceType.GOOGLE_DOCS: GoogleDocsDocumentSourceForm,
         }.get(self.source_type, DocumentSourceForm)
 
     @property
