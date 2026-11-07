@@ -47,9 +47,8 @@
 # the ledger would only drift from it.
 #
 # Triggered on: daily schedule, or manual dispatch
-# Requirements: ANTHROPIC_API_KEY secret. The upstream file is public and the
-#   script makes exactly one unauthenticated request, so it needs no
-#   credentials of its own.
+# Requirements: ANTHROPIC_API_KEY secret. The script fetches one public file
+#   without authentication.
 #
 # Notes:
 # - The PR gets the `claude` and `auto-models` labels.

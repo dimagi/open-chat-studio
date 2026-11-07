@@ -1,29 +1,31 @@
 # Claude Code Workflow
 #
 # Runs Claude Code against issues and PR/issue conversations in two modes:
-# - Scheduled/manual (find-work + scheduled jobs): picks the oldest open
+# 1. Scheduled/manual (find-work + scheduled jobs): picks the oldest open
 #   issue labelled `claude` that doesn't already have an open PR, and
-#   implements its next unchecked task.
-# - Event-driven (claude job): responds to an `@claude` mention in an issue
-#   comment, PR review comment, or PR review, or to an issue being labelled
-#   `claude`.
+#   implements its next unchecked, unblocked task. A manual run with the
+#   `issue_number` input uses that issue instead, with the same open-PR check.
+# 2. Event-driven (claude job): responds to the `@claude` mention and issue
+#   label events listed under "Triggered on".
 #
 # Triggered on: daily schedule, manual dispatch, `@claude` mention (issue
 # comment, PR review comment, or PR review), or issue labelled `claude`
 # Requirements: ANTHROPIC_API_KEY secret must be configured
 #
 # Notes:
-# - Applies the `claude` label to PRs it opens when instructed by the prompt
-#   (the scheduled/manual mode aims to create one PR per completed task).
-# - Runs are grouped per issue/PR (`cancel-in-progress: false`), so a
-#   second trigger for the same issue or PR waits for the in-progress run
-#   to finish rather than replacing it.
-# - The `claude` job has no actor/permission gate of its own — it relies on
-#   claude-code-action's built-in check that the triggering user has write
-#   access to this repo. A mention or review from anyone without write
-#   access (most fork PR authors included) fails the "Run Claude Code" step
+# - Labels: applies the `claude` label to PRs it opens when the prompt says
+#   to (mode 1 aims to create one PR per completed task).
+# - Concurrency: "queue per unit of work" (see README-claude-workflows.md).
+#   A new run never cancels an in-progress one. Scheduled runs share one
+#   group, manual runs group by the `issue_number` input, and event runs
+#   group by issue or PR number.
+# - Access: the `claude` job has no actor/permission gate of its own. It
+#   relies on claude-code-action's check that the triggering user has write
+#   access to this repo. Anyone without it fails the "Run Claude Code" step
 #   with "Action failed with error: User does not have write access on this
 #   repository" rather than being silently skipped.
+# - Fork PRs: see "Fork limitations" in README-claude-workflows.md. The Access
+#   check applies to fork PR authors too, and most lack write access.
 
 name: Claude Code
 
