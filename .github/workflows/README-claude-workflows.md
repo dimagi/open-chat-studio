@@ -17,7 +17,7 @@ Two independent mechanisms scope what Claude can do in every run: the `permissio
 
 | File | Actions UI name | Purpose | Trigger | Prompt |
 |---|---|---|---|---|
-| `claude.yml` | Claude Code | Implements labelled issues and answers `@claude` requests | Issue labelled `claude`, `@claude` mention, daily schedule, manual dispatch | Inline in the workflow for scheduled runs; the `@claude` comment for event-driven runs |
+| `claude.yml` | Claude Code | Implements labelled issues and answers `@claude` requests | Issue labelled `claude`, `@claude` mention, daily schedule, manual dispatch | Inline in the workflow for scheduled and manual runs; the triggering comment or review for `@claude` requests; the issue for label events |
 | `claude-followup.yml` | Claude Followup | One automatic pass to fix CI failures and review feedback on Claude-created PRs | CI (i.e. Lint and Test) workflow completes on any `claude/**` branch | Inline in the workflow |
 | `claude-dependabot.yml` | Claude Dependabot PR Review | Summarises dependency changes, changelogs and breaking-change risk | Dependabot PR opened or updated, manual dispatch | Inline in the workflow |
 | `claude-code-review.yml` | Claude Code Review | Two-stage PR review (OpenCodeReview, then Claude) plus an advisory merge-risk comment | PR opened, marked ready for review, or pushed | `/code-review:code-review` plugin for the review; `.claude/skills/merge-risk` for the risk comment |
@@ -37,11 +37,11 @@ A Claude run has up to three layers:
 - **Prompt**: the instructions for the run, inline in the workflow file unless the table above says otherwise.
 - **Skill or plugin**: optional reusable instructions the prompt invokes. `/merge-risk` is the one repo skill these workflows use, in `.claude/skills/`.
 
-When a run reads untrusted text such as an issue or PR body, limit its tools to reading, plus one output file, and leave any write to GitHub to a later workflow step, as the `merge-risk` job does.
+When a run reads untrusted text such as an issue or PR body, limit its tools to reading and file output, and leave any write to GitHub to a later workflow step, as the `merge-risk` job does. That job's prompt names one output file, but the `Write` tool is not restricted to a path, so the prompt does not enforce the limit.
 
 ## Fork limitations
 
-Fork PRs get no secrets or OIDC token, so the automatic workflows cannot run Claude on them. Most skip them, leaving no failed run to debug; `claude.yml` fails instead when the `@claude` author lacks write access. See each header comment.
+Workflows triggered by a fork PR itself (`pull_request`) get no secrets or OIDC token, so they cannot run Claude on it. Most skip these PRs, leaving no failed run to debug. Comment and review events (`issue_comment`, `pull_request_review_comment`, `pull_request_review`) run in the base repository's context with its secrets, so `@claude` from a maintainer on a fork PR can run. `claude.yml` fails when the `@claude` author lacks write access. See each header comment.
 
 ## Concurrency and run cancellation
 

@@ -11,7 +11,9 @@
 #
 # Notes:
 # - Manual dispatch accepts any PR number, not only Dependabot's, which is
-#   how to test changes to the prompt.
+#   how to test changes to the prompt. The PR's branch must be in this
+#   repository: checkout uses the head branch name, so fork PRs are not
+#   supported.
 # - Has no concurrency group, so runs are independent of one another.
 
 name: Claude Dependabot PR Review
