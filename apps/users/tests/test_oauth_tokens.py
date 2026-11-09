@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -55,3 +57,33 @@ class TestOAuthTokenViews:
 
         # Verify token was deleted
         assert not OAuth2AccessToken.objects.filter(id=token_id).exists()
+
+
+@pytest.mark.django_db()
+def test_profile_oauth_tokens_team_does_not_cause_n_plus_one(client, team_with_users, oauth_app):
+    """Rendering the profile page should not issue a team query per OAuth token."""
+    user = team_with_users.members.first()
+    client.force_login(user)
+
+    def _create_token(i):
+        OAuth2AccessToken.objects.create(
+            user=user,
+            team=team_with_users,
+            application=oauth_app,
+            token=f"n-plus-one-token-{i}",
+            expires=timezone.now() + timedelta(days=30),
+            scope="chatbots:read",
+        )
+
+    _create_token(0)
+    with CaptureQueriesContext(connection) as single:
+        response = client.get(reverse("users:user_profile"))
+    assert response.status_code == 200
+
+    for i in range(1, 5):
+        _create_token(i)
+    with CaptureQueriesContext(connection) as many:
+        response = client.get(reverse("users:user_profile"))
+    assert response.status_code == 200
+
+    assert len(many.captured_queries) == len(single.captured_queries)

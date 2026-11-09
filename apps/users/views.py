@@ -42,7 +42,7 @@ def profile(request):
     notification_preferences_form = NotificationPreferencesForm(instance=preferences)
 
     oauth_tokens = (
-        OAuth2AccessToken.objects.filter(user=request.user).select_related("application").order_by("-created")
+        OAuth2AccessToken.objects.filter(user=request.user).select_related("application", "team").order_by("-created")
     )
 
     available_scopes = settings.OAUTH2_PROVIDER.get("SCOPES", {})
