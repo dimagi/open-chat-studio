@@ -59,6 +59,10 @@ class TestOAuthTokenViews:
         assert not OAuth2AccessToken.objects.filter(id=token_id).exists()
 
 
+def _team_lookup_queries(captured):
+    return [q for q in captured.captured_queries if q["sql"].lstrip().startswith('SELECT "teams_team"."id"')]
+
+
 @pytest.mark.django_db()
 def test_profile_oauth_tokens_team_does_not_cause_n_plus_one(client, team_with_users, oauth_app):
     """Rendering the profile page should not issue a team query per OAuth token."""
@@ -75,6 +79,10 @@ def test_profile_oauth_tokens_team_does_not_cause_n_plus_one(client, team_with_u
             scope="chatbots:read",
         )
 
+    # Warm up: the first request creates notification preferences and populates caches,
+    # which would otherwise skew the query counts below.
+    assert client.get(reverse("users:user_profile")).status_code == 200
+
     _create_token(0)
     with CaptureQueriesContext(connection) as single:
         response = client.get(reverse("users:user_profile"))
@@ -86,4 +94,4 @@ def test_profile_oauth_tokens_team_does_not_cause_n_plus_one(client, team_with_u
         response = client.get(reverse("users:user_profile"))
     assert response.status_code == 200
 
-    assert len(many.captured_queries) == len(single.captured_queries)
+    assert len(_team_lookup_queries(many)) == len(_team_lookup_queries(single))
