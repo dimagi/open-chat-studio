@@ -6,7 +6,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
-from apps.chat.models import MODERATION_STATUS_LABELS, Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment
 from apps.moderation.filters import ParticipantBlockedFilter
 from apps.teams.flags import Flags
@@ -16,7 +16,6 @@ from apps.web.dynamic_filters.base import (
     ChoiceColumnFilter,
     ColumnFilter,
     MultiColumnFilter,
-    YesNoExistsFilter,
 )
 from apps.web.dynamic_filters.column_filters import (
     AnnotationQueueFilter,
@@ -263,41 +262,6 @@ class ChannelsFilter(ChoiceColumnFilter):
         return [val for val in selected_values if val is not None]
 
 
-class ModerationStatusFilter(ChoiceColumnFilter):
-    """Session filter on the moderation status of the session's messages."""
-
-    query_param: str = "moderation_status"
-    label: str = "Moderation Status"
-    description: str = "Filter by moderation status. A session matches when any of its messages has the status."
-    options: list[str | dict] = [
-        {"id": status.value, "label": label} for status, label in MODERATION_STATUS_LABELS.items()
-    ]
-
-    def apply_any_of(self, queryset, value, timezone=None):
-        return queryset.filter(_session_has_message(moderation_status__in=value))
-
-    def apply_excludes(self, queryset, value, timezone=None):
-        return queryset.exclude(_session_has_message(moderation_status__in=value))
-
-    def apply_all_of(self, queryset, value, timezone=None):
-        """The filter does not offer "all of", so a query parameter that uses it has no effect."""
-        return queryset
-
-
-class RuleHitFilter(YesNoExistsFilter):
-    """Session filter on whether an abuse rule fired on any of the session's messages."""
-
-    yes_label: ClassVar[str] = "A rule fired"
-    no_label: ClassVar[str] = "No rule fired"
-
-    query_param: str = "rule_hit"
-    label: str = "Rule Hit"
-    description: str = "Filter by whether an abuse rule fired on any message in the session"
-
-    def _condition(self) -> Exists:
-        return _session_has_message(moderation_detail__rules__0__isnull=False)
-
-
 class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
@@ -333,8 +297,6 @@ class ExperimentSessionFilter(MultiColumnFilter):
         SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
         SessionIdFilter(),
-        ModerationStatusFilter(required_flag=Flags.ABUSE_DETECTION.slug),
-        RuleHitFilter(required_flag=Flags.ABUSE_DETECTION.slug),
         ParticipantBlockedFilter(required_flag=Flags.ABUSE_DETECTION.slug),
     ]
 

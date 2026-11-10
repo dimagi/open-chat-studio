@@ -56,7 +56,7 @@ class TestFilterAgentPrompt:
         with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
             prompt = FilterAgent.get_system_prompt(input_data)
 
-        assert ('"moderation_status"' in prompt) is expected
+        assert ('"participant_blocked"' in prompt) is expected
 
     def test_unknown_team_raises(self):
         input_data = FilterInput(query="test", filter_slug="session", team_id=0)

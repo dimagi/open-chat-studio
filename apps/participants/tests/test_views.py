@@ -164,7 +164,7 @@ def test_sessions_panel_does_not_offer_the_participant_blocked_filter(client, te
 
     assert response.status_code == 200
     columns = response.context["df_filter_columns"]
-    assert "moderation_status" in columns
+    assert "state" in columns
     assert "participant_blocked" not in columns
 
 
