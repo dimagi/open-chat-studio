@@ -3,8 +3,12 @@ from unittest.mock import Mock
 import pytest
 from django.db.models import Q
 
-from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
-from apps.documents.forms import CollectionForm, JSONCollectionDocumentSourceForm
+from apps.documents.datamodels import (
+    DocumentSourceConfig,
+    GoogleDocsSourceConfig,
+    JSONCollectionSourceConfig,
+)
+from apps.documents.forms import CollectionForm, GoogleDocsDocumentSourceForm, JSONCollectionDocumentSourceForm
 from apps.documents.models import SourceType
 from apps.service_providers.models import AuthProviderType, LlmProviderTypes
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
@@ -281,3 +285,169 @@ class TestJSONCollectionDocumentSourceForm:
         form = JSONCollectionDocumentSourceForm(collection=collection, instance=instance, initial={})
         assert form.initial["unsupported_file_types"] == "mp3, wav"
         assert form.initial["metadata_filters"] == [{"field": "status", "operator": "eq", "value": "published"}]
+
+
+@pytest.mark.django_db()
+class TestGoogleDocsDocumentSourceForm:
+    @pytest.fixture()
+    def collection(self):
+        return CollectionFactory.create()
+
+    @pytest.fixture()
+    def oauth_provider(self, collection):
+        return AuthProviderFactory.create(
+            team=collection.team,
+            type=AuthProviderType.oauth_authorization_code,
+            config={
+                "client_id": "client",
+                "client_secret": "secret",
+                "authorize_url": "https://accounts.google.test/o/oauth2/auth",
+                "token_url": "https://oauth2.google.test/token",
+                "scope": "https://www.googleapis.com/auth/documents.readonly",
+                "token_endpoint_auth_method": "client_secret_basic",
+            },
+        )
+
+    def test_valid_form_saves_google_docs_config(self, collection, oauth_provider):
+        url = "https://docs.google.com/document/d/doc_123/edit"
+        form = GoogleDocsDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.GOOGLE_DOCS,
+                "auto_sync_enabled": False,
+                "auth_provider": oauth_provider.id,
+                "document_url": url,
+            },
+        )
+
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.source_type == SourceType.GOOGLE_DOCS
+        assert saved.auth_provider == oauth_provider
+        assert saved.config.google_docs.document_url == url
+        assert saved.source_config == saved.config.google_docs
+
+    @pytest.mark.parametrize(
+        "document_url",
+        [
+            "http://docs.google.com/document/d/doc_123/edit",
+            "https://example.com/document/d/doc_123/edit",
+            "https://docs.google.com/spreadsheets/d/doc_123/edit",
+            "https://docs.google.com/document/d//edit",
+            "https://docs.google.com/document/d/bad.id/edit",
+        ],
+    )
+    def test_invalid_google_docs_urls_are_rejected(self, collection, oauth_provider, document_url):
+        form = GoogleDocsDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.GOOGLE_DOCS,
+                "auto_sync_enabled": False,
+                "auth_provider": oauth_provider.id,
+                "document_url": document_url,
+            },
+        )
+
+        assert not form.is_valid()
+        assert "document_url" in form.errors
+
+    def test_wrong_source_type_is_rejected(self, collection, oauth_provider):
+        form = GoogleDocsDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.JSON_COLLECTION,
+                "auto_sync_enabled": False,
+                "auth_provider": oauth_provider.id,
+                "document_url": "https://docs.google.com/document/d/doc_123/edit",
+            },
+        )
+
+        assert not form.is_valid()
+        assert "source_type" in form.errors
+        assert "config" not in form.cleaned_data
+
+    def test_auth_provider_queryset_is_team_and_type_scoped(self, collection):
+        allowed = AuthProviderFactory.create(
+            team=collection.team,
+            type=AuthProviderType.oauth_authorization_code,
+            config={
+                "client_id": "client",
+                "client_secret": "secret",
+                "authorize_url": "https://auth.example.test/authorize",
+                "token_url": "https://auth.example.test/token",
+                "scope": "documents.readonly",
+                "token_endpoint_auth_method": "client_secret_basic",
+            },
+        )
+        wrong_type = AuthProviderFactory.create(team=collection.team, type=AuthProviderType.bearer)
+        foreign_team = AuthProviderFactory.create(
+            team=TeamFactory.create(),
+            type=AuthProviderType.oauth_authorization_code,
+            config={
+                "client_id": "other",
+                "client_secret": "secret",
+                "authorize_url": "https://auth.example.test/authorize",
+                "token_url": "https://auth.example.test/token",
+                "scope": "documents.readonly",
+                "token_endpoint_auth_method": "client_secret_basic",
+            },
+        )
+
+        form = GoogleDocsDocumentSourceForm(collection=collection)
+        provider_ids = set(form.fields["auth_provider"].queryset.values_list("id", flat=True))
+
+        assert provider_ids == {allowed.id}
+        assert wrong_type.id not in provider_ids
+        assert foreign_team.id not in provider_ids
+        assert "documents.readonly" in form.fields["auth_provider"].help_text
+
+    @pytest.mark.parametrize(
+        ("provider_type", "same_team"),
+        [
+            (AuthProviderType.bearer, True),
+            (AuthProviderType.oauth_authorization_code, False),
+        ],
+    )
+    def test_foreign_or_wrong_type_provider_cannot_be_submitted(self, collection, provider_type, same_team):
+        provider = AuthProviderFactory.create(
+            team=collection.team if same_team else TeamFactory.create(),
+            type=provider_type,
+            config=(
+                {"token": "bearer-token"}
+                if provider_type == AuthProviderType.bearer
+                else {
+                    "client_id": "other",
+                    "client_secret": "secret",
+                    "authorize_url": "https://auth.example.test/authorize",
+                    "token_url": "https://auth.example.test/token",
+                    "scope": "documents.readonly",
+                    "token_endpoint_auth_method": "client_secret_basic",
+                }
+            ),
+        )
+        form = GoogleDocsDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.GOOGLE_DOCS,
+                "auto_sync_enabled": False,
+                "auth_provider": provider.id,
+                "document_url": "https://docs.google.com/document/d/doc_123/edit",
+            },
+        )
+
+        assert not form.is_valid()
+        assert "auth_provider" in form.errors
+
+    def test_existing_google_docs_config_populates_edit_form(self, collection, oauth_provider):
+        url = "https://docs.google.com/document/d/doc_123/edit"
+        instance = DocumentSourceFactory.create(
+            collection=collection,
+            source_type=SourceType.GOOGLE_DOCS,
+            auth_provider=oauth_provider,
+            config=DocumentSourceConfig(google_docs=GoogleDocsSourceConfig(document_url=url)),
+        )
+
+        form = GoogleDocsDocumentSourceForm(collection=collection, instance=instance, initial={})
+
+        assert form.initial["document_url"] == url
+        assert form._get_config_from_instance(instance) == instance.config.google_docs
