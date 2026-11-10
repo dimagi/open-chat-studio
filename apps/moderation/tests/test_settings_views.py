@@ -8,7 +8,6 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.http import urlencode
 from field_audit.models import AuditAction
-from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
@@ -17,7 +16,6 @@ from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.models import ModerationProvider
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMIN_GROUP
-from apps.teams.flags import Flags
 from apps.teams.models import Team
 from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ParticipantFactory
@@ -26,13 +24,11 @@ from apps.utils.factories.service_provider_factories import ModerationProviderFa
 from apps.utils.factories.team import TeamFactory
 from apps.utils.tests.team_helpers import member_with_groups
 
-FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
 
 
 @pytest.fixture()
-def team(team_with_users, team_flag):
-    team_flag(flag_name=FLAG, team=team_with_users)
+def team(team_with_users):
     return team_with_users
 
 
@@ -75,22 +71,6 @@ def _table_url(team):
 
 def _new_provider_url(team):
     return reverse("moderation:provider_new", args=[team.slug, "openai"])
-
-
-@pytest.mark.django_db()
-@override_flag(FLAG, active=False)
-@pytest.mark.parametrize(
-    ("method", "url_builder"),
-    [pytest.param("get", _section_url, id="section"), pytest.param("post", _settings_url, id="save_settings")],
-)
-def test_not_found_with_flag_off(client, team_with_users, admin, method, url_builder):
-    client.force_login(admin)
-
-    response = getattr(client, method)(url_builder(team_with_users), {"auto_block_enabled": "on"})
-
-    assert response.status_code == 404
-    team_with_users.refresh_from_db()
-    assert not team_with_users.auto_block_enabled
 
 
 @pytest.mark.django_db()

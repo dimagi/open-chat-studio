@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-from waffle.testutils import override_flag
 
 from apps.channels.api_channel import ApiChannel
 from apps.channels.channel_base import ChannelBase
@@ -12,14 +11,11 @@ from apps.channels.stages.core import BlockedParticipantStage, ParticipantResolv
 from apps.channels.tests.channels.conftest import core_stages, make_context, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
-
-FLAG = Flags.ABUSE_DETECTION.slug
 
 
 def _block(session):
@@ -28,21 +24,12 @@ def _block(session):
 
 @pytest.mark.django_db()
 class TestBlockedParticipantStage:
-    @override_flag(FLAG, active=False)
-    def test_does_not_run_when_flag_off(self):
-        session = ExperimentSessionFactory.create()
-        ctx = make_context(experiment=session.experiment, participant=session.participant)
-
-        assert BlockedParticipantStage().should_run(ctx) is False
-
-    @override_flag(FLAG, active=True)
     def test_allowed_participant_is_a_no_op(self):
         session = ExperimentSessionFactory.create()
         ctx = make_context(experiment=session.experiment, participant=session.participant)
 
         BlockedParticipantStage()(ctx)
 
-    @override_flag(FLAG, active=True)
     @pytest.mark.parametrize(
         "context_kwargs",
         [
@@ -62,7 +49,6 @@ class TestBlockedParticipantStage:
 
 @pytest.mark.django_db()
 class TestBlockedParticipantPerChannel:
-    @override_flag(FLAG, active=True)
     def test_messaging_channel_sends_no_reply(self):
         session = ExperimentSessionFactory.create()
         _block(session)
@@ -78,21 +64,6 @@ class TestBlockedParticipantPerChannel:
         get_bot.assert_not_called()
         assert not ChatMessage.objects.filter(chat=session.chat).exists()
 
-    @override_flag(FLAG, active=False)
-    def test_messaging_channel_replies_when_flag_off(self):
-        session = ExperimentSessionFactory.create()
-        _block(session)
-        channel = messaging_channel(session)
-
-        with patch("apps.channels.stages.core.get_bot") as get_bot:
-            get_bot.return_value.process_input.return_value = ChatMessage(
-                content="Hello", message_type=ChatMessageType.AI
-            )
-            channel.new_user_message(base_messages.text_message(participant_id=session.participant.identifier))
-
-        assert channel.text_sent == ["Hello"]
-
-    @override_flag(FLAG, active=True)
     def test_web_widget_gets_no_reply(self):
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "tok"}
@@ -114,7 +85,6 @@ class TestBlockedParticipantPerChannel:
         session.refresh_from_db()
         assert session.last_activity_at == last_activity_at
 
-    @override_flag(FLAG, active=True)
     def test_api_channel_gets_no_reply(self):
         session = ExperimentSessionFactory.create()
         session.experiment_channel = ExperimentChannel.objects.get_team_api_channel(session.team)

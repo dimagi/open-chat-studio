@@ -1,6 +1,7 @@
 from apps.experiments.filters import ChatMessageFilter, ExperimentSessionFilter
 from apps.web.dynamic_filters.base import (
     FIELD_TYPE_FILTERS,
+    ChoiceColumnFilter,
     MultiColumnFilter,
     Operators,
     StringColumnFilter,
@@ -21,6 +22,14 @@ class _TestFilter(MultiColumnFilter):
     ]
 
 
+class _ChoiceTestFilter(MultiColumnFilter):
+    filters = [
+        ChoiceColumnFilter(query_param="labelled", label="Labelled", options=[{"id": "true", "label": "Blocked"}]),
+        ChoiceColumnFilter(query_param="plain", label="Plain", options=["Pending", "Completed"]),
+        ChoiceColumnFilter(query_param="dynamic", label="Dynamic"),
+    ]
+
+
 class TestGetFilterSchema:
     def test_extracts_schema(self):
         schema = get_filter_schema(_TestFilter)
@@ -35,6 +44,12 @@ class TestGetFilterSchema:
     def test_schema_keys_are_query_params(self):
         schema = get_filter_schema(_TestFilter)
         assert list(schema.keys()) == ["name"]
+
+    def test_choice_options_keep_their_labels(self):
+        schema = get_filter_schema(_ChoiceTestFilter)
+        assert schema["labelled"]["options"] == [{"id": "true", "label": "Blocked"}]
+        assert schema["plain"]["options"] == ["Pending", "Completed"]
+        assert "options" not in schema["dynamic"]
 
 
 class TestGetFilterRegistry:
@@ -67,8 +82,7 @@ class TestExperimentSessionFilterSchema:
             "remote_id",
             "session_id",
             "annotation_queue",
-            "moderation_status",
-            "rule_hit",
+            "participant_blocked",
         }
         assert set(schema.keys()) == expected_keys
 

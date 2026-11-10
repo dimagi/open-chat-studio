@@ -2,9 +2,7 @@ from django.db import transaction
 from field_audit.models import AuditAction
 
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
-from apps.teams.flags import Flags
 from apps.teams.models import Membership
-from apps.teams.utils import flag_is_active_for_team
 
 BLOCKED_MESSAGE = "You have been blocked from using this chatbot."
 
@@ -42,28 +40,15 @@ def unblock_participant(participant) -> bool:
     return bool(deleted)
 
 
-def abuse_detection_enabled(team) -> bool:
-    return flag_is_active_for_team(team, Flags.ABUSE_DETECTION.slug)
-
-
-def is_on_denylist(team, participant_id: int | None) -> bool:
-    """Whether the participant has a denylist row for the team. Ignores the feature flag."""
+def is_participant_blocked(team, participant_id: int | None) -> bool:
+    """Whether the participant is on the team's denylist."""
     if participant_id is None:
         return False
     return DeniedParticipant.objects.filter(team=team, participant_id=participant_id).exists()
 
 
-def is_participant_blocked(team, participant_id: int) -> bool:
-    """Whether the participant is on the team's denylist. Always False while the feature flag is off."""
-    if participant_id is None:
-        return False
-    return abuse_detection_enabled(team) and is_on_denylist(team, participant_id)
-
-
 def is_identifier_blocked(team, identifier: str, platform: str) -> bool:
     """`is_participant_blocked` for a participant known only by its normalized identifier and platform."""
-    if not abuse_detection_enabled(team):
-        return False
     return DeniedParticipant.objects.filter(
         team=team, participant__identifier=identifier, participant__platform=platform
     ).exists()

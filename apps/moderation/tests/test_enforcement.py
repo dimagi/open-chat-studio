@@ -1,45 +1,31 @@
 import pytest
-from waffle.testutils import override_flag
 
 from apps.experiments.models import Participant
 from apps.moderation.enforcement import block_participant, is_exempt, is_participant_blocked, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
-from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 
-FLAG = Flags.ABUSE_DETECTION.slug
-
 
 @pytest.mark.django_db()
 class TestIsParticipantBlocked:
-    def test_blocked_when_flag_on_for_team(self, team_flag):
+    def test_blocked_with_a_row(self):
         denial = DeniedParticipantFactory.create()
-        team_flag(FLAG, denial.team)
 
         assert is_participant_blocked(team=denial.team, participant_id=denial.participant_id) is True
 
-    @override_flag(FLAG, active=False)
-    def test_flag_off_means_not_blocked_even_with_a_row(self):
-        denial = DeniedParticipantFactory.create()
-
-        assert is_participant_blocked(team=denial.team, participant_id=denial.participant_id) is False
-
-    @override_flag(FLAG, active=True)
     def test_not_blocked_without_a_row(self):
         participant = ParticipantFactory.create()
 
         assert is_participant_blocked(team=participant.team, participant_id=participant.id) is False
 
-    @override_flag(FLAG, active=True)
     def test_block_is_scoped_to_its_team(self):
         denial = DeniedParticipantFactory.create()
 
         assert is_participant_blocked(team=TeamFactory.create(), participant_id=denial.participant_id) is False
 
-    @override_flag(FLAG, active=True)
     def test_missing_participant_is_not_blocked(self):
         assert is_participant_blocked(team=TeamFactory.create(), participant_id=None) is False
 

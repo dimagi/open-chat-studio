@@ -9,7 +9,7 @@ from waffle.testutils import override_flag
 from apps.mcp_integrations.models import McpServer
 from apps.service_providers.auth_service.oauth import config_fingerprint
 from apps.service_providers.models import AuthProviderType, LlmProviderTypes
-from apps.service_providers.utils import get_enabled_providers
+from apps.service_providers.utils import ServiceProvider
 from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.views.integrations_views import (
     build_integration_filter_pills,
@@ -42,11 +42,11 @@ def request_for(team):
 
 
 def _visible_categories(request):
-    return get_visible_categories(request=request, providers=get_enabled_providers(request))
+    return get_visible_categories(request=request, providers=list(ServiceProvider))
 
 
 def _rows(request, team):
-    return get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))
+    return get_integration_rows(request=request, team=team, providers=list(ServiceProvider))
 
 
 @pytest.mark.django_db()
@@ -85,7 +85,7 @@ def test_mcp_rows_excluded_when_flag_off(team, request_for):
         rows=rows, active_category=None, visible_categories=_visible_categories(request)
     )
     labels = [pill.label for pill in pills]
-    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing"]
+    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation"]
     assert "MCP" not in labels
     assert all(pill.count == 0 for pill in pills[1:])
 
@@ -105,7 +105,7 @@ def test_mcp_rows_included_when_flag_on(team, request_for):
         rows=rows, active_category=None, visible_categories=_visible_categories(request)
     )
     labels = [pill.label for pill in pills]
-    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "MCP"]
+    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation", "MCP"]
     mcp_pill = pills[-1]
     assert mcp_pill.count == 1
 

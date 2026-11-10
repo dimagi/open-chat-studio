@@ -43,6 +43,7 @@ from apps.experiments.decorators import experiment_session_view, verify_session_
 from apps.experiments.export import EXPORT_COLUMNS, export_rows_to_csv_stream, generate_export_rows
 from apps.experiments.filters import (
     ExperimentSessionFilter,
+    ParticipantSessionFilter,
     get_filter_context_data,
 )
 from apps.experiments.forms import ExperimentVersionForm
@@ -690,6 +691,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
     template_name = "table/single_table.html"
     permission_required = "experiments.view_experimentsession"
     show_annotation_queues = True
+    filter_class: type[ExperimentSessionFilter] = ExperimentSessionFilter
 
     def extra_filters(self) -> Q:
         """Extra constraints applied to the base queryset, on top of the dynamic filter widget."""
@@ -700,7 +702,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         query_set = ExperimentSession.objects.get_table_queryset(self.request.team, experiment_id)
         query_set = query_set.filter(self.extra_filters())
         timezone = self.request.session.get("detected_tz", None)
-        session_filter = ExperimentSessionFilter()
+        session_filter = self.filter_class()
         return session_filter.apply(query_set, filter_params=FilterParams.from_request(self.request), timezone=timezone)
 
     def get_table(self, **kwargs):
@@ -742,6 +744,7 @@ class ParticipantScopedSessionsTableView(ChatbotSessionsTableView):
 
     table_class = ParticipantSessionsTable
     show_annotation_queues = False
+    filter_class = ParticipantSessionFilter
 
     def extra_filters(self) -> Q:
         filters = Q(participant_id=self.kwargs.get("participant_id"))

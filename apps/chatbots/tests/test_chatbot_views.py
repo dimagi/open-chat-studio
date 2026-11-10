@@ -48,6 +48,7 @@ from apps.utils.factories.events import ScheduledMessageFactory, StaticTriggerFa
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
+from apps.web.dynamic_filters.base import Operators
 
 
 @pytest.mark.django_db()
@@ -576,6 +577,22 @@ def test_participant_scoped_sessions_table_view_chatbot_quick_filter(client, tea
     response = client.get(url, {"chatbot": matching_experiment.id})
 
     assert list(response.context_data["table"].data.data) == [matching_session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_ignores_the_participant_blocked_filter(client, team_with_users):
+    team = team_with_users
+    client.force_login(team.members.first())
+
+    participant = ParticipantFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url, {"f_participant_blocked": "true", "op_participant_blocked": Operators.ANY_OF})
+
+    assert list(response.context_data["table"].data.data) == [session]
 
 
 @pytest.mark.django_db()

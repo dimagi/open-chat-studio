@@ -28,7 +28,7 @@ from apps.experiments.models import (
 )
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
-from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
+from apps.moderation.enforcement import is_participant_blocked
 from apps.moderation.services import record_moderation_result, record_rule_hits, start_moderation
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -220,13 +220,10 @@ class BlockedParticipantStage(ProcessingStage):
 
     span_input_fields = ("participant.id", "experiment_session.participant_id")
 
-    def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return abuse_detection_enabled(ctx.experiment.team)
-
     def process(self, ctx: MessageProcessingContext) -> None:
         # Web channels pre-set the session and have no ParticipantResolverStage.
         participant_id = ctx.participant.id if ctx.participant else ctx.experiment_session.participant_id
-        if not is_on_denylist(team=ctx.experiment.team, participant_id=participant_id):
+        if not is_participant_blocked(team=ctx.experiment.team, participant_id=participant_id):
             return
 
         logger.info("Ignoring message from blocked participant %s", participant_id)
@@ -789,7 +786,7 @@ class AbuseRulesStage(ProcessingStage):
     span_output_fields = ("human_message.moderation_detail.rules", "moderation_task_id")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.human_message is not None and abuse_detection_enabled(ctx.experiment.team)
+        return ctx.human_message is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
         record_rule_hits(

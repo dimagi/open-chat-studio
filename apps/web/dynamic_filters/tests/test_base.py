@@ -45,7 +45,7 @@ def test_columns_handles_a_mix_of_overridden_and_default_prepare(team):
     """ExperimentSessionFilter.filters mixes filters that override prepare() (VersionsFilter,
     ChannelsFilter, ...) with ones that rely on the base no-op. columns() must not crash on
     either kind. See #4363."""
-    with override_flag("flag_human_annotations", active=True), override_flag("flag_abuse_detection", active=True):
+    with override_flag("flag_human_annotations", active=True):
         columns = ExperimentSessionFilter.columns(team)
 
     assert set(columns) == {f.query_param for f in ExperimentSessionFilter.filters}
@@ -83,7 +83,7 @@ class _FlagGatedFilter(MultiColumnFilter):
     filters: ClassVar[Sequence[ColumnFilter]] = [
         StringColumnFilter(query_param="open", label="Open", columns=["external_id"]),
         StringColumnFilter(
-            query_param="gated", label="Gated", columns=["external_id"], required_flag=Flags.ABUSE_DETECTION.slug
+            query_param="gated", label="Gated", columns=["external_id"], required_flag=Flags.HUMAN_ANNOTATIONS.slug
         ),
     ]
 
@@ -94,7 +94,7 @@ class _FlagGatedFilter(MultiColumnFilter):
     [pytest.param(True, {"open", "gated"}, id="flag-on"), pytest.param(False, {"open"}, id="flag-off")],
 )
 def test_columns_offer_a_flag_gated_filter_only_when_the_flag_is_on(team, flag_active, expected):
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
+    with override_flag(Flags.HUMAN_ANNOTATIONS.slug, active=flag_active):
         columns = _FlagGatedFilter.columns(team)
 
     assert set(columns) == expected
@@ -109,7 +109,7 @@ def test_apply_applies_a_flag_gated_filter_whether_or_not_the_flag_is_on(team, f
     ExperimentSessionFactory.create(team=team, external_id="other")
     params = FilterParams(QueryDict(urlencode({"f_gated": "match", "op_gated": Operators.EQUALS})))
 
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
+    with override_flag(Flags.HUMAN_ANNOTATIONS.slug, active=flag_active):
         result = _FlagGatedFilter().apply(ExperimentSession.objects.filter(team=team), filter_params=params)
 
     assert set(result.values_list("id", flat=True)) == {matching.id}
@@ -121,7 +121,7 @@ def test_apply_applies_a_flag_gated_filter_whether_or_not_the_flag_is_on(team, f
     [pytest.param(True, {"open", "gated"}, id="flag-on"), pytest.param(False, {"open"}, id="flag-off")],
 )
 def test_filter_schema_for_a_team_leaves_out_flag_gated_filters_when_the_flag_is_off(team, flag_active, expected):
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
+    with override_flag(Flags.HUMAN_ANNOTATIONS.slug, active=flag_active):
         schema = get_filter_schema(_FlagGatedFilter, team=team)
 
     assert set(schema) == expected

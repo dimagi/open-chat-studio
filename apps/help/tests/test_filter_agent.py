@@ -24,6 +24,11 @@ class TestFilterAgentPrompt:
         assert "channels" in prompt
         assert "state" in prompt
 
+    def test_system_prompt_gives_option_labels(self, team):
+        input_data = FilterInput(query="test", filter_slug="participant", team_id=team.id)
+        prompt = FilterAgent.get_system_prompt(input_data)
+        assert '"label": "Blocked"' in prompt
+
     def test_system_prompt_contains_operators(self, team):
         input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
         prompt = FilterAgent.get_system_prompt(input_data)
@@ -47,10 +52,10 @@ class TestFilterAgentPrompt:
     def test_system_prompt_lists_flag_gated_filters_only_when_the_flag_is_on(self, team, flag_active, expected):
         input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
 
-        with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
+        with override_flag(Flags.HUMAN_ANNOTATIONS.slug, active=flag_active):
             prompt = FilterAgent.get_system_prompt(input_data)
 
-        assert ('"moderation_status"' in prompt) is expected
+        assert ('"annotation_queue"' in prompt) is expected
 
     def test_unknown_team_raises(self):
         input_data = FilterInput(query="test", filter_slug="session", team_id=0)
@@ -180,7 +185,7 @@ class TestMakeGetOptionsTool:
         assert "error" in result
 
     def test_error_for_a_filter_whose_flag_is_off(self):
-        gated = ChoiceColumnFilter(query_param="gated", label="Gated", required_flag=Flags.ABUSE_DETECTION.slug)
+        gated = ChoiceColumnFilter(query_param="gated", label="Gated", required_flag=Flags.HUMAN_ANNOTATIONS.slug)
         filter_class = self._make_filter_class([gated])
 
         tool_fn = make_get_options_tool(filter_class, mock.Mock())
