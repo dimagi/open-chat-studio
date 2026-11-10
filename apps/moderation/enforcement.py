@@ -85,11 +85,9 @@ def block_participant_from_code_node(*, session, reason: str) -> bool:
 
     participant = session.participant
     team = session.team
-    if (
-        session.platform == ChannelPlatform.EVALUATIONS
-        or not abuse_detection_enabled(team)
-        or is_exempt(participant=participant, team=team)
-    ):
+    if session.platform == ChannelPlatform.EVALUATIONS:
+        return False
+    if not abuse_detection_enabled(team) or is_exempt(participant=participant, team=team):
         return False
     _denial, created = block_participant(
         participant=participant,
