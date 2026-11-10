@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 import openai
 import pytest
 from django.db import DatabaseError
-from waffle.testutils import override_flag
 
 from apps.channels.exceptions import EarlyExitResponse
 from apps.channels.models import ChannelPlatform
@@ -18,13 +17,11 @@ from apps.experiments.models import Participant, SessionStatus
 from apps.moderation.const import FLAGGED_MESSAGE, STRIKE_LIMIT
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.moderation_service.schemas import ModerationOutput
-from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ChatMessageFactory
 from apps.utils.factories.pipelines import PipelineChatHistoryFactory, PipelineChatMessagesFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.tests.provider_errors import connection_error
 
-FLAG = Flags.ABUSE_DETECTION.slug
 EVENT_BOT = "apps.channels.pipeline.EventBot"
 NOTIFICATION = "apps.channels.stages.terminal.moderation_skipped_notification"
 BLOCKED_NOTIFICATION = "apps.moderation.services.participant_auto_blocked_notification"
@@ -337,11 +334,6 @@ class TestModerationResultStageStrikes:
 
 @pytest.mark.django_db()
 class TestModerationInTheChannelPipeline:
-    @pytest.fixture(autouse=True)
-    def _flag_on(self):
-        with override_flag(FLAG, active=True):
-            yield
-
     def _send(self, session, *, process_input, message_text="Bad words"):
         channel = messaging_channel(session)
         with patch("apps.channels.stages.core.get_bot") as get_bot:
@@ -488,12 +480,3 @@ class TestModerationInTheChannelPipeline:
         )
         notification.assert_called_once()
         assert _strikes(auto_block_session) == STRIKE_LIMIT
-
-    @override_flag(FLAG, active=False)
-    def test_flag_off_starts_no_task(self, moderated_session, moderation_task):
-        channel = self._send(moderated_session, process_input=lambda *args, **kwargs: _bot_response(moderated_session))
-
-        moderation_task.task.delay.assert_not_called()
-        moderation_task.async_result.assert_not_called()
-        assert channel.text_sent == ["The bot's answer"]
-        assert self._human_message(moderated_session).moderation_status is None

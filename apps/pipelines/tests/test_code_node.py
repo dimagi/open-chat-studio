@@ -22,7 +22,6 @@ from apps.pipelines.tests.utils import (
     render_template_node,
     start_node,
 )
-from apps.teams.flags import Flags
 from apps.utils.factories.events import EventActionFactory, ScheduledMessageFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -650,8 +649,7 @@ def test_block_participant_errors(code, session, error):
 
 
 @pytest.mark.django_db()
-def test_block_participant_in_a_pipeline(pipeline, experiment_session, team_flag):
-    team_flag(Flags.ABUSE_DETECTION.slug, experiment_session.team)
+def test_block_participant_in_a_pipeline(pipeline, experiment_session):
     code = """
 def main(input, **kwargs):
     block_participant("test")
@@ -670,8 +668,7 @@ def main(input, **kwargs):
 
 
 @pytest.mark.django_db()
-def test_block_participant_uses_the_session_from_the_pipeline_state(experiment_session, team_flag):
-    team_flag(Flags.ABUSE_DETECTION.slug, experiment_session.team)
+def test_block_participant_uses_the_session_from_the_pipeline_state(experiment_session):
     node = CodeNode(name="test", node_id="123", django_node=None, code=BLOCK_PARTICIPANT_CODE)
     node._repo = ORMRepository(session=None)
     state = PipelineState(outputs={}, experiment_session=experiment_session, last_node_input="hi", node_inputs=["hi"])

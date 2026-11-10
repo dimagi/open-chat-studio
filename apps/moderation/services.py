@@ -52,7 +52,7 @@ def record_rule_hits(
 def start_moderation(*, team: Team, message: ChatMessage) -> str | None:
     """Queue the moderation task when the team has moderation on and the message has text. Returns the task id.
 
-    Does not check the feature flag. The message must be committed, as the task reads it.
+    The message must be committed, as the task reads it.
     """
     if not team.moderation_enabled or team.moderation_provider_id is None:
         return None

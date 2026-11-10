@@ -179,7 +179,6 @@ def resolve_export_columns(keys: Iterable[str] | None = None) -> list[ExportColu
 
 _FLAG_GATED_COLUMNS = {
     "annotation_queues": Flags.HUMAN_ANNOTATIONS.slug,
-    "moderation_status": Flags.ABUSE_DETECTION.slug,
 }
 
 

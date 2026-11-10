@@ -13,7 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.moderation.settings_section import SETTINGS_SECTION as MODERATION_SETTINGS_SECTION
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
-from apps.service_providers.utils import ServiceProvider, get_enabled_providers
+from apps.service_providers.utils import ServiceProvider
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import (
     FeatureFlagForm,
@@ -220,7 +220,7 @@ def _settings_context(
             set_form_fields_disabled(team_form, True)
     stats = {
         "members": team.membership_set.count(),
-        "integrations": len(get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))),
+        "integrations": len(get_integration_rows(request=request, team=team, providers=list(ServiceProvider))),
         "pending_invites": Invitation.objects.filter(team=team, is_accepted=False).count(),
     }
     return {

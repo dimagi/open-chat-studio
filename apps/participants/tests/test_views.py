@@ -10,12 +10,10 @@ from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
-from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.participants.forms import TriggerBotForm
-from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.events import ScheduledMessageFactory
@@ -159,8 +157,7 @@ def test_sessions_panel_does_not_offer_the_participant_blocked_filter(client, te
     client.login(username=user.username, password="password")
     url = reverse("participants:single-participant-home", args=[team_with_users.slug, participant.id])
 
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
-        response = client.get(url)
+    response = client.get(url)
 
     assert response.status_code == 200
     columns = response.context["df_filter_columns"]

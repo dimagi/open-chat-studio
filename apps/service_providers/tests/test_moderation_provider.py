@@ -4,18 +4,15 @@ import openai
 import pytest
 from django.urls import reverse
 from field_audit.models import AuditAction
-from waffle.testutils import override_flag
 
 from apps.service_providers.forms import OpenAIModerationConfigForm
 from apps.service_providers.models import ModerationProvider, ModerationProviderType
 from apps.service_providers.moderation_service import ModerationRateLimited, OpenAIModerationService
 from apps.service_providers.moderation_service.schemas import ModerationOutput
-from apps.teams.flags import Flags
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.tests.provider_errors import connection_error, status_error
 
-FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
 
 
@@ -146,21 +143,7 @@ def _urls(team, provider=None):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("view", ["table", "new", "edit", "delete"])
-def test_views_are_hidden_with_the_flag_off(view, team_with_users, admin_client):
-    provider = ModerationProviderFactory.create(team=team_with_users)
-    method, url = _urls(team=team_with_users, provider=provider)[view]
-
-    with override_flag(FLAG, active=False):
-        response = getattr(admin_client, method)(url)
-
-    assert response.status_code == 404
-    assert ModerationProvider.objects.filter(id=provider.id).exists()
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize("view", ["edit", "delete"])
-@override_flag(FLAG, active=True)
 def test_views_do_not_reach_another_teams_provider(view, team_with_users, admin_client):
     other_provider = ModerationProviderFactory.create(team=TeamFactory.create())
     method, url = _urls(team=team_with_users, provider=other_provider)[view]
@@ -172,7 +155,6 @@ def test_views_do_not_reach_another_teams_provider(view, team_with_users, admin_
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 def test_create_view_saves_a_provider(team_with_users, admin_client):
     _, url = _urls(team_with_users)["new"]
 
@@ -186,7 +168,6 @@ def test_create_view_saves_a_provider(team_with_users, admin_client):
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 def test_create_view_rejects_a_bad_key(team_with_users, admin_client):
     _, url = _urls(team_with_users)["new"]
 
@@ -199,7 +180,6 @@ def test_create_view_rejects_a_bad_key(team_with_users, admin_client):
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 def test_delete_view_blocks_deleting_the_provider_the_team_moderates_with(team_with_users, admin_client):
     provider = ModerationProviderFactory.create(team=team_with_users)
     team_with_users.moderation_enabled = True
@@ -216,7 +196,6 @@ def test_delete_view_blocks_deleting_the_provider_the_team_moderates_with(team_w
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 @pytest.mark.parametrize(
     "selected",
     [pytest.param(False, id="not-selected"), pytest.param(True, id="selected-with-moderation-off")],

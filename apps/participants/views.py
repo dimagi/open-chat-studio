@@ -15,7 +15,6 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
-from waffle.decorators import waffle_flag
 
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
@@ -24,7 +23,7 @@ from apps.cost_tracking.services.reporting import CostFilters, costs_by_particip
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.generics.breadcrumbs import Crumb
-from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt, unblock_participant
+from apps.moderation.enforcement import block_participant, is_exempt, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.participants.forms import (
     BlockParticipantForm,
@@ -34,7 +33,6 @@ from apps.participants.forms import (
     TriggerBotForm,
 )
 from apps.teams.decorators import login_and_team_required
-from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.redirects import safe_redirect_url
 
@@ -200,13 +198,10 @@ def single_participant_home_context(
     )
     if participant.platform not in ChannelPlatform.team_global_platforms():
         context["trigger_bot_form"] = TriggerBotForm(participant=participant)
-    if abuse_detection_enabled(team):
-        denial = (
-            DeniedParticipant.objects.filter(team=team, participant=participant).select_related("created_by").first()
-        )
-        context["denial"] = denial
-        context["block_form"] = BlockParticipantForm()
-        context["can_block"] = denial is None and not is_exempt(participant=participant, team=team)
+    denial = DeniedParticipant.objects.filter(team=team, participant=participant).select_related("created_by").first()
+    context["denial"] = denial
+    context["block_form"] = BlockParticipantForm()
+    context["can_block"] = denial is None and not is_exempt(participant=participant, team=team)
     return context
 
 
@@ -615,7 +610,6 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
 
 @login_and_team_required
-@waffle_flag(Flags.ABUSE_DETECTION.slug)
 @permission_required("experiments.change_participant")
 @require_POST
 def block(request, team_slug: str, participant_id: int):
@@ -644,7 +638,6 @@ def block(request, team_slug: str, participant_id: int):
 
 
 @login_and_team_required
-@waffle_flag(Flags.ABUSE_DETECTION.slug)
 @permission_required("experiments.change_participant")
 @require_POST
 def unblock(request, team_slug: str, participant_id: int):

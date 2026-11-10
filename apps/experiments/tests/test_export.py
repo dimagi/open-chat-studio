@@ -25,7 +25,6 @@ from apps.experiments.export import (
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItemStatus
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
-from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.human_annotations import AnnotationItemFactory, AnnotationQueueFactory
@@ -652,31 +651,11 @@ def test_moderation_status_column(message_type, moderation_status, expected):
         chat=session.chat, content="hello", message_type=message_type, moderation_status=moderation_status
     )
 
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
-        header, row = list(
-            generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["moderation_status"])
-        )
-
-    assert dict(zip(header, row, strict=True))["Moderation Status"] == expected
-
-
-@pytest.mark.django_db()
-def test_moderation_status_column_is_empty_when_the_flag_is_off():
-    """Statuses recorded before the flag was turned off do not reach the export."""
-    session = ExperimentSessionFactory.create()
-    ChatMessage.objects.create(
-        chat=session.chat,
-        content="hello",
-        message_type=ChatMessageType.HUMAN,
-        moderation_status=ModerationStatus.FLAGGED,
+    header, row = list(
+        generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["moderation_status"])
     )
 
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=False):
-        header, row = list(
-            generate_export_rows(session.experiment, session.experiment.sessions.all(), columns=["moderation_status"])
-        )
-
-    assert dict(zip(header, row, strict=True))["Moderation Status"] == ""
+    assert dict(zip(header, row, strict=True))["Moderation Status"] == expected
 
 
 def _session_with_one_message():

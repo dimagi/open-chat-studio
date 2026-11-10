@@ -1,5 +1,4 @@
 import pytest
-from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
@@ -12,42 +11,29 @@ from apps.moderation.enforcement import (
     unblock_participant,
 )
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
-from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 
-FLAG = Flags.ABUSE_DETECTION.slug
-
 
 @pytest.mark.django_db()
 class TestIsParticipantBlocked:
-    def test_blocked_when_flag_on_for_team(self, team_flag):
+    def test_blocked_with_a_row(self):
         denial = DeniedParticipantFactory.create()
-        team_flag(FLAG, denial.team)
 
         assert is_participant_blocked(team=denial.team, participant_id=denial.participant_id) is True
 
-    @override_flag(FLAG, active=False)
-    def test_flag_off_means_not_blocked_even_with_a_row(self):
-        denial = DeniedParticipantFactory.create()
-
-        assert is_participant_blocked(team=denial.team, participant_id=denial.participant_id) is False
-
-    @override_flag(FLAG, active=True)
     def test_not_blocked_without_a_row(self):
         participant = ParticipantFactory.create()
 
         assert is_participant_blocked(team=participant.team, participant_id=participant.id) is False
 
-    @override_flag(FLAG, active=True)
     def test_block_is_scoped_to_its_team(self):
         denial = DeniedParticipantFactory.create()
 
         assert is_participant_blocked(team=TeamFactory.create(), participant_id=denial.participant_id) is False
 
-    @override_flag(FLAG, active=True)
     def test_missing_participant_is_not_blocked(self):
         assert is_participant_blocked(team=TeamFactory.create(), participant_id=None) is False
 
@@ -132,10 +118,8 @@ class TestIsExempt:
 @pytest.mark.django_db()
 class TestBlockParticipantFromCodeNode:
     @pytest.fixture()
-    def session(self, team_flag):
-        session = ExperimentSessionFactory.create()
-        team_flag(FLAG, session.team)
-        return session
+    def session(self):
+        return ExperimentSessionFactory.create()
 
     def test_blocks_the_participant_without_strikes(self, session):
         created = block_participant_from_code_node(session=session, reason="Repeated threats")
@@ -163,13 +147,6 @@ class TestBlockParticipantFromCodeNode:
 
         assert created is False
         assert DeniedParticipant.objects.get().reason == "First"
-
-    @override_flag(FLAG, active=False)
-    def test_does_nothing_when_the_flag_is_off(self):
-        session = ExperimentSessionFactory.create()
-
-        assert block_participant_from_code_node(session=session, reason="Spam") is False
-        assert not DeniedParticipant.objects.exists()
 
     @pytest.mark.parametrize(
         ("is_member", "blocked"),

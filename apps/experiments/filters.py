@@ -297,7 +297,7 @@ class ExperimentSessionFilter(MultiColumnFilter):
         SessionStatusFilter(query_param="state"),
         RemoteIdFilter(),
         SessionIdFilter(),
-        ParticipantBlockedFilter(required_flag=Flags.ABUSE_DETECTION.slug),
+        ParticipantBlockedFilter(),
     ]
 
 
