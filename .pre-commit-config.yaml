@@ -23,18 +23,18 @@ repos:
     hooks:
       - id: gitleaks
   - repo: https://github.com/adamchainz/djade-pre-commit
-    rev: '1.9.0'
+    rev: '1.10.0'
     hooks:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.8
+    rev: v0.17.2
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.46.2
+    rev: v1.47.0
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
@@ -42,7 +42,8 @@ repos:
     rev: 'v10.11.0'
     hooks:
       - id: eslint
-        # Keep these in sync with the matching devDependencies in package.json.
+        # Pinned to the versions pnpm-lock.yaml resolves. Dependabot bumps package.json only;
+        # sync-eslint-pins.yml (or `python scripts/check_eslint_versions.py --fix`) updates these.
         additional_dependencies:
           - eslint@10.11.0
           - '@eslint/js@10.0.1'
@@ -51,14 +52,14 @@ repos:
         types: [ file ]
         args: [ --fix ]
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: 'v3.9.9'
+    rev: 'v3.9.10'
     hooks:
       - id: prettier
         files: ^components/chat_widget/src/.*\.(ts|tsx|css)$
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.83
+    rev: v0.0.92
     hooks:
       # Run the type checker.
       - id: ty-check
@@ -69,7 +70,7 @@ repos:
     hooks:
       - id: actionlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.49.1
+    rev: v0.50.0
     hooks:
       - id: markdownlint
         args: [--config, .markdownlint.yaml]
@@ -84,8 +85,7 @@ repos:
         fail_fast: true
       - id: eslint-versions-in-sync
         name: eslint pins in .pre-commit-config.yaml must match pnpm-lock.yaml
-        # package.json and .pre-commit-config.yaml are bumped by different
-        # Dependabot ecosystems, so they drift apart silently.
+        # package.json and .pre-commit-config.yaml can drift apart silently; --fix repairs it.
         entry: python scripts/check_eslint_versions.py
         language: python
         additional_dependencies: [pyyaml]

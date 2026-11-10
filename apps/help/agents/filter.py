@@ -165,4 +165,21 @@ class FilterAgent(BaseHelpAgent[FilterInput, FilterOutput]):
                 {"messages": [{"role": "user", "content": self.get_user_message(self.input)}]},
                 config=trace_config,
             )
-        return self.parse_response(response)
+        output = self.parse_response(response)
+        return FilterOutput(filters=_drop_unsupported_operators(output.filters, filter_class=filter_class, team=team))
+
+
+def _drop_unsupported_operators(
+    filters: list[ColumnFilterData], *, filter_class: type[MultiColumnFilter], team: Team
+) -> list[ColumnFilterData]:
+    """Drop filters whose operator the column does not offer. The model can ignore the operators in its prompt."""
+    columns = filter_class.available_filters(team)
+    operators_by_column = {f.query_param: {op.value for op in f.operators} for f in columns}
+    kept = []
+    for item in filters:
+        allowed = operators_by_column.get(item.column)
+        if allowed is not None and item.operator not in allowed:
+            logger.warning("Filter agent returned unsupported operator %r for %r", item.operator, item.column)
+            continue
+        kept.append(item)
+    return kept

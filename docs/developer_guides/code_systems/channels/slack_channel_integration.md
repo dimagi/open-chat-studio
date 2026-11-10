@@ -1,14 +1,21 @@
 # Slack Integration on Localhost
 
-This guide helps you set up Slack integration with your development environment using a local server exposed via ngrok.
+This guide is for developers running Open Chat Studio (OCS) locally. It walks through creating a Slack app and connecting it to your local OCS server, which you expose with [ngrok](https://ngrok.com/), so that you can use and test the Slack integration.
 
-## 1. Create a Slack App
+Slack can be used as an OCS messaging provider so that participants can interact with the chatbot directly from Slack.
+In addition it can be used to deliver [OCS notifications](https://docs.openchatstudio.com/concepts/notifications/) to a team's Slack channel.
 
-1. Visit [https://api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
+!!! note
+
+    Slack's app settings screens change often. If a screen doesn't match the steps below, check Slack's guide, [Creating an app from app settings](https://docs.slack.dev/app-management/quickstart-app-settings).
+
+## 1. Create a Slack app
+
+1. Visit the [Slack API apps page](https://api.slack.com/apps) and click **Create New App**.
 2. Choose **From scratch**.
 3. Provide a name for your app and select your workspace.
 
-## 2. Add Bot Scopes
+## 2. Add bot scopes
 
 1. Go to **OAuth & Permissions → Scopes**.
 2. Under **Bot Token Scopes**, add the scopes that your app needs, for example:
@@ -16,12 +23,12 @@ This guide helps you set up Slack integration with your development environment 
    - `files:write` — allows uploading files
 3. Click **Save Changes**.
 
-## 3. Install the App to Your Workspace
+## 3. Install the app to your workspace
 
-- Navigate to **Install App** in the left sidebar.
-- Click **Install to Workspace** and authorize.
+1. Navigate to **Install App** in the left sidebar.
+2. Click **Install to Workspace** and authorize.
 
-## 4. Update Environment Variables
+## 4. Update environment variables
 
 1. Go to the **Basic Information** section of your app.
 2. Copy the following values:
@@ -38,7 +45,7 @@ This guide helps you set up Slack integration with your development environment 
 
 ## 5. Install ngrok
 
-1. Download and install ngrok from [https://ngrok.com/download](https://ngrok.com/download).
+1. Download and install ngrok from the [ngrok download page](https://ngrok.com/download).
 2. Start your Django server with a public URL using:
 
    ```bash
@@ -49,7 +56,7 @@ This guide helps you set up Slack integration with your development environment 
    https://abc123.ngrok.io
    ```
 
-## 6. Update Redirect URLs in Slack App
+## 6. Update redirect URLs in the Slack app
 
 1. In your Slack app, go to **OAuth & Permissions**.
 2. Under **Redirect URLs**, add:
@@ -59,7 +66,7 @@ This guide helps you set up Slack integration with your development environment 
    ```
 3. Click **Save URLs**.
 
-## 7. Set Up Slack Events Endpoint
+## 7. Set up Slack events endpoint
 
 1. Go to **Event Subscriptions** in your Slack app.
 2. Toggle **Enable Events**.
@@ -71,9 +78,9 @@ This guide helps you set up Slack integration with your development environment 
 4. Under **Subscribe to Bot Events**, add:
    - `message.channels`
    - `message.im`
-   - Click **Save Changes**.
+5. Click **Save Changes**.
 
-## 8. Update Local Django Settings
+## 8. Update local Django settings
 
 In your `settings.py`:
 
@@ -85,19 +92,25 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "<your-ngrok-subdomain>.ngrok.io"]
 CSRF_TRUSTED_ORIGINS = ["https://<your-ngrok-subdomain>.ngrok.io"]
 ```
 
-## 9. Configure Messaging Provider in Open Chat Studio
+## 9. Configure the messaging provider in Open Chat Studio
 
-1. Go to **Team Settings → Messaging Providers**.
-2. Click **Add**, and select **Slack** as the provider type.
+1. Go to **Team Settings → Integrations**.
+2. Click **Add integration**, expand **Messaging**, and select **Slack**.
 3. Click **Connect Slack** — you'll be redirected to Slack's authorization screen.
+
+See the user guide on [OCS Messaging Providers](https://docs.openchatstudio.com/concepts/team/messaging_providers/).
 
 ## 10. Authorize in Slack
 
-- Slack may auto-select a workspace. If the correct workspace isn't shown, open the link in **Incognito mode** or **clear cookies**.
-- You'll be redirected to your **ngrok URL** (not `localhost`).
-- Log back into Open Chat Studio if prompted.
-- Navigate again to **Team Settings → Messaging Providers** and complete the Slack setup.
+1. Slack may auto-select a workspace.
+  If the correct workspace isn't shown, open the link in **Incognito mode** or **clear cookies**.
+2. You'll be redirected to your **ngrok URL** (not `localhost`).
+3. Log back into Open Chat Studio if prompted.
+4. Navigate again to **Team Settings → Integrations** and complete the Slack setup.
 
-## ✅ Done!
+## What this enables
 
-Your Slack app is now integrated with your local development environment!
+With Slack connected to your local environment, OCS Admin users can:
+
+1. [Deploy a chatbot to Slack](https://docs.openchatstudio.com/how-to/channels/deploy_slack_channel/).
+2. Set up [notifications to be sent to Slack](https://docs.openchatstudio.com/how-to/send_notifications_to_slack/).

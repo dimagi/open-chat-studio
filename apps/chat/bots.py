@@ -18,7 +18,7 @@ from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.pipelines.repository import ORMRepository
-from apps.service_providers.llm_service.default_models import get_default_model, get_model_parameters
+from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from apps.channels.datamodels import Attachment
+    from apps.service_providers.models import LlmProvider, LlmProviderModel
 
 
 def create_conversation(
@@ -50,6 +51,17 @@ def get_bot(session: ExperimentSession, experiment: Experiment, trace_service, d
     if experiment.pipeline_id:
         return PipelineBot(session, experiment, trace_service, disable_reminder_tools=disable_tools)
     raise NotImplementedError("Only pipeline chatbots are supported")
+
+
+def _changed_participant_data(input_state, output) -> dict | None:
+    out_pd = output.get("participant_data", None)
+    if out_pd is None or out_pd == input_state.get("participant_data"):
+        return None
+    return out_pd
+
+
+def _participant_data_diff(input_state, participant_data: dict) -> list:
+    return list(dictdiffer.diff(input_state.get("participant_data", {}), participant_data))
 
 
 class PipelineBot:
@@ -205,20 +217,26 @@ class PipelineBot:
 
     def _persist_pipeline_state(self, input_state, output):
         """Persist pipeline state changes (participant data, session state, tags) to the database."""
+        self._persist_session_tags(output)
+        self._persist_participant_data(input_state, output)
+        self._persist_session_state(input_state, output)
 
+    def _persist_session_tags(self, output):
         if session_tags := output.get("session_tags"):
             for tag, category in session_tags:
                 self.session.chat.create_and_add_tag(tag, self.session.team, tag_category=category)
 
-        out_pd = output.get("participant_data", None)
-        if out_pd is not None and out_pd != input_state.get("participant_data"):
-            if self.trace_service:
-                diff = list(dictdiffer.diff(input_state.get("participant_data", {}), out_pd))
-                self.trace_service.set_participant_data_diff(diff)
-            self.participant_data.data = out_pd
-            self.participant_data.save(update_fields=["data"])
-            self.session.participant.update_name_from_data(out_pd)
+    def _persist_participant_data(self, input_state, output):
+        out_pd = _changed_participant_data(input_state, output)
+        if out_pd is None:
+            return
+        if self.trace_service:
+            self.trace_service.set_participant_data_diff(_participant_data_diff(input_state, out_pd))
+        self.participant_data.data = out_pd
+        self.participant_data.save(update_fields=["data"])
+        self.session.participant.update_name_from_data(out_pd)
 
+    def _persist_session_state(self, input_state, output):
         out_session_state = output.get("session_state", None)
         if out_session_state is not None and out_session_state != input_state.get("session_state"):
             self.session.state = out_session_state
@@ -267,10 +285,25 @@ class EvalsBot(PipelineBot):
     def __init__(self, session: ExperimentSession, experiment: Experiment, trace_service, participant_data: dict):
         super().__init__(session, experiment, trace_service, False)
         self._participant_data = participant_data
+        self.pipeline_output: dict | None = None
+        self.participant_data_diff: list = []
 
     def _update_state_with_participant_data(self, state):
         state["participant_data"] = self._participant_data
         return state
+
+    def _persist_pipeline_state(self, input_state, output):
+        self.pipeline_output = output
+        super()._persist_pipeline_state(input_state, output)
+
+    def _persist_participant_data(self, input_state, output):
+        """Record the diff only: the row is the team-wide evaluations participant's, and a name key would rename it."""
+        out_pd = _changed_participant_data(input_state, output)
+        if out_pd is None:
+            return
+        self.participant_data_diff = _participant_data_diff(input_state, out_pd)
+        if self.trace_service:
+            self.trace_service.set_participant_data_diff(self.participant_data_diff)
 
 
 class PipelineTestBot:
@@ -341,11 +374,11 @@ class EventBot:
         self.trace_service = trace_service
 
     def get_user_message(self, event_prompt: str) -> str:
-        provider = self.llm_provider
-        if not provider:
+        provider_and_model = self.get_provider_and_model()
+        if not provider_and_model:
             raise Exception("No LLM provider found")
 
-        model = get_default_model(provider.type)
+        provider, model = provider_and_model
         params = get_model_parameters(model.name, temperature=0.7)
 
         service = provider.get_llm_service()
@@ -382,9 +415,18 @@ class EventBot:
                     self.trace_service.set_output_message_id(ai_message.id)
         return message
 
-    @property
-    def llm_provider(self):
-        return self.experiment.team.llmprovider_set.first()
+    def get_provider_and_model(self) -> tuple[LlmProvider, LlmProviderModel] | None:
+        """The team's first provider that has a chat model, trying verified providers first and
+        providers whose credentials failed a check last."""
+        rank = {"verified": 0, "failed": 2}
+        providers = sorted(
+            self.experiment.team.llmprovider_set.all(),
+            key=lambda p: rank.get(p.verification_state, 1),
+        )
+        for provider in providers:
+            if model := provider.get_default_chat_model():
+                return provider, model
+        return None
 
     @property
     def system_prompt(self):

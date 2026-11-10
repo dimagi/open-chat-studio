@@ -1,6 +1,6 @@
 import pytest
 
-from apps.events.forms import EventActionForm, PipelineStartForm
+from apps.events.forms import EventActionForm, PipelineStartForm, ScheduledMessageConfigForm
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 
@@ -38,3 +38,34 @@ def test_event_action_form_end_conversation_on_end_triggers(trigger_type, action
     form = EventActionForm(data={"type": trigger_type, "action_type": action_type})
 
     assert form.is_valid() is is_valid
+
+
+SCHEDULE = {"name": "Weekly", "prompt_text": "Check in", "frequency": 1, "time_period": "weeks", "repetitions": 2}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "posted",
+    [
+        pytest.param({}, id="not-posted"),
+        pytest.param({"experiment_id": ""}, id="posted-empty"),
+    ],
+)
+def test_scheduled_message_form_defaults_to_its_own_experiment(posted):
+    experiment = ExperimentFactory.create()
+
+    form = ScheduledMessageConfigForm(data={**SCHEDULE, **posted}, experiment_id=experiment.id)
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["experiment_id"] == str(experiment.id)
+
+
+@pytest.mark.django_db()
+def test_scheduled_message_form_refuses_another_experiment():
+    experiment = ExperimentFactory.create()
+    other = ExperimentFactory.create(team=experiment.team)
+
+    form = ScheduledMessageConfigForm(data={**SCHEDULE, "experiment_id": other.id}, experiment_id=experiment.id)
+
+    assert not form.is_valid()
+    assert "experiment_id" in form.errors

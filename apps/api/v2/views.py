@@ -24,6 +24,7 @@ from apps.api.v2.write.serializers import (
     ChatbotWriteSerializer,
 )
 from apps.experiments.models import Experiment
+from apps.experiments.services import last_activity_subquery
 from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.teams.models import Team
 
@@ -63,7 +64,12 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return self.request.team
 
     def get_queryset(self) -> QuerySet[Experiment]:
-        return working_chatbots(self.team).select_related("team").prefetch_related("versions")
+        return (
+            working_chatbots(self.team)
+            .select_related("team")
+            .prefetch_related("versions")
+            .annotate(last_activity_at=last_activity_subquery())
+        )
 
     def get_serializer_class(self) -> type[serializers.BaseSerializer]:
         # The actions below build their serializers directly, but any `self.get_serializer()` call

@@ -1,8 +1,8 @@
 import pytest
-from django.urls import reverse
 
 from apps.chat.models import ChatMessageType
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory, ParticipantFactory
+from apps.utils.tests.session_helpers import session_url
 
 
 @pytest.fixture()
@@ -21,24 +21,12 @@ def session_with_messages(experiment):
 
 
 def _messages_url(experiment, session):
-    return reverse(
-        "experiments:experiment_session_messages_view",
-        kwargs={
-            "team_slug": experiment.team.slug,
-            "experiment_id": experiment.public_id,
-            "session_id": session.external_id,
-        },
-    )
+    return session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
 
 
 def _fragment_url(experiment, session):
-    return reverse(
-        "experiments:experiment_session_messages_fragment_view",
-        kwargs={
-            "team_slug": experiment.team.slug,
-            "experiment_id": experiment.public_id,
-            "session_id": session.external_id,
-        },
+    return session_url(
+        name="experiments:experiment_session_messages_fragment_view", experiment=experiment, session=session
     )
 
 

@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -692,3 +694,40 @@ def test_read_only_key_can_read_sessions(session):
     client = ApiTestClient(user, session.team, read_only=True)
     assert client.get(reverse("api:session-list")).status_code == 200
     assert client.get(reverse("api:session-detail", kwargs={"id": session.external_id})).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_retrieve_session_query_count_does_not_scale_with_messages(session, django_assert_num_queries):
+    """Tags and attachments for messages must be loaded in bulk, not with one query per message."""
+    user = session.team.members.first()
+    tag = Tag.objects.create(name="tag1", slug="tag1", team=session.team, created_by=user)
+    client = ApiTestClient(user, session.team)
+    url = reverse("api:session-detail", kwargs={"id": session.external_id})
+
+    attachment, _created = ChatAttachment.objects.get_or_create(chat_id=session.chat.id, tool_type="file_search")
+
+    def _add_messages(count):
+        for _ in range(count):
+            message = session.chat.messages.create(message_type="human", content="msg", summary="sum")
+            message.add_tag(tag, session.team, user)
+            # Attachments are matched by id / external id within the chat, so each message gets
+            # files with their own external ids.
+            files = [FileFactory.create(external_id=f"file_{message.id}_{i}") for i in range(2)]
+            attachment.files.add(*files)
+            message.metadata = {"openai_file_ids": [f.external_id for f in files]}
+            message.save()
+
+    _add_messages(2)
+    client.get(url)  # warm up any per-process caches (e.g. content types)
+
+    with CaptureQueriesContext(connection) as baseline:
+        assert client.get(url).status_code == 200
+
+    _add_messages(5)
+    with django_assert_num_queries(len(baseline.captured_queries)):
+        response = client.get(url)
+    assert response.status_code == 200
+    messages = [m for m in response.json()["messages"] if m["role"] == "user"]
+    assert len(messages) == 7
+    assert all(m["tags"] == ["tag1"] for m in messages)
+    assert all(len(m["attachments"]) == 2 for m in messages)

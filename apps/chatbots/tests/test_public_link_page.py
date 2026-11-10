@@ -69,6 +69,30 @@ def test_live_page_renders_the_kiosk_widget(client, team_with_users):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
+    ("published_value", "draft_value", "expected"),
+    [
+        pytest.param(True, False, True, id="published-enabled"),
+        pytest.param(False, True, False, id="published-disabled"),
+    ],
+)
+def test_attachments_follow_the_published_versions_file_uploads_setting(
+    client, team_with_users, published_value, draft_value, expected
+):
+    channel = _channel(team_with_users, publish=False)
+    working = channel.experiment
+    working.file_uploads_enabled = published_value
+    working.save()
+    working.create_new_version(make_default=True)
+    working.file_uploads_enabled = draft_value
+    working.save()
+
+    html = _get(client).content.decode()
+
+    assert ('allow-attachments="true"' in html) is expected
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
     ("kwargs", "banner"),
     [
         pytest.param({"enabled": False}, "Back soon", id="disabled"),

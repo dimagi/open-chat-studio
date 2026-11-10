@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
-from apps.service_providers.auth_service.oauth import OAuthTokenManager
+from apps.service_providers.auth_service.oauth import OAuthTokenManager, authorization_code_config_changed
 from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.service_providers.minimax import build_minimax_synthetic_voices
 from apps.service_providers.moderation_service import ModerationService, OpenAIModerationService
@@ -300,12 +300,22 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
 
+        if not self.supports_connection_test:
+            raise ConnectionTestNotSupportedError(self.type)
+
+        model = self.get_default_chat_model()
+        if model is None:
+            raise NoTestableModelError(self.type)
+
+        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+        chat_model.invoke([HumanMessage(content="Hello")])
+
+    def get_default_chat_model(self) -> "LlmProviderModel | None":
+        """The model to send a chat request to when nothing more specific is configured, or None
+        if the team has no model for this provider's type."""
         # Local import: default_models imports LlmProviderModel/LlmProviderTypes from this
         # module, so importing it at module level here would be circular.
         from apps.service_providers.llm_service.default_models import get_default_model  # noqa: PLC0415
-
-        if not self.supports_connection_test:
-            raise ConnectionTestNotSupportedError(self.type)
 
         # Prefer the provider type's registered default model (get_default_model, the same
         # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
@@ -320,13 +330,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         )
         default_model = get_default_model(self.type)
         model = team_models.filter(name=default_model.name).first() if default_model else None
-        if model is None:
-            model = team_models.first()
-        if model is None:
-            raise NoTestableModelError(self.type)
-
-        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
-        chat_model.invoke([HumanMessage(content="Hello")])
+        return model or team_models.first()
 
     def run_connection_test_hook(self) -> tuple[list[str], str]:
         """Verify the saved credentials, record the outcome, and report what happened.
@@ -842,6 +846,7 @@ class AuthProviderType(models.TextChoices):
     bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
     oauth_client_credentials = "oauth_client_credentials", _("OAuth (Client Credentials)")
+    oauth_authorization_code = "oauth_authorization_code", _("OAuth (Authorization Code)")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -858,6 +863,8 @@ class AuthProviderType(models.TextChoices):
                 return forms.CommCareAuthConfigForm
             case AuthProviderType.oauth_client_credentials:
                 return forms.OAuthClientCredentialsConfigForm
+            case AuthProviderType.oauth_authorization_code:
+                return forms.OAuthAuthorizationCodeConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
@@ -884,6 +891,7 @@ class AuthProvider(BaseTeamModel):
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
     _auth_data = encrypt(models.JSONField(default=dict))
+    extra_data = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ("type", "name")
@@ -895,8 +903,42 @@ class AuthProvider(BaseTeamModel):
     def type_enum(self):
         return AuthProviderType(self.type)
 
+    @property
+    def credentials_verified(self) -> bool:
+        return (
+            self.type_enum == AuthProviderType.oauth_authorization_code
+            and (self.extra_data or {}).get("verified_credentials") is True
+            and bool(self._auth_data.get("access_token"))
+            and not self._auth_data.get("reconnect_required")
+            and not authorization_code_config_changed(self)
+        )
+
+    @property
+    def verification_error(self) -> str:
+        if self.type_enum == AuthProviderType.oauth_authorization_code:
+            if authorization_code_config_changed(self):
+                return "OAuth configuration changed; connect the provider again."
+            if self._auth_data.get("reconnect_required"):
+                return "The OAuth connection needs to be renewed; connect the provider again."
+        return (self.extra_data or {}).get("verification_error", "")
+
+    @property
+    def credentials_checked_at(self) -> datetime | None:
+        checked_at = (self.extra_data or {}).get("credentials_checked_at")
+        return datetime.fromisoformat(checked_at) if checked_at else None
+
+    @property
+    def verification_state(self) -> Literal["verified", "failed", "no_model", "unchecked"]:
+        if self.credentials_verified:
+            return "verified"
+        if self.verification_error:
+            return "failed"
+        if self.credentials_checked_at:
+            return "no_model"
+        return "unchecked"
+
     def get_auth_service(self) -> auth_service.AuthService:
-        if self.type_enum == AuthProviderType.oauth_client_credentials:
+        if self.type_enum in (AuthProviderType.oauth_client_credentials, AuthProviderType.oauth_authorization_code):
             token = OAuthTokenManager(self).get_valid_access_token()
             return auth_service.BearerTokenAuthService(token=token)
         return self.type_enum.get_auth_service(self.config)

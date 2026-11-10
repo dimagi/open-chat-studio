@@ -1,4 +1,4 @@
-"""Breadcrumb trail rendered by `generic/breadcrumbs.html` via the `breadcrumbs` context variable."""
+"""Breadcrumb trail rendered by `<c-ui.breadcrumbs>` in the app base template via the `breadcrumbs` context variable."""
 
 Crumb = tuple[str, str | None]
 """A `(label, url)` pair. The final crumb is the current page and is never rendered as a link."""

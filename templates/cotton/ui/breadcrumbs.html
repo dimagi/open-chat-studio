@@ -1,0 +1,19 @@
+{% comment %}
+Breadcrumb trail. `items` is a list of (label, url) pairs; the last item is the current page and a None url is plain text.
+
+  <c-ui.breadcrumbs :items="breadcrumbs" />
+{% endcomment %}
+<c-vars items="" />
+<nav aria-label="breadcrumbs" {{ attrs|with_classes:"text-sm breadcrumbs" }}>
+  <ul>
+    {% for label, url in items %}
+      {% if forloop.last %}
+        <li class="pg-breadcrumb-active" aria-current="page">{{ label }}</li>
+      {% elif url %}
+        <li><a href="{{ url }}">{{ label }}</a></li>
+      {% else %}
+        <li>{{ label }}</li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+</nav>

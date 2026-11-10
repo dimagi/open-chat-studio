@@ -11,6 +11,7 @@ from apps.utils.factories.experiment import (
     ParticipantFactory,
 )
 from apps.utils.factories.traces import TraceFactory
+from apps.utils.tests.session_helpers import session_url
 
 
 @pytest.mark.django_db()
@@ -53,14 +54,7 @@ class TestParticipantDataDiffInSessionMessages:
         )
 
         client.force_login(experiment.owner)
-        url = reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
         response = client.get(url + "?show_all=on")
         assert response.status_code == 200
         page_messages = response.context["messages"]
@@ -99,14 +93,7 @@ class TestTagFilterInSessionMessages:
         )
 
         client.force_login(experiment.owner)
-        url = reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
         response = client.get(f"{url}?show_all=on&tag_filter=billing&tag_filter=urgent")
         assert response.status_code == 200
         page_messages = response.context["messages"]
@@ -123,14 +110,7 @@ class TestTagFilterInSessionMessages:
         assert response.context["tag_context_count"] == 1
 
     def _get(self, client, experiment, session, **params):
-        url = reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
         client.force_login(experiment.owner)
         return client.get(url, {"show_all": "on", **params})
 
@@ -236,14 +216,7 @@ class TestTagFilterInSessionMessages:
         messages[2].add_tag(tag, team=experiment.team, added_by=None)
         messages[10].add_tag(tag, team=experiment.team, added_by=None)
 
-        url = reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
         client.force_login(experiment.owner)
         response = client.get(url, {"tag_filter": "billing"})
 
@@ -291,14 +264,7 @@ class TestPushUrlInSessionMessages:
             participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
         )
         client.force_login(experiment.owner)
-        url = reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
         expected_page_url = reverse(
             "chatbots:chatbot_session_view",
             args=[experiment.team.slug, experiment.public_id, session.external_id],
@@ -314,14 +280,7 @@ class TestPushUrlInSessionMessages:
             participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
         )
         client.force_login(experiment.owner)
-        url = reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
 
         response = client.get(url)
 
@@ -330,16 +289,6 @@ class TestPushUrlInSessionMessages:
 
 @pytest.mark.django_db()
 class TestCompressionCheckpointsInSessionMessages:
-    def _url(self, experiment, session):
-        return reverse(
-            "experiments:experiment_session_messages_view",
-            kwargs={
-                "team_slug": experiment.team.slug,
-                "experiment_id": experiment.public_id,
-                "session_id": session.external_id,
-            },
-        )
-
     def test_summarize_checkpoint_shows_the_summary_text(self, client, experiment):
         """A real summarize checkpoint only ever sets `summary` -- `compression_marker` is reserved
         for the synthetic, unsaved message `ChatMessage.save()` refuses to persist (see
@@ -357,7 +306,8 @@ class TestCompressionCheckpointsInSessionMessages:
         )
 
         client.force_login(experiment.owner)
-        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
+        response = client.get(f"{url}?show_all=on")
 
         assert response.status_code == 200
         content = response.content.decode()
@@ -380,7 +330,8 @@ class TestCompressionCheckpointsInSessionMessages:
         )
 
         client.force_login(experiment.owner)
-        response = client.get(f"{self._url(experiment, session)}?show_all=on")
+        url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
+        response = client.get(f"{url}?show_all=on")
 
         assert response.status_code == 200
         content = response.content.decode()

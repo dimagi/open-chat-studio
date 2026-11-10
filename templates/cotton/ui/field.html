@@ -1,0 +1,40 @@
+{% comment %}
+Form field: label, help icon, the control (slot) and its errors. `render_field` renders every form field through it.
+
+  <c-ui.field label="{% translate 'Name' %}" :input_id="form.name.id_for_label" :help="form.name.help_text" :errors="form.name.errors">
+    {{ form.name }}
+  </c-ui.field>
+  <c-ui.field label="{% translate 'Enabled' %}" inline x-show="advanced">{{ form.enabled }}</c-ui.field>
+
+Params:
+  label: the label text.
+  input_id: id of the control, for the label's `for`.
+  help: help text shown behind a help icon. HTML allowed, as for a form field's help_text.
+  errors: the field's error list, or any renderable value. Empty for none.
+  inline: boolean; puts the control inside the label, for a checkbox or toggle.
+  class: extra classes, merged with the component's own.
+Anything else (x-show, id, data-*) is passed through to the wrapper.
+{% endcomment %}
+<c-vars label="" input_id="" help="" errors="" inline="" />
+{% with classes=inline|yesno:"fieldset,fieldset w-full" %}
+  <div {{ attrs|with_classes:classes }}>
+    {% if inline %}
+      <label class="label font-bold cursor-pointer">
+        <div>
+          {{ label }}
+          {% if help %}<small class="form-text text-muted"><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
+        </div>
+        {{ slot }}
+      </label>
+    {% else %}
+      <label class="label font-bold"{% if input_id %} for="{{ input_id }}"{% endif %}>
+        <div>
+          {{ label }}
+          {% if help %}<small class="form-text text-muted"><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
+        </div>
+      </label>
+      {{ slot }}
+    {% endif %}
+    {{ errors }}
+  </div>
+{% endwith %}

@@ -8,6 +8,7 @@ from apps.service_providers.openai_client import build_openai_client
 from .schemas import ModerationCategory, ModerationOutput
 
 OPENAI_MODERATION_MODEL = "omni-moderation-latest"
+DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
 class ModerationRateLimited(Exception):
@@ -23,7 +24,7 @@ class OpenAIModerationService(ModerationService):
     openai_api_key: pydantic.SecretStr
     openai_api_base: str | None = None
     openai_organization: str | None = None
-    timeout: float | None = None
+    timeout: float = DEFAULT_TIMEOUT_SECONDS
     max_retries: int = openai.DEFAULT_MAX_RETRIES
 
     def moderate(self, text: str) -> ModerationOutput:

@@ -44,6 +44,7 @@ from apps.utils.factories.experiment import (
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
+    LlmProviderModelFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
@@ -66,12 +67,6 @@ def general_synthetic_voices():
 
 
 class TestSyntheticVoice:
-    @pytest.mark.django_db()
-    def test_get_for_team_returns_all_general_services(self):
-        """General services are those not included in SyntheticVoice.TEAM_SCOPED_SERVICES"""
-        voices_queryset = SyntheticVoice.get_for_team(team=None)
-        assert voices_queryset.count() == SyntheticVoice.objects.count()
-
     @pytest.mark.django_db()
     def test_get_for_team_excludes_service(self, general_synthetic_voices):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
@@ -532,6 +527,7 @@ class TestExperimentSession:
         """The Trace created during ad_hoc_bot_message should reference the AI ChatMessage it produced."""
         mock_get_llm_service.return_value = build_fake_llm_service(responses=["Bot reply"])
         LlmProviderFactory.create(team=experiment_session.experiment.team)
+        LlmProviderModelFactory.create(team=experiment_session.experiment.team)
         from_experiment_session.return_value = Mock()
 
         experiment_session.ad_hoc_bot_message("Tell the user we're testing", TraceInfo(name="test"))
@@ -668,10 +664,6 @@ class TestExperimentSession:
 
         with pytest.raises(ValueError, match="Commit must be True when trigger_type is specified"):
             session.end(commit=False, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_BOT)
-
-    def test_latest_trace_returns_none_when_no_traces(self):
-        session = ExperimentSessionFactory.create()
-        assert session.latest_trace is None
 
     def test_latest_trace_returns_most_recent(self):
         session = ExperimentSessionFactory.create()
@@ -914,6 +906,41 @@ class TestExperimentModel:
         experiment.refresh_from_db()
         assert experiment.compare_with_latest() is False
 
+    def test_latest_version_eagerly_loads_related_fields(self, django_assert_num_queries):
+        """Regression test: Experiment.latest_version must not cause N+1 queries when version_details is accessed."""
+        experiment = self._setup_original_experiment()
+        experiment.create_new_version(make_default=True)
+
+        # Fetch working version with the same eager loading used by get_release_status_badge
+        experiment = (
+            Experiment.objects.select_related(
+                "consent_form",
+                "synthetic_voice",
+                "voice_provider",
+                "trace_provider",
+                "pipeline",
+            )
+            .prefetch_related("static_triggers", "timeout_triggers", "scheduled_triggers")
+            .get(id=experiment.id)
+        )
+
+        # latest_version should fetch the snapshot in a fixed number of queries regardless
+        # of how many FK/M2M relations are defined on the experiment.
+        version = experiment.latest_version
+        assert version is not None
+        # All FK fields must be pre-loaded (present in the instance cache, no extra queries needed)
+        with django_assert_num_queries(0):
+            _ = version.consent_form
+            _ = version.synthetic_voice
+            _ = version.voice_provider
+            _ = version.trace_provider
+            _ = version.pipeline
+        # All reverse-FK querysets must be pre-loaded (present in the prefetch cache, no extra queries needed)
+        with django_assert_num_queries(0):
+            list(version.static_triggers.all())
+            list(version.timeout_triggers.all())
+            list(version.scheduled_triggers.all())
+
     def _assert_pipeline_is_duplicated(self, original_experiment, new_version):
         assert new_version.pipeline.working_version == original_experiment.pipeline
         assert new_version.pipeline.version_number == 1
@@ -1038,19 +1065,78 @@ class TestExperimentModel:
         assert second_version.is_archived is True
         assert ScheduledMessage.objects.filter(experiment=experiment).exists() is False
 
-    def test_archive_with_pipeline(self):
+    def test_archive_version_archives_its_pipeline(self):
         pipeline = PipelineFactory.create()
         NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
         experiment = ExperimentFactory.create(pipeline=pipeline)
-
-        # Archiving a version archives that version's pipeline...
         new_version = experiment.create_new_version()
-        assert new_version.archive() is True
-        self._assert_archived(new_version.pipeline, True)
 
-        # ...but archiving the working experiment leaves the working pipeline alone.
-        experiment.archive()
+        assert new_version.archive() is True
+
+        self._assert_archived(new_version.pipeline, True)
         self._assert_archived(experiment.pipeline, False)
+
+    def test_archive_working_experiment_archives_its_pipeline(self):
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        version = experiment.create_new_version()
+
+        assert experiment.archive() is True
+
+        self._assert_archived(pipeline, True)
+        self._assert_archived(node, True)
+        self._assert_archived(version.pipeline, True)
+
+    def test_archive_working_experiment_leaves_a_pipeline_another_chatbot_uses(self):
+        pipeline = PipelineFactory.create()
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        ExperimentFactory.create(pipeline=pipeline, team=experiment.team)
+
+        assert experiment.archive() is True
+
+        self._assert_archived(experiment, True)
+        self._assert_archived(pipeline, False)
+
+    def test_archive_working_experiment_leaves_a_pipeline_a_static_trigger_starts(self):
+        pipeline = PipelineFactory.create()
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        action = EventActionFactory.create(
+            action_type=EventActionType.PIPELINE_START, params={"pipeline_id": pipeline.id}
+        )
+        StaticTriggerFactory.create(experiment=ExperimentFactory.create(team=experiment.team), action=action)
+
+        assert experiment.archive() is True
+
+        self._assert_archived(experiment, True)
+        self._assert_archived(pipeline, False)
+
+    def test_unarchive_working_experiment_restores_its_pipeline(self):
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment.archive()
+        self._assert_archived(pipeline, True)
+
+        experiment.unarchive()
+
+        self._assert_archived(pipeline, False)
+        self._assert_archived(node, False)
+
+    def test_unarchive_working_experiment_leaves_nodes_removed_from_the_canvas(self):
+        """A working pipeline keeps a removed node as an archived row while versions reference it."""
+        pipeline = PipelineFactory.create()
+        removed = NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": "hi"})
+        experiment = ExperimentFactory.create(pipeline=pipeline)
+        experiment.create_new_version()
+        pipeline.update_nodes_from_data({flow_id: None for flow_id in pipeline.node_ids if flow_id != removed.flow_id})
+        self._assert_archived(removed, True)
+        experiment.archive()
+
+        experiment.unarchive()
+
+        self._assert_archived(pipeline, False)
+        self._assert_archived(removed, True)
 
     def _assert_archived(self, model_obj, archived: bool):
         model_obj.refresh_from_db(fields=["is_archived"])

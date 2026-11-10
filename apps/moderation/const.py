@@ -1,8 +1,11 @@
-MODERATION_WAIT_TIMEOUT = 10
+MODERATION_WAIT_TIMEOUT = 30
 """Seconds `ModerationResultStage` waits for the moderation task after the bot has answered."""
 
 STRIKE_LIMIT = 3
 """Strikes at which a participant is blocked automatically, when the team has auto-block on."""
+
+REQUEST_TIMEOUT_SECONDS = 2
+"""Timeout for one moderation provider request."""
 
 STRIKE_CATEGORIES = frozenset(
     {

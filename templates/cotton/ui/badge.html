@@ -1,0 +1,21 @@
+{% comment %}
+Badge for a status or a count.
+
+  <c-ui.badge variant="success">Active</c-ui.badge>
+  <c-ui.badge variant="warning" size="sm" icon="fa-solid fa-ban">Disabled</c-ui.badge>
+  <c-ui.badge variant="ghost" style="outline" size="xs">{{ count }}</c-ui.badge>
+
+Params:
+  variant: primary, secondary, accent, neutral, info, success, warning, error or ghost. Empty for the default badge.
+  style: outline, soft or dash.
+  size: xs, sm, md, lg or xl.
+  icon: Font Awesome classes, rendered before the label.
+  class: extra classes, merged with the component's own.
+Anything else is passed through to the element.
+{% endcomment %}
+<c-vars variant="" style="" size="" icon="" />
+{% with variant_class=variant|yesno:"badge-,"|add:variant style_class=style|yesno:"badge-,"|add:style size_class=size|yesno:"badge-,"|add:size %}
+  {% with classes="badge "|add:variant_class|add:" "|add:style_class|add:" "|add:size_class %}
+    <span {{ attrs|with_classes:classes }}>{% if icon %}<i class="{{ icon }}"></i> {% endif %}{{ slot }}</span>
+  {% endwith %}
+{% endwith %}

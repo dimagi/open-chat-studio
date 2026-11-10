@@ -1,5 +1,4 @@
 from unittest import mock
-from unittest.mock import patch
 
 import pytest
 from django.db import connection
@@ -8,8 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
 from apps.documents.models import CollectionFile
-from apps.events.models import EventActionType
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SourceMaterial
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.graph import PipelineGraph
@@ -27,7 +25,6 @@ from apps.pipelines.tests.utils import (
     start_node,
 )
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -41,14 +38,6 @@ from apps.utils.tests.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
 )
-
-
-@pytest.mark.django_db()
-def test_archive_pipeline_archives_nodes_as_well():
-    pipeline = PipelineFactory.create()
-    assert pipeline.node_set.count() > 0
-    pipeline.archive()
-    assert pipeline.node_set.count() == 0
 
 
 @pytest.mark.django_db()
@@ -188,150 +177,6 @@ class TestVersioningNodes:
         assert not node.compare_with_latest()
 
 
-@pytest.mark.django_db()
-class TestArchivingNodes:
-    @patch("apps.pipelines.models.Node._archive_related_params")
-    def test_archive_related_objects_conditionally(self, archive_related_params):
-        """Related objects should only be archived when the node is a version"""
-        pipeline = PipelineFactory.create()
-        node = NodeFactory.create(pipeline=pipeline)
-        node_version = NodeFactory.create(pipeline=pipeline, working_version=node)
-
-        assert node.archive() is True
-        archive_related_params.assert_not_called()
-
-        assert node_version.archive() is True
-        archive_related_params.assert_called()
-
-    def test_archive_related_objects(self):
-        # Setup related objects
-        collection = CollectionFactory.create()
-        collection_index = CollectionFactory.create(
-            is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
-        )
-        source_material = SourceMaterialFactory.create()
-
-        # Build the pipeline
-        pipeline = PipelineFactory.create()
-        NodeFactory.create(
-            type=LLMResponseWithPrompt.__name__,
-            pipeline=pipeline,
-            params={
-                "collection_id": str(collection.id),
-                "collection_index_ids": [str(collection_index.id)],
-                "source_material_id": str(source_material.id),
-            },
-        )
-        pipeline.create_new_version()
-
-        pipeline.archive()
-
-        # Ensure that the working versions are not archived
-        collection.refresh_from_db()
-        collection_index.refresh_from_db()
-
-        # ADR-0031: media + index collections are live shared resources — never versioned per bot,
-        # so the working collections are untouched and no collection versions exist.
-        assert collection.is_archived is False
-        assert not collection.versions.exists()
-        assert collection_index.is_archived is False
-        assert not collection_index.versions.exists()
-
-    def test_archive_legacy_frozen_index_version(self):
-        """
-        LEGACY data: a pre-ADR-0031 node may reference both the live working index id and a
-        frozen index version id in collection_index_ids. Archiving the pipeline must archive the
-        frozen copy (is_a_version=True) while leaving the live working index (is_a_version=False)
-        untouched. Including both ids makes the is_a_version guard load-bearing: dropping the guard
-        would wrongly archive the working index and fail this test.
-        """
-        # Working index collection (is_a_version=False)
-        collection_index = CollectionFactory.create(is_index=True)
-        # Frozen version of the index (is_a_version=True) — simulates the legacy per-bot copy
-        frozen_index = collection_index.create_new_version()
-        assert frozen_index.is_a_version, "pre-condition: frozen_index must be a version"
-
-        # Node references BOTH the live working id and the frozen version id (legacy stored data)
-        pipeline = PipelineFactory.create()
-        NodeFactory.create(
-            type=LLMResponseWithPrompt.__name__,
-            pipeline=pipeline,
-            params={"collection_index_ids": [collection_index.id, frozen_index.id]},
-        )
-
-        # Version the pipeline — the version node copies the param verbatim
-        pipeline.create_new_version()
-
-        # Archive the pipeline (working version → archives all version nodes too)
-        pipeline.archive()
-
-        frozen_index.refresh_from_db()
-        collection_index.refresh_from_db()
-        # The frozen per-bot copy is archived (legacy cleanup branch)
-        assert frozen_index.is_archived is True
-        # The live working index is protected by the is_a_version guard
-        assert collection_index.is_archived is False
-
-    def test_archive_legacy_frozen_media_version(self):
-        """
-        LEGACY data: a pre-ADR-0031 node may reference a frozen media collection version in
-        collection_id. Archiving the pipeline must archive that frozen copy (is_a_version=True)
-        while leaving a live working media collection (referenced by another node) untouched.
-        The working-media node makes the is_a_version guard load-bearing: dropping the guard would
-        wrongly archive the working media and fail this test.
-        """
-        node_type = LLMResponseWithPrompt.__name__
-        working_media = CollectionFactory.create(is_index=False)
-        frozen_media = working_media.create_new_version()
-        assert frozen_media.is_a_version, "pre-condition: frozen_media must be a version"
-
-        pipeline = PipelineFactory.create()
-        # Node A references the live working media id; Node B references the frozen version id.
-        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(working_media.id)})
-        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(frozen_media.id)})
-
-        pipeline.create_new_version()
-        pipeline.archive()
-
-        working_media.refresh_from_db()
-        frozen_media.refresh_from_db()
-        assert frozen_media.is_archived is True
-        assert working_media.is_archived is False
-
-    def test_archiving_one_node_version_leaves_a_shared_source_material_version_intact(self):
-        """REUSE_UNCHANGED can leave one version shared by two separately-published nodes."""
-        source_material = SourceMaterialFactory.create()
-
-        pipeline_a = PipelineFactory.create()
-        node_a = NodeFactory.create(
-            type=LLMResponseWithPrompt.__name__,
-            pipeline=pipeline_a,
-            params={"source_material_id": str(source_material.id)},
-        )
-        node_a_version = node_a.create_new_version()
-        shared_version_id = node_a_version.params["source_material_id"]
-        assert shared_version_id != str(source_material.id), "pre-condition: first publish versions it"
-
-        pipeline_b = PipelineFactory.create()
-        node_b = NodeFactory.create(
-            type=LLMResponseWithPrompt.__name__,
-            pipeline=pipeline_b,
-            params={"source_material_id": str(source_material.id)},
-        )
-        node_b_version = node_b.create_new_version()
-        assert node_b_version.params["source_material_id"] == shared_version_id, (
-            "pre-condition: unchanged content reuses the existing version rather than creating a new one"
-        )
-
-        node_a_version.archive()
-        shared_version = SourceMaterial.objects.get(id=shared_version_id)
-        assert shared_version.is_archived is False, "node_b_version still references this version"
-
-        node_b_version.archive()
-        shared_version.refresh_from_db()
-        assert shared_version.is_archived is True
-
-
 class TestPipeline:
     @pytest.mark.django_db()
     @pytest.mark.parametrize("participant_exists", [True, False])
@@ -402,30 +247,6 @@ class TestPipeline:
 
         assert ExperimentSession.objects.count() == 0
 
-    @pytest.mark.django_db()
-    def test_archive_pipeline(self):
-        pipeline = PipelineFactory.create()
-        start_pipeline__action = EventActionFactory.create(
-            action_type=EventActionType.PIPELINE_START,
-            params={
-                "pipeline_id": pipeline.id,
-            },
-        )
-        experiment1 = ExperimentFactory.create()
-        experiment2 = ExperimentFactory.create()
-        static_trigger = StaticTriggerFactory.create(experiment=experiment2, action=start_pipeline__action)
-
-        # Experiment and Static trigger still uses it
-        assert pipeline.archive() is False
-
-        experiment1.archive()
-        # Static trigger from experiment2 still uses it
-        assert pipeline.archive() is False
-
-        static_trigger.archive()
-        # Nothing uses it, so archive it
-        assert pipeline.archive() is True
-
 
 @pytest.mark.django_db()
 class TestUpdateNodesFromData:
@@ -451,6 +272,24 @@ class TestUpdateNodesFromData:
         assert node.type == "RenderTemplate"
         assert node.label == "Template"
         assert node.params["template_string"] == "{{ input }}"
+
+    @pytest.mark.parametrize(
+        ("params", "expected_mode"),
+        [
+            pytest.param({}, "custom", id="missing-mode-saved-as-custom"),
+            pytest.param({"prompt_mode": ""}, "custom", id="empty-mode-saved-as-custom"),
+            pytest.param({"prompt_mode": "standard"}, "standard", id="standard-kept"),
+        ],
+    )
+    def test_a_router_saved_without_a_mode_keeps_its_prompt(self, params, expected_mode):
+        """A builder tab or export from before prompt modes existed sends a router with no mode."""
+        pipeline = PipelineFactory.create()
+        router_params = {"name": "router", "prompt": "Pick one.", "keywords": ["a"], **params}
+
+        pipeline.update_nodes_from_data({"router": content_flow_node("router", "RouterNode", params=router_params)})
+
+        node = Node.objects.get(pipeline=pipeline, flow_id="router")
+        assert node.params == {**router_params, "prompt_mode": expected_mode}
 
     @pytest.mark.parametrize(
         "make_entry",

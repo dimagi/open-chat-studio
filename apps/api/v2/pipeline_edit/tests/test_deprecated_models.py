@@ -64,7 +64,7 @@ def test_a_node_already_on_a_deprecated_model_stays_writable(client, chatbot, ll
     body = renamed.json()
     assert body["pipeline_valid"] is True
     assert body["pipeline_errors"] == {"node": {}, "edge": [], "pipeline": []}
-    assert body["deprecated_models"] == {node_id: {"model": "gpt-4o", "replacement": None}}
+    assert body["deprecated_models"] == {node_id: {"model": "gpt-4o", "replacement": "gpt-6-luna"}}
 
     moved = client.patch(
         node_url(chatbot, node_id),

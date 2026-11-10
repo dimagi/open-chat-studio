@@ -19,8 +19,9 @@ class ParticipantFilter(MultiColumnFilter):
             label="Name/Identifier",
             columns=["identifier", "name"],  # OR search across both fields
             query_param="participant",
+            allow_any_of=True,
         ),
-        StringColumnFilter(label="Remote ID", columns=["remote_id"], query_param="remote_id"),
+        StringColumnFilter(label="Remote ID", columns=["remote_id"], query_param="remote_id", allow_any_of=True),
         ChannelsFilter(column="platform"),
         ParticipantBlockedFilter(
             query_param="blocked",

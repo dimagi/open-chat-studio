@@ -65,6 +65,7 @@ from apps.evaluations.utils import build_trend_data, filter_aggregates_for_displ
 from apps.experiments.models import Experiment
 from apps.generics import actions
 from apps.generics.actions import chip_action
+from apps.generics.tables import TemplateColumn
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
@@ -725,7 +726,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
     def get_column(self, key):
         if key in self.categorical_column_keys:
             column = next(c for c in self.categorical_columns if c.column_key == key)
-            return columns.TemplateColumn(
+            return TemplateColumn(
                 template_name="evaluations/components/category_badge_column.html",
                 verbose_name=column.field_label,
                 orderable=False,
@@ -737,7 +738,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
             # A free-text evaluator field (e.g. reasoning) can run just as long as the
             # dataset input/generated response below, so it gets the same clamp. Sortable,
             # same as the plain Column this replaces - only the rendering changes.
-            return columns.TemplateColumn(
+            return TemplateColumn(
                 template_name="evaluations/components/truncated_text_column.html",
                 verbose_name=dynamic_labels[key],
             )
@@ -746,7 +747,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
             case "#":
                 # Data is stored 0-based (see build_evaluation_table_data); shown 1-based so
                 # a row's table number matches the "#N" heading in its detail panel.
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_code=(
                         '<span class="inline-flex items-center gap-1.5">{{ value|add:1 }}'
                         "{% if record.has_error %}"
@@ -791,7 +792,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     attrs={"td": {"onclick": "event.stopPropagation()"}},
                 )
             case "Session Preview":
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_name="evaluations/components/truncated_text_column.html",
                     verbose_name="Preview",
                 )
@@ -799,12 +800,12 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                 # Clamped to 2 lines - these are free-text dataset/model output and can run
                 # arbitrarily long, which would otherwise blow out every row's height. The
                 # full text is still one click away in the detail panel.
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_name="evaluations/components/truncated_text_column.html",
                     verbose_name=key,
                 )
             case "Cost":
-                return columns.TemplateColumn(
+                return TemplateColumn(
                     template_code=(
                         "{% load cost_tracking %}"
                         "{% if value is not None %}${{ value|cost_display }}{% else %}—{% endif %}"
@@ -813,6 +814,15 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
                     orderable=False,
                 )
         return columns.Column(verbose_name=key)
+
+
+def _judged_responses(results: list[EvaluationResult]) -> list[dict]:
+    # Only evaluators with `span_as_response` write `judged_response`; the rest judge the reply itself.
+    return [
+        {"evaluator_name": result.evaluator.name, "value": result.output.get("judged_response")}
+        for result in results
+        if result.output.get("judged_response") is not None
+    ]
 
 
 class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMixin, View):
@@ -909,6 +919,7 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
             "dataset_input": row.get("Dataset Input"),
             "dataset_output": row.get("Dataset Output"),
             "generated_response": row.get("Generated Response"),
+            "judged_responses": _judged_responses(results),
             "badges": badges,
             "text_fields": text_fields,
             "tokens": row.get("Tokens"),

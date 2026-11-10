@@ -26,12 +26,13 @@ from apps.api.v2.inspect.nodes import (
     nodes_in_render_order,
 )
 from apps.api.v2.inspect.param_serializers import node_params_schema
+from apps.api.v2.triggers.params_reference import SERVER_SET_PARAMS
 from apps.api.v2.utils import parse_custom_actions
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
 from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
-from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
+from apps.events.models import EventAction, EventActionType, ScheduledTrigger, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.build_state import pipeline_build_state
@@ -40,10 +41,6 @@ from apps.utils.fields import as_int
 
 if TYPE_CHECKING:
     from apps.custom_actions.schema_utils import APIOperationDetails
-
-
-# Cadence keys exposed for a ``schedule_trigger`` action (resolved Q3).
-_CADENCE_KEYS = ("name", "frequency", "time_period", "repetitions", "prompt_text")
 
 
 @extend_schema_serializer(component_name="InspectFile")
@@ -630,13 +627,15 @@ class InspectTriggerActionSerializer(_TeamContextMixin, serializers.ModelSeriali
     # extension marks it optional (see ``_ConditionalRequiredSchemaMixin``).
     CONDITIONAL_RESPONSE_KEYS = ("pipeline",)
 
-    params = serializers.SerializerMethodField(help_text="Action parameters; keys depend on the action ``type``.")
+    params = serializers.SerializerMethodField(
+        help_text="Action parameters, as the trigger write endpoints take them; keys depend on `action_type`."
+    )
     pipeline = serializers.SerializerMethodField()
 
     class Meta:
         model = EventAction
-        fields = ["type", "params", "pipeline"]
-        extra_kwargs = {"type": {"help_text": "What the trigger runs", "source": "action_type"}}
+        fields = ["action_type", "params", "pipeline"]
+        extra_kwargs = {"action_type": {"help_text": "What the trigger runs"}}
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -646,12 +645,7 @@ class InspectTriggerActionSerializer(_TeamContextMixin, serializers.ModelSeriali
 
     @extend_schema_field(serializers.DictField())
     def get_params(self, action) -> dict:
-        params = dict(action.params or {})
-        if action.action_type == EventActionType.SCHEDULETRIGGER:
-            return {"scheduled_message": {key: params.get(key) for key in _CADENCE_KEYS}}
-        if action.action_type == EventActionType.PIPELINE_START:
-            params.pop("pipeline_id", None)
-        return params
+        return {key: value for key, value in (action.params or {}).items() if key not in SERVER_SET_PARAMS}
 
     @extend_schema_field(InspectPipelineSerializer(required=False))
     def get_pipeline(self, action):
@@ -680,9 +674,7 @@ class InspectStaticTriggerSerializer(serializers.ModelSerializer):
 
 
 class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
-    delay_seconds = serializers.IntegerField(
-        source="delay", help_text="Seconds of inactivity before the trigger fires."
-    )
+    delay = serializers.IntegerField(help_text="Seconds of inactivity before the trigger fires.")
     total_num_triggers = serializers.IntegerField(
         help_text="Maximum number of times this timeout fires within a session."
     )
@@ -693,19 +685,54 @@ class InspectTimeoutTriggerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TimeoutTrigger
-        fields = ["id", "delay_seconds", "total_num_triggers", "trigger_from_first_message", "is_active", "action"]
+        fields = ["id", "delay", "total_num_triggers", "trigger_from_first_message", "is_active", "action"]
+
+
+class InspectScheduledTriggerSerializer(serializers.ModelSerializer):
+    action = InspectTriggerActionSerializer()
+
+    class Meta:
+        model = ScheduledTrigger
+        fields = [
+            "id",
+            "trigger_date",
+            "trigger_time",
+            "timezone",
+            "active_session_window_days",
+            "scheduled_at",
+            "fired_at",
+            "is_active",
+            "action",
+        ]
+        extra_kwargs = {
+            "trigger_date": {"help_text": "The date the trigger fires on (YYYY-MM-DD), in `timezone`."},
+            "trigger_time": {"help_text": "The time the trigger fires at (HH:MM:SS), in `timezone`."},
+            "timezone": {"help_text": "The IANA timezone name the date and time are in, e.g. `Africa/Nairobi`."},
+            "active_session_window_days": {
+                "help_text": (
+                    "Fire only for sessions with participant activity in this many past days. Null fires "
+                    "for every open session."
+                )
+            },
+            "scheduled_at": {"help_text": "When the trigger fires, in UTC."},
+            "fired_at": {
+                "help_text": "When the trigger fired, or null if it has not. Changing the schedule resets it."
+            },
+        }
 
 
 class InspectEventsSerializer(serializers.Serializer):
-    """A chatbot's static and timeout triggers, excluding archived ones.
+    """A chatbot's static, timeout and scheduled triggers, excluding archived ones.
 
     ``static_triggers`` fire on conversation events (start, end, a new message, …); ``timeout_triggers``
     fire after a period of inactivity. The two overlap at the end of a conversation: a ``last_timeout``
-    static trigger fires once the final timeout has elapsed.
+    static trigger fires once the final timeout has elapsed. ``scheduled_triggers`` fire once, at a set
+    date and time, for the published version's open sessions.
     """
 
     static_triggers = serializers.SerializerMethodField()
     timeout_triggers = serializers.SerializerMethodField()
+    scheduled_triggers = serializers.SerializerMethodField()
 
     @extend_schema_field(InspectStaticTriggerSerializer(many=True))
     def get_static_triggers(self, experiment) -> list:
@@ -716,6 +743,11 @@ class InspectEventsSerializer(serializers.Serializer):
     def get_timeout_triggers(self, experiment) -> list:
         triggers = [t for t in experiment.timeout_triggers.all() if not t.is_archived]
         return InspectTimeoutTriggerSerializer(triggers, many=True, context=self.context).data
+
+    @extend_schema_field(InspectScheduledTriggerSerializer(many=True))
+    def get_scheduled_triggers(self, experiment) -> list:
+        triggers = [t for t in experiment.scheduled_triggers.all() if not t.is_archived]
+        return InspectScheduledTriggerSerializer(triggers, many=True, context=self.context).data
 
 
 # ── Root (ADR-0024) ──────────────────────────────────────────────────────────────────────────────

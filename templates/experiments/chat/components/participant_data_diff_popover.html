@@ -16,7 +16,7 @@
           <i class="fa-solid fa-code-compare mr-1"></i> Participant data changes
         </h4>
         <div class="space-y-1 max-h-48 overflow-y-auto">
-          {% include "generic/components/participant_data_diff_changes.html" with changes=changes text_size="text-xs" %}
+          <c-app.participant-data-diff-changes :changes="changes" text_size="text-xs" />
         </div>
       </div>
     </div>

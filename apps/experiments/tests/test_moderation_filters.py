@@ -82,9 +82,7 @@ def test_moderation_status_filter(sessions, operator, value, expected):
         pytest.param(Operators.ANY_OF, "false", ["flagged", "passed"], id="any-of-no-rule-fired"),
         pytest.param(Operators.ANY_OF, "true~false", ["flagged", "skipped", "passed", "unmoderated"], id="any-of-both"),
         pytest.param(Operators.EXCLUDES, "true", ["flagged", "passed"], id="excludes-rule-fired"),
-        pytest.param(
-            Operators.EXCLUDES, "true~false", ["flagged", "skipped", "passed", "unmoderated"], id="excludes-both"
-        ),
+        pytest.param(Operators.EXCLUDES, "true~false", [], id="excludes-both"),
     ],
 )
 def test_rule_hit_filter(sessions, operator, value, expected):

@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.lookups import get_working_chatbot
-from apps.api.v2.write.base import ChatbotCompositionPermission
+from apps.api.v2.write.base import CHATBOT_ID, ChatbotCompositionPermission
 from apps.experiments.models import Experiment
 from apps.experiments.services import publish_version
 from apps.experiments.tasks import start_version_creation
@@ -36,9 +36,6 @@ from .serializers import (
     VersionStatusSerializer,
 )
 
-CHATBOT_ID = OpenApiParameter(
-    name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
-)
 VERSION_NUMBER = OpenApiParameter(
     name="version_number",
     type=OpenApiTypes.INT,

@@ -486,7 +486,11 @@ class DashboardService:
         trunc_func = self._get_trunc_function(granularity)
 
         avg_response_stats = (
-            Trace.objects.filter(session__in=sessions)
+            Trace.objects.filter(
+                session__in=sessions,
+                timestamp__gte=querysets["start_date"],
+                timestamp__lt=querysets["end_date"],
+            )
             .annotate(period=trunc_func("timestamp"))
             .values("period")
             .annotate(avg_duration_ms=Avg("duration"))

@@ -81,6 +81,7 @@ FILTER_TABLES = pytest.mark.parametrize(
         ),
         pytest.param(Operators.EXCLUDES, "true", ["not_blocked", "other_team_block"], id="excludes-blocked"),
         pytest.param(Operators.EXCLUDES, "false", ["blocked", "blocked_again"], id="excludes-not-blocked"),
+        pytest.param(Operators.EXCLUDES, "true~false", [], id="excludes-both"),
         pytest.param(
             Operators.ALL_OF,
             "true",

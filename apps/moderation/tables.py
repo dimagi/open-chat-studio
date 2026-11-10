@@ -1,12 +1,13 @@
 from django.conf import settings
 from django.urls import reverse
-from django.utils.html import format_html
 from django.utils.http import urlencode
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 from django_tables2 import columns, tables
 
 from apps.generics import actions
+from apps.generics.chips import Chip
+from apps.generics.components import render_component
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.teams.utils import section_url
 
@@ -48,7 +49,7 @@ class DeniedParticipantTable(tables.Table):
 
     def render_participant(self, record):
         url = reverse("participants:single-participant-home", args=[self.request.team.slug, record.participant_id])
-        return format_html('<a class="link link-hover font-semibold" href="{}">{}</a>', url, record.participant)
+        return render_component("ui.chip", chip=Chip(label=str(record.participant), url=url), truncate=True)
 
     def render_blocked_by(self, record):
         return blocked_by_label(record)

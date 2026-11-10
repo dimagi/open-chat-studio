@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0094_moderationprovider'),
+        ('service_providers', '0096_moderationprovider'),
         ('teams', '0019_team_exportable_experiments'),
     ]
 
@@ -16,11 +16,6 @@ class Migration(migrations.Migration):
             model_name='team',
             name='auto_block_enabled',
             field=models.BooleanField(db_default=False, default=False, help_text='When set, participants who reach the strike limit are blocked automatically.'),
-        ),
-        migrations.AddField(
-            model_name='team',
-            name='moderation_deleted_provider_name',
-            field=models.CharField(blank=True, db_default='', default='', help_text='Name of the selected moderation provider, if it was deleted. Cleared when a provider is selected.', max_length=255),
         ),
         migrations.AddField(
             model_name='team',

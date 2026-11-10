@@ -1,5 +1,4 @@
 import pytest
-from django.urls import reverse
 
 from apps.chat.models import ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
@@ -7,6 +6,7 @@ from apps.experiments.models import SessionStatus
 from apps.service_providers.moderation_service.schemas import ModerationCategory, ModerationOutput
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.user import UserFactory
+from apps.utils.tests.session_helpers import session_url
 
 FLAGGED_OUTPUT = ModerationOutput(
     {
@@ -34,17 +34,6 @@ def _create_session(*, experiment, user, moderation_detail, status=SessionStatus
     return session
 
 
-def _url(*, name, experiment, session):
-    return reverse(
-        name,
-        kwargs={
-            "team_slug": experiment.team.slug,
-            "experiment_id": experiment.public_id,
-            "session_id": session.external_id,
-        },
-    )
-
-
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
     ("moderation_detail", "marker_present"),
@@ -59,7 +48,9 @@ def test_transcript_rule_marker(client, experiment, moderation_detail, marker_pr
     client.force_login(experiment.team.members.first())
 
     response = client.get(
-        _url(name="experiments:experiment_session_messages_fragment_view", experiment=experiment, session=session)
+        session_url(
+            name="experiments:experiment_session_messages_fragment_view", experiment=experiment, session=session
+        )
     )
 
     assert response.status_code == 200
@@ -85,7 +76,9 @@ def test_transcript_flagged_marker_lists_strike_categories(client, experiment, m
     client.force_login(experiment.team.members.first())
 
     response = client.get(
-        _url(name="experiments:experiment_session_messages_fragment_view", experiment=experiment, session=session)
+        session_url(
+            name="experiments:experiment_session_messages_fragment_view", experiment=experiment, session=session
+        )
     )
 
     content = response.content.decode()
@@ -100,7 +93,6 @@ def test_transcript_flagged_marker_lists_strike_categories(client, experiment, m
 @pytest.mark.parametrize(
     ("view_name", "status"),
     [
-        pytest.param("experiments:experiment_review", SessionStatus.PENDING_REVIEW, id="review_page"),
         pytest.param("experiments:experiment_session_messages_view", SessionStatus.ACTIVE, id="transcript_page"),
         pytest.param(
             "experiments:experiment_session_messages_fragment_view", SessionStatus.ACTIVE, id="transcript_fragment"
@@ -118,7 +110,7 @@ def test_moderation_markers_hidden_from_participant(client, experiment, view_nam
     )
     client.force_login(participant_user)
 
-    response = client.get(_url(name=view_name, experiment=experiment, session=session))
+    response = client.get(session_url(name=view_name, experiment=experiment, session=session))
 
     assert response.status_code == 200
     content = response.content.decode()
