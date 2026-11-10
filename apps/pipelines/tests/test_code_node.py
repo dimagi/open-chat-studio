@@ -613,14 +613,13 @@ def test_block_participant_uses_the_repository():
     repo = InMemoryPipelineRepository()
     node = CodeNode(name="test", node_id="123", django_node=None, code=BLOCK_PARTICIPANT_CODE)
     node._repo = repo
-    state = PipelineState(
-        outputs={}, experiment_session=ExperimentSessionFactory.build(), last_node_input="hi", node_inputs=["hi"]
-    )
+    session = ExperimentSessionFactory.build()
+    state = PipelineState(outputs={}, experiment_session=session, last_node_input="hi", node_inputs=["hi"])
 
     output = node._process(state, NodeContext(state))
 
     assert output.update["messages"][-1] == "True False"  # ty: ignore[not-subscriptable]
-    assert repo.blocked_reason == "Repeated threats"
+    assert repo.block_reasons == {session.participant_id: "Repeated threats"}
 
 
 @pytest.mark.parametrize(
@@ -647,7 +646,7 @@ def test_block_participant_errors(code, session, error):
 
     with pytest.raises(CodeNodeRunError, match=error):
         node._process(state, NodeContext(state))
-    assert repo.blocked_reason is None
+    assert repo.block_reasons == {}
 
 
 @pytest.mark.django_db()
