@@ -56,7 +56,7 @@ version section when a release is cut.
 <!-- Changes to the shape of a deployment: process types, Celery queues,
      backing-service versions, resource requirements, new external
      dependencies. -->
-- Abuse detection (`flag_abuse_detection`) runs a `moderate_message` task on the
+- Message moderation runs a `moderate_message` task on the
   `background` queue while the chat task that started it waits up to 30 seconds
   for the result. A worker must be serving the `background` queue. A single
   worker that serves both queues must run more than one task at a time (for
