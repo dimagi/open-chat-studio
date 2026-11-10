@@ -25,6 +25,7 @@ import {
   AuthTokenProvider,
   ChatConsent,
   ConsentRequiredError,
+  ParticipantBlockedError,
 } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
@@ -318,6 +319,8 @@ export class OcsChat {
   @State() isFullscreen: boolean = false;
   @State() showNewChatConfirmation: boolean = false;
   @State() sessionEnded: boolean = false;
+  /** The server refused a start, send or upload because the participant is blocked. */
+  @State() participantBlocked: boolean = false;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -511,17 +514,21 @@ export class OcsChat {
   }
 
   /** Notices carry the browser's clock, so they are kept out of the polling cursor. */
-  private addNotice(content: string): void {
+  private addNotice(content: string, { persist = true, plainText = false }: { persist?: boolean; plainText?: boolean } = {}): ChatMessage {
     const notice: ChatMessage = {
       created_at: new Date().toISOString(),
       role: 'system',
       content,
       attachments: [],
       local: true,
+      ...(plainText && { plainText: true }),
     };
     this.messages = [...this.messages, notice];
-    this.saveSessionToStorage();
+    if (persist) {
+      this.saveSessionToStorage();
+    }
     this.scrollToBottom();
+    return notice;
   }
 
   /** A server copy of a user message replaces the optimistic bubble with the same text instead of repeating it. */
@@ -555,6 +562,14 @@ export class OcsChat {
     return undefined;
   }
 
+  /** Clear the loading, typing and upload indicators that lock the composer. */
+  private resetBusyState(): void {
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.typingProgressMessage = '';
+  }
+
   /**
    * Recover from a rejected session token (403). Unbound widgets discard the
    * dead session/token, show a notice, and start fresh on the next send; bound
@@ -562,10 +577,7 @@ export class OcsChat {
    */
   private handleSessionAccessError(): void {
     this.cleanup();
-    this.isLoading = false;
-    this.isTyping = false;
-    this.isUploadingFiles = false;
-    this.typingProgressMessage = '';
+    this.resetBusyState();
 
     // Session-scoped, so it clears for a bound session too: the panel cannot act without
     // a session, and it covers the error. The stored acceptance stays, so a fresh session
@@ -650,14 +662,35 @@ export class OcsChat {
     }
   }
 
+  /**
+   * Show the server's blocked notice and lock the widget, with no way to retry or start a
+   * new chat. An unbound widget discards its stored session, so a reload starts a new one,
+   * which the server refuses again. The notice is not stored.
+   */
+  private handleParticipantBlocked(error: ParticipantBlockedError): void {
+    this.cleanup();
+    this.resetBusyState();
+    this.participantBlocked = true;
+    this.showNewChatConfirmation = false;
+    this.messageInput = '';
+    this.selectedFiles = [];
+    this.consent = undefined;
+    this.heldMessage = undefined;
+    this.sessionEpoch += 1;
+    if (!this.isSessionBound()) {
+      this.activeSessionId = undefined;
+      this.applySessionToken(undefined);
+      this.clearSessionStorage();
+    }
+    const notice = error.detail || this.translationManager.get('status.participantBlocked', 'You can no longer send messages to this chatbot.');
+    // The wording comes from the server, so it is not rendered as markdown.
+    this.addNotice(notice, { persist: false, plainText: true });
+  }
+
   private handleError(errorText: string): void {
     // show as system message
     this.addErrorMessage(errorText);
-
-    // Clear any loading/typing states
-    this.isLoading = false;
-    this.isTyping = false;
-    this.isUploadingFiles = false;
+    this.resetBusyState();
     this.currentPollTaskId = '';
   }
 
@@ -870,6 +903,10 @@ export class OcsChat {
         this.handleError(error.message);
         return;
       }
+      if (error instanceof ParticipantBlockedError) {
+        this.handleParticipantBlocked(error);
+        return;
+      }
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
@@ -930,6 +967,9 @@ export class OcsChat {
       if (uploadResult.consent) {
         throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
       }
+      if (uploadResult.participantBlocked) {
+        throw new ParticipantBlockedError(uploadResult.participantBlocked.detail);
+      }
       if (uploadResult.tokenRejected) {
         throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
       }
@@ -943,7 +983,7 @@ export class OcsChat {
     // Block sending when the widget is disabled so direct calls cannot bypass
     // the hidden composer.
     if (this.disabled) return;
-    if (!message.trim() || this.sessionEnded) return;
+    if (!message.trim() || this.isConversationClosed()) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
@@ -1072,7 +1112,7 @@ export class OcsChat {
 
   /**
    * A consent refusal keeps the session and puts the send back the way it was, so accepting
-   * retries it whole. A token refusal ends the session. Anything else is reported as is.
+   * retries it whole. A block or token refusal ends the session. Anything else is reported as is.
    */
   private handleSendFailure(error: unknown, message: string, optimisticMessage: ChatMessage | undefined, filesBeforeSend: SelectedFile[]): void {
     if (error instanceof ConsentRequiredError) {
@@ -1083,6 +1123,11 @@ export class OcsChat {
         this.selectedFiles = filesBeforeSend;
       }
       this.holdForConsent(message);
+      return;
+    }
+    if (error instanceof ParticipantBlockedError) {
+      this.dropOptimisticUserMessage(optimisticMessage);
+      this.handleParticipantBlocked(error);
       return;
     }
     if (error instanceof SessionAccessError) {
@@ -1347,7 +1392,7 @@ export class OcsChat {
   }
 
   private startMessagePolling(): void {
-    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded) {
+    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded || this.participantBlocked) {
       return;
     }
 
@@ -2220,6 +2265,7 @@ export class OcsChat {
     this.messages = [];
     this.isTyping = false;
     this.sessionEnded = false;
+    this.participantBlocked = false;
     this.currentPollTaskId = '';
     // The stored acceptance stays: consent memory follows the persistence store, not the session.
     this.consent = undefined;
@@ -2278,8 +2324,13 @@ export class OcsChat {
     );
   }
 
+  /** The session has ended or the participant is blocked; no further messages can be sent. */
+  private isConversationClosed(): boolean {
+    return this.sessionEnded || this.participantBlocked;
+  }
+
   private isComposerLocked(): boolean {
-    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded;
+    return this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.isConversationClosed();
   }
 
   private hasDraft(): boolean {
@@ -2288,7 +2339,7 @@ export class OcsChat {
 
   // Uploading keeps the send button styled as ready while it is disabled, so its label can say so.
   private isSendReady(): boolean {
-    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && this.hasDraft();
+    return !this.isReadOnly() && !this.isTyping && !this.isLoading && !this.isConversationClosed() && this.hasDraft();
   }
 
   private renderAttachmentControls() {
@@ -2349,6 +2400,13 @@ export class OcsChat {
     );
   }
 
+  private composerPlaceholder(): string {
+    if (!this.isConversationClosed()) {
+      return this.translationManager.get('composer.placeholder');
+    }
+    return this.translationManager.get(this.participantBlocked ? 'status.participantBlocked' : 'status.chatEnded');
+  }
+
   private renderComposer() {
     return (
       <div class="input-container">
@@ -2356,7 +2414,7 @@ export class OcsChat {
           ref={el => (this.textareaRef = el)}
           class="message-textarea"
           rows={1}
-          placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
+          placeholder={this.composerPlaceholder()}
           value={this.messageInput}
           onInput={e => this.handleInputChange(e)}
           onKeyPress={e => this.handleKeyPress(e)}
@@ -2375,7 +2433,7 @@ export class OcsChat {
   }
 
   private renderMessageContent(message: ChatMessage) {
-    if (message.role === 'user') {
+    if (message.role === 'user' || message.plainText) {
       return <div class="chat-plain-text">{message.content}</div>;
     }
     return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
@@ -2442,8 +2500,8 @@ export class OcsChat {
                 </div>
                 <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
                 <div class="header-buttons">
-                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) */}
-                  {this.messages.length > 0 && !this.isSessionBound() && (
+                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) and for a blocked participant */}
+                  {this.messages.length > 0 && !this.isSessionBound() && !this.participantBlocked && (
                     <button
                       class="header-button"
                       onClick={() => this.showConfirmationDialog()}
