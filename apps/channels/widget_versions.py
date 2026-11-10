@@ -1,6 +1,6 @@
 """Single source of truth for chat widget version policy.
 
-Update LATEST_VERSION in the same PR that publishes a new widget release.
+Update LATEST_VERSION in a separate PR after the new widget release is on npm.
 Add a WidgetDeprecation entry to deprecate old versions. See
 docs/developer_guides/widget_versioning.md for the full process.
 """
