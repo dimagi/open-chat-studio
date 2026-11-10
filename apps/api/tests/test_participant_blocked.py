@@ -23,6 +23,14 @@ def experiment(db):
     return ExperimentFactory.create(team=TeamWithUsersFactory.create())
 
 
+@pytest.fixture()
+def blocked_member(experiment):
+    """A team member who is blocked as an API participant."""
+    user = experiment.team.members.first()
+    _block(experiment.team, user.email, ChannelPlatform.API, user=user)
+    return user
+
+
 def _block(team, identifier, platform, user=None):
     DeniedParticipantFactory.create(
         team=team, participant__identifier=identifier, participant__platform=platform, participant__user=user
@@ -47,17 +55,18 @@ def _start_widget_session(client, experiment, user):
     )
 
 
+def _assert_refused_without_a_session(response, experiment):
+    assert response.status_code == 403
+    assert response.json() == BLOCKED_BODY
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+
+
 @pytest.mark.django_db()
 class TestWidgetStartSession:
-    def test_blocked_participant_gets_403(self, client, experiment):
-        user = experiment.team.members.first()
-        _block(experiment.team, user.email, ChannelPlatform.API, user=user)
+    def test_blocked_participant_gets_403(self, client, experiment, blocked_member):
+        response = _start_widget_session(client, experiment, blocked_member)
 
-        response = _start_widget_session(client, experiment, user)
-
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+        _assert_refused_without_a_session(response=response, experiment=experiment)
 
 
 @pytest.mark.django_db()
@@ -67,9 +76,7 @@ class TestApiSessionCreate:
 
         response = _create_api_session(experiment, "jack bean")
 
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+        _assert_refused_without_a_session(response=response, experiment=experiment)
 
 
 @pytest.mark.django_db()
@@ -99,10 +106,8 @@ class TestTriggerBot:
 
         response = self._post(experiment, url_name)
 
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
+        _assert_refused_without_a_session(response=response, experiment=experiment)
         trigger_bot_message_task.delay_on_commit.assert_not_called()
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
 
 
 @pytest.mark.django_db()
@@ -133,16 +138,11 @@ class TestApiNewMessage:
             content_type="application/json",
         )
 
-    def test_blocked_participant_gets_403(self, process_input, experiment):
-        user = experiment.team.members.first()
-        _block(experiment.team, user.email, ChannelPlatform.API, user=user)
+    def test_blocked_participant_gets_403(self, process_input, experiment, blocked_member):
+        response = self._send(experiment, blocked_member)
 
-        response = self._send(experiment, user)
-
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
+        _assert_refused_without_a_session(response=response, experiment=experiment)
         process_input.assert_not_called()
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
 
 
 @pytest.mark.django_db()
