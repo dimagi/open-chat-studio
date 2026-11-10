@@ -75,6 +75,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-haiku-5-5", 1000000, parameters=ClaudeOpus55Parameters),
         Model("claude-opus-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
+        Model("claude-fable-5-2", 1000000, parameters=ClaudeOpus47Parameters),
         Model("claude-fable-5-1", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-fable-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-opus-4-8", k(1000), parameters=ClaudeOpus47Parameters),
@@ -157,6 +158,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "minimax": [
         Model("MiniMax-M3", k(1000), is_default=True),
+        # MiniMax takes `reasoning_effort` on Chat Completions, but OpenAIGenericService sends effort as
+        # `reasoning`, which that endpoint rejects, so effort is not exposed. MiniMax defaults it to `max`.
+        Model("MiniMax-M3.1-Flash", 1000000),
         # MiniMax retires the M2.7 and M2.5 families on 2026-11-18.
         Model("MiniMax-M2.7", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
