@@ -3299,6 +3299,7 @@ components:
           type: string
         size:
           type: integer
+          nullable: true
         content_url:
           type: string
           format: uri
