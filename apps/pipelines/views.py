@@ -266,6 +266,16 @@ def pipeline_data(request, team_slug: str, pk: int):
     )
 
 
+def _revision_conflict(pipeline: Pipeline) -> JsonResponse:
+    return JsonResponse(
+        {
+            "error": "Conflict: pipeline was modified by another session.",
+            "current_revision": pipeline.edit_revision,
+        },
+        status=409,
+    )
+
+
 def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
     """Handle full-graph POST saves (backward-compatible)."""
     try:
@@ -275,8 +285,12 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
 
     with transaction.atomic():
         pipeline = get_object_or_404(
-            Pipeline.objects.prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team
+            Pipeline.objects.select_for_update().prefetch_related(*NODE_RESOURCE_PREFETCHES),
+            pk=pk,
+            team=request.team,
         )
+        if data.base_revision is not None and data.base_revision != pipeline.edit_revision:
+            return _revision_conflict(pipeline)
         pipeline.name = data.name
         edge_data, node_data = split_flow_data(data.data)
         pipeline.data = edge_data.model_dump()
@@ -315,13 +329,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         )
 
         if patch.base_revision != pipeline.edit_revision:
-            return JsonResponse(
-                {
-                    "error": "Conflict: pipeline was modified by another session.",
-                    "current_revision": pipeline.edit_revision,
-                },
-                status=409,
-            )
+            return _revision_conflict(pipeline)
 
         if patch.name is not None:
             pipeline.name = patch.name
