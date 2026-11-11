@@ -137,10 +137,16 @@ def _refusal_block(block: object) -> str:
         return ""
     # langchain-core wraps provider-specific blocks, which is how a Responses API refusal arrives
     value = block.get("value") if block.get("type") == "non_standard" else block
-    if isinstance(value, dict) and value.get("type") == "refusal":
+    if isinstance(value, dict) and value.get("type") == "refusal" and not _is_google_filter(value):
         refusal = value.get("refusal", "")
         return refusal if isinstance(refusal, str) else ""
     return ""
+
+
+def _is_google_filter(block: dict) -> bool:
+    """langchain-core reports a Gemini filter stop as a refusal block; it is a content filter, not a refusal."""
+    extras = block.get("extras") or {}
+    return extras.get("finish_reason") in GOOGLE_FILTER_REASONS or bool(extras.get("block_reason"))
 
 
 def _prompt_block_reason(metadata: dict) -> int | str | None:
