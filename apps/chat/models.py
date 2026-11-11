@@ -205,6 +205,21 @@ def _file_matches(file: File, ids: set[str], external_ids: set[str]) -> bool:
     return str(file.id) in ids or bool(file.external_id and file.external_id in external_ids)
 
 
+def _attached_files_by_chat(chat_ids: set[int], ids: set[str], external_ids: set[str]) -> dict[int, list[File]]:
+    """The files among ``ids`` and ``external_ids`` attached to each of ``chat_ids``, in one query."""
+    files_by_chat: dict[int, list[File]] = defaultdict(list)
+    if not (ids or external_ids):
+        return files_by_chat
+    files = (
+        File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat_id__in=chat_ids)
+        .annotate(attached_chat_id=F("chatattachment__chat_id"))
+        .distinct()
+    )
+    for file in files:
+        files_by_chat[file.attached_chat_id].append(file)
+    return files_by_chat
+
+
 class ChatMessage(UpdatedAtOnPartialSaveMixin, BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
@@ -410,18 +425,8 @@ class ChatMessage(UpdatedAtOnPartialSaveMixin, BaseModel, TaggedModelMixin, User
         all_ids = set().union(*(ids for ids, _ in message_file_ids.values()))
         all_external_ids = set().union(*(external_ids for _, external_ids in message_file_ids.values()))
 
-        files_by_chat: dict[int, list[File]] = defaultdict(list)
-        if all_ids or all_external_ids:
-            files = (
-                File.objects.filter(
-                    Q(id__in=all_ids) | Q(external_id__in=all_external_ids),
-                    chatattachment__chat_id__in={message.chat_id for message in saved_messages},
-                )
-                .annotate(attached_chat_id=F("chatattachment__chat_id"))
-                .distinct()
-            )
-            for file in files:
-                files_by_chat[file.attached_chat_id].append(file)
+        chat_ids = {message.chat_id for message in saved_messages}
+        files_by_chat = _attached_files_by_chat(chat_ids, all_ids, all_external_ids)
 
         for message in saved_messages:
             ids, external_ids = message_file_ids[message.pk]
