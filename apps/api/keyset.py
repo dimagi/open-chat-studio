@@ -14,13 +14,17 @@ from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import ValidationError
 
 
-def encode_cursor(row) -> str:
-    """The cursor that resumes after ``row``."""
+def encode_cursor(row, scope: str | None = None) -> str:
+    """The cursor that resumes after ``row``, tied to ``scope`` when one is given."""
     keyset = {"updated_at": row.updated_at.isoformat(), "id": row.id}
+    if scope:
+        keyset["scope"] = scope
     return base64.b64encode(json.dumps(keyset).encode()).decode()
 
 
-def decode_cursor(cursor: str) -> tuple[datetime, int]:
+def decode_cursor(cursor: str, scope: str | None = None) -> tuple[datetime, int]:
+    """The cursor's position. With ``scope``, a cursor issued for another scope is refused: rows of the
+    new selection can lie before its position."""
     try:
         keyset = json.loads(base64.b64decode(cursor))
         updated_at = parse_datetime(keyset["updated_at"])
@@ -29,14 +33,16 @@ def decode_cursor(cursor: str) -> tuple[datetime, int]:
         raise ValidationError("Invalid pagination cursor.") from e
     if updated_at is None:
         raise ValidationError("Invalid pagination cursor.")
+    if scope is not None and keyset.get("scope") != scope:
+        raise ValidationError("This cursor was issued for different filters. Start again without a cursor.")
     return updated_at, row_id
 
 
-def keyset_page(queryset: QuerySet, cursor: str | None, limit: int) -> tuple[list, bool]:
+def keyset_page(queryset: QuerySet, cursor: str | None, limit: int, scope: str | None = None) -> tuple[list, bool]:
     """The rows after ``cursor`` in ``(updated_at, id)`` order, at most ``limit``, and whether more follow."""
     queryset = queryset.order_by("updated_at", "id")
     if cursor:
-        updated_at, row_id = decode_cursor(cursor)
+        updated_at, row_id = decode_cursor(cursor, scope)
         queryset = queryset.filter(Q(updated_at__gt=updated_at) | Q(updated_at=updated_at, id__gt=row_id))
     rows = list(queryset[: limit + 1])
     return rows[:limit], len(rows) > limit

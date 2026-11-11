@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
@@ -39,13 +41,27 @@ class SyncView(APIView):
 
     def page(self, queryset, params, serializer_class) -> Response:
         queryset = queryset.filter(updated_at__lte=timezone.now() - SYNC_SETTLE_WINDOW)
-        rows, has_more = keyset_page(queryset, params.get("cursor"), params["limit"])
-        cursor = encode_cursor(rows[-1]) if rows else params.get("cursor")
+        scope = self.selection(params)
+        rows, has_more = keyset_page(queryset, params.get("cursor"), params["limit"], scope)
+        cursor = encode_cursor(rows[-1], scope) if rows else params.get("cursor")
         results = serializer_class(self.prepare(rows), many=True, context={"request": self.request}).data
         return Response({"cursor": cursor, "has_more": has_more, "results": results})
 
     def prepare(self, rows: list) -> list:
         return rows
+
+    def selection(self, params) -> str:
+        """Identifies the rows a cursor walks: the filters and which chatbots the caller reaches."""
+        filters = {
+            key: sorted(value) if isinstance(value, list) else value
+            for key, value in params.items()
+            if key not in ("cursor", "limit")
+        }
+        reach = None
+        if not token_reaches_all_data(self.request.auth):
+            reach = sorted(self.request.auth.application.allowed_chatbots.values_list("id", flat=True))
+        selection = json.dumps([filters, reach], sort_keys=True, default=str)
+        return hashlib.sha256(selection.encode()).hexdigest()[:16]
 
     def reachable_sessions(self):
         sessions = ExperimentSession.objects.filter(team=self.request.team)
