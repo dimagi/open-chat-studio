@@ -57,13 +57,30 @@ def test_edit_dialog_has_settings_and_embed_tabs(admin_client, widget_channel):
     content = admin_client.get(_edit_url(widget_channel)).content.decode()
 
     assert "Embed &amp; API" in content
-    assert "Published Version" in content
     assert "tab: 'settings'" in content
     assert 'name="enabled"' in content
     assert 'name="credential_mode"' in content
     assert 'data-domains="example.com\n*.mysite.org"' in content
     assert 'id="widget_embed_code"' in content
     assert "Delete channel" in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("publish", "served_label", "other_label"),
+    [
+        pytest.param(True, "Published Version", "Working Version", id="published"),
+        pytest.param(False, "Working Version", "Published Version", id="unpublished"),
+    ],
+)
+def test_header_names_the_served_version(admin_client, widget_channel, publish, served_label, other_label):
+    if publish:
+        widget_channel.experiment.create_new_version(make_default=True)
+
+    content = admin_client.get(_edit_url(widget_channel)).content.decode()
+
+    assert served_label in content
+    assert other_label not in content
 
 
 @pytest.mark.django_db()
