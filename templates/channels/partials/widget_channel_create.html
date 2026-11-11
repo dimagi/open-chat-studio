@@ -37,10 +37,16 @@
           </span>
         </label>
         <div class="pl-8" x-show="!allowAllDomains">
-          <textarea name="{{ domains.html_name }}" rows="3" class="textarea w-full rounded-lg font-mono"
+          <label for="{{ domains.id_for_label }}" class="sr-only">Allowed domains</label>
+          <textarea id="{{ domains.id_for_label }}" name="{{ domains.html_name }}" rows="3" class="textarea w-full rounded-lg font-mono"
                     placeholder="example.com
-*.mysite.org" :disabled="allowAllDomains">{{ domains.value|default_if_none:'' }}</textarea>
-          {% for error in domains.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+*.mysite.org" :disabled="allowAllDomains"
+                    {% if domains.errors %}aria-invalid="true" aria-describedby="{{ domains.id_for_label }}_errors"{% endif %}>{{ domains.value|default_if_none:'' }}</textarea>
+          {% if domains.errors %}
+            <div id="{{ domains.id_for_label }}_errors">
+              {% for error in domains.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+            </div>
+          {% endif %}
         </div>
       </div>
     </fieldset>
