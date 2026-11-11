@@ -1591,6 +1591,30 @@ def test_export_chatbot_session_messages(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_session_view_export_control_provides_request_feedback(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    session = ExperimentSessionFactory.create(experiment__team=team, status=SessionStatus.ACTIVE)
+    client.force_login(user)
+
+    response = client.get(
+        reverse(
+            "experiments:experiment_session_messages_view",
+            args=[team.slug, session.experiment.public_id, session.external_id],
+        )
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "data-session-export" in content
+    assert 'target="session-export-frame"' in content
+    assert "exportState === 'loading'" in content
+    assert 'aria-live="polite"' in content
+    assert "Export failed. Try again." in content
+    assert "Content-Disposition" not in content
+
+
+@pytest.mark.django_db()
 def test_export_chatbot_session_messages_requires_permission(client, team_with_users):
     team = team_with_users
     member = MembershipFactory(team=team, user=UserFactory())
