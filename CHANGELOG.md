@@ -35,6 +35,11 @@ version section when a release is cut.
 <!-- Only migrations that are long-running or locking, irreversible, need a
      manual step or backfill, or change behavior on upgrade. Omit additive
      migrations that run automatically. Omit the section if none qualify. -->
+- `experiments.0155` builds three indexes on `experiments_participant` with
+  `CREATE INDEX CONCURRENTLY` (#3796): trigram indexes on `UPPER(identifier)` and `UPPER(name)`,
+  and a b-tree on `remote_id`. Writes continue during the build, which can take several minutes
+  on a large participant table. If a build fails it leaves an invalid index; drop it with
+  `DROP INDEX CONCURRENTLY <name>` before rerunning the migration.
 
 ### Deprecations and removals
 - The legacy web chat (public `/start/` links, invitations, the server-rendered chat page and the
