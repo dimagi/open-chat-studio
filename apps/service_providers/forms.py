@@ -13,6 +13,7 @@ from apps.generics.help import render_help_with_link
 from apps.service_providers.auth_service.oauth import AUTHORIZATION_PARAM_RESERVED_KEYS
 from apps.service_providers.exceptions import provider_error_message
 from apps.service_providers.llm_service.error_classification import provider_error_types
+from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
 from apps.service_providers.models import LlmProviderModel, MessagingProvider, ModerationProviderType
@@ -250,6 +251,17 @@ class VoyageAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["voyage_api_key"]
 
     voyage_api_key = forms.CharField(label=_("API Key"))
+
+
+class JevConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["jev_api_key"]
+
+    jev_api_key = forms.CharField(label=_("API Key"))
+    jev_api_base = forms.URLField(
+        label="API Base URL",
+        required=False,
+        help_text=f"Leave blank for {DEFAULT_JEV_API_BASE}. Set it to send requests through a proxy.",
+    )
 
 
 class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

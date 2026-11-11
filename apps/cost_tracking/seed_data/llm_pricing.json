@@ -2294,5 +2294,19 @@
         "unit_price": "0.0001"
       }
     ]
+  },
+  {
+    "provider_type": "jev",
+    "model_name": "jev-latest",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.000042"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0"
+      }
+    ]
   }
 ]

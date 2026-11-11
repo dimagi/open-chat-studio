@@ -166,6 +166,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2", 200000),
     ],
+    # Jev only classifies; the LLM Router node is the one node that calls it.
+    "jev": [
+        Model("jev-latest", 64000, is_default=True),
+    ],
     "google": [
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),

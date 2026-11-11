@@ -476,6 +476,7 @@ class TestCredentialsVerifiedFlag:
             pytest.param(LlmProviderTypes.openai, True, id="openai"),
             pytest.param(LlmProviderTypes.anthropic, True, id="anthropic"),
             pytest.param(LlmProviderTypes.voyage, False, id="voyage"),
+            pytest.param(LlmProviderTypes.jev, False, id="jev"),
         ],
     )
     def test_supports_connection_test_by_provider_type(self, provider_type, expected):

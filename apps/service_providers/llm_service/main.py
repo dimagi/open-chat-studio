@@ -27,6 +27,7 @@ from apps.service_providers.llm_service.index_managers import (
     OpenAIRemoteIndexManager,
     VoyageAILocalIndexManager,
 )
+from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE, JevClient
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
@@ -555,6 +556,23 @@ class VoyageAILlmService(LlmService):
 
     def get_reranker(self, model: str) -> Reranker:
         return VoyageReranker(api_key=self.voyage_api_key, model=model)
+
+
+JEV_ROUTER_ONLY_MESSAGE = "Jev can only be used by the LLM Router node"
+
+
+class JevLlmService(LlmService):
+    jev_api_key: pydantic.SecretStr
+    jev_api_base: str = DEFAULT_JEV_API_BASE
+
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        raise ServiceProviderConfigError(self._type, JEV_ROUTER_ONLY_MESSAGE)
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        raise ServiceProviderConfigError(self._type, JEV_ROUTER_ONLY_MESSAGE)
+
+    def get_jev_client(self) -> JevClient:
+        return JevClient(api_key=self.jev_api_key.get_secret_value(), base_url=self.jev_api_base)
 
 
 class GoogleVertexAILlmService(LlmService):
