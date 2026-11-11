@@ -940,6 +940,11 @@ DJANGO_TABLES2_ROW_ATTRS = {
 # This is only used for development purposes
 SITE_URL_ROOT = env("SITE_URL_ROOT", default=None)
 
+# Replaces the User-Agent built from PROJECT_METADATA["NAME"] and the site URL on requests
+# made with an auth provider. Tests get a fixed value because the built one reads the Site
+# record, which tests without database access cannot.
+OUTBOUND_USER_AGENT = env("OUTBOUND_USER_AGENT", default="OpenChatStudio-Test" if IS_TESTING else "")
+
 # Taggit
 TAGGIT_CASE_INSENSITIVE = True
 

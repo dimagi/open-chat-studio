@@ -104,7 +104,7 @@ def test_get_auth_service_returns_bearer_token(team):
         service = provider.get_auth_service()
 
     assert isinstance(service, BearerTokenAuthService)
-    assert service.get_auth_headers() == {"authorization": "Bearer abc123"}
+    assert service.get_auth_headers()["authorization"] == "Bearer abc123"
 
 
 @pytest.mark.django_db()
@@ -247,6 +247,17 @@ def test_token_request_auth_method(team, httpx_mock, auth_method, expect_basic_h
         assert "Authorization" not in request.headers
         assert "client_secret=my-secret" in body
         assert "client_id=my-client" in body
+
+
+@pytest.mark.django_db()
+def test_token_request_sends_outbound_user_agent(team, httpx_mock, settings):
+    settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+    provider = _make_provider(team)
+    httpx_mock.add_response(url=TOKEN_URL, json={"access_token": "tok", "token_type": "Bearer", "expires_in": 3600})
+
+    OAuthTokenManager(provider).get_valid_access_token()
+
+    assert httpx_mock.get_request().headers["User-Agent"] == "TestAgent/1.0"
 
 
 @pytest.mark.django_db()

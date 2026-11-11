@@ -14,6 +14,7 @@ from apps.documents.source_loaders import json_collection as jc
 from apps.documents.source_loaders.base import SourceDocument
 from apps.documents.source_loaders.json_collection import JSONCollectionLoader
 from apps.documents.source_loaders.registry import LOADERS
+from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.urlvalidate import InvalidURL
 
 PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
@@ -557,3 +558,16 @@ class TestAuthHeadersPropagation:
         docs = list(loader.load_documents())
         assert len(docs) == 1
         assert docs[0].content == PDF_BYTES
+
+
+@pytest.mark.django_db()
+def test_auth_provider_fetch_sends_outbound_user_agent(json_config, httpx_mock, settings):
+    settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+    provider = AuthProviderFactory.create(type="bearer", config={"token": "secret"})
+    httpx_mock.add_response(url="https://example.com/feed.json", json=[])
+    loader = JSONCollectionLoader(collection=Mock(id=42), config=json_config, auth_provider=provider)
+
+    assert list(loader.load_documents()) == []
+    request = httpx_mock.get_request()
+    assert request.headers["User-Agent"] == "TestAgent/1.0"
+    assert request.headers["Authorization"] == "Bearer secret"

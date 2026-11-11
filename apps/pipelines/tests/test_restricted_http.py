@@ -362,6 +362,29 @@ class TestAuthProviderIntegration:
         assert "Authorization" not in headers
         assert headers == {"X-Custom": "value"}
 
+    @pytest.mark.parametrize(
+        "user_headers",
+        [
+            pytest.param(None, id="no-user-headers"),
+            pytest.param({"User-Agent": "Custom/1.0"}, id="user-agent-replaced"),
+        ],
+    )
+    @pytest.mark.usefixtures("mock_validate_url")
+    def test_auth_provider_request_sends_outbound_user_agent(self, user_headers, httpx_mock, settings):
+        settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+        provider = AuthProviderFactory.create(
+            name="UA Provider", type="api_key", config={"key": "X-Api-Key", "value": "secret"}
+        )
+        httpx_mock.add_response(url="https://api.example.com/data")
+
+        RestrictedHttpClient(team=provider.team).get(
+            "https://api.example.com/data", headers=user_headers, auth="UA Provider"
+        )
+
+        request = httpx_mock.get_request()
+        assert request.headers["User-Agent"] == "TestAgent/1.0"
+        assert request.headers["X-Api-Key"] == "secret"
+
     def test_cross_team_lookup_blocked(self):
         AuthProviderFactory.create(name="Team A Provider")
         other_team = TeamFactory.create()
