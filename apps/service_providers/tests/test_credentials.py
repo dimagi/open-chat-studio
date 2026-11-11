@@ -12,6 +12,7 @@ halves below guard each side of that trade.
 
 import contextlib
 import typing
+from io import BytesIO
 from unittest import mock
 
 import pydantic
@@ -205,6 +206,12 @@ CREDENTIAL_BOUNDARIES = [
     ),
     pytest.param(speech_service.IntronSpeechService, "httpx.Client", synthesize, id="intron"),
     pytest.param(speech_service.MinimaxSpeechService, "httpx.post", synthesize, id="minimax"),
+    pytest.param(
+        speech_service.GeminiSpeechService,
+        "httpx.post",
+        lambda service: service._transcribe_audio(BytesIO(b"wav")),
+        id="gemini-transcription",
+    ),
     pytest.param(messaging_service.TwilioService, "twilio.rest.Client", messaging_client, id="twilio-client"),
     pytest.param(messaging_service.TwilioService, "httpx.get", download_media, id="twilio-media"),
     pytest.param(messaging_service.TwilioService, TWILIO_VALIDATOR, twilio_signature, id="twilio-signature"),

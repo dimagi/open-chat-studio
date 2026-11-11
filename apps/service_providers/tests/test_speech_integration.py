@@ -14,6 +14,7 @@ from apps.service_providers.models import VoiceProvider, VoiceProviderType
 from apps.service_providers.speech_service import (
     AWSSpeechService,
     AzureSpeechService,
+    GeminiSpeechService,
     IntronSpeechService,
     OpenAISpeechService,
 )
@@ -31,6 +32,14 @@ if os.path.exists(integration_env):
     env.read_env(integration_env)
 else:
     env.read_env(os.path.join(settings.BASE_DIR, ".env"))
+
+
+@pytest.fixture()
+def gemini_api_key():
+    api_key = env.str("GOOGLE_API_KEY", default=None)
+    if not api_key:
+        pytest.skip("GOOGLE_API_KEY not set")
+    return api_key
 
 
 @pytest.fixture()
@@ -267,3 +276,13 @@ class TestIntronSpeechIntegration:
 
         audio_segment = AudioSegment.from_file(result.audio, format=result.format)
         assert len(audio_segment) > 0
+
+
+class TestGeminiSpeechIntegration:
+    def test_transcribe_audio_with_real_api(self, gemini_api_key):
+        """Channels hand transcription a WAV file, so the sample is converted first."""
+        test_audio_path = os.path.join(settings.BASE_DIR, "apps/service_providers/tests/data/speech_sample1.mp3")
+        test_audio_wav_path = os.path.join(tempfile.gettempdir(), "speech_sample1_gemini.wav")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", test_audio_path, test_audio_wav_path], check=True)
+
+        _test_transcription(GeminiSpeechService(gemini_api_key=gemini_api_key), test_audio_wav_path)
