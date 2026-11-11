@@ -35,6 +35,20 @@
       ]
     }
   },
+  "anthropic/claude-mythos-5-2": {
+    "first_seen": "2026-11-11",
+    "verdict": "rejected",
+    "reason": "Project Glasswing cybersecurity model, absent from Anthropic's public model lineup; same verdict as claude-mythos-5 and 5-1.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "sampling": false,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "anthropic/claude-mythos-preview": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -991,6 +1005,15 @@
     "first_seen": "2026-10-14",
     "verdict": "rejected",
     "reason": "Gated cybersecurity variant of gemini-4-argon, not a general chat model.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": []
+    }
+  },
+  "google_vertex_ai/gemini-4-carbon-cyber-permissive": {
+    "first_seen": "2026-11-11",
+    "verdict": "rejected",
+    "reason": "Allowlist-gated cybersecurity variant of gemini-4-carbon, not a general chat model.",
     "params": {
       "reasoning": true,
       "effort_levels": []
