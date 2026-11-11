@@ -4,6 +4,7 @@ from django.apps import AppConfig
 class BotChannelsAppConfig(AppConfig):
     name = "apps.channels"
     label = "bot_channels"
+    verbose_name = "Channels"
 
     def ready(self):
         # Register signal handlers
