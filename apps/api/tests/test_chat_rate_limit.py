@@ -18,8 +18,9 @@ from apps.api.views.chat import (
     chat_start_session,
     chat_upload_file,
 )
-from apps.oauth.models import OAuth2AccessToken
+from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 TINY_LIMITS = {"chat_api": {"rate": "2/5m", "fail_open": True}}
 
@@ -88,9 +89,21 @@ def test_log_only_mode_keeps_serving_the_conversation(api_client, widget_session
     assert response["X-RateLimit-Limit"] == "2"
 
 
+@pytest.mark.django_db()
 def test_host_renewals_do_not_share_the_visitor_bucket():
     """The host's OAuth client is the principal on a renewal, not the session in the URL."""
-    request = SimpleNamespace(auth=OAuth2AccessToken(application_id=42), team=None)
+    team = TeamWithUsersFactory.create()
+    application = OAuth2Application.objects.create(
+        name="machine-app",
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        team=team,
+    )
+    request = SimpleNamespace(
+        auth=OAuth2AccessToken(application=application, application_id=application.pk, team=team),
+        team=None,
+        path="/api/chat/session/token/",
+    )
     view = SimpleNamespace(kwargs={"session_id": "abc"})
 
-    assert ChatAPIRateThrottle().identity(request, view) == ("oauth_client", "42")
+    assert ChatAPIRateThrottle().identity(request, view) == ("oauth_client", str(application.pk))

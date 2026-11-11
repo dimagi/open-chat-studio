@@ -27,10 +27,14 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
     OAuth2 authentication backend that sets the team on the request.
     """
 
-    def authenticate(self, request):
+    def authenticate(self, request, *, check_team_membership: bool = True):
         """
         Returns two-tuple of (user, token) if authentication succeeds,
         or None otherwise.
+
+        ``check_team_membership=False`` is reserved for the Chat API admission adapter. It still
+        validates the OAuth token and records its team, but lets the chat-specific client-credentials
+        policy produce its uniform admission refusal for authorization-code tokens.
         """
         response = super().authenticate(request)
         if response is None:
@@ -52,6 +56,8 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
             set_request_attrs(request, team_membership=SyntheticTeamMembership(access_token.team))
         else:
             request.user = user
+            if not check_team_membership:
+                return user, access_token
             membership = get_team_membership_for_request(request)
             if not membership:
                 raise exceptions.AuthenticationFailed()
@@ -189,7 +195,7 @@ def validated_machine_token(request, experiment) -> OAuth2AccessToken:
     None as "no credential was offered" would let a revoked token fall through to the embed-key
     authenticator and from there to the still-open keyless path.
     """
-    result = OAuth2Authentication().authenticate(request)
+    result = OAuth2AccessTokenAuthentication().authenticate(request, check_team_membership=False)
     if result is None:
         # Signature, expiry or revocation -- never "no token", which the caller ruled out.
         raise ChatApiAccessDenied()

@@ -14,6 +14,7 @@ from django.utils import timezone
 from rest_framework.throttling import SimpleRateThrottle
 from waffle import get_waffle_flag_model
 
+from apps.api.authentication import EmbeddedWidgetAuthentication
 from apps.api.models import UserAPIKey
 from apps.api.throttling import APIRateThrottle, ChatAPIRateThrottle
 from apps.channels.models import ChannelPlatform, CredentialMode, WidgetAuthLevel
@@ -209,6 +210,7 @@ def test_chat_api_throttle_keys_on_the_channel_before_a_session_exists(experimen
     throttle = ChatAPIRateThrottle()
     request = RequestFactory().post("/")
     request.auth = channel
+    request.successful_authenticator = EmbeddedWidgetAuthentication()
 
     assert throttle.identity(request, _view_stub()) == ("channel", str(channel.pk))
 
@@ -265,6 +267,7 @@ def test_chat_api_throttle_keys_a_public_start_on_the_visitor_ip(experiment):
     )
     request = RequestFactory().post("/api/chat/start/", REMOTE_ADDR="203.0.113.9")
     request.auth = channel
+    request.successful_authenticator = EmbeddedWidgetAuthentication()
     view = _view_stub()
     assert ChatAPIRateThrottle().identity(request, view) == ("ip", "203.0.113.9")
 
@@ -276,5 +279,6 @@ def test_chat_api_throttle_still_keys_an_embed_start_on_the_channel(experiment):
     )
     request = RequestFactory().post("/api/chat/start/", REMOTE_ADDR="203.0.113.9")
     request.auth = channel
+    request.successful_authenticator = EmbeddedWidgetAuthentication()
     view = _view_stub()
     assert ChatAPIRateThrottle().identity(request, view) == ("channel", str(channel.pk))

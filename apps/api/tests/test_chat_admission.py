@@ -13,6 +13,8 @@ from apps.api.admission import (
     ChatCredentialKind,
     ChatEntryPoint,
     SessionTokenPolicy,
+    chat_entry_point_for_request,
+    get_chat_admission,
     resolve_chat_admission,
 )
 from apps.api.authentication import ChatOAuthAuthentication, EmbeddedWidgetAuthentication
@@ -184,3 +186,42 @@ def test_an_unmarked_channel_authentication_is_rejected():
 
     with pytest.raises(ChatAdmissionError, match="Unsupported or ambiguous"):
         resolve_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+
+
+@pytest.mark.django_db()
+def test_validated_embed_key_evidence_represents_a_cookie_authenticated_request(channel):
+    """A key validated after another authenticator still becomes the admission credential."""
+    admission = resolve_chat_admission(
+        _request(),
+        entry_point=ChatEntryPoint.START_SESSION,
+        validated_embed_key_channel=channel,
+    )
+
+    assert admission.credential_kind == ChatCredentialKind.EMBED_KEY
+    assert admission.channel == channel
+    assert admission.team == channel.team
+
+
+def test_get_chat_admission_reuses_the_request_result():
+    """Adapters share one admission result instead of reconstructing credential identity."""
+    request = _request()
+
+    first = get_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+    second = get_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+
+    assert first is second
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        pytest.param("/api/chat/start/", ChatEntryPoint.START_SESSION, id="start"),
+        pytest.param("/api/chat/session/token/", ChatEntryPoint.RENEW_SESSION_TOKEN, id="renew"),
+        pytest.param("/api/chat/session/poll/", ChatEntryPoint.CONTINUE_SESSION, id="continue"),
+    ],
+)
+def test_chat_entry_point_matches_the_chat_api_route(path, expected):
+    """Chat routes map to the same operation families used by the admission resolver."""
+    request = RequestFactory().get(path)
+
+    assert chat_entry_point_for_request(request) == expected

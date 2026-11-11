@@ -71,6 +71,7 @@ def resolve_chat_admission(
     entry_point: ChatEntryPoint,
     session=None,
     session_token_validated: bool = False,
+    validated_embed_key_channel: ExperimentChannel | None = None,
 ) -> ChatAdmission:
     """Resolve already-authenticated request attributes into one Chat API admission fact.
 
@@ -97,6 +98,7 @@ def resolve_chat_admission(
         session=session,
         session_token_validated=session_token_validated,
         validated_oauth_token=validated_oauth_token,
+        validated_embed_key_channel=validated_embed_key_channel,
     )
 
     return ChatAdmission(
@@ -119,12 +121,21 @@ def _resolve_credential(
     session,
     session_token_validated: bool,
     validated_oauth_token,
+    validated_embed_key_channel: ExperimentChannel | None,
 ) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
     """Resolve credential identity and tenancy from DRF's already-authenticated objects."""
     if session_token_validated:
         if session is None:
             raise ChatAdmissionError("Validated session-token admission requires a session")
         return ChatCredentialKind.SESSION_TOKEN, session.experiment_channel, None, session.team
+
+    if validated_embed_key_channel is not None:
+        return (
+            ChatCredentialKind.EMBED_KEY,
+            validated_embed_key_channel,
+            None,
+            validated_embed_key_channel.team,
+        )
 
     credential_kind = getattr(authenticator, "chat_credential_kind", None)
     if credential_kind in {ChatCredentialKind.EMBED_KEY, ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS}:
@@ -189,6 +200,45 @@ def _resolve_unmarked_credential(
         return ChatCredentialKind.ANONYMOUS, None, None, None
 
     raise ChatAdmissionError("Unsupported or ambiguous Chat API credential")
+
+
+def get_chat_admission(
+    request,
+    *,
+    entry_point: ChatEntryPoint,
+    session=None,
+    session_token_validated: bool = False,
+    validated_embed_key_channel: ExperimentChannel | None = None,
+) -> ChatAdmission:
+    """Return the request's cached admission or resolve it once for this policy context."""
+    cached = getattr(request, "chat_admission", None)
+    if (
+        cached is not None
+        and not session_token_validated
+        and validated_embed_key_channel is None
+        and cached.entry_point == ChatEntryPoint(entry_point)
+    ):
+        return cached
+
+    admission = resolve_chat_admission(
+        request,
+        entry_point=entry_point,
+        session=session,
+        session_token_validated=session_token_validated,
+        validated_embed_key_channel=validated_embed_key_channel,
+    )
+    request.chat_admission = admission
+    return admission
+
+
+def chat_entry_point_for_request(request) -> ChatEntryPoint:
+    """Map the stable Chat API URL suffix to the admission operation family."""
+    path = getattr(request, "path", "").rstrip("/")
+    if path.endswith("/start"):
+        return ChatEntryPoint.START_SESSION
+    if path.endswith("/token"):
+        return ChatEntryPoint.RENEW_SESSION_TOKEN
+    return ChatEntryPoint.CONTINUE_SESSION
 
 
 def _capabilities(entry_point: ChatEntryPoint, channel: ExperimentChannel | None) -> frozenset[ChatCapability]:

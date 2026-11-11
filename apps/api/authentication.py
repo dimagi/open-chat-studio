@@ -306,16 +306,3 @@ def check_oauth_channel_origin(request, channel: ExperimentChannel) -> None:
         return
     if not validate_domain(origin_domain, allowed_domains):
         raise ChatApiAccessDenied()
-
-
-def oauth_resolved_channel(request) -> ExperimentChannel | None:
-    """The Chat API Channel this request's bearer token resolved, if any.
-
-    `request.auth` holds an `ExperimentChannel` for both credentials, and callers have to tell them
-    apart: the origin rule and the credential mode both turn on *which* credential got in.
-    """
-    if not isinstance(getattr(request, "auth", None), ExperimentChannel):
-        return None
-    if not isinstance(getattr(request, "successful_authenticator", None), ChatOAuthAuthentication):
-        return None
-    return request.auth
