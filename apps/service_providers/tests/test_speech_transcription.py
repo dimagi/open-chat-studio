@@ -6,7 +6,13 @@ from unittest import mock
 import azure.cognitiveservices.speech as speechsdk
 import pytest
 
-from apps.chat.exceptions import AudioTranscriptionException, NoSpeechDetected, NoSpeechReason
+from apps.chat.exceptions import (
+    AudioSynthesizeException,
+    AudioTranscriptionException,
+    NoSpeechDetected,
+    NoSpeechReason,
+)
+from apps.experiments.models import SyntheticVoice
 from apps.service_providers.speech_service import (
     AzureSpeechService,
     ElevenLabsSpeechService,
@@ -197,5 +203,18 @@ class TestGemini:
     def test_reads_the_transcript_from_either_model_kind(self, parts, expected):
         assert _gemini_transcript({"candidates": [{"content": {"parts": parts}}]}) == expected
 
-    def test_a_response_without_candidates_is_silence(self):
-        assert _gemini_transcript({"promptFeedback": {"blockReason": "OTHER"}}) == ""
+    def test_a_blocked_request_is_a_transcription_error_not_silence(self):
+        service = GeminiSpeechService(gemini_api_key="key")
+        response = mock.Mock(json=mock.Mock(return_value={"promptFeedback": {"blockReason": "OTHER"}}))
+
+        with mock.patch("apps.service_providers.speech_service.httpx.post", return_value=response):
+            with pytest.raises(AudioTranscriptionException) as raised:
+                service.transcribe_audio(BytesIO(b"RIFF"))
+
+        assert type(raised.value) is AudioTranscriptionException
+
+    def test_a_voice_from_another_service_fails_as_a_synthesis_error(self):
+        voice = SyntheticVoice(name="Joanna", service=SyntheticVoice.AWS)
+
+        with pytest.raises(AudioSynthesizeException):
+            GeminiSpeechService(gemini_api_key="key").synthesize_voice("hi", voice)

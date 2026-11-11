@@ -60,7 +60,8 @@ class SpeechService(pydantic.BaseModel):
     supports_transcription: ClassVar[bool] = False
 
     def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
-        assert synthetic_voice.service == self._type
+        if synthetic_voice.service != self._type:
+            raise AudioSynthesizeException(f"{self._type} cannot speak the {synthetic_voice.service} voice")
         try:
             return self._synthesize_voice(text, synthetic_voice)
         except Exception as e:
@@ -347,6 +348,8 @@ def _gemini_transcript(payload: dict) -> str:
 
     Called over REST: google-genai 1.x drops ``audioTranscription`` as an unknown field.
     """
+    if block_reason := payload.get("promptFeedback", {}).get("blockReason"):
+        raise ValueError(f"Gemini blocked the request: {block_reason}")
     candidates = payload.get("candidates") or [{}]
     parts = candidates[0].get("content", {}).get("parts", [])
     return "".join(
