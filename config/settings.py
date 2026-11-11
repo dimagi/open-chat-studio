@@ -723,6 +723,7 @@ RATE_LIMITS = {
     # Fail-closed: a counter the limiter cannot read must not become a way to
     # brute force credentials unobserved.
     "credentials": {"rate": env("RATE_LIMIT_CREDENTIALS", default="100/5m"), "fail_open": False},
+    "custom_actions": {"rate": env("RATE_LIMIT_CUSTOM_ACTIONS", default="1000/5m"), "fail_open": True},
 }
 CACHES["rate_limit"] = {
     "BACKEND": "django_redis.cache.RedisCache",
