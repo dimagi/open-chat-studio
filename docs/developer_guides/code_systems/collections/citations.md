@@ -1,26 +1,6 @@
 # Citations
 
-The platform has a built-in mechanism for citing sources used by the LLM, particularly when retrieving information from indexed documents. This process involves generation, parsing, and final rendering of citations.
-
-This page covers the `<CIT file-id />` mechanism used by **pipeline nodes**, which is the only source of references. Provider-native citations are described in [section 2](#2-collecting-cited-files).
-
-## Terms
-
-- **Citation**: the `<CIT file-id />` text the LLM writes in its response, where `file-id` is the ID of a `File`.
-- **Cited files**: the `File` records the response cites (`cited_files`).
-- **Reference**: a numbered footnote (`[^1]`) that replaces a citation in the response message, plus its matching line in the reference section.
-- **Reference section**: the list of references appended to the end of the message. Each line has the reference number, the file's citation text and a download link. The citation text is the file name unless the file's metadata overrides it.
-- **Provider annotation**: an entry in the `annotations` list of a LangChain content block. For OpenAI, entries of type `citation` carry the remote file ID of a cited file, outside the response text. The default parser reads them.
-- **Native citation**: an entry in the `citations` list of an Anthropic text block. The Anthropic parser appends each entry that has a title and URL to the text as a link.
-
-## The citation chain
-
-A citation passes through four steps between the LLM and the user:
-
-1. **Generate** ([section 1](#1-citation-generation)): The LLM writes a citation wherever it uses information from a retrieved file.
-2. **Collect** ([section 2](#2-collecting-cited-files)): The output parser reads the citations (and, for some providers, provider annotations) and resolves them to cited files, scoped to the session's team.
-3. **Build** ([section 3](#3-building-the-reference-section)): Each citation is replaced with a reference and the reference section is appended to the message.
-4. **Render** ([section 4](#4-final-rendering-in-channels)): The channel layer adapts the references to what the channel supports, such as plain `[1]` markers or native file attachments.
+When a chatbot answers from OCS collections, it can cite the files it used. The user sees numbered references in the answer, and a list at the end with each file's name and a download link. Citations are produced by pipeline LLM nodes with the `generate_citations` setting on. See the [user guide for citations](https://docs.openchatstudio.com/concepts/collections/indexed_collections/citations/) for the user's view, and [Index Manager Classes](index_managers.md) for how the retrieval works.
 
 ## Example
 
@@ -39,22 +19,49 @@ The sky is blue [^1]. The grass is green [^2].
 
 Non-web channels show `[1]` instead of `[^1]` (see [section 4](#4-final-rendering-in-channels)).
 
+## The citation chain
+
+Citations are processed in four steps, from the LLM writing its response to the user seeing the answer:
+
+1. **Generate** ([section 1](#1-citation-generation)): The LLM writes a citation wherever it uses information from a retrieved file.
+2. **Collect** ([section 2](#2-collecting-cited-files)): The output parser reads the citations and resolves them to cited files.
+3. **Build** ([section 3](#3-building-the-reference-section)): Each citation is replaced with a reference and the reference section is appended to the message.
+4. **Render** ([section 4](#4-final-rendering-in-channels)): The channel layer adapts the references to what the channel supports, such as plain `[1]` markers or native file attachments.
+
+References come only from `<CIT file-id />` citations, so only local indexes produce them. Files cited through a remote index are covered in [section 1](#1-citation-generation) and [section 2](#2-collecting-cited-files).
+
+## Terms
+
+- **Citation**: the `<CIT file-id />` text the LLM writes in its response, where `file-id` is the ID of a `File`.
+- **Cited files**: the set of `File` records the response cites (`cited_files`).
+- **Reference**: the numbered footnote (`[^1]`) that replaces a citation in the message.
+- **Reference section**: the list appended to the end of the message, with one line per reference. Each line has the reference number, the file's citation text and a download link. The citation text is the file name unless the file's metadata overrides it.
+
 ## 1. Citation Generation
 
-The LLM is instructed to write a citation after each claim that uses retrieved content. The citation format is defined once, in the chat agent constants, and shared by every step below.
+A file is cited in one of two ways, depending on where the collection's index lives:
+
+1. **Local index: the LLM writes the citations.** The search tool returns the matching chunks, each labelled with the `file_id` and `filename` of its file. If `generate_citations` is on, the tool also tells the LLM to write a citation after each claim that uses that content, putting that chunk's `file_id` in the `<CIT file-id />` citation. These citations become references.
+2. **Remote index (OpenAI vector store): the provider reports the citations.** OpenAI's built-in file search has no citation instruction, so the LLM writes no citations. Cited files come only from [provider annotations](#2-collecting-cited-files). They are attached to the chat but get no reference.
 
 ## 2. Collecting Cited Files
 
-All providers fill `cited_files` from the citations in the response text. Some also contribute extra sources:
+After the LLM responds, the node passes the response to an output parser, which returns the text plus `cited_files`. Anthropic has its own parser; every other provider uses the default parser.
 
-- **Default parser** (all providers except Anthropic): also reads provider annotations, matched to files by `File.external_id`. Currently only OpenAI supplies them.
-- **Anthropic parser**: reads the citations only. It also appends Anthropic's native citations to the text as plain `[title](url)` links. These are links, not files, so they never appear in `cited_files` or the reference section.
+| Scenario | Parser | `cited_files` come from | Gets references? |
+|---|---|---|---|
+| 1. Local index, Anthropic | Anthropic parser | `<CIT file-id />` citations in the text | Yes |
+| 2. Local index, other provider | Default parser | `<CIT file-id />` citations in the text | Yes |
+| 3. Remote index, OpenAI | Default parser | **Provider annotations** | No |
 
-Common rules for both parsers:
+**Why Anthropic has its own parser.** [Anthropic's web search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#citations) returns its sources as `citations` on the response's text blocks. The Anthropic parser adds them to the text as `[title](url)` links. They are links, not files, so they never appear in `cited_files` or the reference section.
 
-- IDs are resolved in a single query scoped to the session's team. An ID that matches no file in the team is dropped.
+**Provider annotations** are entries in the `annotations` list of a LangChain content block. For OpenAI, entries of type `citation` carry the file's external ID, which the default parser matches to files by `File.external_id`. Currently only OpenAI supplies them.
+
+Rules for all scenarios:
+
 - When the node's `generate_citations` setting is off, `cited_files` is left empty. The node then removes any citations from the message instead of building references.
-- A file cited only through a provider annotation is in `cited_files` and so is attached to the chat, but it gets no reference, because [section 3](#3-building-the-reference-section) only numbers files that have a citation in the text.
+- A file in `cited_files` is attached to the chat. It gets a reference only if its citation is in the text, because [section 3](#3-building-the-reference-section) only numbers files that have one. This is why scenario 3 has no references.
 
 ## 3. Building the Reference Section
 
