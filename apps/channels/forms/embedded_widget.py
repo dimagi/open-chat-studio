@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
 from django.urls import reverse
+from django.utils.functional import cached_property
 from django.utils.html import format_html
 
 from apps.channels import widget_versions
@@ -14,6 +15,7 @@ from apps.channels.forms.base import ExtraFormBase
 from apps.channels.forms.widgets import CredentialModeSelect, WidgetParams
 from apps.channels.models import CredentialMode, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS, validate_domain_or_wildcard
+from apps.chatbots.version_resolver import resolve_published_or_working
 
 # Floor for the per-channel session lifetime override: anything shorter would make every
 # session on the channel dead on arrival.
@@ -104,6 +106,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["credential_mode"].widget.attrs["x-model"] = "credentialMode"
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
+
+    @cached_property
+    def serves_published_version(self) -> bool:
+        """Whether widget sessions run on the published version; without one they run on the working version."""
+        return resolve_published_or_working(self.experiment).is_default_version
 
     def _seed_initial_from_channel(self):
         if not self.channel:

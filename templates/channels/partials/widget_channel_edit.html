@@ -5,7 +5,7 @@
     </div>
     <div class="flex-1 min-w-0">
       <h3 class="text-lg font-bold">Chat widget &amp; API channel</h3>
-      <p class="text-sm opacity-70 truncate">{{ experiment.name }} <span class="opacity-60 mx-1">/</span> Published Version</p>
+      <p class="text-sm opacity-70 truncate">{{ experiment.name }} <span class="opacity-60 mx-1">/</span> {{ extra_form.serves_published_version|yesno:"Published Version,Working Version" }}</p>
     </div>
     <button type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close" onclick="this.closest('dialog').close()">
       <i class="fa-solid fa-xmark"></i>
