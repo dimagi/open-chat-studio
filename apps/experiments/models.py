@@ -977,6 +977,27 @@ class Experiment(BaseTeamModel, VersionsMixin):
         self._revert_pipeline_to_version(version)
         sync_triggers(version, self, mode=TriggerSyncMode.REVERT)
 
+    @transaction.atomic()
+    def overwrite_from_source(self) -> None:
+        """Replace this copy's content with the current working content of the chatbot it was copied from.
+
+        Takes everything a fresh copy would take, but keeps this chatbot's name, channels, sessions
+        and versions. Only the working version changes, so the published version stays live until
+        the next publish and remains available to revert to.
+        """
+        source = self.cloned_from
+        if not self.is_working_version or source is None:
+            raise ValueError("Can only overwrite a working copy of another chatbot")
+        if source.is_archived:
+            raise ValueError("Cannot overwrite a copy from an archived chatbot")
+
+        for field in self.VERSIONED_CONTENT_FIELDS - {"name", "pipeline"}:
+            setattr(self, field, getattr(source, field))
+        self.save()
+
+        self.pipeline.replace_with_copy_of(source.pipeline)
+        sync_triggers(source, self, mode=TriggerSyncMode.COPY)
+
     def _revert_pipeline_to_version(self, version: Experiment) -> None:
         """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
         if not version.pipeline:
