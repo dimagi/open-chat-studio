@@ -30,6 +30,11 @@ version section when a release is cut.
 ### Upgrading
 <!-- Manual steps, in the order they must run relative to the deploy. Omit if
      the upgrade is "pull the new tag and deploy". -->
+- After deploying, run `python manage.py fold_message_attachment_ids` (#1901). It moves the file
+  ids that chat messages store under the `cited_files` and `generated_files` metadata keys into
+  `ocs_attachment_file_ids`, 10,000 message ids per transaction. `--dry-run` reports how many
+  messages it would change. A later release reruns it as a migration and stops reading the old
+  keys.
 
 ### Migrations
 <!-- Only migrations that are long-running or locking, irreversible, need a
@@ -45,6 +50,9 @@ version section when a release is cut.
   `410 Gone`. Invitations can no longer be created or sent. A new daily Celery beat task,
   `ocs_notifications.tasks.notify_http_sunsets` (02:30), notifies teams still using the legacy
   chat; Celery beat must be running for those notices to go out.
+- Message `metadata` in the sessions API no longer has `cited_files` or `generated_files` keys.
+  Every file attached to a message is listed under `ocs_attachment_file_ids`, and the message's
+  `attachments` field is unchanged. (#1901)
 
 ### Configuration
 <!-- Every new, renamed, retyped or removed setting that can be configured through
