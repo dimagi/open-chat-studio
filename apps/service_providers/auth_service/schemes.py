@@ -1,7 +1,12 @@
+import re
+
 import httpx
 
 # Header names user-supplied config may not set on an outbound request.
 BLOCKED_HEADERS = {"host", "transfer-encoding"}
+
+# RFC 9110 field-name: one or more token characters.
+HEADER_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 class HeaderAuth(httpx.Auth):

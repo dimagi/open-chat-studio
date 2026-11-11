@@ -11,6 +11,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
 from apps.service_providers.auth_service.oauth import AUTHORIZATION_PARAM_RESERVED_KEYS
+from apps.service_providers.auth_service.schemes import BLOCKED_HEADERS, HEADER_NAME_RE
 from apps.service_providers.exceptions import provider_error_message
 from apps.service_providers.llm_service.error_classification import provider_error_types
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -515,6 +516,18 @@ class ApiKeyAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     key = forms.CharField(label=_("Header Name"))
     value = forms.CharField(label=_("API Key"))
+
+    def clean_key(self):
+        key = self.cleaned_data["key"]
+        if not HEADER_NAME_RE.fullmatch(key):
+            raise forms.ValidationError(
+                _("Enter a valid header name, such as X-Api-Key. Spaces, colons and other separators are not allowed.")
+            )
+        if key.lower() in BLOCKED_HEADERS:
+            raise forms.ValidationError(
+                _("The %(header)s header cannot be used for authentication."), params={"header": key}
+            )
+        return key
 
 
 class BearerAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
