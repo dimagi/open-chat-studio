@@ -543,6 +543,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "is_archived",
             "version_description",
             "create_version_task_id",
+            "cloned_from",
         }
     )
     """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
@@ -633,6 +634,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
     debug_mode_enabled = models.BooleanField(default=False)
     create_version_task_id = models.CharField(max_length=128, blank=True)
+    # Set on a working chatbot made with "Copy"; versions and other chatbots leave it empty.
+    cloned_from = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copies",
+    )
     file_uploads_enabled = models.BooleanField(
         default=False,
         help_text="Enables file attachments in the web chat interface.",
@@ -927,6 +936,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if is_copy:
             new_version.name = name if name is not None else new_version.name + "_copy"
             new_version.version_number = 1
+        new_version.cloned_from_id = self.get_working_version_id() if is_copy else None
         new_version.save()
 
         if not is_copy:
