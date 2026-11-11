@@ -212,6 +212,28 @@ def test_get_chat_admission_reuses_the_request_result():
     assert first is second
 
 
+@pytest.mark.django_db()
+def test_get_chat_admission_refreshes_for_a_session_context(channel):
+    """A session-bound call cannot reuse an admission resolved without its session."""
+    application = OAuth2Application.objects.create(
+        name="machine-app",
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        team=channel.team,
+    )
+    token = OAuth2AccessToken(application=application, application_id=application.pk, team=channel.team)
+    request = _request(auth=token)
+    session = SimpleNamespace(experiment_channel=channel, team=channel.team, external_id="session-123")
+
+    first = get_chat_admission(request, entry_point=ChatEntryPoint.CONTINUE_SESSION)
+    second = get_chat_admission(request, entry_point=ChatEntryPoint.CONTINUE_SESSION, session=session)
+
+    assert first is not second
+    assert first.channel is None
+    assert second.channel == channel
+    assert second.session_token_policy == SessionTokenPolicy.ISSUE_AND_REQUIRE
+
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [

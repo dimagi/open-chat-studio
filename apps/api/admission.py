@@ -211,12 +211,15 @@ def get_chat_admission(
     validated_embed_key_channel: ExperimentChannel | None = None,
 ) -> ChatAdmission:
     """Return the request's cached admission or resolve it once for this policy context."""
+    session = session if session is not None else getattr(request, "chat_session", None)
+    session_cache_key = _session_cache_key(session)
     cached = getattr(request, "chat_admission", None)
     if (
         cached is not None
         and not session_token_validated
         and validated_embed_key_channel is None
         and cached.entry_point == ChatEntryPoint(entry_point)
+        and getattr(request, "_chat_admission_session_key", None) == session_cache_key
     ):
         return cached
 
@@ -228,7 +231,19 @@ def get_chat_admission(
         validated_embed_key_channel=validated_embed_key_channel,
     )
     request.chat_admission = admission
+    request._chat_admission_session_key = session_cache_key
     return admission
+
+
+def _session_cache_key(session) -> tuple[str, object] | None:
+    """Return a stable request-local key for the session context used in admission."""
+    if session is None:
+        return None
+    if (session_pk := getattr(session, "pk", None)) is not None:
+        return "pk", session_pk
+    if (external_id := getattr(session, "external_id", None)) is not None:
+        return "external_id", external_id
+    return "object", id(session)
 
 
 def chat_entry_point_for_request(request) -> ChatEntryPoint:
