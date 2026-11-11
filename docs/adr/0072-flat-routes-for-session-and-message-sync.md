@@ -26,7 +26,7 @@ We will serve session and message reads from flat, team-scoped collections:
 - A consumer syncs a team with one paginated pull per collection per cycle, whatever the number of chatbots.
 - Narrowing to one chatbot is `?chatbot=<public_id>`, so the same endpoint serves both uses.
 - v2 has no `/chatbots/{id}/sessions/` route; a later need for one adds it as an alias of the filtered collection.
-- Authorization stays team-scoped, as in [ADR-0028](0028-inspect-authorization-team-scoped.md); the chatbot filter narrows results, it is not an access boundary.
+- Authorization is team-scoped, as in [ADR-0028](0028-inspect-authorization-team-scoped.md), and a client-credentials token limited to listed chatbots reads only those, as in [ADR-0056](0056-client-credentials-applications-name-their-chatbots.md). The chatbot filter narrows results; it is not an access boundary.
 
 ## Alternatives considered
 
