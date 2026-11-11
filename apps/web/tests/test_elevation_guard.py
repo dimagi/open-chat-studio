@@ -42,6 +42,7 @@ def _is_gated(callback) -> bool:
 
 
 def _views():
+    """Every ``(route, callback)`` on the elevation-gated surfaces, each route prefixed by its surface."""
     return [
         (prefix + route, callback)
         for prefix, patterns in SURFACES.items()
@@ -51,6 +52,7 @@ def _views():
 
 @pytest.mark.parametrize("prefix", list(SURFACES))
 def test_surface_is_discoverable(prefix):
+    """Each surface resolves to at least one view, so the gate test has routes to check."""
     assert list(iter_view_callbacks(SURFACES[prefix])), f"expected to resolve views under /{prefix}"
 
 

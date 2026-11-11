@@ -48,6 +48,7 @@ def _tomorrow():
     ],
 )
 def test_admits_every_credential_but_a_limited_machine_token_on_an_unlisted_chatbot(credential, allowed):
+    """Only a machine token whose application neither lists the chatbot nor holds all_data is refused."""
     team = TeamWithUsersFactory.create()
     chatbot = ChatbotFactory.create(team=team)
     request = SimpleNamespace(auth=credential(team, chatbot), method="PATCH")

@@ -97,6 +97,7 @@ def _is_team_authorized(callback) -> bool:
 
 
 def _team_scoped_views():
+    """One ``(route, callback)`` per distinct view under the team-scoped URL prefix."""
     seen = {}
     for route, callback in iter_view_callbacks(team_urlpatterns):
         seen.setdefault(_view_identifier(callback), (route, callback))

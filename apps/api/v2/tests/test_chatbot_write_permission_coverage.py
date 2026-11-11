@@ -38,6 +38,7 @@ def _allowed_methods(callback) -> set[str]:
 
 
 def _permissions_for(callback, method: str) -> list:
+    """The permission instances the view behind ``callback`` applies to ``method``."""
     view = callback.cls(**callback.initkwargs)
     view.request = Request(APIRequestFactory().generic(method, "/"))
     if actions := getattr(callback, "actions", None):
@@ -46,6 +47,7 @@ def _permissions_for(callback, method: str) -> list:
 
 
 def _chatbot_write_routes():
+    """Every ``(callback, method)`` under ``/chatbots/{id}/`` that must declare the allowlist permission."""
     for route, callback in iter_view_callbacks(v2_urls.urlpatterns):
         if not any(marker in route for marker in CHATBOT_ROUTE_MARKERS):
             continue
@@ -65,6 +67,7 @@ def test_the_walk_finds_the_chatbot_write_routes():
 
 @pytest.mark.parametrize(("callback", "method"), CHATBOT_WRITE_ROUTES)
 def test_every_chatbot_write_declares_the_allowlist_permission(callback, method):
+    """The first escape: a view that serves a chatbot write without the permission on its list."""
     permissions = _permissions_for(callback, method)
 
     assert any(isinstance(permission, ApplicationAllowsChatbot) for permission in permissions), (

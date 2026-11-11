@@ -116,6 +116,7 @@ class ChatbotVersionCreateView(APIView):
         },
     )
     def post(self, request, id: str) -> Response:
+        """Snapshot the working chatbot as a new version, refusing one with nothing to publish or unfit to go live."""
         body = VersionCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         chatbot = get_authorized_chatbot(self, id)
@@ -315,6 +316,7 @@ class ChatbotVersionView(APIView):
         },
     )
     def delete(self, request, id: str, version_number: int) -> Response:
+        """Archive one version of the chatbot; the published version is refused."""
         # Resolution, the default-version rule and the archive share one transaction and one row
         # lock on the working chatbot, so two archives of the same version cannot both read it as
         # live. The second blocks, then re-resolves against the committed `is_archived` and 404s.
