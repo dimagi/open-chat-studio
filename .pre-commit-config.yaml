@@ -100,3 +100,10 @@ repos:
         language: system
         files: ^apps/.*\.py$
         exclude: /migrations/
+      - id: spectral
+        name: lint api-schemas/*.yml with Spectral
+        # Rules live in .spectral.yaml. Every rule left on there is a gate, so there is one policy.
+        entry: spectral lint --fail-severity=warn
+        language: node
+        additional_dependencies: ['@stoplight/spectral-cli@6.17.0']
+        files: ^api-schemas/.*\.yml$
