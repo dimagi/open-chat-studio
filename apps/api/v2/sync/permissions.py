@@ -14,3 +14,12 @@ class CanViewSessions(BasePermission):
         if is_client_credentials_request(request):
             return True
         return bool(request.user and request.user.has_perm("experiments.view_experimentsession"))
+
+
+class CanViewMessages(CanViewSessions):
+    """Message reads also need the permission to view chat messages."""
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            return True
+        return super().has_permission(request, view) and request.user.has_perm("chat.view_chatmessage")

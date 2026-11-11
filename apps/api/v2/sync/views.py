@@ -14,7 +14,7 @@ from apps.annotations.models import CustomTaggedItem
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.keyset import encode_cursor, keyset_page
 from apps.api.permissions import BASE_PERMISSION_CLASSES
-from apps.api.v2.sync.permissions import CanViewSessions
+from apps.api.v2.sync.permissions import CanViewMessages, CanViewSessions
 from apps.api.v2.sync.serializers import (
     MessagePageSerializer,
     MessageQuerySerializer,
@@ -107,6 +107,8 @@ class SessionListView(SyncView):
 
 
 class MessageListView(SyncView):
+    permission_classes = [*BASE_PERMISSION_CLASSES, CanViewMessages, TokenHasOAuthResourceScope]
+
     @extend_schema(
         operation_id="message_list",
         summary="List messages changed since a cursor",
