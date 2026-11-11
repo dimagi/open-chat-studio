@@ -180,7 +180,7 @@ def make_context(
     Uses MagicMock for experiment/channel by default (no DB)."""
     return MessageProcessingContext(
         message=message or text_message(),
-        experiment=experiment or MagicMock(),
+        experiment=experiment or MagicMock(unavailable_message=""),
         experiment_channel=experiment_channel or MagicMock(),
         callbacks=callbacks or StubCallbacks(),
         sender=sender or StubSender(),
