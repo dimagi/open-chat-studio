@@ -22,7 +22,7 @@ from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType
 from apps.experiments.models import Experiment
 from apps.pipelines.build_state import deprecated_models
 from apps.pipelines.exceptions import MissingNodeDataError
-from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
+from apps.pipelines.flow import FlowNode, FlowPipelineData, FlowWithoutNodes, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.nodes.node_metadata import (
@@ -276,34 +276,31 @@ def _revision_conflict(pipeline: Pipeline) -> JsonResponse:
     )
 
 
-def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
-    """Handle full-graph POST saves (backward-compatible)."""
-    try:
-        data = FlowPipelineData.model_validate_json(request.body)
-    except pydantic.ValidationError as e:
-        return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
+def _locked_pipeline(request, pk: int) -> Pipeline:
+    return get_object_or_404(
+        Pipeline.objects.select_for_update().prefetch_related(*NODE_RESOURCE_PREFETCHES), pk=pk, team=request.team
+    )
 
-    with transaction.atomic():
-        pipeline = get_object_or_404(
-            Pipeline.objects.select_for_update().prefetch_related(*NODE_RESOURCE_PREFETCHES),
-            pk=pk,
-            team=request.team,
-        )
-        if data.base_revision is not None and data.base_revision != pipeline.edit_revision:
-            return _revision_conflict(pipeline)
-        pipeline.name = data.name
-        edge_data, node_data = split_flow_data(data.data)
-        pipeline.data = edge_data.model_dump()
-        pipeline.edit_revision += 1
-        pipeline.save(update_fields=["name", "data", "edit_revision"])
-        try:
-            pipeline.update_nodes_from_data(node_data)
-        except MissingNodeDataError as e:
-            # A payload node without content for which no row exists — client error.
-            # The message is built from the client-supplied node ids only.
-            transaction.set_rollback(True)
-            return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
-        pipeline.clear_node_caches()
+
+def _save_graph(
+    pipeline: Pipeline, edge_data: FlowWithoutNodes, node_data: dict[str, FlowNode | None]
+) -> JsonResponse | None:
+    """Write the graph inside the caller's transaction; a 400 if a node has no content and no row."""
+    pipeline.data = edge_data.model_dump()
+    pipeline.edit_revision += 1
+    pipeline.save(update_fields=["name", "data", "edit_revision"])
+    try:
+        pipeline.update_nodes_from_data(node_data)
+    except MissingNodeDataError as e:
+        # The message is built from the client-supplied node ids only.
+        transaction.set_rollback(True)
+        return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
+    # flow_data may have been read off the rows before this write, so the response needs it rebuilt.
+    pipeline.clear_node_caches()
+    return None
+
+
+def _saved_graph_response(pipeline: Pipeline) -> JsonResponse:
     return JsonResponse(
         {
             "data": pipeline.flow_data,
@@ -312,6 +309,23 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
             "edit_revision": pipeline.edit_revision,
         }
     )
+
+
+def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
+    """Handle full-graph POST saves (backward-compatible)."""
+    try:
+        data = FlowPipelineData.model_validate_json(request.body)
+    except pydantic.ValidationError as e:
+        return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
+
+    with transaction.atomic():
+        pipeline = _locked_pipeline(request, pk)
+        if data.base_revision is not None and data.base_revision != pipeline.edit_revision:
+            return _revision_conflict(pipeline)
+        pipeline.name = data.name
+        if error := _save_graph(pipeline, *split_flow_data(data.data)):
+            return error
+    return _saved_graph_response(pipeline)
 
 
 def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
@@ -322,42 +336,16 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
 
     with transaction.atomic():
-        pipeline = get_object_or_404(
-            Pipeline.objects.select_for_update().prefetch_related(*NODE_RESOURCE_PREFETCHES),
-            pk=pk,
-            team=request.team,
-        )
-
+        pipeline = _locked_pipeline(request, pk)
         if patch.base_revision != pipeline.edit_revision:
             return _revision_conflict(pipeline)
-
         if patch.name is not None:
             pipeline.name = patch.name
-
         # The patch engine works off the full current graph: nodes rebuilt from the rows,
         # since Pipeline.data no longer lists them (ADR-0049).
-        edge_data, node_data = apply_pipeline_patch(pipeline.flow_data, patch)
-        pipeline.data = edge_data.model_dump()
-        pipeline.edit_revision += 1
-        pipeline.save(update_fields=["name", "data", "edit_revision"])
-        try:
-            pipeline.update_nodes_from_data(node_data)
-        except MissingNodeDataError as e:
-            # A diff node without content for which no row exists — client error.
-            # The message is built from the client-supplied node ids only.
-            transaction.set_rollback(True)
-            return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
-        # flow_data was read above, off the pre-patch rows, so the response needs it rebuilt.
-        pipeline.clear_node_caches()
-
-    return JsonResponse(
-        {
-            "data": pipeline.flow_data,
-            "errors": pipeline.validate(),
-            "deprecated_models": deprecated_models(pipeline),
-            "edit_revision": pipeline.edit_revision,
-        }
-    )
+        if error := _save_graph(pipeline, *apply_pipeline_patch(pipeline.flow_data, patch)):
+            return error
+    return _saved_graph_response(pipeline)
 
 
 @login_and_team_required
