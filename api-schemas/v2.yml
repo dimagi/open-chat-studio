@@ -1997,6 +1997,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/SessionPage'
           description: ''
+  /api/v2/sessions/{id}/:
+    get:
+      operationId: session_retrieve
+      description: One session and all of its messages, oldest first.
+      summary: Retrieve a session with its messages
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Sessions
+      security:
+      - OAuth2:
+        - sessions:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+          description: ''
   /api/v2/source-material/:
     get:
       operationId: source_material_list
@@ -5141,6 +5166,67 @@ components:
       - created_at
       - ended_at
       - id
+      - participant_id
+      - platform
+      - state
+      - status
+      - tags
+      - updated_at
+    SessionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        chatbot_id:
+          type: string
+          format: uuid
+          readOnly: true
+        participant_id:
+          type: string
+          format: uuid
+          readOnly: true
+        platform:
+          type: string
+          readOnly: true
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ChatbotSessionStatusEnum'
+          readOnly: true
+        state:
+          readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
+          description: Read from the tagged items the view attaches to each page.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        ended_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the experiment (chat) ended.
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+          readOnly: true
+      required:
+      - chatbot_id
+      - created_at
+      - ended_at
+      - id
+      - messages
       - participant_id
       - platform
       - state
