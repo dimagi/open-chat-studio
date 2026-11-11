@@ -2,29 +2,33 @@
 
 The platform has a built-in mechanism for citing sources used by the LLM, particularly when retrieving information from indexed documents. This process involves generation, parsing, and final rendering of citations.
 
-This page covers the `<CIT file-id />` tag mechanism used by **pipeline nodes** (`apps/pipelines/nodes/llm_node.py`). It is the only mechanism that produces a reference section. Two other sources interact with it:
-- Provider citation annotations (such as OpenAI file citations) add files to `cited_files`, as described in [Collecting Cited Files](#2-collecting-cited-files).
-- Anthropic's native web citations are appended to the text as plain `[title](url)` links by `parse_output_for_anthropic`. They bypass the reference section.
+This page covers the `<CIT file-id />` mechanism used by **pipeline nodes**, which is the only source of references. Provider-native citations are described in [section 2](#2-collecting-cited-files).
 
-This assumes the LLM has retrieved content from a document collection — see [Index Manager Classes](index_managers.md) for how that retrieval works.
+## Terms
+
+- **Citation**: the `<CIT file-id />` text the LLM writes in its response, where `file-id` is the ID of a `File`.
+- **Cited files**: the `File` records the response cites (`cited_files`).
+- **Reference**: a numbered footnote (`[^1]`) that replaces a citation in the response message, plus its matching line in the reference section.
+- **Reference section**: the list of references appended to the end of the message. Each line has the reference number, the file's citation text and a download link. The citation text is the file name unless the file's metadata overrides it.
+- **Provider annotation**: an entry in the `annotations` list of a LangChain content block. For OpenAI, entries of type `citation` carry the remote file ID of a cited file, outside the response text. The default parser reads them.
+- **Native citation**: an entry in the `citations` list of an Anthropic text block. The Anthropic parser appends each entry that has a title and URL to the text as a link.
 
 ## 1. Citation Generation
 
-When an agent uses a tool like `SearchIndexTool` to query a document collection, it gains access to the content of relevant files. The LLM is instructed to cite its sources by embedding a special tag in its response whenever it uses information from a file.
-
-The citation format is `<CIT file-id />`, where `file-id` is the unique identifier of the cited `File` model instance. This format is defined by the `OCS_CITATION_PATTERN` constant found in `apps.chat.agent.constants`.
+The LLM is instructed to write a citation after each claim that uses retrieved content. The citation format is defined once, in the chat agent constants, and shared by every step below.
 
 ## 2. Collecting Cited Files
 
-Before the reference section is built, the LLM output is parsed into an `LlmChatResponse` whose `cited_files` field holds the `File` records the response cites. `_process_agent_output()` gets the parser from the node's LLM service (`get_output_parser()`) and passes `include_citations=node.generate_citations`.
+All providers fill `cited_files` from the citations in the response text. Some also contribute extra sources:
 
-`LlmService._default_parser`, used by every provider except Anthropic, fills `cited_files` from two sources:
-- The IDs found in `<CIT n />` tags in the response text (`extract_file_ids_from_ocs_citations`).
-- The provider's own citation annotations (`get_cited_file_ids`), matched to files by `File.external_id`. Only `OpenAILlmService` returns annotation IDs; the base implementation returns none.
+- **Default parser** (all providers except Anthropic): also reads provider annotations, matched to files by `File.external_id`. Currently only OpenAI supplies them.
+- **Anthropic parser**: reads the citations only. It also appends Anthropic's native citations to the text as plain `[title](url)` links. These are links, not files, so they never appear in `cited_files` or the reference section.
 
-Both sets of IDs are resolved with a single `File` query scoped to the session's team. An ID that matches no file in the team is dropped. When `include_citations` is false, `cited_files` is left empty.
+Common rules for both parsers:
 
-The Anthropic parser (`parse_output_for_anthropic`) overrides `get_output_parser()`. It fills `cited_files` from the `<CIT n />` tags only (`get_cited_files_from_text`), looked up once on the assembled response text with the same team scoping and `include_citations` behaviour. It also appends Anthropic's native web citations to the text as `[title](url)` links, which do not affect `cited_files`.
+- IDs are resolved in a single query scoped to the session's team. An ID that matches no file in the team is dropped.
+- When the node's `generate_citations` setting is off, `cited_files` is left empty. The node then removes any citations from the message instead of building references.
+- A file cited only through a provider annotation is in `cited_files` and so is attached to the chat, but it gets no reference, because [section 3](#3-building-the-reference-section) only numbers files that have a citation in the text.
 
 ## 3. Building the Reference Section
 
