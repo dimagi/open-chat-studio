@@ -6,6 +6,7 @@ from io import BytesIO
 import httpx
 import openai
 from django.conf import settings
+from django.db.models import Q
 from langchain_core.messages import HumanMessage
 
 from apps.chat.agent.constants import OCS_CITATION_PATTERN
@@ -44,12 +45,11 @@ def extract_file_ids_from_ocs_citations(text: str) -> list[str]:
     return [match.group("file_id") for match in re.finditer(OCS_CITATION_PATTERN, text)]
 
 
-def get_cited_files_from_text(text: str, team_id: int) -> set[File]:
-    """Return the team's files referenced by `<CIT n />` markers in the text."""
-    file_ids = extract_file_ids_from_ocs_citations(text)
-    if not file_ids:
+def get_cited_files(team_id: int, file_ids: Collection[str] = (), external_ids: Collection[str] = ()) -> set[File]:
+    """Return the team's files whose `id` is in `file_ids` or whose `external_id` is in `external_ids`."""
+    if not (file_ids or external_ids):
         return set()
-    return set(File.objects.filter(id__in=file_ids, team_id=team_id))
+    return set(File.objects.filter(Q(id__in=file_ids) | Q(external_id__in=external_ids), team_id=team_id))
 
 
 def populate_reference_section_from_citations(text: str, cited_files: list[File], session: ExperimentSession) -> str:

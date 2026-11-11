@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessage
 
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
-from apps.service_providers.llm_service.utils import get_cited_files_from_text
+from apps.service_providers.llm_service.utils import extract_file_ids_from_ocs_citations, get_cited_files
 
 
 def parse_output_for_anthropic(
@@ -11,7 +11,9 @@ def parse_output_for_anthropic(
     """Parse Anthropic's output, resolving `<CIT n />` markers in the assembled text to the team's cited files."""
     response = _parse_content(output)
     if include_citations and session is not None:
-        response.cited_files |= get_cited_files_from_text(response.text, session.team_id)
+        response.cited_files |= get_cited_files(
+            session.team_id, file_ids=extract_file_ids_from_ocs_citations(response.text)
+        )
     return response
 
 
