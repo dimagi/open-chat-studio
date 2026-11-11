@@ -13,6 +13,32 @@ This page covers the `<CIT file-id />` mechanism used by **pipeline nodes**, whi
 - **Provider annotation**: an entry in the `annotations` list of a LangChain content block. For OpenAI, entries of type `citation` carry the remote file ID of a cited file, outside the response text. The default parser reads them.
 - **Native citation**: an entry in the `citations` list of an Anthropic text block. The Anthropic parser appends each entry that has a title and URL to the text as a link.
 
+## The citation chain
+
+A citation passes through four steps between the LLM and the user:
+
+1. **Generate** ([section 1](#1-citation-generation)): The LLM writes a citation wherever it uses information from a retrieved file.
+2. **Collect** ([section 2](#2-collecting-cited-files)): The output parser reads the citations (and, for some providers, provider annotations) and resolves them to cited files, scoped to the session's team.
+3. **Build** ([section 3](#3-building-the-reference-section)): Each citation is replaced with a reference and the reference section is appended to the message.
+4. **Render** ([section 4](#4-final-rendering-in-channels)): The channel layer adapts the references to what the channel supports, such as plain `[1]` markers or native file attachments.
+
+## Example
+
+**LLM response (before the build step):**
+```text
+The sky is blue <CIT 123 />. The grass is green <CIT 456 />.
+```
+
+**Message after the build step:**
+```markdown
+The sky is blue [^1]. The grass is green [^2].
+
+[^1]: [document_a.pdf](https://example.com/download/123)
+[^2]: [source_b.txt](https://example.com/download/456)
+```
+
+Non-web channels show `[1]` instead of `[^1]` (see [section 4](#4-final-rendering-in-channels)).
+
 ## 1. Citation Generation
 
 The LLM is instructed to write a citation after each claim that uses retrieved content. The citation format is defined once, in the chat agent constants, and shared by every step below.
@@ -40,21 +66,6 @@ This method performs three main actions:
 3. It appends a markdown-formatted reference list to the end of the message. Each entry includes the reference number, the original file name, and a download link for that file.
 
 This processing step occurs in `_process_agent_output()` in `apps/pipelines/nodes/llm_node.py`, before the final message is saved and sent to the user.
-
-Example transformation:
-
-**Input from LLM:**
-```text
-The sky is blue <CIT 123 />. The grass is green <CIT 456 />.
-```
-
-**Output after processing:**
-```markdown
-The sky is blue [^1]. The grass is green [^2].
-
-[^1]: [document_a.pdf](https://example.com/download/123)
-[^2]: [source_b.txt](https://example.com/download/456)
-```
 
 ## 4. Final Rendering in Channels
 
