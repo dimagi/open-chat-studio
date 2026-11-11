@@ -48,6 +48,7 @@ class TestSessionMessagesLoadOnScroll:
         assert b"page=2" in response.content
 
     def test_next_page_trigger_is_halfway_through_the_current_page(self, client, experiment, session_with_messages):
+        """Place the prefetch trigger before the current page is exhausted."""
         client.force_login(experiment.owner)
         response = client.get(_messages_url(experiment, session_with_messages))
 
@@ -56,6 +57,7 @@ class TestSessionMessagesLoadOnScroll:
         assert content.index("Message 4") < trigger_position < content.index("Message 5")
 
     def test_page_fragments_use_a_beforeend_append_target(self, client, experiment, session_with_messages):
+        """Append each fragment to the existing message list and advance its trigger."""
         client.force_login(experiment.owner)
         first_page = client.get(_messages_url(experiment, session_with_messages))
         next_page = client.get(_fragment_url(experiment, session_with_messages) + "?page=2")
@@ -69,6 +71,7 @@ class TestSessionMessagesLoadOnScroll:
         assert 'data-session-message-page-trigger="2"' in next_page_content
 
     def test_each_page_has_only_one_next_page_trigger(self, client, experiment, session_with_messages):
+        """Render one active trigger per page so an appended fragment cannot duplicate requests."""
         client.force_login(experiment.owner)
         for page in (1, 2):
             response = client.get(_fragment_url(experiment, session_with_messages) + f"?page={page}")
@@ -76,6 +79,7 @@ class TestSessionMessagesLoadOnScroll:
             assert response.content.count(b"data-session-message-page-trigger") == 1
 
     def test_next_page_request_renders_only_the_message_fragment(self, client, experiment, session_with_messages):
+        """Keep a paginated response to the message fragment while retaining the next trigger."""
         client.force_login(experiment.owner)
         url = _fragment_url(experiment, session_with_messages) + "?page=2"
         response = client.get(url)
