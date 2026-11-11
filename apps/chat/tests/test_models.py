@@ -37,6 +37,24 @@ def test_get_attached_files():
 
 
 @pytest.mark.django_db()
+def test_prefetch_attached_files_across_chats_matches_each_message_to_its_own_chat():
+    first, second = ExperimentSessionFactory.create_batch(2)
+    team = first.team
+    own_file = FileFactory.create(team=team)
+    shared_file = FileFactory.create(team=team)
+    first.chat.attach_files("ocs_attachments", [own_file, shared_file])
+    second.chat.attach_files("ocs_attachments", [shared_file])
+    referencing_both = {ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS: [own_file.id, shared_file.id]}
+    in_first = ChatMessage.objects.create(chat=first.chat, message_type="ai", content="a", metadata=referencing_both)
+    in_second = ChatMessage.objects.create(chat=second.chat, message_type="ai", content="b", metadata=referencing_both)
+
+    ChatMessage.prefetch_attached_files([in_first, in_second])
+
+    assert sorted(f.id for f in in_first.get_attached_files()) == sorted([own_file.id, shared_file.id])
+    assert [f.id for f in in_second.get_attached_files()] == [shared_file.id]
+
+
+@pytest.mark.django_db()
 class TestChatMessage:
     def test_get_processor_bot_tag_name(self):
         session = ExperimentSessionFactory.create()
