@@ -1,6 +1,8 @@
 """Records custom action HTTP requests on the active trace, with credentials redacted."""
 
 import logging
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -16,57 +18,49 @@ ATTACHMENT_PLACEHOLDER = "[attachment not logged]"
 SENSITIVE_HEADER_FRAGMENTS = ("auth", "token", "secret", "password", "key", "cookie", "session", "signature")
 
 
-def log_request(
-    *,
-    tool_name: str,
-    custom_action_name: str | None,
-    request: httpx.Request,
-    unauthenticated_headers: dict[str, str],
-    response: httpx.Response | None,
-    duration_ms: int,
-    error: BaseException | None,
-) -> None:
+@dataclass
+class RequestAttempt:
+    """One HTTP request a custom action tool sent, and what came back."""
+
+    tool_name: str
+    custom_action_name: str | None
+    request: httpx.Request
+    # The request's headers before the auth provider added its own while sending it.
+    unauthenticated_headers: dict[str, str]
+    response: httpx.Response | None = None
+    error: BaseException | None = None
+    started: float = field(default_factory=time.monotonic)
+
+    @property
+    def duration_ms(self) -> int:
+        return int((time.monotonic() - self.started) * 1000)
+
+
+def log_request(attempt: RequestAttempt) -> None:
     """Send the request log to the trace callbacks of the tool run making the request."""
     try:
-        record = build_request_log(
-            tool_name=tool_name,
-            custom_action_name=custom_action_name,
-            request=request,
-            unauthenticated_headers=unauthenticated_headers,
-            response=response,
-            duration_ms=duration_ms,
-            error=error,
-        )
-        dispatch_custom_event(CUSTOM_ACTION_REQUEST_EVENT, record)
+        dispatch_custom_event(CUSTOM_ACTION_REQUEST_EVENT, build_request_log(attempt))
     except RuntimeError:
         # dispatch_custom_event raises this when the call is not inside a tool run.
         pass
     except Exception:
-        logger.exception("[%s] Could not log the request", tool_name)
+        logger.exception("[%s] Could not log the request", attempt.tool_name)
 
 
-def build_request_log(
-    *,
-    tool_name: str,
-    custom_action_name: str | None,
-    request: httpx.Request,
-    unauthenticated_headers: dict[str, str],
-    response: httpx.Response | None,
-    duration_ms: int,
-    error: BaseException | None,
-) -> dict[str, Any]:
+def build_request_log(attempt: RequestAttempt) -> dict[str, Any]:
     """A JSON-ready record of one request and its response.
 
-    Headers the auth provider added are found by comparing the sent headers with
-    `unauthenticated_headers`; their values are removed from every field of the record.
+    Headers the auth provider added are found by comparing the sent headers with the
+    unauthenticated ones; their values are removed from every field of the record.
     """
+    request, response, error = attempt.request, attempt.response, attempt.error
     auth_headers = {
-        name: value for name, value in request.headers.items() if unauthenticated_headers.get(name) != value
+        name: value for name, value in request.headers.items() if attempt.unauthenticated_headers.get(name) != value
     }
     redactor = _Redactor(auth_headers)
     return {
-        "tool": tool_name,
-        "custom_action": custom_action_name,
+        "tool": attempt.tool_name,
+        "custom_action": attempt.custom_action_name,
         "method": request.method,
         "url": redactor.scrub(str(request.url)),
         "request_headers": redactor.headers(request.headers),
@@ -74,7 +68,7 @@ def build_request_log(
         "status_code": response.status_code if response is not None else None,
         "response_headers": redactor.headers(response.headers) if response is not None else {},
         "response_body": redactor.body(_response_text(response)) if response is not None else None,
-        "duration_ms": duration_ms,
+        "duration_ms": attempt.duration_ms,
         "error": redactor.scrub(f"{type(error).__name__}: {error}") if error else "",
     }
 

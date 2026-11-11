@@ -2,7 +2,6 @@ import enum
 import logging
 import pathlib
 import tempfile
-import time
 import uuid
 from collections import defaultdict
 from email.message import Message
@@ -16,7 +15,7 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field
 
-from apps.chat.agent.request_log import log_request
+from apps.chat.agent.request_log import RequestAttempt, log_request
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
     custom_action_unexpected_error_notification,
@@ -129,30 +128,23 @@ class OpenAPIOperationExecutor:
     ) -> tuple[str, ToolArtifact | None]:
         logger.info("[%s] %s %s", self.function_def.name, method.upper(), url)
         request = http_client.build_request(method.upper(), url, **kwargs)
-        # The auth provider adds its headers to `request` while sending it.
-        unauthenticated_headers = dict(request.headers)
-        response = None
-        error = None
-        started = time.monotonic()
+        attempt = RequestAttempt(
+            tool_name=self.function_def.name,
+            custom_action_name=self.custom_action.name if self.custom_action else None,
+            request=request,
+            unauthenticated_headers=dict(request.headers),
+        )
         try:
-            response = http_client.send(request, follow_redirects=False, stream=True)
+            attempt.response = http_client.send(request, follow_redirects=False, stream=True)
             try:
-                return self._read_response(response)
+                return self._read_response(attempt.response)
             finally:
-                response.close()
+                attempt.response.close()
         except Exception as e:
-            error = e
+            attempt.error = e
             raise
         finally:
-            log_request(
-                tool_name=self.function_def.name,
-                custom_action_name=self.custom_action.name if self.custom_action else None,
-                request=request,
-                unauthenticated_headers=unauthenticated_headers,
-                response=response,
-                duration_ms=int((time.monotonic() - started) * 1000),
-                error=error,
-            )
+            log_request(attempt)
 
     def _read_response(self, response: httpx.Response) -> tuple[str, ToolArtifact | None]:
         try:
