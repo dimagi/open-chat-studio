@@ -300,12 +300,22 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         from langchain_core.messages import HumanMessage  # noqa: PLC0415 - heavy lib, slow startup
 
+        if not self.supports_connection_test:
+            raise ConnectionTestNotSupportedError(self.type)
+
+        model = self.get_default_chat_model()
+        if model is None:
+            raise NoTestableModelError(self.type)
+
+        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
+        chat_model.invoke([HumanMessage(content="Hello")])
+
+    def get_default_chat_model(self) -> "LlmProviderModel | None":
+        """The model to send a chat request to when nothing more specific is configured, or None
+        if the team has no model for this provider's type."""
         # Local import: default_models imports LlmProviderModel/LlmProviderTypes from this
         # module, so importing it at module level here would be circular.
         from apps.service_providers.llm_service.default_models import get_default_model  # noqa: PLC0415
-
-        if not self.supports_connection_test:
-            raise ConnectionTestNotSupportedError(self.type)
 
         # Prefer the provider type's registered default model (get_default_model, the same
         # recommendation get_first_llm_provider_model uses to pre-select one) since it's the
@@ -320,13 +330,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         )
         default_model = get_default_model(self.type)
         model = team_models.filter(name=default_model.name).first() if default_model else None
-        if model is None:
-            model = team_models.first()
-        if model is None:
-            raise NoTestableModelError(self.type)
-
-        chat_model = self.get_llm_service().get_chat_model(model.name, timeout=CONNECTION_TEST_TIMEOUT_SECONDS)
-        chat_model.invoke([HumanMessage(content="Hello")])
+        return model or team_models.first()
 
     def run_connection_test_hook(self) -> tuple[list[str], str]:
         """Verify the saved credentials, record the outcome, and report what happened.

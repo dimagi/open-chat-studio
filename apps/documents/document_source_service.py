@@ -328,6 +328,9 @@ class DocumentSourceManager:
 
     def _extract_filename(self, document: SourceDocument, identifier: str) -> str:
         """Extract a suitable filename from document metadata or identifier"""
+        if filename := document.metadata.get("filename"):
+            return filename
+
         if path := document.metadata.get("path"):
             return path
 

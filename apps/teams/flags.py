@@ -102,11 +102,6 @@ class Flags(FlagInfo, Enum):
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
     )
 
-    ABUSE_DETECTION = (
-        "flag_abuse_detection",
-        "Abuse detection - message moderation, strikes and participant blocking (issue #4269)",
-    )
-
     ENGAGEMENT_DASHBOARD = (
         "flag_engagement_dashboard",
         "Engagement dashboard - user engagement and adoption metrics (issue #2927)",

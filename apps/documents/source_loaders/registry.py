@@ -2,12 +2,14 @@ from apps.documents.models import SourceType
 from apps.documents.source_loaders.base import BaseDocumentLoader
 from apps.documents.source_loaders.confluence import ConfluenceDocumentLoader
 from apps.documents.source_loaders.github import GitHubDocumentLoader
+from apps.documents.source_loaders.google_docs import GoogleDocsDocumentLoader
 from apps.documents.source_loaders.json_collection import JSONCollectionLoader
 
 LOADERS = {
     SourceType.GITHUB: GitHubDocumentLoader,
     SourceType.CONFLUENCE: ConfluenceDocumentLoader,
     SourceType.JSON_COLLECTION: JSONCollectionLoader,
+    SourceType.GOOGLE_DOCS: GoogleDocsDocumentLoader,
 }
 
 

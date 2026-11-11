@@ -8,9 +8,11 @@ from apps.documents.datamodels import (
     ConfluenceSourceConfig,
     DocumentSourceConfig,
     GitHubSourceConfig,
+    GoogleDocsSourceConfig,
     JSONCollectionSourceConfig,
 )
 from apps.documents.models import Collection, DocumentSource, SourceType
+from apps.documents.source_loaders.google_docs import extract_document_id
 from apps.service_providers.models import AuthProvider, AuthProviderType, EmbeddingProviderModel
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -340,6 +342,46 @@ class ConfluenceDocumentSourceForm(DocumentSourceForm):
             raise forms.ValidationError(f"Invalid config: {e!s}") from None
 
         cleaned_data["config"] = DocumentSourceConfig(confluence=config)
+        return cleaned_data
+
+
+class GoogleDocsDocumentSourceForm(DocumentSourceForm):
+    requires_auth = True
+    allowed_auth_types = [AuthProviderType.oauth_authorization_code]
+    auth_provider_help = (
+        "Use an OAuth Authorization Code provider with the https://www.googleapis.com/auth/documents.readonly scope."
+    )
+
+    document_url = forms.CharField(
+        label="Google Docs URL",
+        help_text="Paste a Google Docs document URL (for example, /document/d/<id>/edit).",
+        widget=forms.URLInput(attrs={"placeholder": "https://docs.google.com/document/d/.../edit"}),
+    )
+
+    def _get_config_from_instance(self, instance):
+        return instance.config.google_docs
+
+    def clean_document_url(self):
+        value = self.cleaned_data["document_url"]
+        try:
+            extract_document_id(value)
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from None
+        return value
+
+    def clean_source_type(self):
+        source_type = self.cleaned_data.get("source_type")
+        if source_type != SourceType.GOOGLE_DOCS:
+            raise forms.ValidationError(f"Expected Google Docs source type, got {source_type}")
+        return source_type
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
+        cleaned_data["config"] = DocumentSourceConfig(
+            google_docs=GoogleDocsSourceConfig(document_url=cleaned_data["document_url"])
+        )
         return cleaned_data
 
 

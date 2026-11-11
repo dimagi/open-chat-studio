@@ -35,6 +35,20 @@
       ]
     }
   },
+  "anthropic/claude-mythos-5-2": {
+    "first_seen": "2026-11-11",
+    "verdict": "rejected",
+    "reason": "Project Glasswing cybersecurity model, absent from Anthropic's public model lineup; same verdict as claude-mythos-5 and 5-1.",
+    "params": {
+      "reasoning": true,
+      "adaptive_thinking": true,
+      "sampling": false,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "anthropic/claude-mythos-preview": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -865,6 +879,14 @@
       "reasoning": true
     }
   },
+  "google/gemini-omni-1.2-flash": {
+    "first_seen": "2026-11-06",
+    "verdict": "rejected",
+    "reason": "Omni video-generation model (video with native audio), not a text chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
   "google/gemini-omni-flash-preview": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -988,6 +1010,15 @@
       "effort_levels": []
     }
   },
+  "google_vertex_ai/gemini-4-carbon-cyber-permissive": {
+    "first_seen": "2026-11-11",
+    "verdict": "rejected",
+    "reason": "Allowlist-gated cybersecurity variant of gemini-4-carbon, not a general chat model.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": []
+    }
+  },
   "google_vertex_ai/gemini-omni-1.1-flash": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -997,6 +1028,14 @@
     "first_seen": "2026-09-24",
     "verdict": "rejected",
     "reason": "Omni realtime audio model, not a text chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "google_vertex_ai/gemini-omni-1.2-flash": {
+    "first_seen": "2026-11-06",
+    "verdict": "rejected",
+    "reason": "Omni video-generation model (video with native audio), not a text chat model.",
     "params": {
       "reasoning": true
     }
@@ -1570,6 +1609,38 @@
       "reasoning": true
     }
   },
+  "openai/gpt-6-astra-law": {
+    "first_seen": "2026-11-06",
+    "verdict": "rejected",
+    "reason": "Legal-domain variant absent from OpenAI's model catalogue, which lists only gpt-6-astra.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-6-cyber": {
+    "first_seen": "2026-11-06",
+    "verdict": "rejected",
+    "reason": "Gated Daybreak cybersecurity specialist release, not a general chat model.",
+    "params": {
+      "reasoning": true
+    }
+  },
+  "openai/gpt-6-rosalind": {
+    "first_seen": "2026-11-06",
+    "verdict": "rejected",
+    "reason": "Life-sciences model restricted to approved organizations, with no published context window.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "openai/gpt-audio": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
@@ -1811,6 +1882,11 @@
     "params": {
       "reasoning": true
     }
+  },
+  "perplexity/nemotron-3.5-super-120b-a12b": {
+    "first_seen": "2026-11-06",
+    "verdict": "rejected",
+    "reason": "Served only on Perplexity's Agent API as perplexity/nemotron-3.5-super-120b-a12b, not the chat-completions endpoint OCS calls."
   },
   "perplexity/pplx-70b-chat": {
     "first_seen": "2026-09-17",

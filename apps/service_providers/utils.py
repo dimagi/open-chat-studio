@@ -12,8 +12,6 @@ from django.http import HttpRequest
 from django_tables2 import tables
 from waffle import flag_is_active
 
-from apps.teams.flags import Flags
-
 from . import const
 from .llm_service.default_models import get_default_model
 from .models import (
@@ -125,17 +123,6 @@ class ServiceProvider(ServiceProviderType, Enum):
     def get_form_initial(self, instance) -> dict:
         """Return the initial data for the config form."""
         return instance.config
-
-
-def is_provider_enabled(provider: ServiceProvider, request: HttpRequest) -> bool:
-    """Whether ``provider`` is available to the given request."""
-    if provider == ServiceProvider.moderation:
-        return bool(flag_is_active(request, Flags.ABUSE_DETECTION.slug))
-    return True
-
-
-def get_enabled_providers(request: HttpRequest) -> list[ServiceProvider]:
-    return [provider for provider in ServiceProvider if is_provider_enabled(provider=provider, request=request)]
 
 
 def get_available_subtypes(provider: ServiceProvider, request: HttpRequest) -> list:

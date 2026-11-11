@@ -151,6 +151,21 @@ def test_single_participant_home_lazy_loads_the_sessions_table(client, team_with
 
 
 @pytest.mark.django_db()
+def test_sessions_panel_does_not_offer_the_participant_blocked_filter(client, team_with_users):
+    participant = ParticipantFactory.create(team=team_with_users)
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+    url = reverse("participants:single-participant-home", args=[team_with_users.slug, participant.id])
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    columns = response.context["df_filter_columns"]
+    assert "state" in columns
+    assert "participant_blocked" not in columns
+
+
+@pytest.mark.django_db()
 def test_sessions_panel_forwards_the_chatbot_filter_to_the_lazy_load_url(client, team_with_users):
     """Pill clicks don't remount the Alpine filter widget, so this panel must forward `?chatbot=` itself."""
     participant = ParticipantFactory.create(team=team_with_users)

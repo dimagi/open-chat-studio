@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from apps.experiments.filters import ChannelsFilter
+from apps.moderation.filters import ParticipantBlockedFilter
 from apps.web.dynamic_filters.base import ColumnFilter, MultiColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
@@ -17,7 +18,13 @@ class ParticipantFilter(MultiColumnFilter):
             label="Name/Identifier",
             columns=["identifier", "name"],  # OR search across both fields
             query_param="participant",
+            allow_any_of=True,
         ),
-        StringColumnFilter(label="Remote ID", columns=["remote_id"], query_param="remote_id"),
+        StringColumnFilter(label="Remote ID", columns=["remote_id"], query_param="remote_id", allow_any_of=True),
         ChannelsFilter(column="platform"),
+        ParticipantBlockedFilter(
+            query_param="blocked",
+            label="Blocked",
+            participant_column="id",
+        ),
     ]

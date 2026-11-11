@@ -46,7 +46,9 @@ When the user asks about a general time period (e.g., "last week", "last 30 days
 ## Choice Filter Values
 
 Some filters include an `"options"` list in the schema — these have a **fixed** set of valid values.
-Use those exact option strings as filter values. Do **not** call `get_filter_options` for them.
+Each option is either a plain string or an object with an `id` and a `label`. Use the plain string, or
+the option's `id`, as the filter value; the `label` says what the option means (for example, `"true"`
+with the label `"Blocked"` selects blocked participants). Do **not** call `get_filter_options` for them.
 
 Filters **without** an `"options"` list have dynamic, database-sourced values. For these you **must**
 call `get_filter_options` to discover valid IDs before setting the filter value.

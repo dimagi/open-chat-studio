@@ -6,7 +6,6 @@ import httpx
 import pytest
 from django.urls import reverse
 from django.utils import timezone
-from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.exceptions import ServiceWindowExpiredException
@@ -27,7 +26,6 @@ from apps.service_providers.models import (
 from apps.service_providers.utils import ServiceProvider
 from apps.service_providers.views import _format_context
 from apps.teams.backends import CHAT_VIEWER_GROUP
-from apps.teams.flags import Flags
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
@@ -41,8 +39,6 @@ from apps.utils.factories.service_provider_factories import (
 )
 from apps.utils.tests.team_helpers import member_with_groups
 
-pytestmark = pytest.mark.usefixtures("abuse_detection_flag_on")
-
 
 def factory_for_model(model):
     return {
@@ -53,13 +49,6 @@ def factory_for_model(model):
         TraceProvider: TraceProviderFactory,
         ModerationProvider: ModerationProviderFactory,
     }.get(model)
-
-
-@pytest.fixture()
-def abuse_detection_flag_on(db):
-    """Moderation providers are only reachable with the abuse detection flag on."""
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
-        yield
 
 
 @pytest.fixture()

@@ -15,7 +15,6 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
 from django_tables2 import SingleTableView
-from waffle.decorators import waffle_flag
 
 from apps.api.tasks import trigger_bot_message_task
 from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
@@ -24,7 +23,7 @@ from apps.cost_tracking.services.reporting import CostFilters, costs_by_particip
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.generics.breadcrumbs import Crumb
-from apps.moderation.enforcement import abuse_detection_enabled, block_participant, is_exempt, unblock_participant
+from apps.moderation.enforcement import block_participant, is_exempt, unblock_participant
 from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.participants.forms import (
     BlockParticipantForm,
@@ -34,13 +33,12 @@ from apps.participants.forms import (
     TriggerBotForm,
 )
 from apps.teams.decorators import login_and_team_required
-from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.redirects import safe_redirect_url
 
 from ..events.models import ScheduledMessage
 from ..events.tables import SchedulesTable
-from ..experiments.filters import ExperimentSessionFilter, get_filter_context_data
+from ..experiments.filters import ParticipantSessionFilter, get_filter_context_data
 from ..generics import actions
 from ..web.dynamic_filters.datastructures import FilterParams
 from .filters import ParticipantFilter
@@ -100,8 +98,8 @@ def _sessions_panel_context(
     total_session_count = ExperimentSession.objects.filter(team=team, participant=participant).count()
     filter_context = get_filter_context_data(
         team=team,
-        columns=ExperimentSessionFilter.columns(team),
-        filter_class=ExperimentSessionFilter,
+        columns=ParticipantSessionFilter.columns(team),
+        filter_class=ParticipantSessionFilter,
         table_url=reverse("chatbots:participant_sessions_list", args=[team.slug, participant.id]),
         table_container_id="participant-sessions-table",
         table_type=FilterSet.TableType.ALL_SESSIONS,
@@ -200,13 +198,10 @@ def single_participant_home_context(
     )
     if participant.platform not in ChannelPlatform.team_global_platforms():
         context["trigger_bot_form"] = TriggerBotForm(participant=participant)
-    if abuse_detection_enabled(team):
-        denial = (
-            DeniedParticipant.objects.filter(team=team, participant=participant).select_related("created_by").first()
-        )
-        context["denial"] = denial
-        context["block_form"] = BlockParticipantForm()
-        context["can_block"] = denial is None and not is_exempt(participant=participant, team=team)
+    denial = DeniedParticipant.objects.filter(team=team, participant=participant).select_related("created_by").first()
+    context["denial"] = denial
+    context["block_form"] = BlockParticipantForm()
+    context["can_block"] = denial is None and not is_exempt(participant=participant, team=team)
     return context
 
 
@@ -476,38 +471,38 @@ def cancel_schedule(request, team_slug: str, participant_id: int, schedule_id: s
     return render(request, "table/table_row.html", {"row": table.rows[0]})
 
 
+PARTICIPANT_IDENTIFIER_LIMIT = 200
+PARTICIPANT_IDENTIFIER_FIELDS = ("identifier", "remote_id")
+
+
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def participant_identifiers_by_experiment(request, team_slug: str, experiment_id: int):
-    query = (
-        Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
-        .values_list("identifier", "remote_id")
-        .distinct()
-    )
-    return _get_identifiers_response(query)
+    participants = Participant.objects.filter(team=request.team, experimentsession__experiment_id=experiment_id)
+    return _get_identifiers_response(participants, request)
 
 
 @permission_required("experiments.view_participant")
 @login_and_team_required
 def all_participant_identifiers(request, team_slug: str):
-    query = Participant.objects.filter(team=request.team).values_list("identifier", "remote_id").distinct()
-    return _get_identifiers_response(query)
+    participants = Participant.objects.filter(team=request.team)
+    return _get_identifiers_response(participants, request)
 
 
-def _get_identifiers_response(queryset):
-    identifiers, remote_ids = set(), set()
-    for ident, remote_id in queryset:
-        if ident:
-            identifiers.add(ident)
-        if remote_id:
-            remote_ids.add(remote_id)
-    return JsonResponse(
-        {
-            "identifiers": list(identifiers),
-            "remote_ids": list(remote_ids),
-        },
-        safe=False,
-    )
+def _get_identifiers_response(participants, request):
+    """Return one page of distinct values of the requested field, sorted, starting after the `after` value."""
+    field = request.GET.get("field")
+    if field not in PARTICIPANT_IDENTIFIER_FIELDS:
+        return JsonResponse({"error": f"field must be one of {', '.join(PARTICIPANT_IDENTIFIER_FIELDS)}"}, status=400)
+
+    queryset = participants.exclude(**{field: ""})
+    if search := request.GET.get("q", "").strip():
+        queryset = queryset.filter(**{f"{field}__icontains": search})
+    if after := request.GET.get("after"):
+        queryset = queryset.filter(**{f"{field}__gt": after})
+    limit = PARTICIPANT_IDENTIFIER_LIMIT
+    values = list(queryset.order_by(field).values_list(field, flat=True).distinct()[: limit + 1])
+    return JsonResponse({"values": values[:limit], "has_more": len(values) > limit})
 
 
 @permission_required(IMPORT_PERMISSIONS)
@@ -615,7 +610,6 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
 
 @login_and_team_required
-@waffle_flag(Flags.ABUSE_DETECTION.slug)
 @permission_required("experiments.change_participant")
 @require_POST
 def block(request, team_slug: str, participant_id: int):
@@ -644,7 +638,6 @@ def block(request, team_slug: str, participant_id: int):
 
 
 @login_and_team_required
-@waffle_flag(Flags.ABUSE_DETECTION.slug)
 @permission_required("experiments.change_participant")
 @require_POST
 def unblock(request, team_slug: str, participant_id: int):

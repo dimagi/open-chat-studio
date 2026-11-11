@@ -527,7 +527,7 @@ class TestRunAgentView:
     @mock.patch("apps.help.agents.filter.Team")
     @mock.patch("apps.help.agents.filter.build_system_agent")
     def test_successful_filter_agent_call(self, mock_build, mock_team_cls):
-        stub_output = FilterOutput(filters=[ColumnFilterData(column="state", operator="equals", value="setup")])
+        stub_output = FilterOutput(filters=[ColumnFilterData(column="state", operator="any of", value='["setup"]')])
         mock_agent = mock.Mock()
         mock_agent.invoke.return_value = {"structured_response": stub_output}
         mock_build.return_value = mock_agent

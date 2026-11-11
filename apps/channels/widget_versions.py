@@ -1,6 +1,6 @@
 """Single source of truth for chat widget version policy.
 
-Update LATEST_VERSION in the same PR that publishes a new widget release.
+Update LATEST_VERSION in a separate PR after the new widget release is on npm.
 Add a WidgetDeprecation entry to deprecate old versions. See
 docs/developer_guides/widget_versioning.md for the full process.
 """
@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
-LATEST_VERSION = "0.13.0"
+LATEST_VERSION = "0.15.0"
 
 # Widgets older than 0.5.1 (Sept 2025) do not send the x-ocs-widget-version
 # header, so a missing/unparseable version is treated as older than everything.
