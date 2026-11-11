@@ -72,6 +72,7 @@ def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | Non
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @public_chat_rate_limited
 def public_link_page(request, token: str):
+    """Render a public chatbot link after validating its host and published state."""
     if hostname_of(request.get_host()) != canonical_hostname():
         raise PublicLinkWrongHost() if request.user.is_authenticated else Http404()
     channel = (

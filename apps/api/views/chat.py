@@ -420,6 +420,7 @@ NO_PUBLISHED_VERSION = {"error": "This chatbot has no published version", "code"
 
 
 def _is_team_member(request, experiment) -> bool:
+    """Return whether the authenticated user belongs to the experiment's team."""
     return request.user.is_authenticated and is_member(request.user, experiment.team)
 
 
@@ -478,6 +479,7 @@ def _send_version(request, session, version_number) -> tuple[Experiment | None, 
 
 
 def _version_number_refusal(request, session) -> Response | None:
+    """Return the refusal response when an unauthenticated user selects a version."""
     if not request.user.is_authenticated:
         return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
     if not is_member(request.user, session.experiment.team):

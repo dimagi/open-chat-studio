@@ -63,6 +63,7 @@ class ChatAPIRateThrottle(APIRateThrottle):
     scope = "chat_api"
 
     def identity(self, request, view) -> tuple[str, str]:
+        """Return the session bucket when available, otherwise the central admission bucket."""
         entry_point = chat_entry_point_for_request(request)
         if entry_point != ChatEntryPoint.RENEW_SESSION_TOKEN:
             session_id = getattr(view, "kwargs", {}).get("session_id")

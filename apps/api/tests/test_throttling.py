@@ -262,6 +262,7 @@ def test_chat_api_throttle_buckets_an_oauth_caller_on_its_channel(experiment):
 
 @pytest.mark.django_db()
 def test_chat_api_throttle_keys_a_public_start_on_the_visitor_ip(experiment):
+    """Public session creation uses the visitor IP instead of a shared channel bucket."""
     channel = ExperimentChannelFactory.create(
         experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": "tok"}
     )
@@ -274,6 +275,7 @@ def test_chat_api_throttle_keys_a_public_start_on_the_visitor_ip(experiment):
 
 @pytest.mark.django_db()
 def test_chat_api_throttle_still_keys_an_embed_start_on_the_channel(experiment):
+    """Embedded session creation uses the authenticated channel bucket."""
     channel = ExperimentChannelFactory.create(
         experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "tok"}
     )
