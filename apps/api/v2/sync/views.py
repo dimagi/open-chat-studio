@@ -12,8 +12,15 @@ from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.keyset import encode_cursor, keyset_page
 from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.sync.permissions import CanViewSessions
-from apps.api.v2.sync.serializers import SessionPageSerializer, SessionQuerySerializer, SessionSerializer
-from apps.chat.models import Chat
+from apps.api.v2.sync.serializers import (
+    MessagePageSerializer,
+    MessageQuerySerializer,
+    MessageSerializer,
+    SessionPageSerializer,
+    SessionQuerySerializer,
+    SessionSerializer,
+)
+from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ExperimentSession
 from apps.oauth.permissions import TokenHasOAuthResourceScope, token_reaches_all_data
 
@@ -32,7 +39,7 @@ class SyncView(APIView):
         queryset = queryset.filter(updated_at__lte=timezone.now() - SYNC_SETTLE_WINDOW)
         rows, has_more = keyset_page(queryset, params.get("cursor"), params["limit"])
         cursor = encode_cursor(rows[-1]) if rows else params.get("cursor")
-        results = serializer_class(self.prepare(rows), many=True).data
+        results = serializer_class(self.prepare(rows), many=True, context={"request": self.request}).data
         return Response({"cursor": cursor, "has_more": has_more, "results": results})
 
     def prepare(self, rows: list) -> list:
@@ -43,6 +50,9 @@ class SyncView(APIView):
         if not token_reaches_all_data(self.request.auth):
             sessions = sessions.filter(experiment_id__in=self.request.auth.application.allowed_chatbots.values("id"))
         return sessions
+
+    def reachable_messages(self):
+        return ChatMessage.objects.filter(chat__experiment_session__in=self.reachable_sessions())
 
 
 class SessionListView(SyncView):
@@ -76,6 +86,38 @@ class SessionListView(SyncView):
 
     def prepare(self, rows: list) -> list:
         return attach_chat_tagged_items(rows)
+
+
+class MessageListView(SyncView):
+    @extend_schema(
+        operation_id="message_list",
+        summary="List messages changed since a cursor",
+        description=(
+            "Messages across the team's sessions, in the order they last changed. Store `cursor` from each "
+            "response and send it on the next pull to receive only messages created or changed since. Rows "
+            "changed in the last minute are returned on a later pull."
+        ),
+        tags=["Sessions"],
+        parameters=[MessageQuerySerializer],
+        responses=MessagePageSerializer,
+    )
+    def get(self, request):
+        query = MessageQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        params = query.validated_data
+
+        messages = self.reachable_messages().select_related("chat__experiment_session").prefetch_related("tags")
+        if "chatbot" in params:
+            messages = messages.filter(chat__experiment_session__experiment__public_id=params["chatbot"])
+        if "session" in params:
+            messages = messages.filter(chat__experiment_session__external_id=params["session"])
+        if "participant" in params:
+            messages = messages.filter(chat__experiment_session__participant__public_id=params["participant"])
+        return self.page(messages, params, MessageSerializer)
+
+    def prepare(self, rows: list) -> list:
+        ChatMessage.prefetch_attached_files(rows)
+        return rows
 
 
 def _chat_has_tag(names: list[str], team) -> Exists:

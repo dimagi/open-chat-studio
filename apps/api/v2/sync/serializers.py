@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
+from apps.api.serializers import FileSerializer
 from apps.channels.models import ChannelPlatform
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.experiments.models import ExperimentSession
 
 MAX_LIMIT = 1000
@@ -52,9 +54,43 @@ class SessionSerializer(serializers.ModelSerializer):
 
 
 class SessionPageSerializer(serializers.Serializer):
-    cursor = serializers.CharField(
-        allow_null=True,
-        help_text="Pass on the next pull, also when `has_more` is false. Null only when nothing has ever matched.",
-    )
-    has_more = serializers.BooleanField(help_text="More rows are ready now; pull again with `cursor`.")
+    cursor_help = "Pass on the next pull, also when `has_more` is false. Null only when nothing has ever matched."
+    has_more_help = "More rows are ready now; pull again with `cursor`."
+
+    cursor = serializers.CharField(allow_null=True, help_text=cursor_help)
+    has_more = serializers.BooleanField(help_text=has_more_help)
     results = SessionSerializer(many=True)
+
+
+class MessageQuerySerializer(SyncQuerySerializer):
+    session = serializers.CharField(required=False, help_text="A session's ID.")
+    participant = serializers.UUIDField(required=False, help_text="A participant's public ID.")
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    session_id = serializers.CharField(source="chat.experiment_session.external_id", read_only=True)
+    role = serializers.SerializerMethodField()
+    metadata = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+    attachments = FileSerializer(source="get_attached_files", many=True, read_only=True)
+
+    class Meta:
+        model = ChatMessage
+        fields = ["id", "session_id", "role", "content", "metadata", "tags", "attachments", "created_at", "updated_at"]
+        read_only_fields = fields
+
+    def get_role(self, message) -> str:
+        return ChatMessageType(message.message_type).role
+
+    def get_metadata(self, message) -> dict:
+        internal = ChatMessageMetadataKeys.internal_keys()
+        return {key: value for key, value in message.metadata.items() if key not in internal}
+
+    def get_tags(self, message) -> list[str]:
+        return sorted(tag.name for tag in message.tags.all())
+
+
+class MessagePageSerializer(serializers.Serializer):
+    cursor = serializers.CharField(allow_null=True, help_text=SessionPageSerializer.cursor_help)
+    has_more = serializers.BooleanField(help_text=SessionPageSerializer.has_more_help)
+    results = MessageSerializer(many=True)
