@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.channels import widget_versions
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -175,6 +175,19 @@ def test_edit_error_keeps_allow_all_domains_checked(admin_client, widget_channel
 
     assert "The session lifetime must be at least 5 minutes." in content
     assert "&quot;allowAllDomains&quot;: true" in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("saved_mode", [CredentialMode.EMBED_KEY, CredentialMode.OAUTH])
+def test_embed_code_waits_for_a_changed_credential_to_be_saved(admin_client, widget_channel, saved_mode):
+    widget_channel.credential_mode = saved_mode
+    widget_channel.save(update_fields=["credential_mode"])
+
+    content = admin_client.get(_edit_url(widget_channel)).content.decode()
+
+    assert f"x-show=\"credentialMode === '{saved_mode.value}'\"" in content
+    assert f"x-show=\"credentialMode !== '{saved_mode.value}'\"" in content
+    assert "Save to update the embed code." in content
 
 
 @pytest.mark.django_db()
