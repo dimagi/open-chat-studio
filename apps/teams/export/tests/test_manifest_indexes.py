@@ -23,6 +23,8 @@ UNINDEXED_UPDATED_AT_MODELS = frozenset(
         "human_annotations.annotationitem",
         "human_annotations.annotationqueue",
         "human_annotations.annotationqueueaggregate",
+        # Scoped to the one team by pk, so there is nothing to sort.
+        "teams.team",
     }
 )
 

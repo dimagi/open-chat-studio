@@ -1,10 +1,11 @@
 import pytest
 from django.apps import apps
 from django.db import connection
+from django.db.models import ForeignKey
 from django.test.utils import CaptureQueriesContext
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
-from apps.api.export.serializers import build_resource_serializer
+from apps.api.export.serializers import build_entry_serializer, build_resource_serializer
 from apps.files.models import FilePurpose
 from apps.teams.export import manifest
 from apps.teams.export.chatbot_scope import build_scope
@@ -56,7 +57,6 @@ IGNORED_MODELS = frozenset(
         "oauth.oauth2grant",
         "oauth.oauth2idtoken",
         "oauth.oauth2refreshtoken",
-        "service_providers.moderationprovider",
         "site_admin.ocsconfiguration",
         "slack.slackbot",
         "slack.slackinstallation",
@@ -152,6 +152,35 @@ def test_registry_fields_exist_on_their_model():
         model_fields = {f.name for f in _model(label)._meta.get_fields()}
         for field in fields:
             assert field in model_fields, f"{label}.{field}"
+
+
+def _partial_entries():
+    return [(position, entry) for position, entry in enumerate(manifest.MANIFEST_ENTRIES) if entry.fields]
+
+
+def test_partial_entry_fields_exist_and_are_importable():
+    """The importer writes a partial row with a plain update, so it can't carry secrets or timestamps."""
+    for _position, entry in _partial_entries():
+        model = _model(entry.model)
+        model_fields = {f.name for f in model._meta.concrete_fields}
+        assert set(entry.fields) <= model_fields, entry.resource
+        assert not entry.secret, entry.resource
+        for name in entry.fields:
+            field = model._meta.get_field(name)
+            assert not getattr(field, "auto_now", False), name
+            assert not getattr(field, "auto_now_add", False), name
+
+
+def test_partial_entries_follow_the_entries_their_fks_point_at():
+    """A partial row's FK can only be translated once its target's rows are imported."""
+    positions = {entry.model: position for position, entry in enumerate(manifest.MANIFEST_ENTRIES) if not entry.fields}
+    for position, entry in _partial_entries():
+        model = _model(entry.model)
+        for name in entry.fields:
+            field = model._meta.get_field(name)
+            if isinstance(field, ForeignKey):
+                target = field.related_model._meta.label_lower
+                assert positions[target] < position, f"{entry.resource}.{name} -> {target}"
 
 
 def test_get_manifest_entry_returns_matching_entry():
@@ -271,7 +300,7 @@ def test_build_manifest_payload_shape():
     assert isinstance(payload["schema_checksum"], str)
     assert {e["resource"] for e in payload["entries"]} == {e.resource for e in manifest.MANIFEST_ENTRIES}
     first = payload["entries"][0]
-    assert set(first) >= {"model", "resource", "cursor", "secret"}
+    assert set(first) >= {"model", "resource", "cursor", "secret", "fields"}
 
 
 def test_every_resource_serializer_builds():
@@ -279,7 +308,7 @@ def test_every_resource_serializer_builds():
     vector, pydantic) on any synced model fails here rather than at schema generation or request time."""
 
     for entry in manifest.MANIFEST_ENTRIES:
-        serializer = build_resource_serializer(manifest.entry_model(entry.model))()
+        serializer = build_entry_serializer(entry)()
         assert serializer.fields  # accessing .fields builds them; raises on an unmapped field type
 
 

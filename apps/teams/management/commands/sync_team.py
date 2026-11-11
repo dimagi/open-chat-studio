@@ -452,7 +452,9 @@ class _SyncPass:
         catch_ups: dict[str | None, Iterator[tuple[int, bool]]] = {}
         while True:
             try:
-                return self.importer.import_rows(self.entries[position]["model"], [row])
+                entry = self.entries[position]
+                # A source on older code serves no partial entries, so its manifest has no ``fields``.
+                return self.importer.import_rows(model_label=entry["model"], rows=[row], fields=entry.get("fields", ()))
             except UnresolvedForeignKey as exc:
                 reads = catch_ups.setdefault(exc.target_label, self._catch_up_reads(position, exc.target_label))
                 if (read := next(reads, None)) is None:
@@ -468,9 +470,9 @@ class _SyncPass:
     def _catch_up_reads(self, before: int, model_label: str | None) -> Iterator[tuple[int, bool]]:
         """The reads that can bring in a missing ``model_label`` row, in order, as (position, reread):
         its entry from the cursor, then from the beginning when it is rereadable. Only an entry before
-        ``before`` qualifies."""
+        ``before`` qualifies. A partial entry never creates rows, so it can't bring one in."""
         for position, entry in enumerate(self.entries[:before]):
-            if entry["model"] == model_label:
+            if entry["model"] == model_label and not entry.get("fields"):
                 yield position, False
                 if self._rereadable(entry):
                     yield position, True

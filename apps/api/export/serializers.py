@@ -148,6 +148,11 @@ class ManifestEntrySerializer(serializers.Serializer):
         "chatbot selection. Rows can join the served set below a stored cursor when a selected chatbot "
         "starts using them."
     )
+    fields = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Set on a partial resource: the only fields its rows carry besides `id` and `updated_at`. "
+        "They update rows imported earlier in the sync (for `team_settings`, the row from `team/`).",
+    )
 
 
 class ManifestSerializer(serializers.Serializer):
@@ -162,7 +167,33 @@ class ManifestSerializer(serializers.Serializer):
 
 def component_name(model) -> str:
     """The base name for a synced model's OpenAPI components: its ``verbose_name`` PascalCased."""
-    return "".join(word[:1].upper() + word[1:] for word in str(model._meta.verbose_name).split())
+    return _pascal_case(str(model._meta.verbose_name).split())
+
+
+def entry_component_name(entry: ManifestEntry) -> str:
+    """The base name for an entry's OpenAPI components. A partial entry is named after its resource,
+    since its model already has components of its own."""
+    if entry.fields:
+        return _pascal_case(entry.resource.split("_"))
+    return component_name(entry_model(entry.model))
+
+
+def _pascal_case(words: list[str]) -> str:
+    return "".join(word[:1].upper() + word[1:] for word in words)
+
+
+def build_entry_serializer(entry: ManifestEntry) -> type[serializers.ModelSerializer]:
+    if entry.fields:
+        return build_partial_serializer(entry)
+    return build_resource_serializer(entry_model(entry.model))
+
+
+@cache
+def build_partial_serializer(entry: ManifestEntry) -> type[serializers.ModelSerializer]:
+    """Serializer for a partial entry: the row's id, its updated_at (for the cursor) and the entry's
+    fields. An FK goes out as the source pk, like in a full row."""
+    meta = type("Meta", (), {"model": entry_model(entry.model), "fields": ("id", "updated_at", *entry.fields)})
+    return type(f"{entry_component_name(entry)}DetailSerializer", (serializers.ModelSerializer,), {"Meta": meta})
 
 
 @cache
@@ -276,10 +307,9 @@ def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Seria
 
 def build_resource_response_serializer(entry: ManifestEntry) -> type[serializers.Serializer]:
     """The paginated envelope the resource endpoint returns: cursor, has_more, and the page of rows."""
-    model = entry_model(entry.model)
-    item = build_resource_serializer(model)
+    item = build_entry_serializer(entry)
     return type(
-        f"{component_name(model)}List",
+        f"{entry_component_name(entry)}List",
         (serializers.Serializer,),
         {
             "cursor": serializers.CharField(

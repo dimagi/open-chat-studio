@@ -5,7 +5,7 @@ plain functions plus a thin loop so the transforms can be unit-tested without a 
 import contextlib
 import functools
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from django.contrib.auth.models import Group
@@ -37,8 +37,8 @@ from .manifest import MANIFEST_ENTRIES as _ENTRIES
 from .seal import unseal
 from .translation import FKTranslationStore
 
-# The team is synced via a dedicated step rather than from MANIFEST_ENTRIES, but it's still a synced
-# target -- include it so FKs pointing at it resolve to the imported team instead of being nulled.
+# The team row is synced via a dedicated step; MANIFEST_ENTRIES only carries its partial settings
+# entry. Include it so FKs pointing at it resolve to the imported team instead of being nulled.
 MANIFEST_LABELS = {entry.model for entry in _ENTRIES} | {TEAM_MODEL}
 
 SIGNALS_TO_MUTE = (pre_save, post_save, pre_delete, post_delete, m2m_changed)
@@ -316,21 +316,56 @@ class Importer:
         # applied to.
         self.kept_target_edits: dict[str, set[int]] = defaultdict(set)
 
-    def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
+    def import_rows(self, model_label: str, rows: Iterable[dict], fields: Sequence[str] = ()) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
-        Returns the number of rows imported this pass (for the sync's progress report)."""
+        ``fields`` marks the rows as partial (see ``ManifestEntry.fields``). Returns the number of rows
+        imported this pass (for the sync's progress report)."""
         model = entry_model(model_label)
         secret_fields = SECRET_REGISTRY.get(model_label, [])
+        # The full row was recorded with the same updated_at, so a partial row keeps its own checkpoint.
+        checkpoint_label = f"{model_label}[{','.join(sorted(fields))}]" if fields else model_label
         count = 0
         for row in rows:
-            if self._is_unchanged(model_label, row):
+            if self._is_unchanged(checkpoint_label, row):
                 self.skipped_rows += 1
                 continue
-            if self.private_key and secret_fields:
-                row = unseal_secrets(row, secret_fields, self.private_key)
-            self._import_row(model_label, model, row)
+            if fields:
+                self._import_partial_row(
+                    model_label=model_label, model=model, fields=fields, checkpoint_label=checkpoint_label, row=row
+                )
+            else:
+                if self.private_key and secret_fields:
+                    row = unseal_secrets(row, secret_fields, self.private_key)
+                self._import_row(model_label, model, row)
             count += 1
         return count
+
+    def _import_partial_row(
+        self, model_label: str, model: type[models.Model], fields: Sequence[str], checkpoint_label: str, row: dict
+    ) -> None:
+        """Update the listed fields on the row an earlier step imported."""
+        source_pk = row["id"]
+        target_pk = self.store.get_target(model_label, source_pk)
+        if target_pk is None:
+            raise UnresolvedForeignKey(
+                f"{model_label}:{source_pk} has no imported row to update", target_label=model_label
+            )
+        field_values = {}
+        nulled_fk = False
+        for name in fields:
+            field = model._meta.get_field(name)
+            nulled_fk |= self._collect_concrete_field(
+                field=field, row=row, named=set(), field_values=field_values, timestamps={}
+            )
+        _update_without_auto_now(model=model, pk=target_pk, values=field_values)
+        # A nulled FK keeps no timestamp, so a later re-read applies the row again.
+        source_updated_at = None if nulled_fk else row.get("updated_at")
+        self.store.record(
+            content_type=checkpoint_label,
+            source_key=source_pk,
+            target_key=target_pk,
+            source_updated_at=source_updated_at,
+        )
 
     def _is_unchanged(self, model_label: str, row: dict) -> bool:
         """Whether the row is already on the target at this exact source revision, so a re-read costs
@@ -412,7 +447,7 @@ class Importer:
             self._apply_named_links(model_label, instance, row)
 
             if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
-                _bypass_auto_now_update(model, instance.pk, timestamps)
+                _update_without_auto_now(model, instance.pk, timestamps)
 
             # The store commits on its own, before Postgres does. The mapping goes in first without the
             # timestamp, so a failed Postgres commit leaves a row a rerun re-imports, not one it skips.
@@ -666,9 +701,9 @@ class Importer:
             membership.groups.set(Group.objects.filter(name__in=row.get("groups", [])))
 
 
-def _bypass_auto_now_update(model: type[models.Model], pk: int, values: dict) -> None:
-    """Write the source timestamps back. QuerySet.update() bypasses auto_now/auto_now_add; audited
-    models additionally need an explicit (non-auditing) action."""
+def _update_without_auto_now(model: type[models.Model], pk: int, values: dict) -> None:
+    """Write column values to an existing row. QuerySet.update() bypasses auto_now/auto_now_add;
+    audited models additionally need an explicit (non-auditing) action."""
     queryset = model._default_manager.filter(pk=pk)
     if isinstance(queryset, AuditingQuerySet):
         queryset.update(audit_action=AuditAction.IGNORE, **values)

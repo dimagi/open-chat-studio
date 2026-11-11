@@ -420,6 +420,9 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     "annotations.tag": _team_wide(),
     "users.customuser": _team_wide(),
     "cost_tracking.pricingrule": _team_wide(),
+    # Moderation is a team setting that applies to every chatbot.
+    "teams.team": _team_wide(),
+    "service_providers.moderationprovider": _team_wide(),
     # Notification text and links can name chatbots outside the selection. The settings form and
     # the sync report say so.
     "ocs_notifications.eventtype": _team_wide(),

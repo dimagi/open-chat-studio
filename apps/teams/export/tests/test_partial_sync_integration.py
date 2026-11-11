@@ -9,7 +9,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from apps.api.export.serializers import build_resource_serializer, build_team_serializer
+from apps.api.export.serializers import build_entry_serializer, build_team_serializer
 from apps.chat.models import ChatMessage
 from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
@@ -18,7 +18,7 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.backends import add_user_to_team
 from apps.teams.export.chatbot_scope import build_scope
 from apps.teams.export.importer import Importer, mute_signals
-from apps.teams.export.manifest import MANIFEST_ENTRIES, TEAM_MODEL, entry_model, scoped_queryset
+from apps.teams.export.manifest import MANIFEST_ENTRIES, TEAM_MODEL, scoped_queryset
 from apps.teams.export.seal import load_public_key
 from apps.users.models import CustomUser
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -35,7 +35,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
 
 pytestmark = pytest.mark.django_db
@@ -86,6 +86,9 @@ class Fixture:
         self.staying_message = ChatMessageFactory(chat=staying_session.chat, content="Hello from the staying bot")
 
         self.evaluator = EvaluatorFactory(team=self.team)
+        self.team.moderation_provider = ModerationProviderFactory(team=self.team, name="Moderation")
+        self.team.moderation_enabled = True
+        self.team.save()
         self.team.exportable_experiments.add(self.migrating)
         # Users are synced by team membership; the factories create owners outside the team.
         for user in CustomUser.objects.exclude(membership__team=self.team):
@@ -106,18 +109,18 @@ def _import_scoped_export(store) -> Importer:
     exported = []
     for entry in MANIFEST_ENTRIES:
         rows = list(scoped_queryset(entry, fixture.team, scope).order_by("id"))
-        serializer = build_resource_serializer(entry_model(entry.model))(
+        serializer = build_entry_serializer(entry)(
             rows, many=True, context={"team": fixture.team, "public_key": public_key}
         )
-        exported.append((entry.model, serializer.data))
+        exported.append((entry, serializer.data))
 
     importer = Importer(store, private_key=fixture.private_key)
     with mute_signals():
         # Muted so the source's file blobs stay in storage for the import to find.
         fixture.team.delete()
         importer.import_rows(TEAM_MODEL, [team_row])
-        for model_label, rows in exported:
-            importer.import_rows(model_label, rows)
+        for entry, rows in exported:
+            importer.import_rows(entry.model, rows, fields=entry.fields)
 
     importer.fixture = fixture
     return importer
@@ -164,3 +167,13 @@ def test_the_chatbots_files_came_across(make_store, tmp_path):
     names = set(File.objects.filter(team=target).values_list("name", flat=True))
     assert importer.fixture.collection_file.name in names
     assert importer.fixture.attached_file.name in names
+
+
+def test_the_team_keeps_its_moderation_settings(make_store, tmp_path):
+    importer = _import_scoped_export(make_store(tmp_path / "team.sqlite"))
+    target = importer.target_team
+    target.refresh_from_db()
+
+    assert target.moderation_enabled is True
+    assert target.moderation_provider.name == "Moderation"
+    assert target.moderation_provider.team == target
