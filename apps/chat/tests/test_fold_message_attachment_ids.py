@@ -1,5 +1,9 @@
+import threading
+import time
+
 import pytest
 from django.core.management import call_command
+from django.db import connection, transaction
 
 from apps.chat.management.commands import fold_message_attachment_ids
 from apps.chat.models import ChatMessage
@@ -62,6 +66,51 @@ def test_does_not_touch_updated_at():
     call_command("fold_message_attachment_ids")
 
     assert ChatMessage.objects.get(id=message.id).updated_at == updated_at
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_concurrent_edit_is_not_undone():
+    """Moderation strips a reply's attachments while the backfill waits on its row lock."""
+    message = _message(ChatFactory.create(), {"cited_files": [1]})
+    locked, release = threading.Event(), threading.Event()
+
+    def moderate():
+        try:
+            with transaction.atomic():
+                reply = ChatMessage.objects.select_for_update().get(id=message.id)
+                reply.metadata = {}
+                reply.save(update_fields=["metadata"])
+                locked.set()
+                release.wait(timeout=10)
+        finally:
+            connection.close()
+
+    def backfill():
+        try:
+            call_command("fold_message_attachment_ids")
+        finally:
+            connection.close()
+
+    moderation, backfill_run = threading.Thread(target=moderate), threading.Thread(target=backfill)
+    moderation.start()
+    locked.wait(timeout=10)
+    backfill_run.start()
+    _wait_for_a_blocked_query()
+    release.set()
+    moderation.join()
+    backfill_run.join()
+
+    assert _metadata(message) == {}
+
+
+def _wait_for_a_blocked_query():
+    with connection.cursor() as cursor:
+        for _ in range(100):
+            cursor.execute("SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'")
+            if cursor.fetchone():
+                return
+            time.sleep(0.05)
+    raise AssertionError("the backfill never waited on the row lock")
 
 
 @pytest.mark.django_db()

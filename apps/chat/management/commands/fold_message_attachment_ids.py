@@ -8,25 +8,21 @@ BATCH_SIZE = 10_000
 LEGACY_KEYS = [ChatMessageMetadataKeys.CITED_FILES.value, ChatMessageMetadataKeys.GENERATED_FILES.value]
 TARGET_KEY = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS.value
 
-# updated_at is left alone: the file references are unchanged, and bumping it would re-send every
-# AI message to incremental exports.
+# The new value is computed from the updated row itself, so a row changed while this waits on its
+# lock is re-read rather than overwritten. updated_at is left alone: the file references are
+# unchanged, and bumping it would re-send every AI message to incremental exports.
 FOLD_SQL = f"""
-    UPDATE {ChatMessage._meta.db_table} AS message
-    SET metadata = (message.metadata - %(legacy)s::text[]) || folded.patch
-    FROM (
-        SELECT candidate.id,
-            CASE WHEN count(file_id) = 0 THEN '{{}}'::jsonb
-                ELSE jsonb_build_object(%(target)s, jsonb_agg(DISTINCT file_id)) END AS patch
-        FROM {ChatMessage._meta.db_table} AS candidate
-        LEFT JOIN LATERAL jsonb_array_elements(
-            coalesce(candidate.metadata -> %(target)s, '[]')
-            || coalesce(candidate.metadata -> %(cited)s, '[]')
-            || coalesce(candidate.metadata -> %(generated)s, '[]')
-        ) AS file_id ON true
-        WHERE candidate.id >= %(start)s AND candidate.id < %(stop)s AND candidate.metadata ?| %(legacy)s::text[]
-        GROUP BY candidate.id
-    ) AS folded
-    WHERE message.id = folded.id
+    UPDATE {ChatMessage._meta.db_table}
+    SET metadata = (metadata - %(legacy)s::text[]) || coalesce((
+        SELECT jsonb_build_object(%(target)s, jsonb_agg(DISTINCT file_id))
+        FROM jsonb_array_elements(
+            coalesce(metadata -> %(target)s, '[]')
+            || coalesce(metadata -> %(cited)s, '[]')
+            || coalesce(metadata -> %(generated)s, '[]')
+        ) AS file_id
+        HAVING count(*) > 0
+    ), '{{}}'::jsonb)
+    WHERE id >= %(start)s AND id < %(stop)s AND metadata ?| %(legacy)s::text[]
 """
 
 
