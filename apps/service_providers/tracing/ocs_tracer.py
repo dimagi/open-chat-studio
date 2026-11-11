@@ -15,7 +15,7 @@ from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.llm_service.error_classification import translate_provider_error
-from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
+from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT, OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.trace.models import Trace, TraceStatus
 
@@ -46,6 +46,7 @@ class OCSTracer(Tracer):
         self.error_span_name: str = ""
         self.error_notification_config: SpanNotificationConfig | None = None
         self.metrics_collector: MetricsCollector | None = None
+        self.custom_action_requests: list[dict[str, Any]] = []
 
     @property
     def ready(self) -> bool:
@@ -128,6 +129,7 @@ class OCSTracer(Tracer):
                 self.trace_record.status = TraceStatus.SUCCESS
 
             self._update_trace_metrics()
+            self.trace_record.custom_action_requests = self.custom_action_requests
             self.trace_record.save()
             self._record_costs()
 
@@ -223,6 +225,7 @@ class OCSTracer(Tracer):
         self.error_span_name = ""
         self.error_notification_config = None
         self.metrics_collector = None
+        self.custom_action_requests = []
 
     @contextmanager
     def span(
@@ -367,6 +370,11 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
     def on_tool_error(self, *args, **kwargs) -> None:
         self._capture_error(_error_arg(args, kwargs), "Tool error occurred", "Tool Error")
+
+    def on_custom_event(self, name: str, data: Any, **kwargs: Any) -> None:
+        if name == CUSTOM_ACTION_REQUEST_EVENT:
+            # Tools run on LangGraph's thread pool; list.append is atomic, so no lock is needed.
+            self.tracer.custom_action_requests.append(data)
 
 
 def _error_arg(args, kwargs) -> BaseException | None:

@@ -54,6 +54,9 @@ class Trace(models.Model):
     error = models.TextField(blank=True, help_text="Error message if the trace failed")
     n_turns = models.IntegerField(null=True, blank=True, help_text="Number of LLM calls during pipeline execution")
     n_toolcalls = models.IntegerField(null=True, blank=True, help_text="Number of tool invocations across all turns")
+    custom_action_requests = SanitizedJSONField(
+        default=list, null=True, blank=True, help_text="HTTP requests made by custom actions, with credentials redacted"
+    )
 
     class Meta:
         indexes = [
