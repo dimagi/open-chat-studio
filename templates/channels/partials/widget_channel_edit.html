@@ -62,12 +62,13 @@
 
       <div x-show="!channelEnabled" x-cloak>
         <label for="{{ message.id_for_label }}" class="block text-sm font-semibold mb-1.5">
-          Message shown to participants <span class="font-normal opacity-60">Optional</span>
+          Disabled message <span class="font-normal opacity-60">Optional</span>
         </label>
         <textarea id="{{ message.id_for_label }}" name="{{ message.html_name }}" rows="3" class="textarea w-full rounded-lg"
                   placeholder="This assistant is offline for maintenance. Please try again later.">{{ message.value|default_if_none:'' }}</textarea>
         <p class="text-sm opacity-70 mt-1.5">
-          Shown when someone tries to start a chat while the channel is off. Leave blank for a generic "currently unavailable" message.
+          The chat API returns this when someone starts a chat while the channel is off. Leave blank for a generic
+          "currently unavailable" message. The web widget shows its own generic error instead.
         </p>
         {% for error in message.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
       </div>
