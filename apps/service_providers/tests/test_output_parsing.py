@@ -246,6 +246,14 @@ class TestParseOutputForAnthropicOcsCitations:
 
         assert result.cited_files == set()
 
+    def test_text_without_markers_cites_nothing_and_skips_the_query(self, team_with_users, django_assert_num_queries):
+        session = Mock(team_id=team_with_users.id)
+
+        with django_assert_num_queries(0):
+            result = parse_output_for_anthropic(AIMessage(content="No citations here."), session=session)
+
+        assert result.cited_files == set()
+
     def test_include_citations_false_leaves_cited_files_empty(self, team_with_users):
         session = Mock(team_id=team_with_users.id)
         file = FileFactory.create(team=team_with_users)
