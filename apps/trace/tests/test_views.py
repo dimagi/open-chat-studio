@@ -229,6 +229,49 @@ def test_trace_detail_view_shows_confidence_badge_for_estimated_rows(client, tea
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("requests", "shown"),
+    [
+        pytest.param([], False, id="no-requests"),
+        pytest.param(None, False, id="null-from-older-release"),
+        pytest.param(
+            [
+                {
+                    "tool": "get_weather",
+                    "custom_action": "Weather API",
+                    "method": "GET",
+                    "url": "https://api.example.com/weather?city=Nairobi",
+                    "request_headers": {"authorization": "[REDACTED]"},
+                    "request_body": None,
+                    "status_code": 503,
+                    "response_headers": {"content-type": "text/plain"},
+                    "response_body": "upstream unavailable",
+                    "duration_ms": 412,
+                    "error": "HTTPStatusError: Server error '503 Service Unavailable'",
+                }
+            ],
+            True,
+            id="one-request",
+        ),
+    ],
+)
+def test_trace_detail_view_shows_custom_action_requests(client, team_with_users, requests, shown):
+    team = team_with_users
+    trace = _make_trace(team, custom_action_requests=requests)
+
+    client.force_login(team.members.first())
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert ('data-testid="custom-action-requests"' in content) is shown
+    if shown:
+        for text in ["Weather API", "https://api.example.com/weather?city=Nairobi", "503", "412 ms", "[REDACTED]"]:
+            assert text in content
+        assert "upstream unavailable" in content
+
+
+@pytest.mark.django_db()
 def test_trace_table_view_filters_by_team(client, team_with_users):
     """The trace list view must return only traces belonging to the requesting team."""
     team = team_with_users

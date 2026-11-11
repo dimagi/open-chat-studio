@@ -169,6 +169,9 @@
         </div>
       {% endif %}
       {% include "trace/inputs_outputs.html" %}
+      {% if trace.custom_action_requests %}
+        {% include "trace/partials/custom_action_requests.html" with requests=trace.custom_action_requests %}
+      {% endif %}
       {# Langfuse spans — lazy loaded via HTMX #}
       <div hx-get="{% url 'trace:trace_langfuse_spans' request.team.slug trace.pk %}"
            hx-trigger="load"
