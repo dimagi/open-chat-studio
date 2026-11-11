@@ -6,8 +6,8 @@ resolves the request identity and translates the result into DRF semantics.
 
 from rest_framework.throttling import BaseThrottle
 
+from apps.api.admission import ChatEntryPoint, chat_entry_point_for_request, get_chat_admission
 from apps.api.models import UserAPIKey
-from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.oauth.models import OAuth2AccessToken
 from apps.utils.rate_limit import check, client_ip, is_exempt
 
@@ -63,17 +63,12 @@ class ChatAPIRateThrottle(APIRateThrottle):
     scope = "chat_api"
 
     def identity(self, request, view) -> tuple[str, str]:
-        auth = getattr(request, "auth", None)
-        if isinstance(auth, OAuth2AccessToken):
-            # A token renewal is the OAuth client's traffic, not the visitor's.
-            return "oauth_client", str(auth.application_id)
-        session_id = getattr(view, "kwargs", {}).get("session_id")
-        if session_id is not None:
-            return "session", str(session_id)
-        if isinstance(auth, ExperimentChannel):
-            if auth.platform == ChannelPlatform.PUBLIC:
-                # A shared link cannot pool every visitor in one bucket: any holder could lock
-                # the rest out, and each admitted start creates a participant and a session.
-                return "ip", client_ip(request)
-            return "channel", str(auth.pk)
-        return "ip", client_ip(request)
+        """Return the session bucket when available, otherwise the central admission bucket."""
+        entry_point = chat_entry_point_for_request(request)
+        if entry_point != ChatEntryPoint.RENEW_SESSION_TOKEN:
+            session_id = getattr(view, "kwargs", {}).get("session_id")
+            if session_id is not None:
+                return "session", str(session_id)
+
+        admission = get_chat_admission(request, entry_point=entry_point)
+        return admission.throttle_bucket

@@ -14,6 +14,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionRule, resolve_chatbot_version
 from apps.experiments.models import Experiment
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.teams.roles import is_member
 from apps.web.meta import canonical_hostname, get_server_root, hostname_of
 from apps.web.waf import WafRule, waf_allow
 
@@ -71,6 +72,7 @@ def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | Non
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @public_chat_rate_limited
 def public_link_page(request, token: str):
+    """Render a public chatbot link after validating its host and published state."""
     if hostname_of(request.get_host()) != canonical_hostname():
         raise PublicLinkWrongHost() if request.user.is_authenticated else Http404()
     channel = (
@@ -82,7 +84,7 @@ def public_link_page(request, token: str):
         raise Http404()
 
     state, published = _page_state(channel)
-    member = request.user.is_authenticated and channel.team.members.filter(id=request.user.id).exists()
+    member = request.user.is_authenticated and is_member(request.user, channel.team)
     # With no published version there is no name a visitor is entitled to. Members previewing the
     # page before publishing keep the draft's, since the placeholder would hide what they came for.
     shown = published or (channel.experiment if member else None)

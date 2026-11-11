@@ -26,12 +26,12 @@ from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
+from apps.api.admission import ChatCredentialKind, ChatEntryPoint, get_chat_admission
 from apps.api.authentication import (
     ChatOAuthAuthentication,
     ChatSessionOAuthAuthentication,
     EmbeddedWidgetAuthentication,
     get_embed_key_channel,
-    oauth_resolved_channel,
 )
 from apps.api.chat_consent import consent_refusal, session_consent_block
 from apps.api.exceptions import ChatApiAccessDenied, ParticipantBlocked
@@ -78,6 +78,7 @@ from apps.service_providers.llm_service.image_types import (
     DENIED_IMAGE_EXTENSIONS,
     image_type_names,
 )
+from apps.teams.roles import is_member
 from apps.users.models import CustomUser
 from apps.web.waf import WafRule, waf_allow
 
@@ -304,20 +305,20 @@ def _issue_or_opt_out_session_token(session, channel):
     return _opt_out_session_token(session)
 
 
-def _resolve_embed_key_channel(request, experiment) -> ExperimentChannel | None:
+def _resolve_embed_key_channel(request, experiment, admission) -> ExperimentChannel | None:
     """The widget channel this request's embed key proves, if any.
 
     Resolved once: it both authorizes the caller and owns the session. `request.auth` already
     holds it when the key did the authenticating, so this only queries for keys that rode along
     with another authenticator.
 
-    A bearer token also puts a channel in `request.auth`, and that one is not an embed-key
-    resolution: in `oauth` mode the key is ignored, so none is looked up either.
+    A bearer token is represented by the admission result, so its Chat API Channel is not
+    reinterpreted as an Embed Key resolution.
     """
-    if oauth_resolved_channel(request) is not None:
+    if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS:
         return None
-    if isinstance(request.auth, ExperimentChannel):
-        return request.auth
+    if admission.credential_kind == ChatCredentialKind.EMBED_KEY:
+        return admission.channel
     return get_embed_key_channel(request, experiment)
 
 
@@ -365,7 +366,7 @@ def _check_start_session_access(
             raise ChatApiAccessDenied()
         # Keyless: unchanged here — closing it is keyless-chat-start-sunset.md's work.
         return None
-    if experiment.team.members.filter(id=request.user.id).exists():
+    if is_member(request.user, experiment.team):
         return None
     # Not a member: the embed key is the only other proof, and it does not grant version selection.
     if _embed_key_admits(embed_key_channel) and version_number is None:
@@ -419,7 +420,8 @@ NO_PUBLISHED_VERSION = {"error": "This chatbot has no published version", "code"
 
 
 def _is_team_member(request, experiment) -> bool:
-    return request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
+    """Return whether the authenticated user belongs to the experiment's team."""
+    return request.user.is_authenticated and is_member(request.user, experiment.team)
 
 
 def _published_public_version(experiment) -> tuple[Experiment | None, Response | None]:
@@ -477,9 +479,10 @@ def _send_version(request, session, version_number) -> tuple[Experiment | None, 
 
 
 def _version_number_refusal(request, session) -> Response | None:
+    """Return the refusal response when an unauthenticated user selects a version."""
     if not request.user.is_authenticated:
         return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
-    if not session.experiment.team.members.filter(id=request.user.id).exists():
+    if not is_member(request.user, session.experiment.team):
         return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
     return None
 
@@ -675,8 +678,17 @@ def chat_start_session(request):
         Experiment.objects.select_related("team"), public_id=experiment_id, working_version_id__isnull=True
     )
 
-    oauth_channel = oauth_resolved_channel(request)
-    embed_key_channel = _resolve_embed_key_channel(request, experiment)
+    admission = get_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+    oauth_channel = (
+        admission.channel if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS else None
+    )
+    embed_key_channel = _resolve_embed_key_channel(request, experiment, admission)
+    if embed_key_channel is not None and admission.credential_kind != ChatCredentialKind.EMBED_KEY:
+        admission = get_chat_admission(
+            request,
+            entry_point=ChatEntryPoint.START_SESSION,
+            validated_embed_key_channel=embed_key_channel,
+        )
 
     denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
     if denied:

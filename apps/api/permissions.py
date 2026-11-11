@@ -13,11 +13,17 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
-from apps.api.authentication import channel_origin_allowed, embed_key_authorizes_channel, oauth_resolved_channel
+from apps.api.admission import (
+    ChatAdmissionError,
+    ChatCredentialKind,
+    ChatEntryPoint,
+    chat_entry_point_for_request,
+    get_chat_admission,
+)
+from apps.api.authentication import channel_origin_allowed, embed_key_authorizes_channel
 from apps.api.session_tokens import parse_session_token, session_token_expired
-from apps.channels.models import ExperimentChannel, WidgetAuthLevel
+from apps.channels.models import WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
-from apps.oauth.permissions import is_client_credentials_request
 from apps.teams.helpers import get_team_membership_for_request, set_request_attrs
 from apps.teams.utils import set_current_team
 from apps.utils.rate_limit import check as check_rate_limit
@@ -26,6 +32,15 @@ from apps.utils.rate_limit import client_ip
 from .models import UserAPIKey
 
 logger = logging.getLogger("ocs.api")
+
+
+def _is_client_credentials_admission(request) -> bool:
+    """Return whether the central admission result identifies a machine OAuth credential."""
+    try:
+        admission = get_chat_admission(request, entry_point=chat_entry_point_for_request(request))
+    except ChatAdmissionError:
+        return False
+    return admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS
 
 
 def _count_failed_credential_attempt(request):
@@ -87,19 +102,16 @@ class BearerTokenAuthentication(BaseKeyAuthentication):
 
 class WidgetDomainPermission(BasePermission):
     def has_permission(self, request, view):
-        if not isinstance(request.auth, ExperimentChannel):
-            # not authed with widget token
+        """Allow non-embed credentials and enforce the embed channel's origin policy."""
+        try:
+            admission = get_chat_admission(request, entry_point=chat_entry_point_for_request(request))
+        except ChatAdmissionError:
+            return False
+
+        if admission.credential_kind != ChatCredentialKind.EMBED_KEY:
             return True
 
-        if oauth_resolved_channel(request) is not None:
-            # Each credential validates its own origin, and ChatOAuthAuthentication has already
-            # applied the rule for this one — including the case this check cannot express, where a
-            # blank domain list declares the channel server-only and an originless request is the
-            # correct shape. The origin rule now lives in `channel_origin_allowed`, which would
-            # reject an originless server-only request before the view runs.
-            return True
-
-        return channel_origin_allowed(request, request.auth)
+        return channel_origin_allowed(request, admission.channel)
 
 
 class SessionAccessPermission(BasePermission):
@@ -111,6 +123,7 @@ class SessionAccessPermission(BasePermission):
     """
 
     def has_permission(self, request, view):
+        """Allow a participant or validated credential to access the requested session."""
         session = get_experiment_session_cached(view.kwargs.get("session_id"))
         if not session:
             return False
@@ -119,11 +132,13 @@ class SessionAccessPermission(BasePermission):
             return self._has_legacy_access(request, session)
 
         if self._user_is_session_participant(request.user, session):
+            get_chat_admission(request, entry_point=ChatEntryPoint.CONTINUE_SESSION, session=session)
             return True
 
         return self._token_grants_access(request, session)
 
     def _token_grants_access(self, request, session) -> bool:
+        """Validate the session token and record the resulting session-bound admission."""
         token = request.headers.get("X-Session-Token")
         if not token:
             raise exceptions.PermissionDenied(
@@ -136,20 +151,32 @@ class SessionAccessPermission(BasePermission):
             )
         if session_token_expired(session, payload):
             raise exceptions.PermissionDenied(detail={"error": "Session has expired", "code": "session_expired"})
+        get_chat_admission(
+            request,
+            entry_point=ChatEntryPoint.CONTINUE_SESSION,
+            session=session,
+            session_token_validated=True,
+        )
         return True
 
     def _has_legacy_access(self, request, session) -> bool:
+        """Apply the legacy channel policy while preserving embed-key channel binding."""
         # Embedded widget channels carry a durable auth policy. The level gates every
         # branch below so a valid embed key can never stand in for a stronger level.
         channel = session.experiment_channel
         level = channel.widget_auth_level if channel is not None else None
 
-        if isinstance(request.auth, ExperimentChannel):
+        try:
+            admission = get_chat_admission(request, entry_point=ChatEntryPoint.CONTINUE_SESSION, session=session)
+        except ChatAdmissionError:
+            return False
+
+        if admission.credential_kind == ChatCredentialKind.EMBED_KEY:
             # The embed key must authenticate *this* session's channel. Auth only proves
             # some channel's key was valid, and WidgetDomainPermission checked that
             # channel's own allowed_domains — so a valid key for a different channel (of
             # the same experiment) must not grant cross-channel access to this session.
-            if request.auth != channel:
+            if admission.channel != channel:
                 return False
             # A valid embed key + domain check satisfies EMBED_KEY and NONE channels. It
             # never satisfies a SESSION_TOKEN channel — that always requires the token,
@@ -162,6 +189,12 @@ class SessionAccessPermission(BasePermission):
         # as the branch above — otherwise the site help widget could start a session on an
         # EMBED_KEY channel and then be denied every follow-up request.
         if embed_key_authorizes_channel(request, channel):
+            get_chat_admission(
+                request,
+                entry_point=ChatEntryPoint.CONTINUE_SESSION,
+                session=session,
+                validated_embed_key_channel=channel,
+            )
             return level != WidgetAuthLevel.SESSION_TOKEN
 
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
@@ -181,7 +214,8 @@ class IsAuthenticatedOrMachineToken(IsAuthenticated):
     """
 
     def has_permission(self, request, view):
-        if is_client_credentials_request(request):
+        """Allow authenticated users or machine credentials admitted by OAuth scopes."""
+        if _is_client_credentials_admission(request):
             return True
         return super().has_permission(request, view)
 
@@ -192,10 +226,11 @@ class ReadOnlyAPIKeyPermission(BasePermission):
     """
 
     def has_permission(self, request, view):
+        """Allow safe API-key requests and machine credentials, rejecting write access for read-only keys."""
         if not hasattr(request, "auth") or request.auth is None:
             return False
 
-        if is_client_credentials_request(request):
+        if _is_client_credentials_admission(request):
             # Machine token: no user and not an API key; authorization is delegated to the OAuth
             # scope classes.
             return True
@@ -233,6 +268,7 @@ class RequiresTeamPermission(BasePermission):
     required_permissions: list[str]
 
     def __init_subclass__(cls, **kwargs) -> None:
+        """Reject permission subclasses that fail to declare a non-empty permission set."""
         # At import rather than at request time: a subclass that forgot this would otherwise be an
         # open door that only shows itself when someone calls the endpoint it guards.
         super().__init_subclass__(**kwargs)
@@ -243,7 +279,8 @@ class RequiresTeamPermission(BasePermission):
             )
 
     def has_permission(self, request, view) -> bool:
-        if is_client_credentials_request(request):
+        """Require the declared team permissions unless OAuth scopes authorize a machine token."""
+        if _is_client_credentials_admission(request):
             return True
         return bool(request.user and request.user.has_perms(self.required_permissions))
 
@@ -273,7 +310,8 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
     }
 
     def has_permission(self, request, view):
-        if is_client_credentials_request(request):
+        """Allow machine credentials or the model permission derived from the current request."""
+        if _is_client_credentials_admission(request):
             # Machine token: no user, so no membership-derived model permissions. Authorization is
             # delegated to the OAuth scope classes.
             return True
@@ -315,7 +353,8 @@ class ParticipantModelPermissions(BasePermission):
         return self.perms_map[method]
 
     def has_permission(self, request, view):
-        if is_client_credentials_request(request):
+        """Require the participant permissions for the request method or an admitted machine token."""
+        if _is_client_credentials_admission(request):
             # Machine token: no user, so no membership-derived model permissions. Authorization is
             # delegated to the OAuth scope classes.
             return True
@@ -340,7 +379,8 @@ class CanTriggerBotMessage(BasePermission):
     """
 
     def has_permission(self, request, view):
-        if is_client_credentials_request(request):
+        """Require participant-change permission unless OAuth scopes authorize a machine token."""
+        if _is_client_credentials_admission(request):
             return True
         return bool(request.user and request.user.has_perm("experiments.change_participant"))
 

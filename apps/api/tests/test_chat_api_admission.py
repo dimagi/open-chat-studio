@@ -17,6 +17,7 @@ import pytest
 import time_machine
 from django.urls import reverse
 from django.utils import timezone
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.test import APIClient
 
 from apps.api.authentication import ChatOAuthAuthentication
@@ -97,6 +98,25 @@ def test_machine_token_starts_a_session_on_an_oauth_channel(chatbot):
     assert session.external_id == response.json()["session_id"]
     # The mode pins SESSION_TOKEN, so a token must come back or every follow-up call 403s.
     assert response.json()["session_token"]
+
+
+@pytest.mark.django_db()
+def test_chat_admission_authenticates_oauth_once(chatbot):
+    """The chat adapter does not invoke a second OAuth authenticator to rediscover the token."""
+    _channel(chatbot)
+    client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
+    original_authenticate = OAuth2Authentication.authenticate
+
+    with mock.patch.object(
+        OAuth2Authentication,
+        "authenticate",
+        autospec=True,
+        side_effect=original_authenticate,
+    ) as authenticate:
+        response = _start(client, chatbot.public_id)
+
+    assert response.status_code == 201, response.json()
+    assert authenticate.call_count == 1
 
 
 @pytest.mark.django_db()
