@@ -545,6 +545,12 @@ def test_removed_is_what_upstream_no_longer_lists_at_all():
     assert [r.name for r in diff.removed] == ["gone"]
 
 
+def test_a_provider_litellm_does_not_list_is_never_removed():
+    """LiteLLM has no namespace for some providers, so their absence upstream says nothing."""
+    diff = compare_with(ours_records=[ours("jev", "jev-latest")], live_records=[])
+    assert diff.removed == []
+
+
 def test_a_model_upstream_now_serves_only_as_non_chat_is_removed():
     """``groq/whisper-large-v3-turbo`` is still in the price table, as audio_transcription."""
     live, all_chat = upstream.translate(
