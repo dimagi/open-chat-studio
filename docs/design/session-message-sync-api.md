@@ -51,7 +51,7 @@ resurfaces.
 | D5: one scope, `sessions:read`; message reads also need message permission | already declared |
 | D6: filters applied directly in `get_queryset()` | not through `ExperimentSessionFilter` |
 | D7: `/messages/` takes `participant` | answers the open question on the issue |
-| D8: IDs follow [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) | public identifier where one exists |
+| D8: sessions and participants keep their existing IDs | extends [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) |
 | D9: `metadata` on messages | matches v1 |
 | D10: attachments and tags batch-loaded per page | no per-row queries |
 
@@ -150,14 +150,17 @@ sessions.
 **Alternatives considered.** A separate `participant_identifier` string lookup: rejected, `participant`
 covers the case with one parameter.
 
-### D8: IDs follow ADR-0026
+### D8: Sessions and participants keep their existing IDs
 
 **Decision.** `session.id` is `external_id`; `chatbot_id` is `experiment.public_id`; `participant_id`
 is `participant.public_id`; `message.id` is the primary key.
 
-**Context.** [ADR-0026](../adr/0026-identify-resources-by-primary-key.md): reuse an existing public
-identifier, primary key otherwise. Messages have none, and the endpoint is authenticated and
-team-scoped.
+**Context.** [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) identifies v2 resources by
+primary key and keeps only the chatbot's `public_id`. Sessions and participants also already carry
+opaque identifiers, for the unauthenticated web widget, and v1 and the trigger API return them. Using
+them here, an extension of ADR-0026, gives each session and participant one ID across the APIs.
+Messages have no such identifier, so they use the primary key, which ADR-0026 covers: the endpoint is
+authenticated and team-scoped.
 
 ### D9: `metadata` on messages
 
