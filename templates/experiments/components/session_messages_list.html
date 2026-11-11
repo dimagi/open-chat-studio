@@ -138,12 +138,14 @@
           </time>
         </span>
         {% if show_moderation_markers and message|is_flagged %}
-          <span class="badge badge-error badge-sm" title="The moderation provider flagged this message">
+          <span class="badge badge-error badge-sm"
+                title="The moderation provider flagged this message">
             <i class="fa-solid fa-flag mr-1"></i>flagged: {{ message.moderation_detail|flagged_strike_categories|join:", " }}
           </span>
         {% endif %}
         {% if show_moderation_markers and message.moderation_detail.rules %}
-          <span class="badge badge-warning badge-sm" title="Abuse rules this message triggered">
+          <span class="badge badge-warning badge-sm"
+                title="Abuse rules this message triggered">
             <i class="fa-solid fa-triangle-exclamation mr-1"></i>rule: {{ message.moderation_detail.rules|join:", " }}
           </span>
         {% endif %}
@@ -178,6 +180,29 @@
       {% endif %}
     </div>
   </div>
+  {% if page < total_pages and forloop.counter == prefetch_trigger_index %}
+    <div data-session-message-page-trigger="{{ page }}"
+         hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
+         hx-trigger="intersect, click"
+         hx-target="#session-messages-list"
+         hx-swap="beforeend"
+         hx-sync="this:drop"
+         hx-indicator="#messages-loading-more-{{ page }}"
+         hx-on::before-request="this.querySelector('[data-session-message-load-error]').classList.add('hidden')"
+         hx-on::after-request="if (event.detail.successful) this.remove(); else this.querySelector('[data-session-message-load-error]').classList.remove('hidden');">
+      <div id="messages-loading-more-{{ page }}"
+           class="flex items-center justify-center p-4">
+        <span class="loading loading-spinner loading-sm"></span>
+        <span class="ml-2">Loading more...</span>
+      </div>
+      <div data-session-message-load-error
+           class="hidden flex items-center justify-center gap-2 p-4 text-error"
+           role="alert">
+        <span>Unable to load more messages.</span>
+        <button type="button" class="btn btn-ghost btn-xs">Retry</button>
+      </div>
+    </div>
+  {% endif %}
 {% empty %}
   <div class="px-5 py-6 text-center text-base-content/60">
     {% if search %}
@@ -187,16 +212,3 @@
     {% endif %}
   </div>
 {% endfor %}
-{% if page < total_pages %}
-  <div hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
-       hx-trigger="intersect once"
-       hx-target="this"
-       hx-swap="outerHTML"
-       hx-indicator="#messages-loading-more-{{ page }}">
-    <div id="messages-loading-more-{{ page }}"
-         class="flex items-center justify-center p-4">
-      <span class="loading loading-spinner loading-sm"></span>
-      <span class="ml-2">Loading more...</span>
-    </div>
-  </div>
-{% endif %}

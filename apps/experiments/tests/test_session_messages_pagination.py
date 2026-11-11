@@ -47,6 +47,34 @@ class TestSessionMessagesLoadOnScroll:
         assert _fragment_url(experiment, session_with_messages).encode() in response.content
         assert b"page=2" in response.content
 
+    def test_next_page_trigger_is_halfway_through_the_current_page(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        response = client.get(_messages_url(experiment, session_with_messages))
+
+        content = response.content.decode()
+        trigger_position = content.index('data-session-message-page-trigger="1"')
+        assert content.index("Message 4") < trigger_position < content.index("Message 5")
+
+    def test_page_fragments_use_a_beforeend_append_target(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        first_page = client.get(_messages_url(experiment, session_with_messages))
+        next_page = client.get(_fragment_url(experiment, session_with_messages) + "?page=2")
+
+        content = first_page.content.decode()
+        next_page_content = next_page.content.decode()
+        assert 'data-session-message-page-trigger="1"' in content
+        assert 'hx-target="#session-messages-list"' in content
+        assert 'hx-swap="beforeend"' in content
+        assert 'hx-sync="this:drop"' in content
+        assert 'data-session-message-page-trigger="2"' in next_page_content
+
+    def test_each_page_has_only_one_next_page_trigger(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        for page in (1, 2):
+            response = client.get(_fragment_url(experiment, session_with_messages) + f"?page={page}")
+
+            assert response.content.count(b"data-session-message-page-trigger") == 1
+
     def test_next_page_request_renders_only_the_message_fragment(self, client, experiment, session_with_messages):
         client.force_login(experiment.owner)
         url = _fragment_url(experiment, session_with_messages) + "?page=2"
@@ -55,7 +83,7 @@ class TestSessionMessagesLoadOnScroll:
         assert response.status_code == 200
         assert len(response.context["messages"]) == 10
         assert response.context["page"] == 2
-        # Fragment: no control panel or page wrapper duplicated in.
+        # Fragment: no control panel or full message container duplicated in.
         assert b'id="table-top"' not in response.content
         assert b'id="control-panel"' not in response.content
         # Still on a middle page, so the next trigger (for page 3) is present.

@@ -11,9 +11,9 @@
       <span class="ml-2">Loading...</span>
     </div>
   </div>
-  <div class="flex flex-col" x-data="{commentsRow: null}">
-    {% include "experiments/components/session_messages_list.html" %}
-  </div>
+  <div id="session-messages-list"
+       class="flex flex-col"
+       x-data="{commentsRow: null}">{% include "experiments/components/session_messages_list.html" %}</div>
   <div id="update_dataset_modal"></div>
 </div>
 {{ llm_provider_models_dict|json_script:"provider-models-dict" }}
