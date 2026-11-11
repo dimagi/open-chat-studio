@@ -3,7 +3,9 @@
 import pytest
 from django.contrib.auth.models import Permission
 from django.urls import reverse
+from django.utils import timezone
 
+from apps.channels import widget_versions
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -151,3 +153,15 @@ def test_edit_error_keeps_allow_all_domains_checked(admin_client, widget_channel
 
     assert "The session lifetime must be at least 5 minutes." in content
     assert "&quot;allowAllDomains&quot;: true" in content
+
+
+@pytest.mark.django_db()
+def test_embed_tab_shows_the_minimum_and_the_reported_version(admin_client, widget_channel):
+    widget_channel.widget_version = widget_versions.LATEST_VERSION
+    widget_channel.widget_version_updated_at = timezone.now()
+    widget_channel.save(update_fields=["widget_version", "widget_version_updated_at"])
+
+    content = admin_client.get(_edit_url(widget_channel)).content.decode()
+
+    assert f"This channel requires widget {widget_channel.min_widget_version} or newer." in content
+    assert f"Your site last reported widget {widget_versions.LATEST_VERSION}" in content
