@@ -1,0 +1,89 @@
+from datetime import timedelta
+
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Exists, OuterRef
+from django.utils import timezone
+from drf_spectacular.utils import extend_schema
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.annotations.models import CustomTaggedItem
+from apps.annotations.prefetch import attach_chat_tagged_items
+from apps.api.keyset import encode_cursor, keyset_page
+from apps.api.permissions import BASE_PERMISSION_CLASSES
+from apps.api.v2.sync.permissions import CanViewSessions
+from apps.api.v2.sync.serializers import SessionPageSerializer, SessionQuerySerializer, SessionSerializer
+from apps.chat.models import Chat
+from apps.experiments.models import ExperimentSession
+from apps.oauth.permissions import TokenHasOAuthResourceScope, token_reaches_all_data
+
+# `updated_at` is stamped when a row is saved, not when its transaction commits. Holding back the newest
+# rows keeps a slow commit from landing behind a cursor a consumer has already passed.
+SYNC_SETTLE_WINDOW = timedelta(seconds=60)
+
+
+class SyncView(APIView):
+    # A comment, not a docstring: drf-spectacular reads a view docstring as the operation description.
+    # Shared auth and the page shape for the sync collections (ADR-0072).
+    permission_classes = [*BASE_PERMISSION_CLASSES, CanViewSessions, TokenHasOAuthResourceScope]
+    required_scopes = ["sessions"]
+
+    def page(self, queryset, params, serializer_class) -> Response:
+        queryset = queryset.filter(updated_at__lte=timezone.now() - SYNC_SETTLE_WINDOW)
+        rows, has_more = keyset_page(queryset, params.get("cursor"), params["limit"])
+        cursor = encode_cursor(rows[-1]) if rows else params.get("cursor")
+        results = serializer_class(self.prepare(rows), many=True).data
+        return Response({"cursor": cursor, "has_more": has_more, "results": results})
+
+    def prepare(self, rows: list) -> list:
+        return rows
+
+    def reachable_sessions(self):
+        sessions = ExperimentSession.objects.filter(team=self.request.team)
+        if not token_reaches_all_data(self.request.auth):
+            sessions = sessions.filter(experiment_id__in=self.request.auth.application.allowed_chatbots.values("id"))
+        return sessions
+
+
+class SessionListView(SyncView):
+    @extend_schema(
+        operation_id="session_list",
+        summary="List sessions changed since a cursor",
+        description=(
+            "Sessions in the order they last changed. Store `cursor` from each response and send it on the "
+            "next pull to receive only sessions created or changed since. Rows changed in the last minute "
+            "are returned on a later pull."
+        ),
+        tags=["Sessions"],
+        parameters=[SessionQuerySerializer],
+        responses=SessionPageSerializer,
+    )
+    def get(self, request):
+        query = SessionQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        params = query.validated_data
+
+        sessions = self.reachable_sessions().select_related("experiment", "participant", "chat")
+        if "chatbot" in params:
+            sessions = sessions.filter(experiment__public_id=params["chatbot"])
+        if "participant" in params:
+            sessions = sessions.filter(participant__public_id=params["participant"])
+        if "platform" in params:
+            sessions = sessions.filter(platform=params["platform"])
+        if params.get("tags"):
+            sessions = sessions.filter(_chat_has_tag(params["tags"], request.team))
+        return self.page(sessions, params, SessionSerializer)
+
+    def prepare(self, rows: list) -> list:
+        return attach_chat_tagged_items(rows)
+
+
+def _chat_has_tag(names: list[str], team) -> Exists:
+    return Exists(
+        CustomTaggedItem.objects.filter(
+            content_type=ContentType.objects.get_for_model(Chat),
+            object_id=OuterRef("chat_id"),
+            tag__name__in=names,
+            tag__team=team,
+        )
+    )
