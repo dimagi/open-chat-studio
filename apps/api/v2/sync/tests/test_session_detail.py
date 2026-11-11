@@ -1,15 +1,18 @@
 """GET /api/v2/sessions/{id}/: one session with its messages embedded (ADR-0072)."""
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.teams.backends import add_user_to_team
 from apps.utils.factories.annotations import TagFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -95,3 +98,13 @@ def test_queries_do_not_grow_with_the_messages(team, client):
         return len(queries)
 
     assert queries_for(2) == queries_for(6)
+
+
+@pytest.mark.django_db()
+def test_the_embedded_messages_need_the_message_permission(team):
+    session = _session(team)
+    user = UserFactory.create()
+    add_user_to_team(team, user)
+    user.user_permissions.add(Permission.objects.get(codename="view_experimentsession"))
+
+    assert ApiTestClient(user, team).get(_url(session)).status_code == 403

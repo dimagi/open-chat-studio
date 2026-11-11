@@ -141,6 +141,8 @@ class MessageListView(SyncView):
 
 
 class SessionDetailView(SyncView):
+    permission_classes = [*BASE_PERMISSION_CLASSES, CanViewMessages, TokenHasOAuthResourceScope]
+
     @extend_schema(
         operation_id="session_retrieve",
         summary="Retrieve a session with its messages",
