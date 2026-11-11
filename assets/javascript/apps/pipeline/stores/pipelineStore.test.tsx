@@ -676,6 +676,29 @@ describe("pipelineStore savePipeline", () => {
     expect(update).toHaveBeenCalledWith(1, expect.anything(), 4);
   });
 
+  test("keeps a node added while it waited, after a deferred autosave persisted it", async () => {
+    const nodeC: Node = {id: "c", type: "pipelineNode", position: {x: 200, y: 0}, data: {type: "LLMResponse", params: {}}};
+    let finishFirstPatch!: (value: typeof saved) => void;
+    vi.spyOn(apiClient, "patchPipeline")
+      .mockReturnValueOnce(new Promise((resolve) => (finishFirstPatch = resolve)))
+      .mockResolvedValueOnce({...saved, data: {nodes: [nodeA, nodeB, nodeC], edges: [edgeAB]}, edit_revision: 5});
+    const sent: {nodeIds: string[]; revision: number}[] = [];
+    vi.spyOn(apiClient, "updatePipeline").mockImplementation(async (_id, updated, revision) => {
+      sent.push({nodeIds: updated.data!.nodes.map((node) => node.id), revision});
+      return {...saved, edit_revision: revision + 1};
+    });
+
+    const firstPatch = usePipelineStore.getState()._patchPipeline({base_revision: 3});
+    const save = usePipelineStore.getState().savePipeline(pipeline());
+    usePipelineStore.setState({nodes: [...usePipelineStore.getState().nodes, nodeC]});
+    usePipelineStore.getState()._flushSave();
+    finishFirstPatch(saved);
+    await firstPatch;
+    await save;
+
+    expect(sent).toEqual([{nodeIds: ["a", "b", "c"], revision: 5}]);
+  });
+
   test("refuses to save over an unresolved conflict", async () => {
     const update = vi.spyOn(apiClient, "updatePipeline");
     usePipelineStore.setState({conflictDetected: true});

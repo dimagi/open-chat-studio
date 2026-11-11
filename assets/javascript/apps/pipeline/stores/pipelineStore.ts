@@ -528,6 +528,8 @@ const createPipelineManagerStore: StateCreator<
     if (get().conflictDetected) {
       throw new Error("Conflict: reload the pipeline before saving.");
     }
+    // Edits made during the wait may already be in that revision, so send the graph as it is now.
+    pipeline = {...pipeline, data: {nodes: get().nodes, edges: get().edges}};
     set({isSaving: true});
     if (saveTimeoutId) {
       clearTimeout(saveTimeoutId);
