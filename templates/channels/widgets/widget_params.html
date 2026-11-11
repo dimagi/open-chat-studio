@@ -1,100 +1,82 @@
-<div class="card bg-base-200">
-  <div class="card-body">
-    <h3 class="card-title text-base">
-      <i class="fa-solid fa-gear me-1"></i>
-      Parameters
-    </h3>
-    <label class="label">Chatbot ID:</label>
-    <div class="join w-full">
-      <input type="text"
-             id="widget_chatbot_id"
-             value="{{ widget.experiment.public_id }}"
-             class="input input-bordered join-item flex-1 font-mono text-sm"
-             readonly>
-      <button class="btn btn-neutral join-item" type="button"
-              onclick="SiteJS.app.copyToClipboard(this, 'widget_chatbot_id')"
-              title="Copy to clipboard">
-          <i class="fa-solid fa-copy"></i> Copy
+<div class="flex flex-col gap-5">
+  {% if widget.version_status %}
+    <div role="alert" class="alert alert-{{ widget.version_status.level }} alert-soft items-start">
+      <i class="fa-solid {{ widget.version_status.icon }} mt-0.5"></i>
+      <div>
+        <p class="font-semibold">{{ widget.version_status.message }}</p>
+        <p class="text-sm">Replace the script tag on your site with the embed code below to upgrade.</p>
+      </div>
+    </div>
+  {% endif %}
+  {% if widget.pending_min_version %}
+    <div role="alert" class="alert alert-warning alert-soft items-start">
+      <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+      <div>
+        <p class="font-semibold">Widget {{ widget.pending_min_version }} required from {{ widget.pending_effective_at|date }}</p>
+        <p class="text-sm">
+          An upgraded widget was detected. From that date this channel requires widget {{ widget.pending_min_version }}
+          or newer. Upgrade every embed before then, or older embeds stop connecting.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <label for="widget_chatbot_id" class="block text-sm font-semibold mb-1.5">Chatbot ID</label>
+      <div class="join w-full">
+        <input type="text" id="widget_chatbot_id" value="{{ widget.experiment.public_id }}"
+               class="input join-item flex-1 h-11 font-mono text-sm bg-base-200" readonly>
+        <button type="button" class="btn join-item h-11" onclick="SiteJS.app.copyToClipboard(this, 'widget_chatbot_id')">Copy</button>
+      </div>
+    </div>
+    <div>
+      <label for="widget_token" class="block text-sm font-semibold mb-1.5">Embed token</label>
+      <div class="join w-full">
+        <input type="text" id="widget_token" value="{{ widget.token }}"
+               class="input join-item flex-1 h-11 font-mono text-sm bg-base-200" readonly>
+        <button type="button" class="btn join-item h-11" onclick="SiteJS.app.copyToClipboard(this, 'widget_token')">Copy</button>
+      </div>
+      <p class="text-sm opacity-70 mt-1.5" x-show="credentialMode === '{{ widget.oauth_mode }}'" x-cloak>
+        This channel requires an OAuth token, so the embed token is ignored.
+      </p>
+    </div>
+  </div>
+
+  <div>
+    <div class="flex items-center justify-between mb-1.5">
+      <span class="text-sm font-semibold">Embed code</span>
+      <button type="button" class="btn btn-primary btn-sm rounded-lg" onclick="copyWidgetEmbedCode(this)">
+        <i class="fa-regular fa-copy"></i> Copy embed code
       </button>
     </div>
-    <label class="label">Embed Token:</label>
-    <div class="join w-full">
-      <input type="text"
-             id="widget_token"
-             value="{{ widget.token }}"
-             class="input input-bordered join-item flex-1 font-mono text-sm"
-             readonly>
-      <button class="btn btn-neutral join-item" type="button"
-              onclick="SiteJS.app.copyToClipboard(this, 'widget_token')"
-              title="Copy to clipboard">
-          <i class="fa-solid fa-copy"></i> Copy
-      </button>
-    </div>
-    <div class="text-sm opacity-70 mt-2" x-show="credentialMode === '{{ widget.oauth_mode }}'" x-cloak>
-      <i class="fa-solid fa-key me-1"></i>
-      This channel requires an OAuth token, so the embed token is ignored.
-    </div>
-    {% if widget.version_status %}
-      <div role="alert" class="alert alert-{{ widget.version_status.level }} mt-3">
-        <i class="fa-solid fa-circle-exclamation"></i>
+    {% if widget.oauth %}
+      <div role="alert" class="alert alert-info alert-soft mb-2 text-sm">
+        <i class="fa-solid fa-circle-info"></i>
         <span>
-          {{ widget.version_status.message }}
-          Replace the script tag on your site with the embed code below to upgrade.
-        </span>
-      </div>
-    {% elif widget.version %}
-      <div class="text-sm opacity-70 mt-3">
-        <i class="fa-solid fa-circle-check me-1"></i>
-        Your site last reported widget version {{ widget.version }}
-        ({{ widget.version_updated_at|date }}) — up to date.
-      </div>
-    {% endif %}
-    {% if widget.min_version %}
-      <div class="text-sm opacity-70 mt-2">
-        <i class="fa-solid fa-shield-halved me-1"></i>
-        This channel requires widget version {{ widget.min_version }} or newer.
-      </div>
-    {% endif %}
-    {% if widget.pending_min_version %}
-      <div role="alert" class="alert alert-warning mt-3">
-        <i class="fa-solid fa-circle-exclamation"></i>
-        <span>
-          An upgraded widget was detected. On {{ widget.pending_effective_at|date }} this channel
-          will require widget version {{ widget.pending_min_version }} or newer. Make sure every embed
-          is upgraded before then, or older embeds will stop connecting.
+          The code includes an <code>authTokenProvider</code> stub. Point it at an endpoint in your own backend
+          that mints a short-lived token. The client secret must never reach page source.
         </span>
       </div>
     {% endif %}
-    <h3 class="card-title text-base mt-3">
-      <i class="fa-solid fa-code me-1"></i>
-      Embed Code
-    </h3>
-    <div class="w-full">
-      <p class="my-4">Use this HTML code to embed the chat window for your bot in a different site.</p>
-      {% if widget.oauth %}
-        <div role="alert" class="alert alert-info my-2">
-          <i class="fa-solid fa-circle-info"></i>
-          <span>
-            The snippet includes an <code>authTokenProvider</code> stub. Point it at an endpoint in your
-            own backend that mints a short-lived token — the client secret must never reach page source.
-          </span>
-        </div>
+    <pre id="widget_embed_code" class="rounded-lg bg-base-200 p-4 text-xs leading-relaxed whitespace-pre-wrap break-all"></pre>
+  </div>
+
+  <div class="flex items-center justify-between gap-4 border-t border-base-300 pt-3 text-sm">
+    <span class="opacity-70">
+      {% if widget.min_version %}
+        This channel requires widget {{ widget.min_version }} or newer.
+      {% elif widget.version and not widget.version_status %}
+        Your site last reported widget {{ widget.version }} on {{ widget.version_updated_at|date }}, which is up to date.
       {% endif %}
-      <button class="my-2 btn btn-sm btn-primary justify-self-center" onclick="copyEmbed(event)" title="Copy to clipboard">
-        <i class="fa-regular fa-copy"></i> Copy Widget Embed Code
-      </button>
-      <p class="my-2 text-sm"><a href="{{ docs_base_url }}{{ docs_links.chat_widget }}" class="link" target="_blank">Learn more about embedding</a></p>
-    </div>
-    <div class="text-sm opacity-70 mt-2">
-      <i class="fa-solid fa-info-circle me-1"></i>
-      Copy this code and paste it into your website's HTML where you want the chat widget to appear.
-    </div>
+    </span>
+    <a href="{{ docs_base_url }}{{ docs_links.chat_widget }}" class="link link-primary font-semibold" target="_blank">Embedding guide</a>
   </div>
 </div>
 <script>
-  async function copyEmbed(event) {
-    event.preventDefault()
-    const code = `{% include "experiments/share/widget.html" with experiment=widget.experiment embed_key=widget.token oauth=widget.oauth %}`
-    await SiteJS.app.copyTextToClipboard(event.target, code)
-  }
+  (() => {
+    const code = `{% include "experiments/share/widget.html" with experiment=widget.experiment embed_key=widget.token oauth=widget.oauth %}`.trim();
+    document.getElementById("widget_embed_code").textContent = code;
+    window.copyWidgetEmbedCode = (button) => SiteJS.app.copyTextToClipboard(button, code);
+  })();
 </script>

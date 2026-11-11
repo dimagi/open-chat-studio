@@ -1,0 +1,63 @@
+{% with name=form.name domains=extra_form.allowed_domains all_domains=extra_form.allow_all_domains %}
+  <div class="px-6 pt-6">
+    <h3 class="text-lg font-bold">Add Chat Widget &amp; API Channel</h3>
+    <p class="text-sm opacity-70">Two things to decide. The embed code comes after.</p>
+  </div>
+  <div class="px-6 py-5 flex flex-col gap-5">
+    {{ form.non_field_errors }}{{ extra_form.non_field_errors }}
+    {# A new channel starts enabled; the toggle is on the edit view. #}
+    <input type="hidden" name="enabled" value="on">
+    {{ extra_form.widget_token }}
+    <div>
+      <label for="{{ name.id_for_label }}" class="block text-sm font-semibold mb-1.5">Channel name</label>
+      <input type="text" id="{{ name.id_for_label }}" name="{{ name.html_name }}" value="{{ name.value|default_if_none:'' }}"
+             class="input w-full h-11 rounded-lg" placeholder="{{ experiment.name }}">
+      <p class="text-sm opacity-70 mt-1.5">Leave blank to use the chatbot name.</p>
+      {% for error in name.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+    </div>
+    <fieldset>
+      <legend class="text-sm font-semibold mb-1.5">Where the widget may be embedded</legend>
+      <div class="flex flex-col gap-2">
+        <label class="flex gap-3 items-start rounded-lg border p-3 cursor-pointer"
+               :class="allowAllDomains ? 'border-primary bg-primary/5' : 'border-base-300'">
+          <input type="radio" name="{{ all_domains.html_name }}" class="radio radio-primary radio-sm mt-0.5"
+                 x-model.boolean="allowAllDomains" :value="true">
+          <span>
+            <span class="block font-semibold">Any domain</span>
+            <span class="block text-sm opacity-70">The embed token is the only thing standing between a page and this chatbot.</span>
+          </span>
+        </label>
+        <label class="flex gap-3 items-start rounded-lg border p-3 cursor-pointer"
+               :class="allowAllDomains ? 'border-base-300' : 'border-primary bg-primary/5'">
+          <input type="radio" name="{{ all_domains.html_name }}" class="radio radio-primary radio-sm mt-0.5"
+                 x-model.boolean="allowAllDomains" :value="false">
+          <span>
+            <span class="block font-semibold">Only these domains</span>
+            <span class="block text-sm opacity-70">One per line. Wildcards allowed, e.g. *.mysite.org</span>
+          </span>
+        </label>
+        <div class="pl-8" x-show="!allowAllDomains">
+          <textarea name="{{ domains.html_name }}" rows="3" class="textarea w-full rounded-lg font-mono"
+                    placeholder="example.com
+*.mysite.org" :disabled="allowAllDomains">{{ domains.value|default_if_none:'' }}</textarea>
+          {% for error in domains.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+        </div>
+      </div>
+    </fieldset>
+    <div class="flex gap-3 rounded-lg border border-dashed border-base-300 bg-base-200/50 p-4 text-sm">
+      <i class="fa-solid fa-lock opacity-60 mt-0.5"></i>
+      <div>
+        <p class="font-semibold">Install</p>
+        <p class="opacity-70">
+          Chatbot ID, embed token and the script tag to paste into your site appear here once the channel exists.
+          Session lifetime, the credential type and the disabled-channel message become available too.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="px-6 py-4 border-t border-base-300 flex items-center justify-end gap-2">
+    <span class="loading loading-spinner loading-sm htmx-indicator"></span>
+    <button type="button" class="btn h-11 rounded-lg" onclick="this.closest('dialog').close()">Cancel</button>
+    <button type="submit" class="btn btn-primary h-11 rounded-lg">Create channel</button>
+  </div>
+{% endwith %}

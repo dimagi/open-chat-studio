@@ -21,6 +21,8 @@ MIN_SESSION_TOKEN_LIFETIME = timedelta(minutes=5)
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
+    oauth_mode = CredentialMode.OAUTH.value
+
     credential_mode = forms.ChoiceField(
         label="Credential",
         choices=CredentialMode.choices,
@@ -84,7 +86,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self._credential_mode = self.channel.credential_mode if self.channel else CredentialMode.EMBED_KEY
         self.fields["credential_mode"].help_text = self._credential_mode_help_text()
         self.fields["credential_mode"].widget = CredentialModeSelect(
-            experiment=self.experiment, choices=CredentialMode.choices
+            experiment=self.experiment, choices=CredentialMode.choices, attrs={"class": "h-11 rounded-lg"}
         )
         self._seed_initial_from_channel()
 
