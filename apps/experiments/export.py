@@ -26,6 +26,7 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
+ID_PAGE_SIZE = 20_000
 PROGRESS_UPDATE_INTERVAL = 100
 
 # Ceiling on the per-session value cache. At roughly 2.4 KB per entry this caps the cache
@@ -198,25 +199,28 @@ def _blank(column: ExportColumn) -> ExportColumn:
     return replace(column, from_message=lambda m, e, t: "", prefetch=())
 
 
-def count_export_messages(sessions_queryset) -> int:
-    """Total number of messages an export of these sessions will produce.
+def _message_id_chunks(chat_ids: list[int]) -> Iterator[list[int]]:
+    """Yield the ids of the messages in ``chat_ids`` in pk order, EXPORT_CHUNK_SIZE at a time.
 
-    Used as the denominator for export progress reporting.
+    Ids are read ID_PAGE_SIZE at a time, so the list of chat ids goes to the database once
+    per page rather than once per chunk.
     """
-    return _build_message_queryset(sessions_queryset).count()
+    ids = ChatMessage.objects.filter(chat_id__in=chat_ids).order_by("pk").values_list("pk", flat=True)
+    last_pk = 0
+    while page := list(ids.filter(pk__gt=last_pk)[:ID_PAGE_SIZE]):
+        for start in range(0, len(page), EXPORT_CHUNK_SIZE):
+            yield page[start : start + EXPORT_CHUNK_SIZE]
+        last_pk = page[-1]
 
 
-def _build_message_queryset(sessions_queryset, columns: list[ExportColumn] = EXPORT_COLUMNS):
-    """Return the ChatMessage queryset for export, ordered by pk for keyset pagination.
+def _build_message_queryset(columns: list[ExportColumn] = EXPORT_COLUMNS):
+    """Return the ChatMessage queryset that loads one chunk of export rows, ordered by pk.
 
     Only the relations the given columns read are prefetched.
     """
     prefetch = [lookup for column in columns for lookup in column.prefetch]
     return (
-        ChatMessage.objects.filter(
-            chat__experiment_session__in=sessions_queryset,
-        )
-        .select_related(
+        ChatMessage.objects.select_related(
             "chat",
             "chat__experiment_session",
             "chat__experiment_session__participant",
@@ -290,8 +294,10 @@ def generate_export_rows(
 ) -> Generator[list]:
     """Yield the header row, then one data row per message across all matching sessions.
 
-    Messages are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
-    that memory usage stays bounded regardless of dataset size.  Session-level values
+    The session filter runs once, to resolve the chat ids; the tag and message-date filters
+    scan messages, so it is the costly part of the export's queries. Messages are then
+    processed in chunks of EXPORT_CHUNK_SIZE so that memory usage stays bounded regardless
+    of dataset size. ``progress_callback`` receives ``(processed, total)``. Session-level values
     (platform name, state JSON, participant fields, chat tags/comments) are cached the
     first time each session is encountered so they are serialised only once no matter
     how many messages belong to that session; see :class:`_SessionCache` for why that
@@ -302,20 +308,18 @@ def generate_export_rows(
     export_columns = _gate_flagged_columns(resolve_export_columns(columns), experiment)
     yield _get_export_header(columns=export_columns, translation_language=translation_language)
 
-    base_qs = _build_message_queryset(sessions_queryset, columns=export_columns)
-    last_pk = 0
+    chat_ids = list(sessions_queryset.values_list("chat_id", flat=True))
+    total = ChatMessage.objects.filter(chat_id__in=chat_ids).count() if progress_callback else 0
+    base_qs = _build_message_queryset(columns=export_columns)
     session_cache = _SessionCache(columns=export_columns)
     processed = 0
 
     def report(count):
         if progress_callback:
-            progress_callback(count)
+            progress_callback(count, total)
 
-    while True:
-        chunk = list(base_qs.filter(pk__gt=last_pk)[:EXPORT_CHUNK_SIZE])
-        if not chunk:
-            break
-
+    for message_ids in _message_id_chunks(chat_ids):
+        chunk = list(base_qs.filter(pk__in=message_ids))
         for message in chunk:
             yield _yield_row_for_message(
                 message=message,
@@ -328,8 +332,6 @@ def generate_export_rows(
             if processed % PROGRESS_UPDATE_INTERVAL == 0:
                 report(processed)
 
-        last_pk = chunk[-1].pk
-        done = len(chunk) < EXPORT_CHUNK_SIZE
         # Django model instances take part in reference cycles (``_state``, the
         # related-object and prefetch caches), so refcounting alone does not reclaim a
         # spent chunk -- it lingers two to three chunks behind until a generational pass
@@ -337,8 +339,6 @@ def generate_export_rows(
         # current chunk go too, which measured ~70% off peak memory for large exports.
         del chunk
         gc.collect()
-        if done:
-            break
 
     # Report the final tally so the last partial interval (and exports smaller than one
     # interval) still reach 100%. processed == 0 is a no-op since 0 % INTERVAL == 0.
