@@ -1,7 +1,10 @@
+import html
+import re
 from unittest.mock import Mock, patch
 
 import pytest
 
+from apps.ocs_notifications.formatting import message_html
 from apps.ocs_notifications.models import EventUser, LevelChoices
 from apps.ocs_notifications.notifications import (
     AffectedResources,
@@ -169,6 +172,44 @@ class TestTraceErrorNotification:
         call_kwargs = mock_create_notification.call_args.kwargs
         assert call_kwargs["slug"] == "seed-message"
         assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("build", "expected"),
+    [
+        pytest.param(
+            lambda: custom_action_api_failure_notification(
+                CustomActionFactory.create(), _function_def(), KeyError("__init__")
+            ),
+            "POST 'create_user' API call failed: '__init__'",
+            id="exception-with-markdown-syntax",
+        ),
+        pytest.param(
+            lambda: trace_error_notification(
+                experiment=ExperimentFactory.create(),
+                session=None,
+                span_name="llm_response",
+                error_message="<Response [500]>",
+                permissions=None,
+            ),
+            "An error occurred during 'llm_response' for participant 'unknown': <Response [500]>",
+            id="error-that-looks-like-html",
+        ),
+        pytest.param(
+            lambda: audio_synthesis_failure_notification(ExperimentFactory.create(name="Weather *beta*")),
+            "An error occurred while synthesizing a voice response for 'Weather *beta*'",
+            id="name-with-markdown-syntax",
+        ),
+    ],
+)
+def test_runtime_values_render_as_written(build, expected):
+    """Names and error text are data, not markdown, so the rendered message shows them exactly."""
+    with patch("apps.ocs_notifications.notifications.create_notification") as mock_create_notification:
+        build()
+
+    rendered = message_html(mock_create_notification.call_args.kwargs["message"])
+    assert html.unescape(re.sub(r"<[^>]+>", "", rendered)) == expected
 
 
 def _affected(chatbots=None, pipelines=None, evaluators=None) -> AffectedResources:

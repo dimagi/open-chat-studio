@@ -2,8 +2,10 @@ import html
 import re
 
 import pytest
+from django.template.loader import render_to_string
 
 from apps.ocs_notifications.formatting import markdown_literal, message_html, message_mrkdwn, message_text
+from apps.utils.factories.notifications import NotificationEventFactory
 
 
 def _visible(rendered: str) -> str:
@@ -66,6 +68,16 @@ def test_html_in_a_message_is_shown_not_run():
 )
 def test_message_mrkdwn(message, expected):
     assert message_mrkdwn(message) == expected
+
+
+@pytest.mark.django_db()
+def test_the_in_app_list_shows_the_rendered_message():
+    event = NotificationEventFactory.create(message="**Update** the [embed snippet](https://example.com/docs)")
+
+    rendered = render_to_string("ocs_notifications/components/notification_event_content.html", {"record": event})
+
+    assert "<strong>Update</strong>" in rendered
+    assert "**" not in rendered
 
 
 def test_message_text_drops_markdown_escapes():

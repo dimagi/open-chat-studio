@@ -10,6 +10,7 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.utils.decorators import silence_exceptions
 from apps.utils.sunset import HttpSunset
 
+from .formatting import markdown_literal as literal
 from .models import LevelChoices
 from .utils import create_notification
 
@@ -21,7 +22,7 @@ def custom_action_health_check_failure_notification(action, failure_reason: str)
     """Create notification when custom action health check fails."""
     create_notification(
         title="Custom Action is down",
-        message=f"The custom action '{action.name}' health check failed: {failure_reason}.",
+        message=f"The custom action '{literal(action.name)}' health check failed: {literal(failure_reason)}.",
         level=LevelChoices.ERROR,
         team=action.team,
         slug="custom-action-health-check",
@@ -38,7 +39,7 @@ def custom_action_api_failure_notification(custom_action, function_def, exceptio
     operation = function_def.name
     create_notification(
         title=f"Custom Action '{custom_action.name}' failed",
-        message=f"{method} '{operation}' API call failed: {exception}",
+        message=f"{method} '{literal(operation)}' API call failed: {literal(exception)}",
         level=LevelChoices.ERROR,
         team=custom_action.team,
         slug="custom-action-api-failure",
@@ -56,7 +57,7 @@ def custom_action_unexpected_error_notification(custom_action, function_def, exc
 
     create_notification(
         title=f"Custom Action '{custom_action.name}' encountered an error",
-        message=f"{method} '{operation}' failed with an unexpected error: {exception}",
+        message=f"{method} '{literal(operation)}' failed with an unexpected error: {literal(exception)}",
         level=LevelChoices.ERROR,
         team=custom_action.team,
         slug="custom-action-unexpected-error",
@@ -88,9 +89,9 @@ def trace_error_notification(
     )
     title = f"{human_name} Failed for '{experiment}'"
     participant = session.participant.identifier if session else "unknown"
-    message = f"An error occurred during '{span_name}' for participant '{participant}'"
+    message = f"An error occurred during '{literal(span_name)}' for participant '{literal(participant)}'"
     if error_message:
-        message += f": {error_message}"
+        message += f": {literal(error_message)}"
 
     links: dict[str, str] = {"View Bot": experiment.get_absolute_url()}
     if session:
@@ -119,7 +120,7 @@ def audio_synthesis_failure_notification(experiment, session: ExperimentSession 
 
     create_notification(
         title="Audio Synthesis Failed",
-        message=f"An error occurred while synthesizing a voice response for '{experiment.name}'",
+        message=f"An error occurred while synthesizing a voice response for '{literal(experiment.name)}'",
         level=LevelChoices.ERROR,
         team=experiment.team,
         slug="audio-synthesis-failed",
@@ -140,7 +141,7 @@ def file_delivery_failure_notification(
         title="File Delivery Failed",
         message=(
             "An error occurred while delivering a file attachment to the user via "
-            f"{platform_title} for '{experiment.name}'"
+            f"{platform_title} for '{literal(experiment.name)}'"
         ),
         level=LevelChoices.ERROR,
         team=experiment.team,
@@ -160,7 +161,7 @@ def audio_transcription_failure_notification(experiment, platform: str) -> None:
     """Create notification when audio transcription fails."""
     create_notification(
         title="Audio Transcription Failed",
-        message=f"An error occurred while transcribing a voice message for '{experiment.name}'",
+        message=f"An error occurred while transcribing a voice message for '{literal(experiment.name)}'",
         level=LevelChoices.ERROR,
         team=experiment.team,
         slug="audio-transcription-failed",
@@ -186,7 +187,7 @@ def message_delivery_failure_notification(
         links["View Session"] = session.get_absolute_url()
     create_notification(
         title=f"Message Delivery Failed for {experiment.name}",
-        message=f"An error occurred while delivering a {context} to {identifier} via {platform_title}",
+        message=f"An error occurred while delivering a {context} to {literal(identifier)} via {platform_title}",
         level=LevelChoices.ERROR,
         team=experiment.team,
         slug="message-delivery-failed",
@@ -255,11 +256,11 @@ def deprecated_model_notification(
     re-announced every time a later release deprecates something else.
     """
     message = (
-        f"The model '{model_name}' has been deprecated and will be removed soon. "
+        f"The model '{literal(model_name)}' has been deprecated and will be removed soon. "
         f"{affected.summary_text()} are still using it."
     )
     if replacement_model_name:
-        message += f" Please update to '{replacement_model_name}' before it is removed."
+        message += f" Please update to '{literal(replacement_model_name)}' before it is removed."
 
     create_notification(
         title=f"LLM Model '{model_name}' Deprecated",
@@ -386,7 +387,7 @@ def deleted_model_notification(
     create_notification(
         title=f"LLM Model '{model_name}' Removed",
         message=(
-            f"The model '{model_name}' has been removed from the platform. "
+            f"The model '{literal(model_name)}' has been removed from the platform. "
             f"{affected.summary_text()} were affected. "
             f"{action_text}"
         ),
@@ -424,8 +425,8 @@ def participant_auto_blocked_notification(experiment, denial, reason: str) -> No
     create_notification(
         title="Participant blocked automatically",
         message=(
-            f"Participant '{participant.identifier}' was blocked after repeated flagged messages to "
-            f"'{experiment.name}'. Flagged categories: {reason}."
+            f"Participant '{literal(participant.identifier)}' was blocked after repeated flagged messages to "
+            f"'{literal(experiment.name)}'. Flagged categories: {literal(reason)}."
         ),
         level=LevelChoices.WARNING,
         team=experiment.team,
@@ -449,7 +450,7 @@ def moderation_skipped_notification(experiment, session: ExperimentSession, reas
     create_notification(
         title="Moderation skipped",
         message=(
-            f"A message to '{experiment.name}' was answered without moderation because "
+            f"A message to '{literal(experiment.name)}' was answered without moderation because "
             f"{_MODERATION_SKIP_REASONS[reason]}."
         ),
         level=LevelChoices.WARNING,

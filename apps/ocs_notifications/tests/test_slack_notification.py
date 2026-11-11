@@ -61,6 +61,13 @@ class TestSendSlackNotification:
         assert any(notification_channel.team.name in b["elements"][0]["text"] for b in blocks if b["type"] == "context")
         assert "View in OCS" in message["text"]
 
+    def test_build_slack_message_converts_markdown_instead_of_fencing_it(self):
+        event = NotificationEventFactory.create(message="**Update** the [embed snippet](https://example.com/docs)")
+
+        section = next(b for b in build_slack_message(event)["blocks"] if b["type"] == "section")
+
+        assert section["text"]["text"] == "*Details*\n*Update* the <https://example.com/docs|embed snippet>"
+
     def test_send_slack_notification_posts_to_resolved_channel(self, team_with_users):
         notification_channel = NotificationChannelFactory.create(
             team=team_with_users, channel_name="alerts", channel_id="C12345"

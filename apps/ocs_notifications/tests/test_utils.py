@@ -39,6 +39,16 @@ from apps.web.meta import absolute_url
 
 @pytest.mark.django_db()
 class TestSendNotificationEmail:
+    def test_email_renders_the_message_as_markdown(self, team_with_users, mailoutbox):
+        user = team_with_users.members.first()
+        event = NotificationEventFactory.create(team=team_with_users, message="**Update** now\nor later")
+
+        send_notification_email([user], event)
+
+        body = mailoutbox[0].alternatives[0][0]
+        assert "<p><strong>Update</strong> now<br>\nor later</p>" in body
+        assert "**" not in body
+
     def test_email_not_sent_when_preference_doesnt_exist(self, team_with_users, mailoutbox):
         """
         Test that email is not sent when user notification preferences don't exist.
