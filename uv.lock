@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -462,9 +462,9 @@ name = "build"
 version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "os_name == 'nt' and sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "packaging", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "pyproject-hooks", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "colorama", marker = "os_name == 'nt'" },
+    { name = "packaging" },
+    { name = "pyproject-hooks" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/bd/67/4898a44ea4f3f8e213b0954ec0aa0a16971d62a6212d6ea3931e97115b99/build-1.6.1.tar.gz", hash = "sha256:51cc11666391ab6f092070437ac747002ff46f3e4113a3622177ee6b488bfc53", size = 113427, upload-time = "2026-09-10T07:56:00.417Z" }
 wheels = [
@@ -1692,8 +1692,8 @@ name = "httpcore2"
 version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c0/61/afa9d6b7452f9eca73f73d45324eb0bb52f098fd5e6049bf6b8263be9b4e/httpcore2-2.16.0.tar.gz", hash = "sha256:c72cd0413563b17e1cd8354677dff887466f8ec2551679759e93126534428643", size = 69886, upload-time = "2026-10-21T07:09:45.31Z" }
 wheels = [
@@ -2547,13 +2547,13 @@ name = "nab"
 version = "0.0.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nab-index", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-markersets", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-project", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-provider", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-resolver", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "tomli", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nab-index" },
+    { name = "nab-markersets" },
+    { name = "nab-project" },
+    { name = "nab-provider" },
+    { name = "nab-resolver" },
+    { name = "tomli" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/25/cb/2a2b5ff74592407d726b9642322356c07f65dddeac71ece9bfdf6e64c6eb/nab-0.0.20.tar.gz", hash = "sha256:3b6614a394b49a864dcd667dea31c421eac6b24bf6fd02f9bd775ecd21fe0f16", size = 282867, upload-time = "2026-10-13T23:15:45.834Z" }
 wheels = [
@@ -2565,11 +2565,11 @@ name = "nab-index"
 version = "0.0.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nab-provider", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "packaging", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "truststore", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "urllib3", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nab-provider" },
+    { name = "packaging" },
+    { name = "truststore" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b8/08/d61f8e73623f8db9cdad4fd4b3dfe8568385786ec31ca3e0f93bba59fb64/nab_index-0.0.20.tar.gz", hash = "sha256:96a786a853be5f8f5b36b08461701462b7b5206a6c9a462de85cb3d239b2572a", size = 108256, upload-time = "2026-10-13T23:15:30.507Z" }
 wheels = [
@@ -2590,17 +2590,17 @@ name = "nab-project"
 version = "0.0.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "build", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "installer", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-index", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-markersets", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-provider", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-resolver", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "packaging", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "pyproject-hooks", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "tomli", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "tomli-w", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "build" },
+    { name = "installer" },
+    { name = "nab-index" },
+    { name = "nab-markersets" },
+    { name = "nab-provider" },
+    { name = "nab-resolver" },
+    { name = "packaging" },
+    { name = "pyproject-hooks" },
+    { name = "tomli" },
+    { name = "tomli-w" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/b6/dff2382a8f46557428f2a3179f5991422ac763b159821292bc6d2f7b8665/nab_project-0.0.20.tar.gz", hash = "sha256:730524463ccc871f19cce8fd8f4cbbde7a4c8f92d0f429fb756cca8ea07396a6", size = 757806, upload-time = "2026-10-13T23:15:37.97Z" }
 wheels = [
@@ -2612,9 +2612,9 @@ name = "nab-provider"
 version = "0.0.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nab-markersets", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-resolver", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nab-markersets" },
+    { name = "nab-resolver" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/90/f8/633086717838da22e253f03de15636d1d54ba54c3506c9d1fd81b8d0a6a2/nab_provider-0.0.20.tar.gz", hash = "sha256:36f8956e5aa8cf942f2058fafcb6dc51a7387f4e27deeb7a95e3f2df48f07a46", size = 407258, upload-time = "2026-10-13T23:15:22.396Z" }
 wheels = [
@@ -2795,6 +2795,7 @@ wheels = [
 name = "open-chat-studio"
 version = "0.1.0"
 source = { virtual = "." }
+default-groups = ["dev", "docs"]
 dependencies = [
     { name = "anthropic" },
     { name = "atlassian-python-api" },
@@ -3408,9 +3409,9 @@ name = "pipdeptree"
 version = "4.2.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nab", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-index", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "nab-project", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nab" },
+    { name = "nab-index" },
+    { name = "nab-project" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/33/d4/ebf30a47d97e1edcb2d6ab1781f62eef341675ed350f24456d2a58ad4354/pipdeptree-4.2.7.tar.gz", hash = "sha256:902e63188477951acca885e59a25cffc91fed7e2d372e205d96324e5f87d1736", size = 154300, upload-time = "2026-10-10T23:31:22.878Z" }
 
@@ -5041,8 +5042,8 @@ name = "uvicorn"
 version = "0.35.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "sys_platform != 'emscripten'" },
-    { name = "h11", marker = "sys_platform != 'emscripten'" },
+    { name = "click" },
+    { name = "h11" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5e/42/e0e305207bb88c6b8d3061399c6a961ffe5fbb7e2aa63c9234df7259e9cd/uvicorn-0.35.0.tar.gz", hash = "sha256:bc662f087f7cf2ce11a1d7fd70b90c9f98ef2e2831556dd078d131b96cc94a01", size = 78473, upload-time = "2025-06-28T16:15:46.058Z" }
 wheels = [
