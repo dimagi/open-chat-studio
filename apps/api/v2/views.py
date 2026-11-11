@@ -13,7 +13,8 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
-from apps.api.v2.lookups import get_working_chatbot, working_chatbots
+from apps.api.v2.lookups import get_authorized_chatbot, working_chatbots
+from apps.api.v2.permissions import ApplicationAllowsChatbot
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.api.v2.write.archive import archive_chatbot
 from apps.api.v2.write.serializers import (
@@ -25,7 +26,7 @@ from apps.api.v2.write.serializers import (
 )
 from apps.experiments.models import Experiment
 from apps.experiments.services import last_activity_subquery
-from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.teams.models import Team
 
 
@@ -62,6 +63,13 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     def team(self) -> Team | None:
         """The team the credential authenticated with."""
         return self.request.team
+
+    def get_permissions(self) -> list:
+        """Reads are team-scoped (ADR-0028); only the writes are held to the application's allowlist."""
+        permissions = super().get_permissions()
+        if self.action in ("partial_update", "destroy"):
+            permissions.append(ApplicationAllowsChatbot())
+        return permissions
 
     def get_queryset(self) -> QuerySet[Experiment]:
         return (
@@ -178,12 +186,9 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     def partial_update(self, request, *args, **kwargs) -> Response:
         with transaction.atomic():
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
-            # naming different fields would silently clobber one another.
-            chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application allows. Checked after
-            # resolution because the allowlist is keyed on the chatbot, and before any write, so the
-            # refusal costs nothing but the lock this block releases on the way out.
-            enforce_application_chatbot_write(request, chatbot)
+            # naming different fields would silently clobber one another. The allowlist refusal
+            # costs nothing but the lock this block releases on the way out.
+            chatbot = get_authorized_chatbot(self, self.kwargs[self.lookup_url_kwarg], lock=True)
             serializer = ChatbotWriteSerializer(
                 chatbot, data=request.data, partial=True, context=self.get_serializer_context()
             )
@@ -238,11 +243,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         # when only the first did. Under the lock the second blocks, then re-evaluates the
         # working-chatbot predicate against the committed `is_archived` and answers 404.
         with transaction.atomic():
-            chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application allows. Checked
-            # after resolution because the allowlist is keyed on the chatbot, and before anything
-            # is written.
-            enforce_application_chatbot_write(request, chatbot)
+            chatbot = get_authorized_chatbot(self, self.kwargs[self.lookup_url_kwarg], lock=True)
             return Response(archive_chatbot(chatbot))
 
 

@@ -16,12 +16,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
-from apps.api.v2.lookups import get_working_chatbot
+from apps.api.v2.lookups import get_authorized_chatbot
+from apps.api.v2.permissions import ApplicationAllowsChatbot
 from apps.api.v2.write.base import CHATBOT_ID, ChatbotCompositionPermission
 from apps.experiments.models import Experiment
 from apps.experiments.services import publish_version
 from apps.experiments.tasks import start_version_creation
-from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
 
 from .exceptions import NothingToPublish, PipelineIsNotValid, VersionIsDefault, VersionOperationInProgress
@@ -61,7 +62,12 @@ FORBIDDEN_DELETE = OpenApiResponse(
 class ChatbotVersionCreateView(APIView):
     """Snapshot the working version as a new immutable version."""
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    permission_classes = [
+        *BASE_PERMISSION_CLASSES,
+        ChatbotCompositionPermission,
+        TokenHasOAuthResourceScope,
+        ApplicationAllowsChatbot,
+    ]
     required_scopes = ["chatbots"]
 
     @extend_schema(
@@ -112,10 +118,7 @@ class ChatbotVersionCreateView(APIView):
     def post(self, request, id: str) -> Response:
         body = VersionCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        chatbot = get_working_chatbot(request.team, id)
-        # A machine token reaches only the chatbots its application allows. After resolution
-        # because the allowlist is keyed on the chatbot, and before the gate, which reads the graph.
-        enforce_application_chatbot_write(request, chatbot)
+        chatbot = get_authorized_chatbot(self, id)
         make_default = body.validated_data["make_default"]
         # The cheaper question first: an unchanged chatbot is refused for having nothing to publish
         # without the graph also being walked to find fault with it.
@@ -178,7 +181,13 @@ def _check_pipeline_can_go_live(chatbot: Experiment) -> None:
 class ChatbotVersionStatusView(APIView):
     """Report where the chatbot's version history stands."""
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    # The read is held to the publish allowlist: a token that may not publish has no publish to follow.
+    permission_classes = [
+        *BASE_PERMISSION_CLASSES,
+        ChatbotCompositionPermission,
+        TokenHasOAuthResourceScope,
+        ApplicationAllowsChatbot,
+    ]
     required_scopes = ["chatbots"]
 
     @extend_schema(
@@ -209,10 +218,7 @@ class ChatbotVersionStatusView(APIView):
         },
     )
     def get(self, request, id: str) -> Response:
-        chatbot = get_working_chatbot(request.team, id)
-        # The same allowlist the publish is held to: a machine token that may not publish a chatbot
-        # has no publish of its own to follow.
-        enforce_application_chatbot_write(request, chatbot)
+        chatbot = get_authorized_chatbot(self, id)
         return Response(_version_status(chatbot))
 
 
@@ -229,7 +235,8 @@ class ChatbotVersionView(APIView):
         version is served, and `change_experiment` alone would let it hide versions.
         """
         write = ChatbotVersionDeletePermission if self.request.method == "DELETE" else ChatbotCompositionPermission
-        return [permission() for permission in [*BASE_PERMISSION_CLASSES, write, TokenHasOAuthResourceScope]]
+        classes = [*BASE_PERMISSION_CLASSES, write, TokenHasOAuthResourceScope, ApplicationAllowsChatbot]
+        return [permission() for permission in classes]
 
     @extend_schema(
         operation_id="chatbot_version_publish",
@@ -272,8 +279,7 @@ class ChatbotVersionView(APIView):
         # and promoting this version have to land together: interleaved, two promotions could
         # demote each other's winner and leave the chatbot with no published version at all.
         with transaction.atomic():
-            chatbot = get_working_chatbot(request.team, id, lock=True)
-            enforce_application_chatbot_write(request, chatbot)
+            chatbot = get_authorized_chatbot(self, id, lock=True)
             version = get_object_or_404(chatbot.versions, version_number=version_number)
             publish_version(version)
         return Response({"version_number": version.version_number, "is_published_version": True})
@@ -313,10 +319,7 @@ class ChatbotVersionView(APIView):
         # lock on the working chatbot, so two archives of the same version cannot both read it as
         # live. The second blocks, then re-resolves against the committed `is_archived` and 404s.
         with transaction.atomic():
-            chatbot = get_working_chatbot(request.team, id, lock=True)
-            # A machine token reaches only the chatbots its application allows. Checked after
-            # resolution because the allowlist is keyed on the chatbot, and before anything written.
-            enforce_application_chatbot_write(request, chatbot)
+            chatbot = get_authorized_chatbot(self, id, lock=True)
             # `versions` excludes archived rows, so an already-archived version is a 404 here.
             version = get_object_or_404(chatbot.versions, version_number=version_number)
             if version.is_default_version:
