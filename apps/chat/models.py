@@ -21,7 +21,7 @@ from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
 from apps.utils.llm_messages import ensure_non_empty_text
-from apps.utils.models import BaseModel
+from apps.utils.models import BaseModel, UpdatedAtOnPartialSaveMixin
 
 
 class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
@@ -204,7 +204,7 @@ def _file_matches(file: File, ids: set[str], external_ids: set[str]) -> bool:
     return str(file.id) in ids or bool(file.external_id and file.external_id in external_ids)
 
 
-class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
+class ChatMessage(UpdatedAtOnPartialSaveMixin, BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
     """

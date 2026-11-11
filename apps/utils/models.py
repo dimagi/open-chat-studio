@@ -38,6 +38,20 @@ class VersioningMixin:
         return hasattr(self, "working_version")
 
 
+class UpdatedAtOnPartialSaveMixin:
+    """Write ``updated_at`` on ``save(update_fields=...)`` as well as on a full save.
+
+    Django writes an ``auto_now`` field only when ``update_fields`` names it. The v2 sync API pages
+    models with this mixin by ``updated_at``, so every write has to move it.
+    """
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields and "updated_at" not in update_fields:
+            kwargs["update_fields"] = [*update_fields, "updated_at"]
+        super().save(*args, **kwargs)
+
+
 class BaseModel(models.Model, VersioningMixin):
     """
     Base model that includes default created / updated timestamps.
