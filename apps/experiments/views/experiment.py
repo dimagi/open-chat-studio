@@ -816,6 +816,7 @@ def experiment_session_messages_fragment_view(request, team_slug: str, experimen
     """
     session = request.experiment_session
     context, _messages_queryset = _build_session_messages_context(request, session, request.experiment)
+    context["is_fragment"] = True
     return TemplateResponse(request, "experiments/components/session_messages_list.html", context)
 
 

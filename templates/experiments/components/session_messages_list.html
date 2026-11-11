@@ -212,3 +212,15 @@
     {% endif %}
   </div>
 {% endfor %}
+{% if is_fragment and page == total_pages %}
+  <div id="load-all-messages-control"
+       data-load-all-messages-control
+       hx-swap-oob="outerHTML"
+       x-data="{ visible: true }"
+       x-init="setTimeout(() => visible = false, 3000)"
+       x-show="visible"
+       x-transition.opacity
+       class="flex items-center motion-reduce:transition-none"
+       role="status"
+       aria-live="polite">All messages loaded</div>
+{% endif %}

@@ -109,6 +109,40 @@ class TestSessionMessagesLoadOnScroll:
         assert response.context["total_pages"] == 1
         assert _fragment_url(experiment, session_with_messages).encode() not in response.content
 
+    def test_load_all_is_a_one_shot_button(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        response = client.get(_messages_url(experiment, session_with_messages))
+
+        content = response.content.decode()
+        assert "data-load-all-messages-button" in content
+        assert "Load all messages" in content
+        assert 'name="show_all"' not in content
+        assert "show_all=on" in content
+        assert 'hx-disabled-elt="this"' in content
+        assert 'aria-live="polite"' in content
+        assert "data-load-all-messages-error" in content
+
+    def test_load_all_response_displays_completion_state(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        response = client.get(_messages_url(experiment, session_with_messages) + "?show_all=on")
+
+        content = response.content.decode()
+        assert response.context["total_pages"] == 1
+        assert 'id="load-all-messages-control"' in content
+        assert "All messages loaded" in content
+        assert "data-load-all-messages-button" not in content
+
+    def test_last_fragment_replaces_load_all_control_with_completion_state(
+        self, client, experiment, session_with_messages
+    ):
+        client.force_login(experiment.owner)
+        response = client.get(_fragment_url(experiment, session_with_messages) + "?page=3")
+
+        content = response.content.decode()
+        assert 'hx-swap-oob="outerHTML"' in content
+        assert 'id="load-all-messages-control"' in content
+        assert "All messages loaded" in content
+
     def test_next_page_trigger_carries_the_search_filter_forward(self, client, experiment, session_with_messages):
         client.force_login(experiment.owner)
         response = client.get(_messages_url(experiment, session_with_messages) + "?search=Message&page=1")
