@@ -15,12 +15,7 @@ from pydantic import ValidationError
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ModerationStatus
 from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
-from apps.moderation.const import (
-    MODERATION_WAIT_TIMEOUT,
-    REMOVED_MESSAGE_PLACEHOLDER,
-    STRIKE_CATEGORIES,
-    STRIKE_LIMIT,
-)
+from apps.moderation.const import MODERATION_WAIT_TIMEOUT, STRIKE_CATEGORIES, STRIKE_LIMIT
 from apps.moderation.datamodels import ModerationTaskResult
 from apps.moderation.enforcement import block_participant, is_exempt
 from apps.moderation.models import DeniedParticipantSource
@@ -166,31 +161,18 @@ def _increment_strikes(participant: Participant) -> int:
     return participant.strikes
 
 
-def replace_turn_in_pipeline_histories(
-    *, human_message: ChatMessage, bot_response: ChatMessage | None, reply: str | None
-) -> None:
-    """Replace the node and named history rows saved while answering `human_message` with one row per history.
+def remove_turn_from_pipeline_histories(*, human_message: ChatMessage, bot_response: ChatMessage | None) -> None:
+    """Delete the node and named history rows the pipeline saved while answering `human_message`.
 
-    The turn's rows are the session's rows created from the human message up to the bot response (or now,
-    when there is none). The newest row of each history is kept, with a placeholder as its human text and
-    `reply` as its AI text; the others are deleted. With no `reply`, all of the turn's rows are deleted.
+    These are the session's rows created from the human message up to the bot response (or now, when
+    there is none).
     """
     rows = PipelineChatMessages.objects.filter(
         chat_history__session__chat_id=human_message.chat_id, created_at__gte=human_message.created_at
     )
     if bot_response is not None:
         rows = rows.filter(created_at__lte=bot_response.created_at)
-    if reply is None:
-        rows.delete()
-        return
-    with transaction.atomic():
-        kept_ids = list(
-            rows.order_by("chat_history_id", "-created_at").distinct("chat_history_id").values_list("id", flat=True)
-        )
-        rows.exclude(id__in=kept_ids).delete()
-        PipelineChatMessages.objects.filter(id__in=kept_ids).update(
-            human_message=REMOVED_MESSAGE_PLACEHOLDER, ai_message=reply, updated_at=timezone.now()
-        )
+    rows.delete()
 
 
 @dataclass(frozen=True)

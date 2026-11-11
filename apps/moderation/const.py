@@ -20,6 +20,3 @@ STRIKE_CATEGORIES = frozenset(
 
 FLAGGED_MESSAGE = "Your message was flagged by our content moderation, so it will not be answered."
 """Reply to a flagged message when a reply in the conversation's language cannot be generated."""
-
-REMOVED_MESSAGE_PLACEHOLDER = "[Message removed by moderation]"
-"""Human text stored in pipeline node and named histories in place of a flagged message."""
