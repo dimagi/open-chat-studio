@@ -3,7 +3,7 @@ import csv
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from io import StringIO
 
@@ -27,12 +27,17 @@ from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
 from apps.evaluations.errors import evaluator_error_output, generation_error_fields, is_failed_output
+from apps.evaluations.evaluation_messages import (
+    iter_message_evaluation_chunks,
+    iter_session_evaluation_messages_for_sessions,
+)
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.export import (
     annotate_export_fields,
     export_evaluation_csv_to_tempfile,
     iter_evaluation_table_rows,
 )
+from apps.evaluations.generation import GenerationRecord
 from apps.evaluations.models import (
     NON_TERMINAL_RUN_STATUSES,
     DatasetCreationStatus,
@@ -51,17 +56,15 @@ from apps.evaluations.notifications import evaluation_run_outcome_notification
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
-from apps.evaluations.utils import (
-    iter_session_evaluation_messages_for_sessions,
-    parse_csv_value_as_json,
-    parse_history_text,
-)
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.pipelines.graph import PipelineGraph
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.celery import Queues, delay_in_new_trace
+from apps.utils.csv_export import restore_csv_formula
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
@@ -149,6 +152,7 @@ class BotGeneration:
     session_id: int | None
     response: str = ""
     error: Exception | None = None
+    record: GenerationRecord = field(default_factory=GenerationRecord)
 
 
 def _run_evaluator_on_message(
@@ -167,7 +171,9 @@ def _run_evaluator_on_message(
     generation_fields = generation_error_fields(generation.error) if generation.error else {}
     usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
-        output = evaluator.run(message, generation.response, usage_context=usage_context).model_dump()
+        output = evaluator.run(
+            message, generation.response, usage_context=usage_context, generation=generation.record
+        ).model_dump()
     except Exception as e:
         if isinstance(e, NoStructuredOutputError):
             logger.warning(
@@ -729,6 +735,7 @@ def run_bot_generation(
 
         participant_data = message.participant_data | {}
         participant_data = session.participant.global_data | participant_data
+        node_names = _pipeline_node_names(experiment)
 
         # Call the bot with the evaluation message and session
         reply = handle_evaluation_message(
@@ -742,12 +749,26 @@ def run_bot_generation(
         response_content = reply.message.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
 
-        return BotGeneration(session_id=session.id, response=response_content, error=reply.error)
+        return BotGeneration(
+            session_id=session.id,
+            response=response_content,
+            error=reply.error,
+            record=GenerationRecord.from_run(
+                reply.pipeline_state, reply.participant_data_diff, reply.spans, node_names=node_names
+            ),
+        )
 
     except Exception as e:
         logger.exception(f"Error generating bot response for evaluation message {message.id}: {e}")
         # Don't fail the entire evaluation if bot generation fails
         return BotGeneration(session_id=session.id, error=e)
+
+
+def _pipeline_node_names(experiment: Experiment) -> dict[str, str]:
+    """Each node id in the experiment's pipeline mapped to the node's name."""
+    if experiment.pipeline is None:
+        return {}
+    return PipelineGraph.build_from_pipeline(experiment.pipeline).node_id_to_name_mapping
 
 
 def _create_message_history(chat: Chat, history: list[dict]) -> None:
@@ -914,8 +935,8 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                 row_count += 1
 
                 # Extract mapped columns
-                input_content = row.get(column_mapping.get("input", ""), "").strip()
-                output_content = row.get(column_mapping.get("output", ""), "").strip()
+                input_content = restore_csv_formula(row.get(column_mapping.get("input", ""), "")).strip()
+                output_content = restore_csv_formula(row.get(column_mapping.get("output", ""), "")).strip()
                 if not input_content or not output_content:
                     continue
 
@@ -923,19 +944,19 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                 if context_mapping := column_mapping.get("context"):
                     for field_name, csv_column in context_mapping.items():
                         if csv_column in row:
-                            context[field_name] = parse_csv_value_as_json(row[csv_column])
+                            context[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 participant_data = {}
                 if participant_data_mapping := column_mapping.get("participant_data"):
                     for field_name, csv_column in participant_data_mapping.items():
                         if csv_column in row:
-                            participant_data[field_name] = parse_csv_value_as_json(row[csv_column])
+                            participant_data[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 session_state = {}
                 if session_state_mapping := column_mapping.get("session_state"):
                     for field_name, csv_column in session_state_mapping.items():
                         if csv_column in row:
-                            session_state[field_name] = parse_csv_value_as_json(row[csv_column])
+                            session_state[field_name] = parse_csv_value_as_json(restore_csv_formula(row[csv_column]))
 
                 message_history = []
                 if populate_history:
@@ -943,7 +964,7 @@ def create_dataset_from_csv_task(  # noqa: C901 - parser: one branch per mapped 
                     message_history = [msg.copy() for msg in auto_history]
                 elif history_column and history_column in row:
                     # Parse history from CSV column
-                    history_text = row[history_column].strip()
+                    history_text = restore_csv_formula(row[history_column]).strip()
                     if history_text:
                         message_history = parse_history_text(history_text)
 
@@ -1021,8 +1042,8 @@ def _parse_csv_content(csv_content: str, progress_recorder: ProgressRecorder) ->
 
 def _extract_row_data(row: dict) -> dict:
     """Extract and validate data from a CSV row."""
-    input_content = row.get("input_content", "").strip()
-    output_content = row.get("output_content", "").strip()
+    input_content = restore_csv_formula(row.get("input_content", "")).strip()
+    output_content = restore_csv_formula(row.get("output_content", "")).strip()
 
     if not input_content or not output_content:
         raise ValueError("Missing input or output content")
@@ -1032,25 +1053,25 @@ def _extract_row_data(row: dict) -> dict:
     for col_name, value in row.items():
         if col_name.startswith("context.") and value:
             context_key = col_name.removeprefix("context.")
-            context[context_key] = parse_csv_value_as_json(value)
+            context[context_key] = parse_csv_value_as_json(restore_csv_formula(value))
 
     # Extract participant_data from participant_data.* columns
     participant_data = {}
     for col_name, value in row.items():
         if col_name.startswith("participant_data.") and value:
             key = col_name.removeprefix("participant_data.")
-            participant_data[key] = parse_csv_value_as_json(value)
+            participant_data[key] = parse_csv_value_as_json(restore_csv_formula(value))
 
     # Extract session_state from session_state.* columns
     session_state = {}
     for col_name, value in row.items():
         if col_name.startswith("session_state.") and value:
             key = col_name.removeprefix("session_state.")
-            session_state[key] = parse_csv_value_as_json(value)
+            session_state[key] = parse_csv_value_as_json(restore_csv_formula(value))
 
     # Parse history if present
     history = []
-    history_text = row.get("history", "").strip()
+    history_text = restore_csv_formula(row.get("history", "")).strip()
     if history_text:
         try:
             history = parse_history_text(history_text)
@@ -1276,10 +1297,11 @@ def process_evaluation_results_csv_rows(  # noqa: C901 - parser: one branch per 
                 value = row[column_name]
                 if value is None:
                     value = ""
+                value = restore_csv_formula(value)
 
-                result_key = column_name
-                if "(" in column_name and column_name.endswith(")"):
-                    result_key = column_name[: column_name.rfind("(")].strip()
+                result_key = restore_csv_formula(column_name)
+                if "(" in result_key and result_key.endswith(")"):
+                    result_key = result_key[: result_key.rfind("(")].strip()
 
                 try:
                     evaluator_id = int(evaluator_id)
@@ -1344,6 +1366,7 @@ def create_dataset_from_session_messages_task(
     filtered_session_ids: list[str],
     filter_query: str | None,
     timezone: str | None,
+    session_filter_query: str | None = None,
 ) -> dict:
     """
     Clone messages from sessions asynchronously.
@@ -1351,10 +1374,11 @@ def create_dataset_from_session_messages_task(
     Args:
         dataset_id: ID of the EvaluationDataset to populate
         team_id: ID of the team
-        session_ids: List of session external IDs to clone from
-        filtered_session_ids: List of filtered session external IDs
-        filter_query: Serialized filter parameters as query string (or None)
+        session_ids: Session external IDs cloned with every pair; when non-empty, the other id list is ignored
+        filtered_session_ids: Session external IDs cloned with filter_query applied, when session_ids is empty
+        filter_query: Serialized message filter (or None); ignored when session_ids picks the sessions
         timezone: Timezone for filtering
+        session_filter_query: Serialized session filter resolved server-side; takes precedence over both id lists
     """
 
     progress_recorder = ProgressRecorder(self)
@@ -1370,25 +1394,34 @@ def create_dataset_from_session_messages_task(
     dataset.status = DatasetCreationStatus.PROCESSING
     dataset.save(update_fields=["status"])
 
+    sessions_done = 0
+    total_sessions = 0
+
     try:
         progress_recorder.set_progress(0, 100, "Starting clone...")
 
         filter_params = FilterParams(QueryDict(filter_query)) if filter_query is not None else None
+        ids = session_ids or filtered_session_ids
+        message_filter = None if session_ids and session_filter_query is None else filter_params
 
         with current_team(team):
-            evaluation_messages = EvaluationMessage.create_from_sessions(
-                team=team,
-                external_session_ids=session_ids,
-                filtered_session_ids=filtered_session_ids,
-                filter_params=filter_params,
-                timezone=timezone,
-            )
-
-            progress_recorder.set_progress(
-                40, 100, f"Found {len(evaluation_messages)} messages, checking for duplicates..."
-            )
-
-            created_messages, duplicates_skipped = dataset.add_messages(evaluation_messages)
+            session_qs = _sessions_for_clone(dataset, ids, session_filter_query, timezone)
+            total_sessions = session_qs.count()
+            created_ids: list[int] = []
+            duplicates_skipped = 0
+            for session_count, chunk in iter_message_evaluation_chunks(
+                session_qs, filter_params=message_filter, timezone=timezone
+            ):
+                # Committing whole sessions keeps a failed run from leaving a session half-cloned, which the
+                # stored-filter re-run would then exclude as already present.
+                chunk_created, chunk_skipped = dataset.add_messages_stream(chunk, batch_boundary=_message_session_id)
+                created_ids.extend(chunk_created)
+                duplicates_skipped += chunk_skipped
+                sessions_done += session_count
+                percent = min(100, int(sessions_done / total_sessions * 100)) if total_sessions else 100
+                progress_recorder.set_progress(
+                    percent, 100, f"Cloned messages from {sessions_done} of {total_sessions} sessions"
+                )
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -1398,24 +1431,36 @@ def create_dataset_from_session_messages_task(
 
             return {
                 "success": True,
-                "created_count": len(created_messages),
+                "created_count": len(created_ids),
                 "duplicates_skipped": duplicates_skipped,
             }
 
-    except Exception as e:
+    # BaseException, not Exception: a gevent.Timeout (raised when a hard task time limit fires)
+    # derives from BaseException and would otherwise leave the dataset stuck in PROCESSING.
+    except BaseException as e:
         logger.exception(f"Error in clone task for dataset {dataset_id}: {e}")
-        message = "An error occurred while cloning messages from sessions"
+        message = (
+            f"Failed after cloning messages from {sessions_done} of {total_sessions} session(s): {e}. "
+            "Re-running will resume from where it stopped."
+        )
         _save_dataset_error(dataset, message)
+        if not isinstance(e, Exception):
+            # Record the failure, but never swallow SystemExit/KeyboardInterrupt/gevent.Timeout.
+            raise
         return {"success": False, "error": message}
 
 
-def _sessions_for_session_mode_clone(
+def _message_session_id(message: EvaluationMessage) -> int | None:
+    return message.session_id
+
+
+def _sessions_for_clone(
     dataset: EvaluationDataset,
     session_ids: list[str] | None,
     filter_query: str | None,
     timezone: str | None,
 ) -> QuerySet[ExperimentSession]:
-    """Resolve which sessions a session-mode clone should walk.
+    """Resolve which sessions a clone task should walk.
 
     A stored filter is resolved here rather than by the request that dispatched the job, so an
     "everything matching these filters" selection never travels as tens of thousands of UUIDs.
@@ -1480,7 +1525,7 @@ def create_dataset_from_sessions_task(
         progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
 
         with current_team(dataset.team):
-            session_qs = _sessions_for_session_mode_clone(dataset, session_ids, filter_query, timezone)
+            session_qs = _sessions_for_clone(dataset, session_ids, filter_query, timezone)
 
             # Counted up front: the message source is a generator, so it has no len(), and the
             # count is needed as the progress denominator. Empty sessions are excluded because

@@ -11,6 +11,7 @@ from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
 from apps.users.models import CustomUser
+from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.tests.langchain import mock_llm
 
 
@@ -28,6 +29,7 @@ class TasksTest(TestCase):
                 "openai_api_key": "123123123",
             },
         )
+        LlmProviderModelFactory.create(team=self.team)
         self.experiment = Experiment.objects.create(
             team=self.team,
             owner=self.user,

@@ -46,6 +46,7 @@ def test_create_scheduled_message_sets_start_date_and_external_id(ad_hoc_bot_mes
             participant=session.participant, team=session.team, action=event_action, experiment=session.experiment
         )
         delta = relativedelta(**{params["time_period"]: params["frequency"]})
+        assert message.next_trigger_date is not None
         rel_delta = timedelta_to_relative_delta(message.next_trigger_date - timezone.now())
         assert rel_delta == delta
         assert message.external_id is not None
@@ -293,8 +294,8 @@ def test_schedule_update():
     # Since message3 is completed, its `next_trigger_date` and `is_complete` should not change
     _assert_next_trigger_date(message3, message3_next_trigger_data)
     assert message3.is_complete is True
-    assert message1.next_trigger_date > message1_prev_trigger_date
-    assert message2.next_trigger_date > message2_prev_trigger_date
+    assert message1.next_trigger_date > message1_prev_trigger_date  # ty: ignore[unsupported-operator]
+    assert message2.next_trigger_date > message2_prev_trigger_date  # ty: ignore[unsupported-operator]
     message1_prev_trigger_date = message1.next_trigger_date
     message2_prev_trigger_date = message2.next_trigger_date
 
@@ -307,8 +308,8 @@ def test_schedule_update():
     _assert_next_trigger_date(message1, message1.created_at + new_delta)
     _assert_next_trigger_date(message2, message2.last_triggered_at + new_delta)
     _assert_next_trigger_date(message3, message3_next_trigger_data)
-    assert message1.next_trigger_date < message1_prev_trigger_date
-    assert message2.next_trigger_date < message2_prev_trigger_date
+    assert message1.next_trigger_date < message1_prev_trigger_date  # ty: ignore[unsupported-operator]
+    assert message2.next_trigger_date < message2_prev_trigger_date  # ty: ignore[unsupported-operator]
 
 
 @pytest.mark.django_db()

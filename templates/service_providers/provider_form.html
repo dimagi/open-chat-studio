@@ -81,6 +81,22 @@
           {% endif %}
         {% endif %}
       {% endif %}
+      {% if oauth_redirect_uri %}
+        <div class="mt-6 p-4 bg-base-200 rounded-box" data-testid="oauth-authorization-settings">
+          <div class="font-semibold">OAuth connection</div>
+          <div class="text-sm mt-2">Callback URI (register this with your provider):</div>
+          <code class="text-xs break-all">{{ oauth_redirect_uri }}</code>
+          {% if oauth_status %}
+            <div class="flex items-center gap-3 mt-3">
+              <span>Status: {{ oauth_status }}{% if oauth_connected_by %} (connected by {{ oauth_connected_by }}){% endif %}</span>
+              {% if oauth_connect_url %}
+                <button type="submit" class="btn btn-outline btn-sm" form="oauth-connect-form">{% if oauth_status == "connected" %}Reconnect{% else %}Connect{% endif %}</button>
+              {% endif %}
+            </div>
+            <div class="text-xs mt-2 opacity-70">The connection uses the authorizing user's access and is shared by everyone on the team who can use this provider.</div>
+          {% endif %}
+        </div>
+      {% endif %}
       {% if can_verify_credentials %}
         {% comment %}
         The label says up front whether saving will also verify credentials. button_text
@@ -96,6 +112,9 @@
         <input type="submit" class="btn btn-primary mt-2" value="{{ button_text }}" :disabled="submitted">
       {% endif %}
     </form>
+    {% if oauth_connect_url %}
+      <form id="oauth-connect-form" method="post" action="{{ oauth_connect_url }}">{% csrf_token %}</form>
+    {% endif %}
     {% block post_form %}
       {% if whatsapp_status_url %}
         {# The sections talk to Meta, so they load after the page rather than holding up the form. #}

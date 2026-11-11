@@ -1,10 +1,10 @@
-from django.template.loader import render_to_string
+from apps.generics.components import render_component
 
 
-def test_breadcrumbs_template():
-    rendered = render_to_string(
-        "generic/breadcrumbs.html",
-        {"breadcrumbs": [("Chatbots", "/a/team/chatbots/"), ("Cross-team", None), ("<b>Bot</b>", "/ignored/")]},
+def test_breadcrumbs_component():
+    rendered = render_component(
+        "ui.breadcrumbs",
+        items=[("Chatbots", "/a/team/chatbots/"), ("Cross-team", None), ("<b>Bot</b>", "/ignored/")],
     )
     assert '<li><a href="/a/team/chatbots/">Chatbots</a></li>' in rendered
     assert "<li>Cross-team</li>" in rendered

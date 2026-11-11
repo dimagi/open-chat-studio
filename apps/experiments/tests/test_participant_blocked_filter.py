@@ -4,12 +4,10 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
-from waffle.testutils import override_flag
 
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.participants.filters import ParticipantFilter
-from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.web.dynamic_filters.base import Operators
@@ -22,15 +20,8 @@ from apps.web.dynamic_filters.base import Operators
         pytest.param(ParticipantFilter, "blocked", id="participants"),
     ],
 )
-@pytest.mark.parametrize(
-    ("flag_active", "expected"),
-    [pytest.param(True, True, id="flag-on"), pytest.param(False, False, id="flag-off")],
-)
-def test_blocked_filter_offered_only_when_the_flag_is_on(db, team, filter_class, query_param, flag_active, expected):
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
-        columns = filter_class.columns(team)
-
-    assert (query_param in columns) is expected
+def test_blocked_filter_is_offered(db, team, filter_class, query_param):
+    assert query_param in filter_class.columns(team)
 
 
 @pytest.mark.parametrize(
@@ -50,9 +41,8 @@ def test_table_ignores_an_operator_the_filter_does_not_offer(client, team_with_u
     url = reverse(viewname=viewname, kwargs={"team_slug": team.slug})
     query = {"filter_0_column": query_param, "filter_0_operator": Operators.ALL_OF, "filter_0_value": '["true"]'}
 
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
-        unfiltered = client.get(url)
-        response = client.get(url, data=query)
+    unfiltered = client.get(url)
+    response = client.get(url, data=query)
 
     assert response.status_code == 200
     unfiltered_rows = list(unfiltered.context_data["table"].data.data)
@@ -69,7 +59,7 @@ BLOCKED_FILTER_QUERY = {
 
 def _session_list_queries(*, client, url, query):
     """The number of queries the session list runs, and the ids of the sessions it shows."""
-    with override_flag(Flags.ABUSE_DETECTION.slug, active=True), CaptureQueriesContext(connection) as queries:
+    with CaptureQueriesContext(connection) as queries:
         response = client.get(url, data=query)
     assert response.status_code == 200
     return len(queries), {session.id for session in response.context_data["table"].data.data}

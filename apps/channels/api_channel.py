@@ -57,7 +57,7 @@ class ApiChannel(ChannelBase):
     """
 
     voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
+    supported_message_types = (MESSAGE_TYPES.TEXT,)
 
     def __init__(
         self,

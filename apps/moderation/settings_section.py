@@ -5,14 +5,12 @@ from datetime import timedelta
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from waffle import flag_is_active
 
 from apps.chat.models import MODERATION_STATUS_LABELS, ModerationStatus
 from apps.moderation.forms import TeamModerationForm
 from apps.moderation.models import DeniedParticipant
 from apps.moderation.services import ModerationCounts, count_moderated_messages
 from apps.service_providers.utils import ServiceProvider, get_available_subtypes
-from apps.teams.flags import Flags
 from apps.teams.settings_sections import SettingsSection, is_team_admin
 from apps.web.forms import set_form_fields_disabled
 
@@ -25,9 +23,7 @@ def _can_view_denylist(request) -> bool:
 
 
 def _can_view_settings_section(request) -> bool:
-    return bool(flag_is_active(request=request, flag_name=Flags.ABUSE_DETECTION.slug)) and (
-        is_team_admin(request) or _can_view_denylist(request)
-    )
+    return is_team_admin(request) or _can_view_denylist(request)
 
 
 def moderation_settings_context(request, form: TeamModerationForm | None = None) -> dict:

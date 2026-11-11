@@ -3,19 +3,16 @@ from unittest import mock
 import openai
 import pytest
 from django.urls import reverse
-from waffle.testutils import override_flag
+from field_audit.models import AuditAction
 
 from apps.service_providers.forms import OpenAIModerationConfigForm
 from apps.service_providers.models import ModerationProvider, ModerationProviderType
 from apps.service_providers.moderation_service import ModerationRateLimited, OpenAIModerationService
 from apps.service_providers.moderation_service.schemas import ModerationOutput
-from apps.teams.flags import Flags
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.tests.moderation_helpers import DELETED_PROVIDER_NOTIFICATION, select_moderation_provider
 from apps.utils.tests.provider_errors import connection_error, status_error
 
-FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
 
 
@@ -119,6 +116,7 @@ def test_provider_builds_openai_service():
     assert service.openai_api_key.get_secret_value() == "sk-1"
     assert service.openai_api_base is None
     assert service.openai_organization == "org-1"
+    assert service.timeout is not None
 
 
 @pytest.mark.django_db()
@@ -145,21 +143,7 @@ def _urls(team, provider=None):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("view", ["table", "new", "edit", "delete"])
-def test_views_are_hidden_with_the_flag_off(view, team_with_users, admin_client):
-    provider = ModerationProviderFactory.create(team=team_with_users)
-    method, url = _urls(team=team_with_users, provider=provider)[view]
-
-    with override_flag(FLAG, active=False):
-        response = getattr(admin_client, method)(url)
-
-    assert response.status_code == 404
-    assert ModerationProvider.objects.filter(id=provider.id).exists()
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize("view", ["edit", "delete"])
-@override_flag(FLAG, active=True)
 def test_views_do_not_reach_another_teams_provider(view, team_with_users, admin_client):
     other_provider = ModerationProviderFactory.create(team=TeamFactory.create())
     method, url = _urls(team=team_with_users, provider=other_provider)[view]
@@ -171,7 +155,6 @@ def test_views_do_not_reach_another_teams_provider(view, team_with_users, admin_
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 def test_create_view_saves_a_provider(team_with_users, admin_client):
     _, url = _urls(team_with_users)["new"]
 
@@ -185,7 +168,6 @@ def test_create_view_saves_a_provider(team_with_users, admin_client):
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 def test_create_view_rejects_a_bad_key(team_with_users, admin_client):
     _, url = _urls(team_with_users)["new"]
 
@@ -198,20 +180,60 @@ def test_create_view_rejects_a_bad_key(team_with_users, admin_client):
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
-def test_delete_view_turns_moderation_off_and_notifies(
-    team_with_users, admin_client, django_capture_on_commit_callbacks
-):
-    provider = ModerationProviderFactory.create(team=team_with_users, name="Main moderation")
-    select_moderation_provider(team=team_with_users, provider=provider)
+def test_delete_view_blocks_deleting_the_provider_the_team_moderates_with(team_with_users, admin_client):
+    provider = ModerationProviderFactory.create(team=team_with_users)
+    team_with_users.moderation_enabled = True
+    team_with_users.moderation_provider = provider
+    team_with_users.save()
     method, url = _urls(team=team_with_users, provider=provider)["delete"]
 
-    with mock.patch(DELETED_PROVIDER_NOTIFICATION) as notify, django_capture_on_commit_callbacks(execute=True):
-        response = getattr(admin_client, method)(url)
+    response = getattr(admin_client, method)(url)
 
     assert response.status_code == 200
+    assert "Cannot delete service provider" in response.content.decode()
+    assert "Message moderation" in response.content.decode()
+    assert ModerationProvider.objects.filter(id=provider.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "selected",
+    [pytest.param(False, id="not-selected"), pytest.param(True, id="selected-with-moderation-off")],
+)
+def test_delete_view_deletes_a_provider_not_in_use(selected, team_with_users, admin_client):
+    provider = ModerationProviderFactory.create(team=team_with_users)
+    if selected:
+        team_with_users.moderation_provider = provider
+        team_with_users.save()
+    method, url = _urls(team=team_with_users, provider=provider)["delete"]
+
+    response = getattr(admin_client, method)(url)
+
+    assert response.status_code == 200
+    assert "Cannot delete" not in response.content.decode()
     assert not ModerationProvider.objects.filter(id=provider.id).exists()
-    team_with_users.refresh_from_db()
-    assert team_with_users.moderation_enabled is False
-    assert team_with_users.moderation_deleted_provider_name == "Main moderation"
-    notify.assert_called_once()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "delete",
+    [
+        pytest.param(lambda provider: provider.delete(), id="instance"),
+        pytest.param(
+            lambda provider: ModerationProvider.objects.filter(id=provider.id).delete(audit_action=AuditAction.AUDIT),
+            id="queryset",
+        ),
+    ],
+)
+def test_deleting_the_selected_provider_turns_moderation_off(delete):
+    provider = ModerationProviderFactory.create()
+    team = provider.team
+    team.moderation_enabled = True
+    team.moderation_provider = provider
+    team.save()
+
+    delete(provider)
+
+    team.refresh_from_db()
+    assert team.moderation_provider is None
+    assert team.moderation_enabled is False

@@ -1,12 +1,10 @@
-import pytest
-
 from apps.experiments.filters import ChatMessageFilter, ExperimentSessionFilter
 from apps.web.dynamic_filters.base import (
     FIELD_TYPE_FILTERS,
     ChoiceColumnFilter,
     MultiColumnFilter,
+    Operators,
     StringColumnFilter,
-    YesNoExistsFilter,
     get_filter_registry,
     get_filter_schema,
 )
@@ -39,7 +37,9 @@ class TestGetFilterSchema:
         assert schema["name"]["label"] == "Name"
         assert schema["name"]["type"] == "string"
         assert schema["name"]["description"] == "Filter by name"
-        assert schema["name"]["operators"] == [op.value for op in FIELD_TYPE_FILTERS["string"]]
+        assert schema["name"]["operators"] == [
+            op.value for op in FIELD_TYPE_FILTERS["string"] if op != Operators.ANY_OF
+        ]
 
     def test_schema_keys_are_query_params(self):
         schema = get_filter_schema(_TestFilter)
@@ -82,8 +82,6 @@ class TestExperimentSessionFilterSchema:
             "remote_id",
             "session_id",
             "annotation_queue",
-            "moderation_status",
-            "rule_hit",
             "participant_blocked",
         }
         assert set(schema.keys()) == expected_keys
@@ -109,20 +107,3 @@ class TestChatMessageFilterSchema:
         schema = get_filter_schema(ChatMessageFilter)
         expected_keys = {"tags", "last_message", "versions"}
         assert set(schema.keys()) == expected_keys
-
-
-class _YesNoFilter(YesNoExistsFilter):
-    query_param: str = "yes_no"
-    label: str = "Yes no"
-
-
-@pytest.mark.parametrize(
-    ("kwargs", "expected"),
-    [
-        pytest.param({}, [{"id": "true", "label": "Yes"}, {"id": "false", "label": "No"}], id="default"),
-        pytest.param({"options": []}, [], id="explicit-empty"),
-        pytest.param({"options": [{"id": "true", "label": "Y"}]}, [{"id": "true", "label": "Y"}], id="explicit"),
-    ],
-)
-def test_yes_no_filter_builds_default_options_only_when_none_are_given(kwargs, expected):
-    assert _YesNoFilter(**kwargs).options == expected

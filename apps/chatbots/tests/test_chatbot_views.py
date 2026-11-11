@@ -48,6 +48,7 @@ from apps.utils.factories.events import ScheduledMessageFactory, StaticTriggerFa
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
+from apps.web.dynamic_filters.base import Operators
 
 
 @pytest.mark.django_db()
@@ -377,13 +378,7 @@ def test_versions_table_chat_action_opens_widget(client, team_with_users):
     assert f"openChatWidget({version.version_number}, " in content
     assert f"headerText: 'Version {version.version_number}'" in content
     assert "allowAttachments: true" in content
-    assert (
-        reverse(
-            "chatbots:start_authed_web_session",
-            args=[team.slug, experiment.id, version.version_number],
-        )
-        not in content
-    )
+    assert "start_authed_web_session" not in content
 
 
 def attach_session_middleware_to_request(request):
@@ -582,6 +577,22 @@ def test_participant_scoped_sessions_table_view_chatbot_quick_filter(client, tea
     response = client.get(url, {"chatbot": matching_experiment.id})
 
     assert list(response.context_data["table"].data.data) == [matching_session]
+
+
+@pytest.mark.django_db()
+def test_participant_scoped_sessions_table_view_ignores_the_participant_blocked_filter(client, team_with_users):
+    team = team_with_users
+    client.force_login(team.members.first())
+
+    participant = ParticipantFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, participant=participant)
+
+    url = reverse(
+        "chatbots:participant_sessions_list", kwargs={"team_slug": team.slug, "participant_id": participant.id}
+    )
+    response = client.get(url, {"f_participant_blocked": "true", "op_participant_blocked": Operators.ANY_OF})
+
+    assert list(response.context_data["table"].data.data) == [session]
 
 
 @pytest.mark.django_db()
@@ -854,7 +865,7 @@ def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
     assert f'chatbot-id="{experiment.public_id}"' in content
     assert f"openChatWidget({experiment.version_number}, " in content
     assert "openChatWidget(0, " in content
-    assert reverse("chatbots:start_authed_web_session", args=[team.slug, experiment.id, 0]) not in content
+    assert "start_authed_web_session" not in content
 
 
 @pytest.mark.django_db()
@@ -1099,6 +1110,18 @@ def test_chatbot_admin_can_access_edit_chatbot(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_edit_chatbot_opens_an_archived_chatbot_read_only(client, team_with_users):
+    experiment = ExperimentFactory.create(team=team_with_users)
+    experiment.archive()
+    client.force_login(team_with_users.members.first())
+
+    response = client.get(reverse("chatbots:edit", args=[team_with_users.slug, experiment.id]))
+
+    assert response.status_code == 200
+    assert response.context["read_only"] is True
+
+
+@pytest.mark.django_db()
 def test_session_table_prefetch_is_page_bounded(team_with_users):
     """Adding more sessions than fit on one page must not increase the number of
     queries fired for the tag prefetch — the prefetch should target only the
@@ -1221,27 +1244,6 @@ def test_chatbot_chat_ui_includes_valid_session_token():
     token = response.context_data["session_token"]
     assert token
     assert parse_session_token(token, session.external_id) is not None
-
-
-@pytest.mark.django_db()
-@patch("apps.experiments.services.enqueue_static_triggers", Mock())
-def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
-    """The chatbots table chat button posts version 0 so sessions run against the published version."""
-    user = team_with_users.members.first()
-    experiment = ExperimentFactory(team=team_with_users)
-    experiment.create_new_version(make_default=True)
-    client.force_login(user)
-
-    url = reverse(
-        "chatbots:start_authed_web_session",
-        args=[team_with_users.slug, experiment.id, Experiment.DEFAULT_VERSION_NUMBER],
-    )
-    response = client.post(url)
-    assert response.status_code == 302
-
-    response = client.get(response.url)
-    assert response.status_code == 200
-    assert response.context["experiment_version"].is_default_version
 
 
 @pytest.mark.django_db()

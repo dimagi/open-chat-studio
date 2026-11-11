@@ -8,7 +8,6 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.http import urlencode
 from field_audit.models import AuditAction
-from waffle.testutils import override_flag
 
 from apps.chat.models import ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
@@ -17,7 +16,6 @@ from apps.moderation.models import DeniedParticipant, DeniedParticipantSource
 from apps.service_providers.models import ModerationProvider
 from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.teams.backends import CHAT_VIEWER_GROUP, NORMAL_USER_GROUPS, TEAM_ADMIN_GROUP
-from apps.teams.flags import Flags
 from apps.teams.models import Team
 from apps.teams.utils import section_url
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ParticipantFactory
@@ -26,13 +24,11 @@ from apps.utils.factories.service_provider_factories import ModerationProviderFa
 from apps.utils.factories.team import TeamFactory
 from apps.utils.tests.team_helpers import member_with_groups
 
-FLAG = Flags.ABUSE_DETECTION.slug
 MODERATE = "apps.service_providers.moderation_service.main.OpenAIModerationService.moderate"
 
 
 @pytest.fixture()
-def team(team_with_users, team_flag):
-    team_flag(flag_name=FLAG, team=team_with_users)
+def team(team_with_users):
     return team_with_users
 
 
@@ -46,6 +42,14 @@ def member(team):
 def team_admin_only(team):
     """Team admin without participant permissions."""
     return member_with_groups(team=team, group_names=[TEAM_ADMIN_GROUP])
+
+
+@pytest.fixture()
+def change_team_member(team):
+    """Not a team admin, but holds ``teams.change_team`` directly."""
+    user = member_with_groups(team=team, group_names=NORMAL_USER_GROUPS)
+    user.user_permissions.add(Permission.objects.get(codename="change_team"))
+    return user
 
 
 @pytest.fixture()
@@ -67,22 +71,6 @@ def _table_url(team):
 
 def _new_provider_url(team):
     return reverse("moderation:provider_new", args=[team.slug, "openai"])
-
-
-@pytest.mark.django_db()
-@override_flag(FLAG, active=False)
-@pytest.mark.parametrize(
-    ("method", "url_builder"),
-    [pytest.param("get", _section_url, id="section"), pytest.param("post", _settings_url, id="save_settings")],
-)
-def test_not_found_with_flag_off(client, team_with_users, admin, method, url_builder):
-    client.force_login(admin)
-
-    response = getattr(client, method)(url_builder(team_with_users), {"auto_block_enabled": "on"})
-
-    assert response.status_code == 404
-    team_with_users.refresh_from_db()
-    assert not team_with_users.auto_block_enabled
 
 
 @pytest.mark.django_db()
@@ -115,19 +103,6 @@ class TestTeamModerationForm:
 
         assert not form.is_valid()
         assert "moderation_provider" in form.errors
-
-    def test_selecting_a_provider_clears_the_deleted_provider_name(self):
-        team = TeamFactory.create(moderation_deleted_provider_name="Old provider")
-        provider = ModerationProviderFactory.create(team=team)
-
-        form = TeamModerationForm({"moderation_enabled": True, "moderation_provider": provider.pk}, instance=team)
-        assert form.is_valid()
-        form.save()
-
-        team.refresh_from_db()
-        assert team.moderation_enabled
-        assert team.moderation_provider == provider
-        assert team.moderation_deleted_provider_name == ""
 
     def test_save_keeps_concurrent_changes_to_other_team_fields(self):
         team = TeamFactory.create(name="Before")
@@ -205,16 +180,6 @@ class TestSectionRendering:
         assert own.name in content
         assert "Other team provider" not in content
         assert 'data-testid="edit-moderation-provider"' in content
-
-    def test_deleted_provider_banner(self, client, admin, team):
-        team.moderation_deleted_provider_name = "Old provider"
-        team.save()
-        client.force_login(admin)
-
-        content = client.get(_section_url(team)).content.decode()
-
-        assert 'data-testid="moderation-provider-deleted"' in content
-        assert "Old provider" in content
 
     @pytest.mark.parametrize(
         ("user_fixture", "can_edit", "sees_denylist"),
@@ -317,7 +282,11 @@ class TestSaveSettings:
 
     @pytest.mark.parametrize(
         "user_fixture",
-        [pytest.param("member", id="participant_editor"), pytest.param("chat_viewer", id="chat_viewer")],
+        [
+            pytest.param("member", id="participant_editor"),
+            pytest.param("chat_viewer", id="chat_viewer"),
+            pytest.param("change_team_member", id="change_team_without_admin"),
+        ],
     )
     def test_requires_team_admin(self, client, request, team, user_fixture):
         client.force_login(request.getfixturevalue(user_fixture))
@@ -395,7 +364,9 @@ class TestProviderDialog:
         provider = ModerationProviderFactory.create(team=team, name="Before")
         user = member_with_groups(team=team, group_names=NORMAL_USER_GROUPS)
         user.user_permissions.add(
-            *Permission.objects.filter(codename__in=["add_moderationprovider", "change_moderationprovider"])
+            *Permission.objects.filter(
+                codename__in=["add_moderationprovider", "change_moderationprovider", "change_team"]
+            )
         )
         client.force_login(user)
         url = (

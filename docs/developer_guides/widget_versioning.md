@@ -108,11 +108,28 @@ See `docs/design/oauth-chat-widget.md` for the admission model as a whole.
 
 ## Releasing a new widget version
 
-1. Publish the new version to npm (see `components/chat_widget`).
-2. In the same PR, bump `LATEST_VERSION` in `apps/channels/widget_versions.py`.
-   The embed snippet (`{% widget_script_url %}`) and the "update available"
-   badges follow automatically.
-3. Optionally announce the release in-app. Add a data migration in
+A release takes two PRs, because `LATEST_VERSION` must not reach production
+before the package is on npm.
+
+1. Release PR: bump the version in `components/chat_widget/package.json`
+   (`npm version [patch|minor|major]` in `components/chat_widget`) and merge it.
+2. Tag the merge commit on `main` with `w_v<version>` and push the tag:
+
+        git tag w_v0.16.0
+        git push origin w_v0.16.0
+
+   The tag triggers the
+   [Publish Package workflow](https://github.com/dimagi/open-chat-studio/actions/workflows/publish_widget.yml),
+   which builds the widget and runs `npm publish`. Do not publish by hand. Do not
+   tag an unmerged branch: npm does not allow republishing a version, so the
+   package could no longer be corrected to match `main`.
+3. Confirm the version is on npm, e.g. `npm view open-chat-studio-widget version`.
+4. Follow-up PR: bump `LATEST_VERSION` in `apps/channels/widget_versions.py`.
+   The embed snippet (`{% widget_script_url %}`) loads the widget from
+   `unpkg.com/open-chat-studio-widget@<LATEST_VERSION>`, so deploying the bump
+   before the package exists gives new embeds a broken script URL. The embed
+   snippet and the "update available" badges follow automatically.
+5. Optionally announce the release in-app, in the same follow-up PR. Add a data migration in
    `apps/channels/migrations/` that triggers the notification on deploy, with the
    version and release notes inline:
 

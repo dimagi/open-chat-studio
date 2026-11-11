@@ -3,6 +3,7 @@ import pytest
 from apps.experiments.models import Experiment, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
+from apps.pipelines.models import Node
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -394,6 +395,49 @@ class TestCopyExperiment:
         assert copied_render.params == {"name": "render template", "template_string": "{{input}}"}
         # The render node's layout position is carried on the copied row.
         assert copied_render.position == {"x": 1086.2033684962435, "y": 91.8445271200375}
+
+
+@pytest.mark.django_db()
+class TestRelatedManagerGetAll:
+    def test_stays_scoped_to_the_parent(self):
+        """get_all() lifts the archived filter only; the parent-row scoping must survive."""
+        pipeline = PipelineFactory.create()
+        other = PipelineFactory.create()
+        other.archive()
+
+        ids = set(pipeline.node_set.get_all().values_list("id", flat=True))
+
+        assert ids == set(Node.objects.get_all().filter(pipeline=pipeline).values_list("id", flat=True))
+        assert ids.isdisjoint(Node.objects.get_all().filter(pipeline=other).values_list("id", flat=True))
+
+    def test_versions_stay_scoped_to_the_experiment(self):
+        chatbot = ExperimentFactory.create()
+        other = ExperimentFactory.create(team=chatbot.team)
+        version = chatbot.create_new_version()
+        other.create_new_version()
+        chatbot.archive()
+
+        assert list(chatbot.versions.get_all()) == [version]
+
+    def test_unarchiving_one_chatbot_leaves_another_archived(self):
+        """chatbot's version takes unarchive() through Pipeline.unarchive(), which must not reach other's nodes."""
+        chatbot = ExperimentFactory.create()
+        chatbot.create_new_version()
+        other = ExperimentFactory.create(team=chatbot.team)
+        trigger = StaticTriggerFactory.create(experiment=other)
+        other_version = other.create_new_version()
+        chatbot.archive()
+        other.archive()
+        other_node_ids = list(other.pipeline.node_set.values_list("id", flat=True))
+        Node.objects.filter(id__in=other_node_ids).update(is_archived=True)
+
+        chatbot.unarchive()
+
+        trigger.refresh_from_db()
+        other_version.refresh_from_db()
+        assert trigger.is_archived is True
+        assert other_version.is_archived is True
+        assert not Node.objects.filter(id__in=other_node_ids).exists()
 
 
 class TestExperimentFieldClassification:

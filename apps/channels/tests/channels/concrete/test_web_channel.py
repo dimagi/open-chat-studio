@@ -90,7 +90,7 @@ class TestWebChannelCapabilities:
         assert caps.supports_voice_replies is False
         assert caps.supports_files is False
         assert caps.supports_conversational_consent is False
-        assert caps.supported_message_types == [MESSAGE_TYPES.TEXT]
+        assert caps.supported_message_types == (MESSAGE_TYPES.TEXT,)
 
 
 _START_SESSION = "apps.channels.web_channel.start_experiment_session"

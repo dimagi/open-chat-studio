@@ -130,7 +130,7 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
         "exportable_experiments",
         "moderation_enabled",
         "moderation_provider",
-        "moderation_deleted_provider_name",
+        "auto_block_enabled",
     ],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # The denylist (moderation.deniedparticipant) is not synced, so imported participants start with no strikes.

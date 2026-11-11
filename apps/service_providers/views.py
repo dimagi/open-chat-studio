@@ -38,11 +38,14 @@ from apps.service_providers.forms import (
 )
 from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.models import (
+    AuthProvider,
+    AuthProviderType,
     EmbeddingProviderModel,
     LlmProvider,
     LlmProviderModel,
     MessagingProvider,
     MessagingProviderType,
+    ModerationProvider,
     VoiceProvider,
     VoiceProviderType,
 )
@@ -53,8 +56,9 @@ from ..generics.chips import Chip
 from ..generics.referenced_objects import render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
+from .oauth_views import _oauth_redirect_uri, is_reconnect_required
 from .usages import get_provider_usages
-from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms, is_provider_enabled
+from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms
 
 log = logging.getLogger("ocs.service_providers")
 
@@ -76,21 +80,18 @@ def _lookup_subtype_by_slug(subtype_enum, slug):
     raise KeyError(slug)
 
 
-def _get_provider_type(request, slug: str) -> ServiceProvider:
-    """The provider type named in the URL. Raises Http404 if it is unknown or not enabled for the request."""
+def _get_provider_type(slug: str) -> ServiceProvider:
+    """The provider type named in the URL. Raises Http404 if it is unknown."""
     try:
-        provider = ServiceProvider[slug]
+        return ServiceProvider[slug]
     except KeyError:
         raise Http404(f"Unknown provider type: {slug}") from None
-    if not is_provider_enabled(provider=provider, request=request):
-        raise Http404("Provider type is not enabled")
-    return provider
 
 
 class ServiceProviderMixin:
     @property
     def provider_type(self) -> ServiceProvider:
-        return _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
+        return _get_provider_type(slug=self.kwargs["provider_type"])
 
 
 class ServiceProviderUsagesMixin(LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin):
@@ -152,10 +153,16 @@ def _experiment_chip_label(experiment) -> str:
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
-    provider = _get_provider_type(request=request, slug=provider_type)
+    provider = _get_provider_type(slug=provider_type)
     if not request.user.has_perm(provider.get_permission("delete")):
         raise PermissionDenied()
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
+    if (
+        isinstance(service_config, ModerationProvider)
+        and request.team.moderation_enabled
+        and request.team.moderation_provider_id == service_config.id
+    ):
+        return render_referenced_objects_modal("service provider", team_settings=[_("Message moderation")])
     related_objects = get_related_objects(service_config)
 
     if related_objects:
@@ -183,14 +190,14 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
 class AddFileToProvider(BaseAddFileHtmxView):
     @transaction.atomic()
     def form_valid(self, form):
-        provider = _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
+        provider = _get_provider_type(slug=self.kwargs["provider_type"])
         provider = get_object_or_404(provider.model, team=self.request.team, pk=self.kwargs["pk"])
         file = super().form_valid(form)
         provider.add_files([file])
         return file
 
     def get_delete_url(self, file):
-        provider = _get_provider_type(request=self.request, slug=self.kwargs["provider_type"])
+        provider = _get_provider_type(slug=self.kwargs["provider_type"])
         return reverse(
             "service_providers:delete_file",
             kwargs={
@@ -206,7 +213,7 @@ class AddFileToProvider(BaseAddFileHtmxView):
 @permission_required("files.delete_file")
 @transaction.atomic()
 def remove_file(request, team_slug: str, provider_type: str, pk: int, file_id: int):
-    provider = _get_provider_type(request=request, slug=provider_type)
+    provider = _get_provider_type(slug=provider_type)
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     service_config.remove_file(file_id)
     return HttpResponse()
@@ -396,6 +403,19 @@ class CreateServiceProvider(
                 "service_providers:whatsapp_status",
                 kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
             )
+        if subtype == AuthProviderType.oauth_authorization_code:
+            ctx["oauth_redirect_uri"] = _oauth_redirect_uri(self.request)
+            if isinstance(instance, AuthProvider):
+                ctx["oauth_status"] = (
+                    "reconnect required"
+                    if is_reconnect_required(instance)
+                    else ("connected" if instance._auth_data.get("access_token") else "not connected")
+                )
+                ctx["oauth_connected_by"] = (instance.extra_data or {}).get("connected_by")
+                ctx["oauth_connect_url"] = reverse(
+                    "service_providers:oauth_connect",
+                    kwargs={"team_slug": self.request.team.slug, "pk": instance.pk},
+                )
         if self.provider_type == ServiceProvider.llm:
             ctx["can_verify_credentials"] = bool(instance) and _can_verify_credentials(self.provider_type, subtype)
             ctx["new_model_form"] = LlmProviderModelForm(self.request.team)

@@ -83,7 +83,7 @@
           {{ form.experiment.label }}
           {% if form.experiment.help_text %}
             <small class="form-text text-muted">
-              {% include "generic/help.html" with help_content=form.experiment.help_text %}
+              <c-ui.help>{{ form.experiment.help_text|safe }}</c-ui.help>
             </small>
           {% endif %}
         </div>

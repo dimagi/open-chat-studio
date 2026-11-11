@@ -3,28 +3,28 @@ from django.template.loader import get_template
 from django_tables2 import columns, tables
 
 from apps.generics import actions
-from apps.generics.tables import ISOTimeAgoColumn, TimeAgoColumn
+from apps.generics.tables import ISOTimeAgoColumn, TemplateColumn, TimeAgoColumn
 from apps.ocs_notifications.models import EventUser, NotificationChannel, NotificationEvent
 
 
 class UserNotificationTable(tables.Table):
-    notification_content = columns.TemplateColumn(
+    notification_content = TemplateColumn(
         template_name="ocs_notifications/components/notification_content.html",
         verbose_name="Notification",
         orderable=False,
     )
-    level = columns.TemplateColumn(
+    level = TemplateColumn(
         template_name="ocs_notifications/components/level_badge.html",
         verbose_name="Level",
         orderable=False,
     )
-    event_count = columns.TemplateColumn(
+    event_count = TemplateColumn(
         template_name="ocs_notifications/components/event_count_badge.html",
         verbose_name="Count",
         orderable=False,
         accessor="event_count",
     )
-    read = columns.TemplateColumn(
+    read = TemplateColumn(
         template_name="ocs_notifications/components/read_button.html", verbose_name="Read Status", orderable=True
     )
     timestamp = ISOTimeAgoColumn(
@@ -33,7 +33,7 @@ class UserNotificationTable(tables.Table):
         orderable=True,
     )
 
-    mute = columns.TemplateColumn(
+    mute = TemplateColumn(
         template_name="ocs_notifications/components/mute_button.html",
         verbose_name="Mute",
         orderable=False,
@@ -60,12 +60,12 @@ class UserNotificationTable(tables.Table):
 
 
 class NotificationEventTable(tables.Table):
-    notification_content = columns.TemplateColumn(
+    notification_content = TemplateColumn(
         template_name="ocs_notifications/components/notification_event_content.html",
         verbose_name="Notification",
         orderable=False,
     )
-    level = columns.TemplateColumn(
+    level = TemplateColumn(
         template_name="ocs_notifications/components/level_badge.html",
         verbose_name="Level",
         orderable=False,
@@ -94,7 +94,7 @@ class NotificationChannelTable(tables.Table):
         verbose_name="Channel",
         orderable=True,
     )
-    level = columns.TemplateColumn(
+    level = TemplateColumn(
         template_name="ocs_notifications/components/notification_channel_level_badge.html",
         verbose_name="Level",
         orderable=True,

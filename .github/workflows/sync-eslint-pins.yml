@@ -1,0 +1,64 @@
+# Dependabot bumps eslint through the npm ecosystem only (the pre-commit ecosystem ignores
+# the eslint hook, see .github/dependabot.yml). This rewrites the hook's pins in
+# .pre-commit-config.yaml to match the new pnpm-lock.yaml and pushes that to the PR branch,
+# so the eslint-versions-in-sync check passes.
+#
+# A pull_request run started by Dependabot only sees Dependabot secrets, so
+# OCS_AGENT_PRIVATE_KEY (and the OCS_AGENT_APP_ID variable) must also exist under
+# Settings > Secrets and variables > Dependabot.
+
+name: Sync eslint pins
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+      - package.json
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync-eslint-pins:
+    if: >-
+      github.event.pull_request.head.repo.fork == false
+      && github.actor == 'dependabot[bot]'
+      && startsWith(github.head_ref, 'dependabot/npm_and_yarn/')
+      && !startsWith(github.head_ref, 'dependabot/npm_and_yarn/components/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      # Push with a GitHub App token (not GITHUB_TOKEN) so the commit re-triggers CI.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.OCS_AGENT_APP_ID }}
+          private-key: ${{ secrets.OCS_AGENT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ github.head_ref }}
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Sync the pre-commit eslint pins
+        run: uv run --no-project --with pyyaml python scripts/check_eslint_versions.py --fix
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -am "chore(deps): sync pre-commit eslint pins with pnpm-lock.yaml"
+          git push

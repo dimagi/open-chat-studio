@@ -2174,5 +2174,125 @@
         "unit_price": "0.0001"
       }
     ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-6.1-terra",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.005"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00005"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00125"
+      }
+    ]
+  },
+  {
+    "provider_type": "azure",
+    "model_name": "gpt-6.1-terra",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.005"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00005"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00125"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-fable-5-2",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.008"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.04"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0002"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.01"
+      }
+    ]
+  },
+  {
+    "provider_type": "minimax",
+    "model_name": "MiniMax-M3.1-Flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00015"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0006"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000015"
+      }
+    ]
+  },
+  {
+    "provider_type": "google",
+    "model_name": "gemini-4-carbon",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.002"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0001"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-4-carbon",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.002"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.01"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0001"
+      }
+    ]
   }
 ]

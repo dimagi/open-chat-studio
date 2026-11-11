@@ -110,13 +110,6 @@ class Team(BaseModel):
         db_default=False,
         help_text="When set, participants who reach the strike limit are blocked automatically.",
     )
-    moderation_deleted_provider_name = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        db_default="",
-        help_text="Name of the selected moderation provider, if it was deleted. Cleared when a provider is selected.",
-    )
 
     def save(self, *args, **kwargs):
         from .helpers import get_next_unique_team_slug  # noqa: PLC0415 - circular: teams.helpers imports teams.models

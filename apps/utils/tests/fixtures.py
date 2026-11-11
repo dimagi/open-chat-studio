@@ -15,7 +15,6 @@ from apps.service_providers.messaging_service import SlackService
 from apps.teams.export import seal as seal_mod
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import ModerationProviderFactory
-from apps.utils.tests.moderation_helpers import select_moderation_provider
 from apps.utils.tests.team_helpers import make_team_with_resources
 
 
@@ -73,7 +72,9 @@ def moderated_session(db):
     """A session whose team has moderation turned on with a provider."""
     session = ExperimentSessionFactory.create()
     team = session.experiment.team
-    select_moderation_provider(team, ModerationProviderFactory.create(team=team))
+    team.moderation_enabled = True
+    team.moderation_provider = ModerationProviderFactory.create(team=team)
+    team.save()
     return session
 
 

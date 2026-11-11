@@ -1,8 +1,11 @@
-MODERATION_WAIT_TIMEOUT = 10
+MODERATION_WAIT_TIMEOUT = 30
 """Seconds `ModerationResultStage` waits for the moderation task after the bot has answered."""
 
 STRIKE_LIMIT = 3
 """Strikes at which a participant is blocked automatically, when the team has auto-block on."""
+
+REQUEST_TIMEOUT_SECONDS = 2
+"""Timeout for one moderation provider request."""
 
 STRIKE_CATEGORIES = frozenset(
     {
@@ -17,9 +20,6 @@ STRIKE_CATEGORIES = frozenset(
 
 FLAGGED_MESSAGE = "Your message was flagged by our content moderation, so it will not be answered."
 """Reply to a flagged message when a reply in the conversation's language cannot be generated."""
-
-MAX_BLOCK_REASON_LENGTH = 500
-"""Characters of a code node's block reason that are saved."""
 
 REMOVED_MESSAGE_PLACEHOLDER = "[Message removed by moderation]"
 """Human text stored in pipeline node and named histories in place of a flagged message."""

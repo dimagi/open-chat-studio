@@ -21,6 +21,7 @@ from rest_framework.test import APIClient
 from apps.channels.models import ChannelPlatform, WidgetAuthLevel
 from apps.channels.tasks import handle_telegram_message
 from apps.channels.tests.message_examples import api_messages
+from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationSkipReason
 from apps.experiments.models import Experiment, Participant
@@ -31,17 +32,15 @@ from apps.moderation.tasks import moderate_message
 from apps.ocs_notifications.models import NotificationEvent
 from apps.pipelines.models import PipelineChatHistoryTypes
 from apps.pipelines.tests.utils import (
-    code_node,
     create_pipeline_model,
     end_node,
     llm_response_with_prompt_node,
     start_node,
 )
 from apps.service_providers.models import LlmProvider
-from apps.teams.flags import Flags
 from apps.teams.models import Team
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -50,9 +49,7 @@ from apps.utils.factories.service_provider_factories import (
 from apps.utils.factories.team import MembershipFactory, UserFactory
 from apps.utils.tests.clients import ApiTestClient
 from apps.utils.tests.langchain import FakeLlm, FakeLlmService
-from apps.utils.tests.moderation_helpers import select_moderation_provider
 
-FLAG = Flags.ABUSE_DETECTION.slug
 MODERATIONS_URL = "https://api.openai.com/v1/moderations"
 TELEGRAM_CHAT_ID = 4242
 REPLACEMENT_REPLY = "Sorry, I can't respond to that message."
@@ -183,18 +180,17 @@ def _eager_moderation_task():
 
 
 @pytest.fixture()
-def make_chatbot(team_with_users, team_flag):
+def make_chatbot(team_with_users):
     """Builds a Telegram chatbot whose team has moderation and auto-block on.
 
-    The bot's LLM and the Telegram Bot API client are faked. The feature flag is on unless `flag=False`.
+    The bot's LLM and the Telegram Bot API client are faked.
     """
     llm = ScriptedLlm()
 
-    def _make(*, nodes=None, history_type=PipelineChatHistoryTypes.GLOBAL, flag=True) -> Chatbot:
+    def _make(*, nodes=None, history_type=PipelineChatHistoryTypes.GLOBAL) -> Chatbot:
         team = team_with_users
-        if flag:
-            team_flag(flag_name=FLAG, team=team)
-        select_moderation_provider(team=team, provider=ModerationProviderFactory.create(team=team))
+        team.moderation_enabled = True
+        team.moderation_provider = ModerationProviderFactory.create(team=team)
         team.auto_block_enabled = True
         team.save()
         llm_provider = LlmProviderFactory.create(team=team)
@@ -338,17 +334,12 @@ def test_only_non_strike_categories_flagged_passes(chatbot, httpx_mock):
 
 
 @pytest.mark.django_db()
-def test_team_member_in_app_is_not_struck_but_gets_a_strike_on_telegram(chatbot, httpx_mock, client):
+def test_team_member_in_app_is_not_struck_but_gets_a_strike_on_telegram(chatbot, httpx_mock):
     member = MembershipFactory.create(team=chatbot.team).user
-    client.force_login(member)
-    client.post(
-        reverse(
-            "chatbots:start_authed_web_session",
-            args=[chatbot.team.slug, chatbot.experiment.id, chatbot.experiment.version_number],
-        )
+    session = WebChannel.start_new_session(
+        working_experiment=chatbot.experiment, participant_identifier=member.email, participant_user=member
     )
-    in_app = Participant.objects.get(team=chatbot.team, user=member)
-    session = in_app.experimentsession_set.get()
+    in_app = session.participant
     _moderation_returns(httpx_mock, *STRIKE)
 
     task_kwargs = {"experiment_session_id": session.id, "experiment_id": chatbot.experiment.id}
@@ -437,27 +428,6 @@ def test_unblocked_participant_is_answered_again(chatbot, httpx_mock, admin, cli
 
 
 @pytest.mark.django_db()
-def test_code_node_blocks_the_participant(make_chatbot, httpx_mock, admin, client):
-    code = 'def main(input, **kwargs):\n    block_participant("test")\n    abort_with_message("Goodbye")\n'
-    chatbot = make_chatbot(nodes=[start_node(), code_node(code=code), end_node()])
-    _moderation_returns(httpx_mock)
-
-    # EventBot rewrites the abort message, so the reply is the fake LLM's EventBot answer.
-    assert chatbot.send_telegram("hello") == [REPLACEMENT_REPLY]
-
-    denial = DeniedParticipant.objects.get(participant=chatbot.telegram_participant())
-    assert (denial.source, denial.reason, denial.experiment) == (
-        DeniedParticipantSource.CODE_NODE,
-        "test",
-        chatbot.experiment,
-    )
-    client.force_login(admin)
-    table = client.get(reverse("moderation:denied_participants_table", args=[chatbot.team.slug]))
-    assert "Pipeline" in table.content.decode()
-    assert chatbot.send_telegram("hello again") == []
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize(
     "history_type",
     [
@@ -478,20 +448,3 @@ def test_flagged_turn_is_left_out_of_the_next_prompt(make_chatbot, httpx_mock, h
     assert "Bot answer 1" not in prompt_texts
     assert REPLACEMENT_REPLY in prompt_texts
     assert prompt_texts[-1] == "What is the weather?"
-
-
-@pytest.mark.django_db()
-def test_flag_off_skips_moderation_and_enforcement(make_chatbot, httpx_mock):
-    chatbot = make_chatbot(flag=False)
-    participant = ParticipantFactory.create(
-        team=chatbot.team, identifier=str(TELEGRAM_CHAT_ID), platform=ChannelPlatform.TELEGRAM
-    )
-    block_participant(participant=participant, source=DeniedParticipantSource.MANUAL)
-
-    sent = [chatbot.send_telegram(OFFENSIVE_TEXT) for _ in range(3)]
-
-    assert sent == [["Bot answer 1"], ["Bot answer 2"], ["Bot answer 3"]]
-    assert httpx_mock.get_requests() == []
-    assert [m.moderation_status for m in _human_messages(participant)] == [None, None, None]
-    participant.refresh_from_db()
-    assert participant.strikes == 0

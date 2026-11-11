@@ -16,7 +16,7 @@ from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, NoSpeechDetected, NoSpeechReason, UserActionableError
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.experiments.models import (
@@ -28,11 +28,12 @@ from apps.experiments.models import (
 )
 from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
-from apps.moderation.enforcement import abuse_detection_enabled, is_on_denylist
-from apps.moderation.services import record_rule_hits, start_moderation
+from apps.moderation.enforcement import is_participant_blocked
+from apps.moderation.services import record_moderation_result, record_rule_hits, start_moderation
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
+    moderation_skipped_notification,
 )
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
@@ -219,13 +220,10 @@ class BlockedParticipantStage(ProcessingStage):
 
     span_input_fields = ("participant.id", "experiment_session.participant_id")
 
-    def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return abuse_detection_enabled(ctx.experiment.team)
-
     def process(self, ctx: MessageProcessingContext) -> None:
         # Web channels pre-set the session and have no ParticipantResolverStage.
         participant_id = ctx.participant.id if ctx.participant else ctx.experiment_session.participant_id
-        if not is_on_denylist(team=ctx.experiment.team, participant_id=participant_id):
+        if not is_participant_blocked(team=ctx.experiment.team, participant_id=participant_id):
             return
 
         logger.info("Ignoring message from blocked participant %s", participant_id)
@@ -575,7 +573,7 @@ class ConsentFlowStage(ProcessingStage):
             return None
         if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
             return None
-        if first_human_message.moderation_status == ModerationStatus.FLAGGED:
+        if first_human_message.is_flagged:
             return None
         return first_human_message
 
@@ -788,17 +786,21 @@ class AbuseRulesStage(ProcessingStage):
     span_output_fields = ("human_message.moderation_detail.rules", "moderation_task_id")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return ctx.human_message is not None and abuse_detection_enabled(ctx.experiment.team)
+        return ctx.human_message is not None
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        assert ctx.human_message is not None
         record_rule_hits(
             message=ctx.human_message,
             text=ctx.user_query or "",
             attachments=ctx.message.attachments,
             participant=ctx.participant or ctx.experiment_session.participant,
         )
-        ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
+        try:
+            ctx.moderation_task_id = start_moderation(team=ctx.experiment.team, message=ctx.human_message)
+        except Exception:
+            logger.exception("Could not queue moderation for message %s", ctx.human_message.id)
+            record_moderation_result(message=ctx.human_message, skip_reason="error")
+            moderation_skipped_notification(ctx.experiment, session=ctx.experiment_session, reason="error")
 
 
 # ---------------------------------------------------------------------------

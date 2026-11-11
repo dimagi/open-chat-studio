@@ -6,12 +6,8 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.mcp_integrations.models import McpServer
-from apps.service_providers.models import LlmProvider
-from apps.service_providers.utils import (
-    ServiceProvider,
-    get_available_subtypes,
-    get_enabled_providers,
-)
+from apps.service_providers.models import AuthProvider, AuthProviderType, LlmProvider
+from apps.service_providers.utils import ServiceProvider, get_available_subtypes
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.tables import IntegrationsTable
 
@@ -38,9 +34,13 @@ _CATEGORY_ICONS = {
 }
 
 
-def _verifiable(provider) -> LlmProvider | None:
-    """The provider if it is an LLM provider whose credentials can be checked, otherwise None."""
-    return provider if isinstance(provider, LlmProvider) and provider.supports_connection_test else None
+def _verifiable(provider) -> LlmProvider | AuthProvider | None:
+    """The provider when the shared integrations table can display its verification state."""
+    if isinstance(provider, LlmProvider) and provider.supports_connection_test:
+        return provider
+    if isinstance(provider, AuthProvider) and provider.type_enum == AuthProviderType.oauth_authorization_code:
+        return provider
+    return None
 
 
 def get_integration_rows(request, team, *, providers: list[ServiceProvider]) -> list[dict]:
@@ -100,7 +100,7 @@ def get_integration_new_choices(request, team) -> list[IntegrationNewGroup]:
     type the user can add, plus MCP once `flag_mcp` is on. Mirrors the permission check
     each provider's own (now-retired) per-section "Add new" dropdown used to apply."""
     options_by_category: dict[str, list[tuple[str, str]]] = {}
-    for provider in get_enabled_providers(request):
+    for provider in ServiceProvider:
         if not request.user.has_perm(provider.get_permission("add")):
             continue
         for subtype in get_available_subtypes(provider, request):
@@ -164,7 +164,7 @@ class IntegrationsTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: 
     template_name = "teams/components/integrations_table.html"
 
     def get_queryset(self):
-        self.providers = get_enabled_providers(self.request)
+        self.providers = list(ServiceProvider)
         self.all_rows = get_integration_rows(request=self.request, team=self.request.team, providers=self.providers)
         category = self.request.GET.get("category")
         if category:

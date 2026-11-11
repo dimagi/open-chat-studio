@@ -12,7 +12,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.chat.models import ChatMessage, ModerationStatus
+from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ModerationStatus
 from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.experiments.models import Participant
 from apps.moderation.const import (
@@ -21,13 +21,13 @@ from apps.moderation.const import (
     STRIKE_CATEGORIES,
     STRIKE_LIMIT,
 )
+from apps.moderation.datamodels import ModerationTaskResult
 from apps.moderation.enforcement import block_participant, is_exempt
 from apps.moderation.models import DeniedParticipantSource
 from apps.moderation.rules import run_rules
 from apps.moderation.tasks import moderate_message
 from apps.ocs_notifications.notifications import participant_auto_blocked_notification
 from apps.pipelines.models import PipelineChatMessages
-from apps.service_providers.moderation_service.schemas import ModerationOutput
 from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from apps.channels.datamodels import Attachment
     from apps.experiments.models import Experiment
+    from apps.service_providers.moderation_service.schemas import ModerationOutput
     from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.moderation")
@@ -56,7 +57,7 @@ def record_rule_hits(
 def start_moderation(*, team: Team, message: ChatMessage) -> str | None:
     """Queue the moderation task when the team has moderation on and the message has text. Returns the task id.
 
-    Does not check the feature flag. The message must be committed, as the task reads it.
+    The message must be committed, as the task reads it.
     """
     if not team.moderation_enabled or team.moderation_provider_id is None:
         return None
@@ -79,13 +80,12 @@ def get_moderation_result(task_id: str) -> tuple[ModerationOutput | None, Modera
         # The task's own failure is already reported by Celery.
         logger.warning("Moderation task %s failed: %r", task_id, error)
         return None, ModerationSkipReason.ERROR
-    if result["status"] != "ok":
-        return None, _parse_skip_reason(result.get("reason"))
     try:
-        return ModerationOutput.model_validate(result["output"]), None
+        task_result = ModerationTaskResult.model_validate(result)
     except ValidationError:
-        logger.exception("Moderation task %s returned an invalid output", task_id)
+        logger.exception("Moderation task %s returned an invalid result", task_id)
         return None, ModerationSkipReason.ERROR
+    return task_result.output, task_result.skip_reason
 
 
 def _parse_skip_reason(value: str | None) -> ModerationSkipReason:
@@ -216,7 +216,7 @@ def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts
     rows = (
         ChatMessage.objects.filter(
             chat__team=team,
-            # An IN list on the leading column lets the planner use `chatmessage_moderation_idx` for each status.
+            # An IN list on the leading column lets the planner use `chatmessage_mod_created_idx` for each status.
             moderation_status__in=ModerationStatus.values,
             created_at__gte=since,
         )
@@ -233,3 +233,21 @@ def count_moderated_messages(*, team: Team, since: datetime) -> ModerationCounts
             reason = _parse_skip_reason(row["skip_reason"])
             skip_reasons[reason] = skip_reasons.get(reason, 0) + row["count"]
     return ModerationCounts(by_status=by_status, skip_reasons=skip_reasons)
+
+
+def replace_bot_reply(*, message: ChatMessage, text: str) -> None:
+    """Save `text` as the bot reply's content and drop its attachments.
+
+    When the save fails, the in-memory message is restored to match the database, as web and API
+    channels return it.
+    """
+    previous_content, previous_metadata = message.content, message.metadata
+    message.content = text
+    message.metadata = {
+        key: value for key, value in previous_metadata.items() if key not in ChatMessageMetadataKeys.attachment_keys()
+    }
+    try:
+        message.save(update_fields=["content", "metadata", "updated_at"])
+    except Exception:
+        message.content, message.metadata = previous_content, previous_metadata
+        raise

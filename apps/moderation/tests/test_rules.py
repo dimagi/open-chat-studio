@@ -44,6 +44,7 @@ def test_markup_fires(text):
         pytest.param("online = true", id="word_online_assignment"),
         pytest.param("set onboarding=done", id="word_onboarding_assignment"),
         pytest.param("on_call=bob", id="snake_case_assignment"),
+        pytest.param("https://example.org/online=true", id="url_path_assignment"),
         pytest.param("one == two", id="equality"),
         pytest.param("Why does onClick={handle} not fire in React?", id="react_question"),
         pytest.param("", id="empty"),

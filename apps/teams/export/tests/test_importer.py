@@ -17,6 +17,8 @@ from apps.events.models import EventAction
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
+from apps.ocs_notifications.models import EventType, EventUser, LevelChoices
+from apps.ocs_notifications.utils import create_notification
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
@@ -93,7 +95,7 @@ from apps.utils.factories.service_provider_factories import (
     TraceProviderFactory,
     VoiceProviderFactory,
 )
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.utils.factories.user import UserFactory
 
@@ -777,6 +779,81 @@ def test_retagged_item_maps_onto_the_existing_tagged_item(store):
     assert store.get_target("annotations.customtaggeditem", 700) == tagged_item.pk
     assert store.get_target("annotations.customtaggeditem", 701) == tagged_item.pk
     assert tagged_item.user_id == second_user.id
+
+
+def test_notification_raised_on_both_servers_maps_onto_the_target_rows(store):
+    """The same notification raised on both servers (e.g. by a migration that ran on each) maps the
+    source's event type and event users onto the target's, and the target keeps its read state."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    source_team = TeamFactory()
+    reader, non_reader = UserFactory(), UserFactory()
+    for user in (reader, non_reader):
+        MembershipFactory(team=source_team, user=user)
+        MembershipFactory(team=target_team, user=user)
+        store.record("users.customuser", user.id, user.id)
+    for team in (source_team, target_team):
+        _raise_model_removal_notification(team)
+    EventUser.objects.filter(team=target_team, user=reader).update(read=True)
+    source_event_type = EventType.objects.get(team=source_team)
+    source_event_users = EventUser.objects.filter(team=source_team)
+
+    importer.import_rows("ocs_notifications.eventtype", [_serialize(source_event_type)])
+    importer.import_rows("ocs_notifications.eventuser", [_serialize(row) for row in source_event_users])
+
+    target_event_type = EventType.objects.get(team=target_team)
+    target_event_users = {eu.user_id: eu for eu in EventUser.objects.filter(team=target_team)}
+    assert store.get_target("ocs_notifications.eventtype", source_event_type.id) == target_event_type.pk
+    assert set(target_event_users) == {reader.id, non_reader.id}
+    for source_event_user in source_event_users:
+        target_pk = store.get_target("ocs_notifications.eventuser", source_event_user.id)
+        assert target_pk == target_event_users[source_event_user.user_id].pk
+    assert target_event_users[reader.id].read is True
+    assert target_event_users[non_reader.id].read is False
+
+
+def test_later_source_revision_of_an_adopted_event_user_keeps_the_target_row(store):
+    """A source event user mapped onto the target's own row is not overwritten when it changes on the
+    source after the first sync."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    source_team = TeamFactory()
+    user = UserFactory()
+    for team in (source_team, target_team):
+        MembershipFactory(team=team, user=user)
+        _raise_model_removal_notification(team)
+    store.record("users.customuser", user.id, user.id)
+    target_event_user = EventUser.objects.get(team=target_team)
+    target_event_user.read = True
+    target_event_user.save()
+    importer.import_rows("ocs_notifications.eventtype", [_serialize(EventType.objects.get(team=source_team))])
+    source_row = _serialize(EventUser.objects.get(team=source_team))
+    importer.import_rows("ocs_notifications.eventuser", [source_row])
+
+    revised_row = {**source_row, "muted_until": PAST, "updated_at": PAST}
+    importer.import_rows("ocs_notifications.eventuser", [revised_row])
+
+    target_event_user.refresh_from_db()
+    assert target_event_user.read is True
+    assert target_event_user.muted_until is None
+    assert importer.kept_target_edits["ocs_notifications.eventuser"] == {source_row["id"]}
+
+
+def _raise_model_removal_notification(team):
+    create_notification(
+        title="Model removed",
+        message="GPT-4.1 has been removed.",
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="llm-model-removed",
+        event_data={"model": "gpt-4.1"},
+    )
+
+
+def _serialize(instance):
+    return dict(build_resource_serializer(type(instance))(instance).data)
 
 
 def _annotation_queue_row(source_id, assignees, name="Queue"):

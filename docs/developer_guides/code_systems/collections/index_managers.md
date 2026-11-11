@@ -2,7 +2,7 @@
 
 Index managers provide an abstraction layer for managing document embeddings and vector stores in Open Chat Studio. They are LLM provider-specific implementations that enable both remote (provider-hosted) and local (self-hosted) indexing strategies for document collections.
 
-Index managers are the implementation layer behind [indexed collections](https://docs.openchatstudio.com/concepts/collections/indexed/), the user-facing feature that lets a chatbot search uploaded documents for relevant information before responding (retrieval-augmented generation).
+Index managers are the implementation layer behind [indexed collections](https://docs.openchatstudio.com/concepts/collections/indexed_collections/), the user-facing feature that lets a chatbot search uploaded documents for relevant information before responding (retrieval-augmented generation).
 
 See also: [DeepWiki: Document Collections and RAG](https://deepwiki.com/dimagi/open-chat-studio/7-document-collections-and-rag) for AI-generated Q&A-style exploration of this code.
 

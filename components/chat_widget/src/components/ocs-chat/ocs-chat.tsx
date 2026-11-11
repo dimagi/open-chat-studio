@@ -17,6 +17,7 @@ import { TranslationStrings, TranslationManager, defaultTranslations } from '../
 import {
   ChatSessionService,
   ChatMessage,
+  ChatAttachment,
   MessagePollingHandle,
   TaskPollingHandle,
   SessionAccessError,
@@ -121,6 +122,11 @@ export class OcsChat {
    * The base URL for the API.
    */
   @Prop() apiBaseUrl?: string = 'https://www.openchatstudio.com';
+  /**
+   * The resolved theme supplied by the embedding application.
+   * External embeds default to the existing light appearance.
+   */
+  @Prop({ reflect: true }) theme: 'light' | 'dark' = 'light';
 
   /**
    * The text to display on the button.
@@ -315,11 +321,10 @@ export class OcsChat {
   @State() sessionEnded: boolean = false;
   /** The server refused a start, send or upload because the participant is blocked. */
   @State() participantBlocked: boolean = false;
-  /** The blocked notice, rendered as plain text because its wording comes from the server. */
-  private blockedNotice?: ChatMessage;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
+  @State() downloadingAttachmentUrls: string[] = [];
   /** Latest consent block from start, poll or a refusal. */
   @State() consent?: ChatConsent;
   /** The message held while the consent panel is up; released by acceptConsent(). */
@@ -504,8 +509,20 @@ export class OcsChat {
     return this.chatService;
   }
 
-  private appendSystemNotice(content: string, { persist = true }: { persist?: boolean } = {}): ChatMessage {
-    const notice: ChatMessage = { created_at: new Date().toISOString(), role: 'system', content, attachments: [] };
+  private addErrorMessage(errorText: string): void {
+    this.addNotice(`**Error:** ${errorText}\nPlease try again.`);
+  }
+
+  /** Notices carry the browser's clock, so they are kept out of the polling cursor. */
+  private addNotice(content: string, { persist = true, plainText = false }: { persist?: boolean; plainText?: boolean } = {}): ChatMessage {
+    const notice: ChatMessage = {
+      created_at: new Date().toISOString(),
+      role: 'system',
+      content,
+      attachments: [],
+      local: true,
+      ...(plainText && { plainText: true }),
+    };
     this.messages = [...this.messages, notice];
     if (persist) {
       this.saveSessionToStorage();
@@ -514,8 +531,35 @@ export class OcsChat {
     return notice;
   }
 
-  private addErrorMessage(errorText: string): void {
-    this.appendSystemNotice(`**Error:** ${errorText}\nPlease try again.`);
+  /** A server copy of a user message replaces the optimistic bubble with the same text instead of repeating it. */
+  private mergeServerMessages(incoming: ChatMessage[]): ChatMessage[] {
+    const merged = [...this.messages];
+    for (const message of incoming) {
+      let index = -1;
+      if (message.role === 'user') {
+        for (let i = merged.length - 1; i >= 0; i--) {
+          if (merged[i].local && merged[i].role === 'user' && merged[i].content === message.content.trim()) {
+            index = i;
+            break;
+          }
+        }
+      }
+      if (index === -1) {
+        merged.push(message);
+      } else {
+        merged[index] = message;
+      }
+    }
+    return merged;
+  }
+
+  private lastServerMessageTimestamp(): string | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (!this.messages[i].local) {
+        return this.messages[i].created_at;
+      }
+    }
+    return undefined;
   }
 
   /** Clear the loading, typing and upload indicators that lock the composer. */
@@ -576,7 +620,46 @@ export class OcsChat {
     if (last?.role === 'system' && last.content === content) {
       return;
     }
-    this.appendSystemNotice(content);
+    this.addNotice(content);
+  }
+
+  /**
+   * The download endpoint needs the session's headers, so the file is fetched and
+   * saved from a blob URL rather than linked directly. A failure is reported in the
+   * chat but leaves the session alone.
+   */
+  private async downloadAttachment(attachment: ChatAttachment): Promise<void> {
+    const url = attachment.download_url;
+    if (!url || this.downloadingAttachmentUrls.includes(url)) {
+      return;
+    }
+    if (!this.activeSessionId) {
+      this.addErrorMessage(this.translationManager.get('error.download'));
+      return;
+    }
+
+    const epoch = this.sessionEpoch;
+    this.downloadingAttachmentUrls = [...this.downloadingAttachmentUrls, url];
+    try {
+      const blob = await this.getChatService().downloadAttachment(this.activeSessionId, url);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = attachment.name;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Revoking in the same task can cancel the download in some browsers.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      console.error('[open-chat-studio-widget] attachment download failed', error);
+      if (epoch === this.sessionEpoch) {
+        this.addErrorMessage(this.translationManager.get('error.download'));
+      }
+    } finally {
+      this.downloadingAttachmentUrls = this.downloadingAttachmentUrls.filter(pending => pending !== url);
+    }
   }
 
   /**
@@ -588,17 +671,20 @@ export class OcsChat {
     this.cleanup();
     this.resetBusyState();
     this.participantBlocked = true;
+    this.showNewChatConfirmation = false;
+    this.messageInput = '';
     this.selectedFiles = [];
     this.consent = undefined;
     this.heldMessage = undefined;
+    this.sessionEpoch += 1;
     if (!this.isSessionBound()) {
-      this.sessionEpoch += 1;
       this.activeSessionId = undefined;
       this.applySessionToken(undefined);
       this.clearSessionStorage();
     }
     const notice = error.detail || this.translationManager.get('status.participantBlocked', 'You can no longer send messages to this chatbot.');
-    this.blockedNotice = this.appendSystemNotice(notice, { persist: false });
+    // The wording comes from the server, so it is not rendered as markdown.
+    this.addNotice(notice, { persist: false, plainText: true });
   }
 
   private handleError(errorText: string): void {
@@ -1006,6 +1092,7 @@ export class OcsChat {
               size: sf.file.size,
             }))
         : [],
+      local: true,
     };
   }
 
@@ -1283,7 +1370,7 @@ export class OcsChat {
         this.typingProgressMessage = message;
       }),
       onTimeout: this.forCurrentSession(() => {
-        this.appendSystemNotice('The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.');
+        this.addNotice('The response is taking longer than expected. The system may be experiencing delays. Please try sending your message again.');
         this.isTyping = false;
         this.typingProgressMessage = '';
         this.currentPollTaskId = '';
@@ -1305,7 +1392,7 @@ export class OcsChat {
   }
 
   private startMessagePolling(): void {
-    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded) {
+    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded || this.participantBlocked) {
       return;
     }
 
@@ -1314,10 +1401,10 @@ export class OcsChat {
     }
 
     this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
-      getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
+      getSince: () => this.lastServerMessageTimestamp(),
       onMessages: this.forCurrentSession(messages => {
         if (messages.length === 0) return;
-        this.messages = [...this.messages, ...messages];
+        this.messages = this.mergeServerMessages(messages);
         this.saveSessionToStorage();
         for (const message of messages) {
           if (message.role !== 'user') {
@@ -2179,7 +2266,6 @@ export class OcsChat {
     this.isTyping = false;
     this.sessionEnded = false;
     this.participantBlocked = false;
-    this.blockedNotice = undefined;
     this.currentPollTaskId = '';
     // The stored acceptance stays: consent memory follows the persistence store, not the session.
     this.consent = undefined;
@@ -2347,10 +2433,41 @@ export class OcsChat {
   }
 
   private renderMessageContent(message: ChatMessage) {
-    if (message.role === 'user' || message === this.blockedNotice) {
+    if (message.role === 'user' || message.plainText) {
       return <div class="chat-plain-text">{message.content}</div>;
     }
     return <div class="chat-markdown" innerHTML={renderMarkdownComplete(message.content)}></div>;
+  }
+
+  private renderMessageAttachments(message: ChatMessage) {
+    if (!message.attachments?.length) {
+      return null;
+    }
+    return (
+      <div class="message-attachments">
+        {message.attachments.map((attachment, attachmentIndex) => (
+          <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
+            <span class="message-attachment-icon">
+              <PaperClipIcon />
+            </span>
+            {attachment.download_url ? (
+              <button
+                type="button"
+                class="message-attachment-link"
+                title={this.translationManager.get('attach.download')}
+                aria-label={`${this.translationManager.get('attach.download')}: ${attachment.name}`}
+                disabled={this.downloadingAttachmentUrls.includes(attachment.download_url)}
+                onClick={() => this.downloadAttachment(attachment)}
+              >
+                {attachment.name}
+              </button>
+            ) : (
+              <span class="message-attachment-name">{attachment.name}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   render() {
@@ -2468,18 +2585,7 @@ export class OcsChat {
                         }`}
                       >
                         {this.renderMessageContent(message)}
-                        {message.attachments && message.attachments.length > 0 && (
-                          <div class="message-attachments">
-                            {message.attachments.map((attachment, attachmentIndex) => (
-                              <div key={attachmentIndex} class="flex items-center gap-[0.5em]">
-                                <span class="message-attachment-icon">
-                                  <PaperClipIcon />
-                                </span>
-                                <span class="message-attachment-name">{attachment.name}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {this.renderMessageAttachments(message)}
                         <div class="message-timestamp">{this.formatTime(message.created_at)}</div>
                       </div>
                     </div>

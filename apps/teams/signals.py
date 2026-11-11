@@ -1,9 +1,11 @@
 from allauth.account.signals import user_signed_up
 from django.core.signals import request_finished
-from django.db.models.signals import m2m_changed, post_delete, post_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete
 from django.dispatch import receiver
+from field_audit.models import AuditAction
 
 from ..experiments.models import Experiment
+from ..service_providers.models import ModerationProvider
 from ..web.signals import migrate_finished
 from .backends import create_default_groups
 from .export.selection import clear_migrating_chatbot_count
@@ -43,6 +45,14 @@ def clear_count_on_chatbot_delete(sender, instance, **kwargs):
 def clear_count_when_migration_ends(sender, instance, **kwargs):
     if not instance.is_migrating:
         clear_migrating_chatbot_count(instance.pk)
+
+
+@receiver(pre_delete, sender=ModerationProvider)
+def disable_moderation_on_provider_delete(sender, instance, **kwargs):
+    """Moderation stays off rather than enabled with no provider to check messages."""
+    Team.objects.filter(moderation_provider=instance, moderation_enabled=True).update(
+        moderation_enabled=False, audit_action=AuditAction.AUDIT
+    )
 
 
 @request_finished.connect

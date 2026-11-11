@@ -21,13 +21,18 @@ class CeleryQueueCheck(HealthCheck):
     label: str
     queue: str
     app: celery.Celery = dataclasses.field(default_factory=app_or_default, repr=False)
-    #: Budget for each of the two broadcast RPCs below. It needs headroom for a busy broker, e.g.
+    #: Budget for the whole check, split evenly between the two broadcast RPCs below, which run one
+    #: after the other and can each take their full share. It needs headroom for a busy broker, e.g.
     #: while a deploy restarts workers, because a slow reply is indistinguishable from no worker
     #: at all.
-    timeout: datetime.timedelta = dataclasses.field(default=datetime.timedelta(seconds=3), repr=False)
+    timeout: datetime.timedelta = dataclasses.field(default=datetime.timedelta(seconds=6), repr=False)
+
+    @property
+    def rpc_timeout(self) -> float:
+        return self.timeout.total_seconds() / 2
 
     def run(self):
-        timeout = self.timeout.total_seconds()
+        timeout = self.rpc_timeout
 
         workers_on_queue = self._workers_on_queue(timeout)
         if not workers_on_queue:

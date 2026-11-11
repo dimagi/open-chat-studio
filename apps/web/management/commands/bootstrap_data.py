@@ -456,7 +456,9 @@ class Command(BaseCommand):
         if not sessions:
             return
         if not traces:
-            traces = {trace.session_id: trace for trace in Trace.objects.filter(team=team)}
+            traces = {
+                trace.session_id: trace for trace in Trace.objects.filter(team=team) if trace.session_id is not None
+            }
         self.stdout.write("")
         self.stdout.write("--- Creating Usage Records ---")
 

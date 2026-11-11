@@ -10,7 +10,6 @@ from apps.chat.models import ChatMessage, ChatMessageMetadataKeys
 from apps.documents.models import Collection
 from apps.experiments.models import ExperimentSession, SourceMaterial
 from apps.files.models import File
-from apps.moderation.enforcement import block_participant_from_code_node
 from apps.pipelines.models import PipelineChatHistory, PipelineChatMessages
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.fields import as_int
@@ -260,10 +259,6 @@ class ORMRepository:
         """Get scheduled messages for the current participant and experiment."""
         return self.participant.get_schedules_for_experiments(self.session.experiment_id, **kwargs)
 
-    def block_participant(self, *, session: ExperimentSession, reason: str) -> bool:
-        """Add the session's participant to the team's denylist. Returns whether a new block was created."""
-        return block_participant_from_code_node(session=session, reason=reason)
-
 
 class InMemoryPipelineRepository(ORMRepository):
     """Test implementation with no DB access.
@@ -289,7 +284,6 @@ class InMemoryPipelineRepository(ORMRepository):
         self.participant_global_data: dict = {}
         self.compression_checkpoints: list[dict] = []
         self.provider_models: dict[int, Any] = {}
-        self.blocked_reason: str | None = None
 
     def get_llm_provider(self, provider_id):
         if provider_id not in self.providers:
@@ -402,9 +396,3 @@ class InMemoryPipelineRepository(ORMRepository):
 
     def get_participant_schedules(self, **kwargs):
         return list(self.participant_schedules)
-
-    def block_participant(self, *, session, reason):
-        if self.blocked_reason is not None:
-            return False
-        self.blocked_reason = reason
-        return True

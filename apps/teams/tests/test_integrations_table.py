@@ -7,20 +7,18 @@ from django.utils import timezone
 from waffle.testutils import override_flag
 
 from apps.mcp_integrations.models import McpServer
-from apps.service_providers.models import LlmProviderTypes
-from apps.service_providers.utils import get_enabled_providers
+from apps.service_providers.auth_service.oauth import config_fingerprint
+from apps.service_providers.models import AuthProviderType, LlmProviderTypes
+from apps.service_providers.utils import ServiceProvider
 from apps.teams.backends import add_user_to_team, make_user_team_owner
-from apps.teams.flags import Flags
-from apps.teams.utils import current_team
 from apps.teams.views.integrations_views import (
     build_integration_filter_pills,
-    get_integration_new_choices,
     get_integration_rows,
     get_visible_categories,
 )
 from apps.utils.factories.service_provider_factories import (
+    AuthProviderFactory,
     LlmProviderFactory,
-    ModerationProviderFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
@@ -44,11 +42,11 @@ def request_for(team):
 
 
 def _visible_categories(request):
-    return get_visible_categories(request=request, providers=get_enabled_providers(request))
+    return get_visible_categories(request=request, providers=list(ServiceProvider))
 
 
 def _rows(request, team):
-    return get_integration_rows(request=request, team=team, providers=get_enabled_providers(request))
+    return get_integration_rows(request=request, team=team, providers=list(ServiceProvider))
 
 
 @pytest.mark.django_db()
@@ -87,7 +85,7 @@ def test_mcp_rows_excluded_when_flag_off(team, request_for):
         rows=rows, active_category=None, visible_categories=_visible_categories(request)
     )
     labels = [pill.label for pill in pills]
-    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing"]
+    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation"]
     assert "MCP" not in labels
     assert all(pill.count == 0 for pill in pills[1:])
 
@@ -107,70 +105,9 @@ def test_mcp_rows_included_when_flag_on(team, request_for):
         rows=rows, active_category=None, visible_categories=_visible_categories(request)
     )
     labels = [pill.label for pill in pills]
-    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "MCP"]
+    assert labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation", "MCP"]
     mcp_pill = pills[-1]
     assert mcp_pill.count == 1
-
-
-@pytest.fixture()
-def moderation_setup(team, request_for):
-    """A team with one moderation provider, and a request from a team owner."""
-    ModerationProviderFactory(team=team, name="Main moderation")
-    admin = UserFactory()
-    make_user_team_owner(team=team, user=admin)
-    return request_for(admin)
-
-
-@pytest.mark.django_db()
-@override_flag(Flags.ABUSE_DETECTION.slug, active=True)
-def test_moderation_rows_menu_and_pill_shown_with_the_abuse_detection_flag_on(team, moderation_setup):
-    request = moderation_setup
-
-    with current_team(team):
-        rows = _rows(request=request, team=team)
-        menu_categories = [group.category for group in get_integration_new_choices(request=request, team=team)]
-    pills = build_integration_filter_pills(
-        rows=rows, active_category=None, visible_categories=_visible_categories(request)
-    )
-    pill_labels = [pill.label for pill in pills]
-
-    assert [(row["name"], row["category"], row["provider"]) for row in rows] == [
-        ("Main moderation", "Moderation", "OpenAI")
-    ]
-    assert "Moderation" in menu_categories
-    assert pill_labels == ["All", "LLM & embedding", "Speech", "Messaging", "Authentication", "Tracing", "Moderation"]
-
-
-@pytest.mark.django_db()
-@override_flag(Flags.ABUSE_DETECTION.slug, active=False)
-def test_moderation_rows_menu_and_pill_hidden_with_the_abuse_detection_flag_off(team, moderation_setup):
-    request = moderation_setup
-
-    with current_team(team):
-        rows = _rows(request=request, team=team)
-        menu_categories = [group.category for group in get_integration_new_choices(request=request, team=team)]
-    pills = build_integration_filter_pills(
-        rows=rows, active_category=None, visible_categories=_visible_categories(request)
-    )
-    pill_labels = [pill.label for pill in pills]
-
-    assert rows == []
-    assert "Moderation" not in menu_categories
-    assert "Moderation" not in pill_labels
-
-
-@pytest.mark.django_db()
-@override_flag(Flags.ABUSE_DETECTION.slug, active=True)
-def test_integrations_table_shows_moderation_provider(client, team):
-    admin = UserFactory()
-    make_user_team_owner(team=team, user=admin)
-    ModerationProviderFactory(team=team, name="Main moderation")
-    client.force_login(admin)
-
-    response = client.get(reverse("single_team:integrations_table", args=[team.slug]), {"category": "Moderation"})
-
-    assert response.status_code == 200
-    assert b"Main moderation" in response.content
 
 
 @pytest.mark.django_db()
@@ -336,3 +273,40 @@ def test_integrations_table_says_when_there_was_no_model_to_check_against(client
     assert "No models" in content
     assert "Not checked" not in content
     assert "Checked 3\xa0days ago" in content
+
+
+@pytest.mark.django_db()
+def test_oauth_authorization_code_rows_carry_their_verification_provider(team, request_for):
+    provider = AuthProviderFactory(
+        team=team,
+        type=AuthProviderType.oauth_authorization_code,
+        config={},
+    )
+    rows = _rows(request=request_for(UserFactory()), team=team)
+    row = next(row for row in rows if row["pk"] == provider.pk and row["provider_type"] == "auth")
+    assert row["verifiable_provider"] == provider
+
+
+@pytest.mark.django_db()
+def test_integrations_table_shows_oauth_as_verified_after_connection(client, team):
+    admin = UserFactory()
+    make_user_team_owner(team, admin)
+    provider = AuthProviderFactory(
+        team=team,
+        type=AuthProviderType.oauth_authorization_code,
+        config={},
+    )
+    provider._auth_data = {
+        "access_token": "oauth-access-token",
+        "config_fingerprint": config_fingerprint(provider.config),
+    }
+    provider.extra_data = {
+        "verified_credentials": True,
+        "credentials_checked_at": timezone.now().isoformat(),
+    }
+    provider.save()
+    client.force_login(admin)
+    response = client.get(reverse("single_team:integrations_table", args=[team.slug]))
+    content = response.content.decode()
+    assert "Verified" in content
+    assert provider.name in content

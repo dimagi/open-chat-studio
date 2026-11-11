@@ -4,27 +4,31 @@ from unittest.mock import patch
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
-from waffle.testutils import override_flag
 
 from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import api_messages
-from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession
 from apps.moderation.enforcement import BLOCKED_MESSAGE
-from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
-FLAG = Flags.ABUSE_DETECTION.slug
 BLOCKED_BODY = {"code": "participant_blocked", "detail": BLOCKED_MESSAGE}
 
 
 @pytest.fixture()
 def experiment(db):
     return ExperimentFactory.create(team=TeamWithUsersFactory.create())
+
+
+@pytest.fixture()
+def blocked_member(experiment):
+    """A team member who is blocked as an API participant."""
+    user = experiment.team.members.first()
+    _block(experiment.team, user.email, ChannelPlatform.API, user=user)
+    return user
 
 
 def _block(team, identifier, platform, user=None):
@@ -51,48 +55,28 @@ def _start_widget_session(client, experiment, user):
     )
 
 
+def _assert_refused_without_a_session(response, experiment):
+    assert response.status_code == 403
+    assert response.json() == BLOCKED_BODY
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+
+
 @pytest.mark.django_db()
 class TestWidgetStartSession:
-    @override_flag(FLAG, active=True)
-    def test_blocked_participant_gets_403(self, client, experiment):
-        user = experiment.team.members.first()
-        _block(experiment.team, user.email, ChannelPlatform.API, user=user)
+    def test_blocked_participant_gets_403(self, client, experiment, blocked_member):
+        response = _start_widget_session(client, experiment, blocked_member)
 
-        response = _start_widget_session(client, experiment, user)
-
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
-
-    @override_flag(FLAG, active=False)
-    def test_flag_off_starts_the_session(self, client, experiment):
-        user = experiment.team.members.first()
-        _block(experiment.team, user.email, ChannelPlatform.API, user=user)
-
-        response = _start_widget_session(client, experiment, user)
-
-        assert response.status_code == 201, response.json()
+        _assert_refused_without_a_session(response=response, experiment=experiment)
 
 
 @pytest.mark.django_db()
 class TestApiSessionCreate:
-    @override_flag(FLAG, active=True)
     def test_blocked_participant_gets_403(self, experiment):
         _block(experiment.team, "jack bean", ChannelPlatform.API)
 
         response = _create_api_session(experiment, "jack bean")
 
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
-
-    @override_flag(FLAG, active=False)
-    def test_flag_off_creates_the_session(self, experiment):
-        _block(experiment.team, "jack bean", ChannelPlatform.API)
-
-        response = _create_api_session(experiment, "jack bean")
-
-        assert response.status_code == 201, response.json()
+        _assert_refused_without_a_session(response=response, experiment=experiment)
 
 
 @pytest.mark.django_db()
@@ -117,25 +101,13 @@ class TestTriggerBot:
         }
         return client.post(reverse(url_name), json.dumps(data), content_type="application/json")
 
-    @override_flag(FLAG, active=True)
     def test_blocked_participant_gets_403_and_nothing_is_queued(self, trigger_bot_message_task, url_name, experiment):
         _block(experiment.team, "user@example.com", ChannelPlatform.EMAIL)
 
         response = self._post(experiment, url_name)
 
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
+        _assert_refused_without_a_session(response=response, experiment=experiment)
         trigger_bot_message_task.delay_on_commit.assert_not_called()
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
-
-    @override_flag(FLAG, active=False)
-    def test_flag_off_queues_the_message(self, trigger_bot_message_task, url_name, experiment):
-        _block(experiment.team, "user@example.com", ChannelPlatform.EMAIL)
-
-        response = self._post(experiment, url_name)
-
-        assert response.status_code == 200, response.json()
-        trigger_bot_message_task.delay_on_commit.assert_called_once()
 
 
 @pytest.mark.django_db()
@@ -145,7 +117,6 @@ class TestWidgetSendMessage:
         url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
         return APIClient().post(url, data={"message": "hi"}, format="json")
 
-    @override_flag(FLAG, active=True)
     def test_blocked_participant_gets_403_and_nothing_is_queued(self, task, experiment):
         session = ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
         DeniedParticipantFactory.create(team=session.team, participant=session.participant)
@@ -155,17 +126,6 @@ class TestWidgetSendMessage:
         assert response.status_code == 403
         assert response.json() == BLOCKED_BODY
         task.delay.assert_not_called()
-
-    @override_flag(FLAG, active=False)
-    def test_flag_off_queues_the_message(self, task, experiment):
-        task.delay.return_value.task_id = "123"
-        session = ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
-        DeniedParticipantFactory.create(team=session.team, participant=session.participant)
-
-        response = self._send(session)
-
-        assert response.status_code == 202, response.json()
-        task.delay.assert_called_once()
 
 
 @pytest.mark.django_db()
@@ -178,32 +138,14 @@ class TestApiNewMessage:
             content_type="application/json",
         )
 
-    @override_flag(FLAG, active=True)
-    def test_blocked_participant_gets_403(self, process_input, experiment):
-        user = experiment.team.members.first()
-        _block(experiment.team, user.email, ChannelPlatform.API, user=user)
+    def test_blocked_participant_gets_403(self, process_input, experiment, blocked_member):
+        response = self._send(experiment, blocked_member)
 
-        response = self._send(experiment, user)
-
-        assert response.status_code == 403
-        assert response.json() == BLOCKED_BODY
+        _assert_refused_without_a_session(response=response, experiment=experiment)
         process_input.assert_not_called()
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
-
-    @override_flag(FLAG, active=False)
-    def test_flag_off_gets_a_reply(self, process_input, experiment):
-        process_input.return_value = ChatMessage(content="Hi user")
-        user = experiment.team.members.first()
-        _block(experiment.team, user.email, ChannelPlatform.API, user=user)
-
-        response = self._send(experiment, user)
-
-        assert response.status_code == 200, response.json()
-        assert response.json()["response"] == "Hi user"
 
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 @patch("apps.chat.bots.PipelineBot.process_input")
 def test_openai_chat_completions_blocked_participant_gets_403(process_input, experiment):
     _block(experiment.team, "jack bean", ChannelPlatform.API)

@@ -1,0 +1,25 @@
+{% comment %}
+Alert box. The slot is the message; put a button inside it for an action.
+
+  <c-ui.alert variant="info">{% translate "No configuration exists yet." %}</c-ui.alert>
+  <c-ui.alert variant="warning" icon="fa-solid fa-triangle-exclamation">
+    <span>{% translate "These codes are shown only once." %}</span>
+  </c-ui.alert>
+
+Params:
+  variant: info, success, warning or error. Empty for the neutral alert.
+  style: soft, outline or dash.
+  layout: vertical or horizontal, for alerts with an action that should wrap on small screens.
+  icon: Font Awesome classes, rendered before the message.
+  class: extra classes, merged with the component's own.
+Anything else is passed through to the element.
+{% endcomment %}
+<c-vars variant="" style="" layout="" icon="" />
+{% with variant_class=variant|yesno:"alert-,"|add:variant style_class=style|yesno:"alert-,"|add:style layout_class=layout|yesno:"alert-,"|add:layout %}
+  {% with classes="alert "|add:variant_class|add:" "|add:style_class|add:" "|add:layout_class %}
+    <div role="alert" {{ attrs|with_classes:classes }}>
+      {% if icon %}<i class="{{ icon }}"></i>{% endif %}
+      {{ slot }}
+    </div>
+  {% endwith %}
+{% endwith %}

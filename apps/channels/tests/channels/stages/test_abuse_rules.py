@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-from waffle.testutils import override_flag
 
 from apps.channels.api_channel import ApiChannel
 from apps.channels.channel_base import ChannelBase
@@ -10,14 +9,11 @@ from apps.channels.stages.core import AbuseRulesStage, BotInteractionStage, Chat
 from apps.channels.tests.channels.conftest import core_stages, make_context, messaging_channel
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail
 from apps.moderation.models import DeniedParticipant
-from apps.teams.flags import Flags
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
-
-FLAG = Flags.ABUSE_DETECTION.slug
 
 
 def _context(session, text):
@@ -32,21 +28,12 @@ def _context(session, text):
 
 @pytest.mark.django_db()
 class TestAbuseRulesStage:
-    @override_flag(FLAG, active=False)
-    def test_does_not_run_when_flag_off(self):
-        session = ExperimentSessionFactory.create()
-        ctx = _context(session, "<script>alert(1)</script>")
-
-        assert AbuseRulesStage().should_run(ctx) is False
-
-    @override_flag(FLAG, active=True)
     def test_does_not_run_without_human_message(self):
         session = ExperimentSessionFactory.create()
         ctx = make_context(experiment=session.experiment, experiment_session=session, user_query="<script>")
 
         assert AbuseRulesStage().should_run(ctx) is False
 
-    @override_flag(FLAG, active=True)
     @pytest.mark.parametrize(
         ("text", "expected"),
         [
@@ -63,7 +50,6 @@ class TestAbuseRulesStage:
         ctx.human_message.refresh_from_db()
         assert ctx.human_message.moderation_detail == expected
 
-    @override_flag(FLAG, active=True)
     @pytest.mark.parametrize(
         ("text", "started"),
         [
@@ -78,7 +64,6 @@ class TestAbuseRulesStage:
 
         assert ctx.moderation_task_id == ("task-1" if started else None)
 
-    @override_flag(FLAG, active=True)
     def test_moderates_exempt_participants(self, moderated_session, moderation_task):
         membership = MembershipFactory.create(team=moderated_session.experiment.team)
         moderated_session.participant.user = membership.user
@@ -89,9 +74,21 @@ class TestAbuseRulesStage:
 
         assert ctx.moderation_task_id == "task-1"
 
+    def test_failure_to_queue_moderation_records_a_skip(self, moderated_session, moderation_task):
+        moderation_task.task.delay.side_effect = ConnectionError("broker down")
+        ctx = _context(moderated_session, "hello")
+
+        with patch("apps.channels.stages.core.moderation_skipped_notification") as notification:
+            AbuseRulesStage()(ctx)
+
+        assert ctx.moderation_task_id is None
+        ctx.human_message.refresh_from_db()
+        assert ctx.human_message.moderation_status == ModerationStatus.SKIPPED
+        assert ctx.human_message.moderation_detail.skip_reason == "error"
+        notification.assert_called_once_with(ctx.experiment, session=moderated_session, reason="error")
+
 
 @pytest.mark.django_db()
-@override_flag(FLAG, active=True)
 def test_markup_message_is_recorded_and_answered():
     session = ExperimentSessionFactory.create()
     channel = messaging_channel(session)

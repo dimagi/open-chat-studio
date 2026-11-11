@@ -5,20 +5,9 @@ from django.test import override_settings
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
-from apps.evaluations.tasks import _sessions_for_session_mode_clone, create_dataset_from_sessions_task
+from apps.evaluations.tasks import _sessions_for_clone, create_dataset_from_sessions_task
+from apps.evaluations.tests.clone_helpers import session_with_messages
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
-
-
-def _session_with_messages(team=None, experiment=None):
-    kwargs = {}
-    if team is not None:
-        kwargs["team"] = team
-    if experiment is not None:
-        kwargs["experiment"] = experiment
-    session = ExperimentSessionFactory.create(**kwargs)
-    ChatMessageFactory.create(message_type=ChatMessageType.HUMAN, content="Hello", chat=session.chat)
-    ChatMessageFactory.create(message_type=ChatMessageType.AI, content="Hi!", chat=session.chat)
-    return session
 
 
 @pytest.mark.django_db()
@@ -138,8 +127,8 @@ def test_task_resolves_filter_query_instead_of_session_ids():
     """A stored filter is resolved inside the task, so the caller posts no session ids at all."""
     experiment = ExperimentFactory.create()
     team = experiment.team
-    matching = _session_with_messages(team=team, experiment=experiment)
-    other = _session_with_messages(team=team, experiment=ExperimentFactory.create(team=team))
+    matching = session_with_messages(team=team, experiment=experiment)
+    other = session_with_messages(team=team, experiment=ExperimentFactory.create(team=team))
 
     dataset = EvaluationDataset.objects.create(
         team=team, name="Filtered Session Dataset", evaluation_mode=EvaluationMode.SESSION
@@ -165,7 +154,7 @@ def test_task_resolves_filter_query_instead_of_session_ids():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_empty_filter_query_means_every_team_session():
     """ "" is "no filters applied", which must stay distinct from None ("use the id list")."""
-    session = _session_with_messages()
+    session = session_with_messages()
     team = session.team
     dataset = EvaluationDataset.objects.create(
         team=team, name="Unfiltered Session Dataset", evaluation_mode=EvaluationMode.SESSION
@@ -181,7 +170,7 @@ def test_empty_filter_query_means_every_team_session():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_filter_query_excludes_sessions_already_in_dataset():
     """Re-running the same filter adds nothing: matches already in the dataset are excluded."""
-    session = _session_with_messages()
+    session = session_with_messages()
     team = session.team
     dataset = EvaluationDataset.objects.create(
         team=team, name="Idempotent Session Dataset", evaluation_mode=EvaluationMode.SESSION
@@ -200,7 +189,7 @@ def test_filter_query_excludes_sessions_already_in_dataset():
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_no_sessions_and_no_filter_completes_without_error():
     """Neither a filter nor ids means there is nothing to do — not a failure."""
-    session = _session_with_messages()
+    session = session_with_messages()
     dataset = EvaluationDataset.objects.create(
         team=session.team, name="Nothing To Do", evaluation_mode=EvaluationMode.SESSION
     )
@@ -221,14 +210,14 @@ def test_pk_ceiling_snapshots_the_filter_result_set():
     The ceiling is what keeps the up-front count and the walk over the same set of rows: both
     re-run the filter, and a relative range filter re-resolves against a moving now().
     """
-    session = _session_with_messages()
+    session = session_with_messages()
     team = session.team
     dataset = EvaluationDataset.objects.create(
         team=team, name="Ceiling Session Dataset", evaluation_mode=EvaluationMode.SESSION
     )
 
-    queryset = _sessions_for_session_mode_clone(dataset, None, "", None)
-    late_session = _session_with_messages(team=team)
+    queryset = _sessions_for_clone(dataset, None, "", None)
+    late_session = session_with_messages(team=team)
 
     assert late_session.pk > session.pk
     assert list(queryset.values_list("pk", flat=True)) == [session.pk]

@@ -10,6 +10,7 @@ from apps.teams.flags import Flags
 from apps.utils.factories.team import TeamFactory
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, MultiColumnFilter
 from apps.web.dynamic_filters.column_filters import ParticipantFilter
+from apps.web.dynamic_filters.datastructures import ColumnFilterData
 
 
 @pytest.mark.django_db()
@@ -25,8 +26,7 @@ class TestFilterAgentPrompt:
 
     def test_system_prompt_gives_option_labels(self, team):
         input_data = FilterInput(query="test", filter_slug="participant", team_id=team.id)
-        with override_flag(Flags.ABUSE_DETECTION.slug, active=True):
-            prompt = FilterAgent.get_system_prompt(input_data)
+        prompt = FilterAgent.get_system_prompt(input_data)
         assert '"label": "Blocked"' in prompt
 
     def test_system_prompt_contains_operators(self, team):
@@ -52,10 +52,10 @@ class TestFilterAgentPrompt:
     def test_system_prompt_lists_flag_gated_filters_only_when_the_flag_is_on(self, team, flag_active, expected):
         input_data = FilterInput(query="test", filter_slug="session", team_id=team.id)
 
-        with override_flag(Flags.ABUSE_DETECTION.slug, active=flag_active):
+        with override_flag(Flags.HUMAN_ANNOTATIONS.slug, active=flag_active):
             prompt = FilterAgent.get_system_prompt(input_data)
 
-        assert ('"moderation_status"' in prompt) is expected
+        assert ('"annotation_queue"' in prompt) is expected
 
     def test_unknown_team_raises(self):
         input_data = FilterInput(query="test", filter_slug="session", team_id=0)
@@ -185,7 +185,7 @@ class TestMakeGetOptionsTool:
         assert "error" in result
 
     def test_error_for_a_filter_whose_flag_is_off(self):
-        gated = ChoiceColumnFilter(query_param="gated", label="Gated", required_flag=Flags.ABUSE_DETECTION.slug)
+        gated = ChoiceColumnFilter(query_param="gated", label="Gated", required_flag=Flags.HUMAN_ANNOTATIONS.slug)
         filter_class = self._make_filter_class([gated])
 
         tool_fn = make_get_options_tool(filter_class, mock.Mock())
@@ -274,3 +274,28 @@ class TestFilterAgentRun:
         call_kwargs = mock_agent.invoke.call_args.kwargs
         assert call_kwargs["config"]["callbacks"] == [callback]
         assert tracer.trace.call_args.kwargs["metadata"] == {"team_id": "42"}
+
+    @mock.patch("apps.help.agents.filter.Team")
+    @mock.patch("apps.help.agents.filter.build_system_agent")
+    def test_run_drops_filters_with_an_operator_the_column_does_not_offer(self, mock_build, mock_team_cls):
+        """Session ID offers no 'any of' (there is no list to pick from), so a generated 'any of' on it is dropped."""
+        mock_agent = mock.Mock()
+        mock_agent.invoke.return_value = {
+            "structured_response": FilterOutput(
+                filters=[
+                    ColumnFilterData(column="session_id", operator="any of", value='["a", "b"]'),
+                    ColumnFilterData(column="session_id", operator="equals", value="a"),
+                    ColumnFilterData(column="participant", operator="any of", value='["x@test.com"]'),
+                ]
+            )
+        }
+        mock_build.return_value = mock_agent
+        mock_team_cls.objects.get.return_value = TeamFactory.build(id=1)
+
+        agent = FilterAgent(input=FilterInput(query="sessions a or b", filter_slug="session", team_id=1))
+        result = agent.run()
+
+        assert [(f.column, f.operator) for f in result.filters] == [
+            ("session_id", "equals"),
+            ("participant", "any of"),
+        ]
