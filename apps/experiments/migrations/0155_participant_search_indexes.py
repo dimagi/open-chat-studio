@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.contrib.postgres.operations import AddIndexConcurrently
 from django.db import migrations, models
 
@@ -17,9 +16,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("experiments", "0154_participant_strikes"),
-        ("teams", "0020_team_moderation_fields"),
         ("web", "0002_auto_20241129_1504"),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
