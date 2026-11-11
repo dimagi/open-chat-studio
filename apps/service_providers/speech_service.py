@@ -353,7 +353,7 @@ def _gemini_transcript(payload: dict) -> str:
     candidates = payload.get("candidates") or [{}]
     parts = candidates[0].get("content", {}).get("parts", [])
     return "".join(
-        (part.get("audioTranscription") or {}).get("text") or part.get("text") or ""
+        part.get("audioTranscription", {}).get("text", part.get("text", ""))
         for part in parts
         if not part.get("thought")
     )
