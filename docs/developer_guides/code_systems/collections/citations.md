@@ -42,7 +42,7 @@ References come only from `<CIT file-id />` citations, so only local indexes pro
 A file is cited in one of two ways, depending on where the collection's index lives:
 
 1. **Local index: the LLM writes the citations.** The search tool returns the matching chunks, each labelled with the `file_id` and `filename` of its file. If `generate_citations` is on, the tool also tells the LLM to write a citation after each claim that uses that content, putting that chunk's `file_id` in the `<CIT file-id />` citation. These citations become references.
-2. **Remote index (OpenAI vector store): the provider reports the citations.** OpenAI's built-in file search has no citation instruction, so the LLM writes no citations. Cited files come only from [provider annotations](#2-collecting-cited-files). They are attached to the chat but get no reference.
+2. **Remote index: the provider reports the citations.** Currently, only OpenAI vector stores are supported. OpenAI's built-in file search has no citation instruction, so the LLM writes no citations. Cited files come only from [provider annotations](#2-collecting-cited-files). They are attached to the chat but get no reference.
 
 ## 2. Collecting Cited Files
 
@@ -56,7 +56,7 @@ After the LLM responds, the node passes the response to an output parser, which 
 
 **Why Anthropic has its own parser.** [Anthropic's web search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool#citations) returns its sources as `citations` on the response's text blocks. The Anthropic parser adds them to the text as `[title](url)` links. They are links, not files, so they never appear in `cited_files` or the reference section.
 
-**Provider annotations** are entries in the `annotations` list of a LangChain content block. For OpenAI, entries of type `citation` carry the file's external ID, which the default parser matches to files by `File.external_id`. Currently only OpenAI supplies them.
+**Provider annotations** are entries in the `annotations` list of a LangChain content block. For OpenAI, entries of type `citation` carry the file's external ID, which the default parser matches to files by `File.external_id`.
 
 Rules for all scenarios:
 
