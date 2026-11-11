@@ -135,3 +135,19 @@ def test_other_platforms_keep_the_single_column_dialog(admin_client, experiment)
 
     assert "Embed &amp; API" not in content
     assert "Update" in content
+
+
+@pytest.mark.django_db()
+def test_edit_error_keeps_allow_all_domains_checked(admin_client, widget_channel):
+    data = {
+        "name": widget_channel.name,
+        "platform": ChannelPlatform.EMBEDDED_WIDGET.value,
+        "enabled": "on",
+        "allow_all_domains": "on",
+        "session_token_lifetime": "00:01:00",
+    }
+
+    content = admin_client.post(_edit_url(widget_channel), data).content.decode()
+
+    assert "The session lifetime must be at least 5 minutes." in content
+    assert "&quot;allowAllDomains&quot;: true" in content
