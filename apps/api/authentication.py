@@ -4,6 +4,7 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed, ParseError
 
+from apps.api.admission import ChatCredentialKind
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
@@ -42,6 +43,8 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
     - request.auth: The ExperimentChannel object
     - request.user: AnonymousUser (since widgets are unauthenticated)
     """
+
+    chat_credential_kind = ChatCredentialKind.EMBED_KEY
 
     def authenticate(self, request):
         """
@@ -178,10 +181,11 @@ class ChatOAuthAuthenticationBase(authentication.BaseAuthentication):
 
     @staticmethod
     def _admit(request, experiment, channel: ExperimentChannel) -> OAuth2AccessToken:
-        """Validate the machine token and origin, and set the request team."""
+        """Validate the machine token and origin, and record its validated object on the request."""
         token = validated_machine_token(request, experiment)
         check_oauth_channel_origin(request, channel)
         request.team = token.team
+        request.chat_oauth_token = token
         set_current_team(token.team)
         return token
 
@@ -205,6 +209,8 @@ class ChatOAuthAuthentication(ChatOAuthAuthenticationBase):
     which is what puts an `ExperimentChannel` in `request.auth` and so buckets OAuth traffic per
     channel in `ChatAPIRateThrottle` rather than per client IP.
     """
+
+    chat_credential_kind = ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS
 
     def authenticate(self, request):
         if not request.headers.get("Authorization"):
