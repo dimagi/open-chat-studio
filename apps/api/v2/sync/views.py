@@ -1,7 +1,8 @@
 from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Prefetch
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
@@ -16,6 +17,7 @@ from apps.api.v2.sync.serializers import (
     MessagePageSerializer,
     MessageQuerySerializer,
     MessageSerializer,
+    SessionDetailSerializer,
     SessionPageSerializer,
     SessionQuerySerializer,
     SessionSerializer,
@@ -118,6 +120,27 @@ class MessageListView(SyncView):
     def prepare(self, rows: list) -> list:
         ChatMessage.prefetch_attached_files(rows)
         return rows
+
+
+class SessionDetailView(SyncView):
+    @extend_schema(
+        operation_id="session_retrieve",
+        summary="Retrieve a session with its messages",
+        description="One session and all of its messages, oldest first.",
+        tags=["Sessions"],
+        responses=SessionDetailSerializer,
+    )
+    def get(self, request, id):
+        messages = ChatMessage.objects.order_by("created_at", "id").prefetch_related("tags")
+        session = get_object_or_404(
+            self.reachable_sessions()
+            .select_related("experiment", "participant", "chat")
+            .prefetch_related(Prefetch("chat__messages", queryset=messages, to_attr="synced_messages")),
+            external_id=id,
+        )
+        attach_chat_tagged_items([session])
+        ChatMessage.prefetch_attached_files(session.chat.synced_messages)
+        return Response(SessionDetailSerializer(session, context={"request": request}).data)
 
 
 def _chat_has_tag(names: list[str], team) -> Exists:

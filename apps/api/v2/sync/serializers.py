@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.api.serializers import FileSerializer
@@ -94,3 +95,16 @@ class MessagePageSerializer(serializers.Serializer):
     cursor = serializers.CharField(allow_null=True, help_text=SessionPageSerializer.cursor_help)
     has_more = serializers.BooleanField(help_text=SessionPageSerializer.has_more_help)
     results = MessageSerializer(many=True)
+
+
+class SessionDetailSerializer(SessionSerializer):
+    messages = serializers.SerializerMethodField()
+
+    class Meta(SessionSerializer.Meta):
+        fields = [*SessionSerializer.Meta.fields, "messages"]
+        read_only_fields = fields
+
+    @extend_schema_field(MessageSerializer(many=True))
+    def get_messages(self, session) -> list:
+        """Read from the messages the view prefetches."""
+        return MessageSerializer(session.chat.synced_messages, many=True, context=self.context).data

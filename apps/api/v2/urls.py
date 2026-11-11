@@ -12,7 +12,7 @@ from apps.api.v2.discovery import (
 )
 from apps.api.v2.pipeline_edit.views import PipelineEdgeEditView, PipelineNodeEditView
 from apps.api.v2.resources.views import ConsentFormViewSet, SourceMaterialViewSet
-from apps.api.v2.sync.views import MessageListView, SessionListView
+from apps.api.v2.sync.views import MessageListView, SessionDetailView, SessionListView
 from apps.api.v2.triggers.views import ScheduledTriggerView, StaticTriggerView, TimeoutTriggerView, TriggerView
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.versions.views import (
@@ -51,6 +51,7 @@ urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
     path("usage/", UsageView.as_view(), name="usage"),
     path("sessions/", SessionListView.as_view(), name="session-list"),
+    path("sessions/<str:id>/", SessionDetailView.as_view(), name="session-detail"),
     path("messages/", MessageListView.as_view(), name="message-list"),
     path("trigger_bot/", TriggerBotMessageView.as_view(), name="trigger_bot"),
     path("chatbot/options/", ChatbotOptionsView.as_view(), name="chatbot-options"),
