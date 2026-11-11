@@ -12,6 +12,8 @@ from apps.chat.exceptions import (
     ProviderConfigurationError,
     UserActionableError,
 )
+from apps.chat.models import ChatMessageMetadataKeys
+from apps.files.models import File
 from apps.pipelines.nodes import llm_node
 from apps.pipelines.nodes.helpers import get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.llm_node import (
@@ -272,3 +274,34 @@ class TestExecuteSubAgentOutcomes:
 
         node.save_history.assert_called_once()
         assert caplog.text == ""
+
+
+class TestAttachedFileMetadata:
+    def test_response_files_go_under_the_attachment_key(self):
+        node = Mock()
+        cited, generated = File(id=1), File(id=2)
+
+        metadata = llm_node._process_files(node, cited_files={cited}, generated_files={generated})
+
+        assert metadata.keys() == {ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS}
+        assert sorted(metadata[ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS]) == [1, 2]
+
+    def test_no_files_adds_no_metadata(self):
+        assert llm_node._process_files(Mock(), cited_files=set(), generated_files=set()) == {}
+
+    def test_tool_attachments_are_kept_alongside_response_files(self, monkeypatch):
+        monkeypatch.setattr(llm_node, "_get_prompt_context", Mock())
+        monkeypatch.setattr(llm_node, "_add_current_datetime_to_turn", Mock())
+        agent, node, context = _node_and_context([AIMessage(content="Done")])
+
+        def build_agent(node, context, session, tool_callbacks, prompt_context):
+            tool_callbacks.attach_file(7)
+            return agent
+
+        monkeypatch.setattr(llm_node, "build_node_agent", build_agent)
+        response_metadata = {ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS: [3]}
+        monkeypatch.setattr(llm_node, "_process_agent_output", Mock(return_value=("Done", response_metadata)))
+
+        state = llm_node.execute_sub_agent(node, context)
+
+        assert sorted(state["output_message_metadata"][ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS]) == [3, 7]

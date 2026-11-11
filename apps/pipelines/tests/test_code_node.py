@@ -6,6 +6,7 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from apps.channels.datamodels import Attachment
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.events.models import EventActionType, TimePeriod
 from apps.files.models import File
 from apps.pipelines.exceptions import CodeNodeRunError
@@ -499,8 +500,8 @@ def main(input, **kwargs):
     assert repo.files_created[0]["content_type"] == "text/plain"
 
     # Verify file ID tracked in output metadata
-    generated_files = node_output.update["output_message_metadata"]["generated_files"]  # ty: ignore[not-subscriptable]
-    assert len(generated_files) == 1
+    output_metadata = node_output.update["output_message_metadata"]  # ty: ignore[not-subscriptable]
+    assert output_metadata == {ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS: [1]}
 
     # Verify attachment was recorded
     assert len(repo.attached_files) == 1

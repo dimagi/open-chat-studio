@@ -1192,8 +1192,7 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
             self.repo.attach_files_to_chat(attachment_type="code_interpreter", files=[file])
 
             metadata = output_state.setdefault("output_message_metadata", {})
-            generated_files = metadata.setdefault(ChatMessageMetadataKeys.GENERATED_FILES, [])
-            generated_files.append(file.id)
+            metadata.setdefault(ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS, []).append(file.id)
 
         return add_file_attachment
 
