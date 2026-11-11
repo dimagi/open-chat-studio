@@ -17,7 +17,7 @@ The sky is blue [^1]. The grass is green [^2].
 [^2]: [source_b.txt](https://example.com/download/456)
 ```
 
-Non-web channels show `[1]` instead of `[^1]` (see [section 4](#4-final-rendering-in-channels)).
+Messaging channels such as Telegram and WhatsApp show `[1]` instead of `[^1]` (see [section 4](#4-final-rendering-in-channels)).
 
 ## The citation chain
 
@@ -65,17 +65,19 @@ Rules for all scenarios:
 
 ## 3. Building the Reference Section
 
-After the LLM generates a response containing these citation tags, the system processes the message to create a human-readable reference section. This is handled by `apps.service_providers.llm_service.utils.populate_reference_section_from_citations`.
+The pipeline LLM node builds the reference section after the output parser, when `generate_citations` is on. The result is the message that is saved and sent on.
 
-This method performs three main actions:
-1. It scans the AI message for all instances of the `<CIT file-id />` pattern. A tag whose ID is not in `cited_files` is removed from the message.
-2. Each tag is replaced with a footnote-style reference (e.g., `[^1]`, `[^2]`). It keeps track of cited files to reuse reference numbers for multiple citations of the same file.
-3. It appends a markdown-formatted reference list to the end of the message. Each entry includes the reference number, the original file name, and a download link for that file.
-
-This processing step occurs in `_process_agent_output()` in `apps/pipelines/nodes/llm_node.py`, before the final message is saved and sent to the user.
+- Citations are numbered in the order they first appear in the message.
+- Repeat citations of the same file reuse its number.
+- A citation whose file is not in `cited_files` is removed. This drops IDs the LLM made up.
+- The reference section is appended after a blank line, one line per reference in number order: `[^1]: [citation text](download link)`. The download link is the file's own URL if its metadata sets one, otherwise the platform's download URL for the session.
 
 ## 4. Final Rendering in Channels
 
-The markdown-formatted message, now including footnote-style references, is passed to the channel layer for final display to the user.
+How the references reach the user depends on the channel.
 
-In `apps/channels/stages/core.py`, `ResponseFormattingStage._format_reference_section` adapts this markdown for the specific channel's capabilities — it rewrites `[^1]`-style footnotes to `[1]` for non-web channels, and for each cited file shows either just the filename (if the channel can send the file natively) or the filename with a download link (if it can't). The message stays in markdown; any HTML rendering happens elsewhere, in the web interface's own message rendering.
+- **Web and API channels** return the saved markdown unchanged. The web interface renders the `[^1]` footnotes itself.
+- **Messaging channels** (those that send the reply themselves) rewrite the message before sending:
+  - `[^1]` becomes `[1]` throughout, because plain-text apps do not support footnotes.
+  - Each reference line shows the citation text, followed by the download link only if the channel cannot send the file as an attachment.
+  - Voice replies skip the reference formatting. The URLs are taken out of the spoken text and sent as a separate text message.
