@@ -51,8 +51,8 @@ version section when a release is cut.
   `ocs_notifications.tasks.notify_http_sunsets` (02:30), notifies teams still using the legacy
   chat; Celery beat must be running for those notices to go out.
 - Message `metadata` in the sessions API no longer has `cited_files` or `generated_files` keys.
-  Every file attached to a message is listed under `ocs_attachment_file_ids`, and the message's
-  `attachments` field is unchanged. (#1901)
+  The file ids they held are under `ocs_attachment_file_ids`. The message's `attachments` field
+  still lists every attached file. (#1901)
 
 ### Configuration
 <!-- Every new, renamed, retyped or removed setting that can be configured through
