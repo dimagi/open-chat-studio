@@ -55,6 +55,7 @@ def test_edit_dialog_has_settings_and_embed_tabs(admin_client, widget_channel):
     content = admin_client.get(_edit_url(widget_channel)).content.decode()
 
     assert "Embed &amp; API" in content
+    assert "Published Version" in content
     assert "tab: 'settings'" in content
     assert 'name="enabled"' in content
     assert 'name="credential_mode"' in content
