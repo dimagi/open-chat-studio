@@ -47,9 +47,25 @@ class UpdatedAtOnPartialSaveMixin:
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
-        if update_fields and "updated_at" not in update_fields:
-            kwargs["update_fields"] = [*update_fields, "updated_at"]
+        if update_fields is None:
+            update_fields = self._loaded_fields_if_deferred()
+        if update_fields is not None:
+            update_fields = list(update_fields)
+            if update_fields and "updated_at" not in update_fields:
+                update_fields.append("updated_at")
+            kwargs["update_fields"] = update_fields
         super().save(*args, **kwargs)
+
+    def _loaded_fields_if_deferred(self) -> list[str] | None:
+        """The fields Django saves for an instance loaded with ``only()``/``defer()``, or None."""
+        deferred = self.get_deferred_fields() if self.pk is not None else set()
+        if not deferred:
+            return None
+        return [
+            field.attname
+            for field in self._meta.concrete_fields
+            if not field.primary_key and not getattr(field, "generated", False) and field.attname not in deferred
+        ]
 
 
 class BaseModel(models.Model, VersioningMixin):
