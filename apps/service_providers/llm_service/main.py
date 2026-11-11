@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from functools import cached_property
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar
 
 import pydantic
 from django.contrib.sites.models import Site
@@ -562,17 +562,17 @@ class GoogleVertexAILlmService(LlmService):
     # kept out of the model repr instead, which is what a Sentry stack-frame local serializes.
     credentials_json: dict = pydantic.Field(repr=False)
     location: str = "global"
-    api_transport: Literal["grpc", "rest"] = "grpc"
     supported_image_content_types: ClassVar[frozenset[str]] = GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
-        from langchain_google_vertexai import ChatVertexAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
+        from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        return ChatVertexAI(
+        return ChatGoogleGenerativeAI(
             model=llm_model,
-            credentials=self.credentials,
+            vertexai=True,
+            project=self.credentials.project_id,
             location=self.location,
-            api_transport=self.api_transport,
+            credentials=self.credentials,
             **kwargs,
         )
 
@@ -584,6 +584,10 @@ class GoogleVertexAILlmService(LlmService):
         from google.oauth2 import service_account  # noqa: PLC0415 - lazy: only needed for Google Vertex AI provider
 
         try:
-            return service_account.Credentials.from_service_account_info(self.credentials_json)
+            # google-genai only scopes the credentials it loads itself; one passed in is used as-is,
+            # and a service account without a scope cannot refresh its token.
+            return service_account.Credentials.from_service_account_info(
+                self.credentials_json, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
         except (KeyError, ValueError) as e:
             raise ServiceProviderConfigError(self._type, f"Invalid service account credentials: {e}") from e

@@ -20,7 +20,17 @@ from enum import StrEnum
 import anthropic
 import httpx
 import openai
-from langchain_core.exceptions import ContextOverflowError
+from langchain_core.exceptions import (
+    ContextOverflowError,
+    ModelAPIError,
+    ModelAuthenticationError,
+    ModelConnectionError,
+    ModelInvalidRequestError,
+    ModelNotFoundError,
+    ModelPermissionDeniedError,
+    ModelRateLimitError,
+    ModelTimeoutError,
+)
 
 from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 
@@ -57,40 +67,36 @@ class ProviderErrorTypes:
     rate_limit: ErrorTypes
     unavailable: ErrorTypes
     invalid_request: ErrorTypes
-    google_invalid_argument: type[Exception]
 
 
 @functools.cache
 def provider_error_types() -> ProviderErrorTypes:
     """The provider SDK exception types, grouped by how a failure is classified."""
-    # Importing google.api_core reads the metadata of every installed package.
-    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - TID253: heavy lib, slow startup
-
+    # The Model*Error types are LangChain's provider-neutral classes; langchain-google-genai raises them.
     return ProviderErrorTypes(
         authentication=(
             openai.AuthenticationError,
             openai.PermissionDeniedError,
             anthropic.AuthenticationError,
             anthropic.PermissionDeniedError,
-            google_exceptions.Unauthenticated,
-            google_exceptions.PermissionDenied,
+            ModelAuthenticationError,
+            ModelPermissionDeniedError,
         ),
         not_found=(
             openai.NotFoundError,
             anthropic.NotFoundError,
-            google_exceptions.NotFound,
+            ModelNotFoundError,
         ),
         timeout=(
             openai.APITimeoutError,
             anthropic.APITimeoutError,
-            google_exceptions.DeadlineExceeded,
+            ModelTimeoutError,
             httpx.TimeoutException,
         ),
         rate_limit=(
             openai.RateLimitError,
             anthropic.RateLimitError,
-            google_exceptions.TooManyRequests,
-            google_exceptions.ResourceExhausted,
+            ModelRateLimitError,
         ),
         unavailable=(
             openai.InternalServerError,
@@ -98,15 +104,15 @@ def provider_error_types() -> ProviderErrorTypes:
             anthropic.InternalServerError,
             anthropic.OverloadedError,
             anthropic.APIConnectionError,
-            google_exceptions.ServiceUnavailable,
-            google_exceptions.InternalServerError,
+            ModelAPIError,
+            ModelConnectionError,
+            httpx.ConnectError,
         ),
         invalid_request=(
             openai.BadRequestError,
             anthropic.BadRequestError,
-            google_exceptions.InvalidArgument,
+            ModelInvalidRequestError,
         ),
-        google_invalid_argument=google_exceptions.InvalidArgument,
     )
 
 
@@ -147,9 +153,8 @@ def translate_provider_error(
     provider error at all", and no error at all.
 
     The whole ``__cause__`` chain is examined because LangChain's provider adapters
-    re-raise the SDK exception wrapped in one of their own -- langchain-google-genai
-    turns every ``InvalidArgument``, a bad API key among them, into a
-    ``ChatGoogleGenerativeAIError`` -- and the outer type says nothing useful.
+    re-raise the SDK exception wrapped in one of their own, and either may be the one a
+    check recognises.
     """
     if isinstance(error, ProviderConfigurationError | ModelRefusedTurnError):
         return None
@@ -228,8 +233,8 @@ def translate_provider_errors():
 
 
 def _is_billing(error: BaseException) -> bool:
-    # Google reports an exhausted balance and a per-minute rate limit alike as
-    # ResourceExhausted, with nothing but prose to tell them apart, so it stays in
+    # Google reports an exhausted balance and a per-minute rate limit alike as a 429
+    # RESOURCE_EXHAUSTED, with nothing but prose to tell them apart, so it stays in
     # rate_limit_exceptions(): over-retrying is the cheaper mistake of the two.
     if isinstance(error, openai.RateLimitError) and _openai_codes(error) & OPENAI_QUOTA_CODES:
         return True
@@ -240,9 +245,9 @@ def _is_authentication(error: BaseException) -> bool:
     types = provider_error_types()
     if isinstance(error, types.authentication):
         return True
-    # Not every InvalidArgument is a bad key; a malformed request is one too, and that is
+    # Not every invalid request is a bad key; a malformed request is one too, and that is
     # not the team's to fix, so it stays unclassified.
-    return isinstance(error, types.google_invalid_argument) and _mentions(error, GOOGLE_BAD_KEY_PHRASES)
+    return isinstance(error, ModelInvalidRequestError) and _mentions(error, GOOGLE_BAD_KEY_PHRASES)
 
 
 def _is_not_found(error: BaseException) -> bool:
@@ -283,4 +288,6 @@ def _mentions(error: BaseException, phrases: tuple[str, ...]) -> bool:
 
 
 def _detail(error: BaseException) -> str:
-    return getattr(error, "message", None) or str(error)
+    """The provider's own wording, from the innermost error: a LangChain wrapper prefixes it with its own."""
+    *_, innermost = _causes(error)
+    return getattr(innermost, "message", None) or str(innermost)

@@ -254,15 +254,6 @@ class VoyageAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["credentials_json"]
-    api_transport = forms.ChoiceField(
-        label=_("API Transport"),
-        choices=[("grpc", "gRPC"), ("rest", "REST")],
-        help_text=_(
-            "Advanced parameter to select the transport protocol for the API calls. "
-            "Refer to the Google documentation for details."
-        ),
-        initial="grpc",
-    )
     location = forms.CharField(
         label=_("Google Cloud Platform Location"),
         help_text=render_help_with_link(

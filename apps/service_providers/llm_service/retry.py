@@ -17,6 +17,7 @@ import functools
 import anthropic
 import openai
 from langchain.agents.middleware import ModelRetryMiddleware
+from langchain_core.exceptions import ModelRateLimitError
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import RunnableBinding
 from langgraph.types import RetryPolicy
@@ -31,8 +32,6 @@ from apps.service_providers.llm_service.error_classification import (
 @functools.cache
 def rate_limit_exceptions() -> ErrorTypes:
     """Exception types that indicate rate limiting."""
-    from google.api_core import exceptions as google_exceptions  # noqa: PLC0415 - TID253: heavy lib, slow startup
-
     return (
         openai.RateLimitError,
         openai.InternalServerError,
@@ -41,8 +40,7 @@ def rate_limit_exceptions() -> ErrorTypes:
         anthropic.OverloadedError,
         anthropic.APIConnectionError,
         anthropic.APITimeoutError,
-        google_exceptions.TooManyRequests,
-        google_exceptions.ResourceExhausted,
+        ModelRateLimitError,
     )
 
 
