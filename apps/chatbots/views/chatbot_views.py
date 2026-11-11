@@ -338,6 +338,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "highlight_version_id": request.GET.get("version_id"),
         "usage_summary": usage_summary,
         "broadcast_form": BroadcastMessageForm(experiment),
+        "copy_form": CopyChatbotForm(experiment),
         "export_columns": EXPORT_COLUMNS,
         "breadcrumbs": [
             (_("Chatbots"), reverse("chatbots:chatbots_home", args=[team_slug])),
@@ -966,17 +967,37 @@ def _chatbot_chat_ui(request):
 @login_and_team_required
 def copy_chatbot(request, team_slug, *args, **kwargs):
     if request.method == "POST":
-        form = CopyChatbotForm(request.POST)
+        experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
+        form = CopyChatbotForm(experiment, request.POST)
         if form.is_valid():
+            if copy := form.cleaned_data["overwrite"]:
+                return _overwrite_copy(request, team_slug, copy)
             new_name = form.cleaned_data["new_name"]
-            experiment = get_object_or_404(Experiment.objects.get_all(), id=kwargs["pk"], team=request.team)
-            # copy chatbot
             new_experiment = experiment.create_new_version(make_default=False, is_copy=True, name=new_name)
             # create default version for copied chatbot
             start_version_creation(new_experiment, make_default=True)
             return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
     experiment_id = kwargs["pk"]
     return single_chatbot_home(request, team_slug, experiment_id)
+
+
+def _overwrite_copy(request, team_slug: str, copy: Experiment):
+    if not request.user.has_perm("experiments.change_experiment"):
+        raise PermissionDenied("You do not have permission to overwrite a chatbot.")
+
+    # Same lock as publish and revert, so an overwrite can't interleave with either.
+    if copy.acquire_version_operation_lock(f"overwrite-{copy.id}"):
+        try:
+            copy.overwrite_from_source()
+        finally:
+            Experiment.release_version_operation_lock(copy.id)
+        messages.success(
+            request,
+            f"{copy.name} now matches the current {copy.cloned_from.name}. Publish it to update its channels.",
+        )
+    else:
+        messages.error(request, "A version operation is already in progress.")
+    return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=copy.id)
 
 
 def home(
