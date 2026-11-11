@@ -93,7 +93,7 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.form_attrs = {
             "x-data": json.dumps(
                 {
-                    "allowAllDomains": self.initial.get("allow_all_domains", False),
+                    "allowAllDomains": bool(self["allow_all_domains"].value()),
                     # Seeded from the same value the select renders as chosen -- `BoundField.value()`
                     # is what `Select.get_context` is handed -- so `x-model` binding to it on init is
                     # a no-op rather than a silent change of the admin's selection.
