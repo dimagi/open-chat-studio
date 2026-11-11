@@ -2,10 +2,11 @@
 
 import pytest
 from django.contrib import admin
-from django.urls import URLPattern, URLResolver, resolve
+from django.urls import resolve
 from django.views.generic import RedirectView
 
 from apps.admin.urls import urlpatterns as ocs_admin_urlpatterns
+from apps.utils.tests.url_helpers import iter_view_callbacks
 from apps.web.admin_site import OcsAdminSite
 from apps.web.elevation import ENFORCES_ELEVATION_ATTR
 
@@ -21,14 +22,6 @@ SURFACES = {
     "admin/": ocs_admin_urlpatterns,
     "django-admin/": admin.site.get_urls(),
 }
-
-
-def _iter_view_callbacks(patterns, prefix=""):
-    for entry in patterns:
-        if isinstance(entry, URLResolver):
-            yield from _iter_view_callbacks(entry.url_patterns, prefix + str(entry.pattern))
-        elif isinstance(entry, URLPattern):
-            yield prefix + str(entry.pattern), entry.callback
 
 
 def _view_identifier(callback) -> str:
@@ -52,13 +45,13 @@ def _views():
     return [
         (prefix + route, callback)
         for prefix, patterns in SURFACES.items()
-        for route, callback in _iter_view_callbacks(patterns)
+        for route, callback in iter_view_callbacks(patterns)
     ]
 
 
 @pytest.mark.parametrize("prefix", list(SURFACES))
 def test_surface_is_discoverable(prefix):
-    assert list(_iter_view_callbacks(SURFACES[prefix])), f"expected to resolve views under /{prefix}"
+    assert list(iter_view_callbacks(SURFACES[prefix])), f"expected to resolve views under /{prefix}"
 
 
 def _plain_view(request):

@@ -19,9 +19,8 @@ will fail this guard until it opts into a team-scoped mechanism (or the allowlis
 
 import inspect
 
-from django.urls import URLPattern, URLResolver
-
 from apps.teams.decorators import ENFORCES_TEAM_AUTH_ATTR
+from apps.utils.tests.url_helpers import iter_view_callbacks
 from config.urls import team_urlpatterns
 
 # Class names (matched across the view's MRO) that gate a CBV on *team-scoped* authorization.
@@ -52,14 +51,6 @@ PUBLIC_VIEW_ALLOWLIST: dict[str, str] = {
     # target enforces its own authorization (e.g. experiments/new/ -> chatbots:new).
     "django.views.generic.base.RedirectView": "static redirect, no data access",
 }
-
-
-def _iter_view_callbacks(patterns, prefix=""):
-    for entry in patterns:
-        if isinstance(entry, URLResolver):
-            yield from _iter_view_callbacks(entry.url_patterns, prefix + str(entry.pattern))
-        elif isinstance(entry, URLPattern):
-            yield prefix + str(entry.pattern), entry.callback
 
 
 def _view_identifier(callback) -> str:
@@ -107,7 +98,7 @@ def _is_team_authorized(callback) -> bool:
 
 def _team_scoped_views():
     seen = {}
-    for route, callback in _iter_view_callbacks(team_urlpatterns):
+    for route, callback in iter_view_callbacks(team_urlpatterns):
         seen.setdefault(_view_identifier(callback), (route, callback))
     return seen
 
