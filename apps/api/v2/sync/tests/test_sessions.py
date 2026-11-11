@@ -235,3 +235,32 @@ def test_a_read_only_key_may_read(team):
     _session(team)
 
     assert ApiTestClient(team.members.first(), team, read_only=True).get(URL).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_a_cursor_reused_with_other_filters_is_refused(team, client):
+    wanted = _session(team)
+    _session(team)
+    cursor = client.get(URL, {"chatbot": str(wanted.experiment.public_id)}).json()["cursor"]
+
+    response = client.get(URL, {"cursor": cursor})
+
+    assert response.status_code == 400
+    assert "different filters" in str(response.json())
+
+
+@pytest.mark.django_db()
+def test_a_cursor_is_refused_after_the_token_s_chatbots_change(team):
+    first = _session(team)
+    second = _session(team)
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[first.experiment],
+    )
+    cursor = client.get(URL).json()["cursor"]
+    client.application.allowed_chatbots.add(second.experiment)
+
+    assert client.get(URL, {"cursor": cursor}).status_code == 400
