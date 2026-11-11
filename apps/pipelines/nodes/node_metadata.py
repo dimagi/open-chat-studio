@@ -19,7 +19,7 @@ from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource
-from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes, VoiceProvider
 from apps.teams.models import Team
 from apps.utils.fields import as_int
 from apps.utils.prompt import PromptVars
@@ -263,6 +263,8 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
     provider_id = None
     if len(llm_providers) > 0:
         for provider in llm_providers:
+            if provider["type"] in LlmProviderTypes.router_only_slugs:
+                continue
             llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
             if llm_provider_model:
                 provider_id = provider["id"]

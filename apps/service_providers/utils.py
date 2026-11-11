@@ -239,7 +239,12 @@ def get_embedding_provider_choices(team) -> dict[str, list[dict[str, Any]]]:
 
 def get_first_llm_provider_by_team(team_id):
     try:
-        return LlmProvider.objects.filter(team_id=team_id).order_by("id").first()
+        return (
+            LlmProvider.objects.filter(team_id=team_id)
+            .exclude(type__in=LlmProviderTypes.router_only_slugs)
+            .order_by("id")
+            .first()
+        )
     except LlmProvider.DoesNotExist:
         return None
 
