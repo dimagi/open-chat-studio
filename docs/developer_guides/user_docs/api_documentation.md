@@ -11,8 +11,8 @@ The schemas can be generated locally by running:
 
 ```bash
 inv schema
-# OR, for one surface
-python manage.py spectacular --api-version v2 --file api-schemas/v2.yml --validate
+# OR, for one surface; the empty key keeps a local OIDC setup's scopes out of the file, as inv schema does
+OIDC_RSA_PRIVATE_KEY='' python manage.py spectacular --api-version v2 --file api-schemas/v2.yml --validate
 ```
 
 ## API Schema updates
