@@ -1183,6 +1183,10 @@ class Participant(BaseTeamModel):
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
+            models.Index(fields=["remote_id"], name="participant_remote_id_idx"),
+            # Trigram indexes on UPPER(identifier) and UPPER(name), which serve the participant
+            # filter's `icontains`, are created in migration 0155 with raw SQL: Django renders an
+            # OpClass over an expression as invalid SQL unless django.contrib.postgres is installed.
         ]
 
     @classmethod
