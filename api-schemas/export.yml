@@ -4561,6 +4561,9 @@ components:
         working_version:
           type: integer
           nullable: true
+        cloned_from:
+          type: integer
+          nullable: true
       required:
       - created_at
       - id
