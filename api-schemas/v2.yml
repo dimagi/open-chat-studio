@@ -1610,6 +1610,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/messages/:
+    get:
+      operationId: message_list
+      description: Messages across the team's sessions, in the order they last changed.
+        Store `cursor` from each response and send it on the next pull to receive
+        only messages created or changed since. Rows changed in the last minute are
+        returned on a later pull.
+      summary: List messages changed since a cursor
+      parameters:
+      - in: query
+        name: chatbot
+        schema:
+          type: string
+          format: uuid
+        description: A chatbot's public ID.
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          minLength: 1
+        description: The `cursor` from the previous response. Omit it on the first
+          pull.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          default: 100
+      - in: query
+        name: participant
+        schema:
+          type: string
+          format: uuid
+        description: A participant's public ID.
+      - in: query
+        name: session
+        schema:
+          type: string
+          minLength: 1
+        description: A session's ID.
+      tags:
+      - Sessions
+      security:
+      - OAuth2:
+        - sessions:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagePage'
+          description: ''
   /api/v2/pipeline/nodes/:
     get:
       operationId: pipeline_node_list
@@ -3234,6 +3289,25 @@ components:
           type: string
           description: JSON object mapping field name to a description of the value
             to extract.
+    File:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        content_type:
+          type: string
+        size:
+          type: integer
+        content_url:
+          type: string
+          format: uri
+          example: https://example.com/api/files/42/content
+          readOnly: true
+      required:
+      - content_url
+      - name
+      - size
     FlattenedLlm:
       type: object
       description: An LLM provider and model, flattened into one ``llm`` object (ADR-0025).
@@ -4005,6 +4079,53 @@ components:
       - files
       - id
       - name
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        session_id:
+          type: string
+          readOnly: true
+        role:
+          type: string
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+        metadata:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        tags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - attachments
+      - content
+      - created_at
+      - id
+      - metadata
+      - role
+      - session_id
+      - tags
+      - updated_at
     MessageCounts:
       type: object
       properties:
@@ -4021,6 +4142,25 @@ components:
       - ai
       - human
       - total
+    MessagePage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Pass on the next pull, also when `has_more` is false. Null
+            only when nothing has ever matched.
+        has_more:
+          type: boolean
+          description: More rows are ready now; pull again with `cursor`.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+      required:
+      - cursor
+      - has_more
+      - results
     NodeCreate:
       type: object
       description: |-
