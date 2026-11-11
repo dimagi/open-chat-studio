@@ -48,7 +48,7 @@ resurfaces.
 | D2: exact `(updated_at, id)` keyset cursor, returned on every page | shared with the team-export API |
 | D3: settle window on the newest rows | protects against late commits |
 | D4: writes to returned fields move `updated_at` | partial saves and tags |
-| D5: one scope, `sessions:read`, for both collections | already declared |
+| D5: one scope, `sessions:read`; message reads also need message permission | already declared |
 | D6: filters applied directly in `get_queryset()` | not through `ExperimentSessionFilter` |
 | D7: `/messages/` takes `participant` | answers the open question on the issue |
 | D8: IDs follow [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) | public identifier where one exists |
@@ -60,7 +60,9 @@ resurfaces.
 **Decision.** Order by `(updated_at, id)` ascending and page with the keyset filter
 `updated_at > t OR (updated_at = t AND id > i)`. The response always carries `cursor` (the last
 row's keyset, or the request's cursor when the page is empty) and `has_more`. The cursor helper and
-keyset filter move out of `apps/api/export/views.py` into a shared module used by both APIs.
+keyset filter move out of `apps/api/export/views.py` into a shared module used by both APIs. A cursor
+is bound to the filters and the caller's reach that produced it; sent with a different selection it
+is refused with a 400, since rows of the new selection may lie before it.
 
 **Context.** DRF's `CursorPagination` positions on the first ordering field plus an offset, so many
 rows sharing an `updated_at` page by offset, and its last page has `next: null`. A sync consumer that
@@ -117,9 +119,12 @@ response: rejected, tags are in the issue's field list and a common sync filter.
 
 ### D5: One scope, `sessions:read`
 
-**Decision.** `required_scopes = ["sessions:read"]` on all three endpoints.
+**Decision.** `required_scopes = ["sessions:read"]` on all three endpoints. API keys and user tokens
+need `experiments.view_experimentsession`, and `chat.view_chatmessage` as well for `/messages/` and
+for the session detail, which embeds messages.
 
-**Context.** The scope is declared and unused. Messages are read in the context of their sessions.
+**Context.** The scope is declared and unused. Messages are read in the context of their sessions,
+but message content has its own view permission in the web app.
 
 **Alternatives considered.** A separate `messages:read` scope: rejected, no resource here splits
 sub-resources by scope, and nothing lets a client read messages without being trusted with their
@@ -163,11 +168,22 @@ team-scoped.
 
 ### D10: Attachments and tags batch-loaded per page
 
-**Decision.** One query per page each for attachments (`ChatMessage.prefetch_attached_files`),
-message tags (`prefetch_related("tags")`) and session tags (`attach_chat_tagged_items`), not per row.
+**Decision.** One query per page each for attachments (`ChatMessage.prefetch_attached_files`, which
+takes messages from any number of chats), message tags (`prefetch_related("tags")`) and session tags
+(`attach_chat_tagged_items`), not per row.
 
 **Context.** `get_attached_files()` queries per call. Fine for one session's messages, not for a page
 of up to 1000.
+
+## Known limitations
+
+- **Deletions are not synced.** A deleted session or message leaves no row to return, so a consumer
+  keeps its copy. Deletion needs a tombstone feed with its own retention rules; it is a follow-up,
+  not part of this API.
+- **A tag-filtered pull is not a synced set.** A session that loses a tag stops matching `?tags=`, so
+  a copy kept by syncing with that filter goes stale. Consumers that need a tag-scoped copy sync
+  without the filter and filter locally; `?tags=` suits one-off pulls. The other filters select on
+  values that do not change.
 
 ## Endpoints
 
@@ -206,7 +222,7 @@ The session fields above plus `messages[]` (the `/messages/` shape), unpaginated
 | Param | Type | Notes |
 |---|---|---|
 | `chatbot` | UUID | `public_id` |
-| `session` | UUID | `external_id` |
+| `session` | string | `external_id`; not always a UUID (email sessions use a Message-ID) |
 | `participant` | UUID | `public_id` |
 | `cursor`, `limit` | | as above |
 
