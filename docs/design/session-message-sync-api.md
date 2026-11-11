@@ -14,7 +14,7 @@ Two flat, team-scoped collections ([ADR-0072](../adr/0072-flat-routes-for-sessio
 paged by an exact `(updated_at, id)` keyset cursor that is returned on every page, including the
 last, so a consumer stores it and resumes from it on the next pull. Rows younger than a short settle
 window are held back so a late-committing write is not skipped. Every write to a field the API
-returns has to move `updated_at`; three code paths do not today and are fixed first.
+returns has to move `updated_at`; partial saves and tag changes did not, and are fixed first.
 
 ## Context
 
@@ -47,7 +47,7 @@ resurfaces.
 | D1: flat routes | [ADR-0072](../adr/0072-flat-routes-for-session-and-message-sync.md) |
 | D2: exact `(updated_at, id)` keyset cursor, returned on every page | shared with the team-export API |
 | D3: settle window on the newest rows | protects against late commits |
-| D4: writes to returned fields move `updated_at` | three paths fixed |
+| D4: writes to returned fields move `updated_at` | partial saves and tags |
 | D5: one scope, `sessions:read`, for both collections | already declared |
 | D6: filters applied directly in `get_queryset()` | not through `ExperimentSessionFilter` |
 | D7: `/messages/` takes `participant` | answers the open question on the issue |
@@ -93,25 +93,26 @@ rejected, far more machinery than a sync API over two tables needs.
 
 ### D4: Writes to returned fields move `updated_at`
 
-**Decision.** Every write to a field this API returns sets `updated_at`. Three paths do not today and
-are fixed:
+**Decision.** Every write to a field this API returns sets `updated_at`. Two kinds of write did not:
 
-- `save(update_fields=[...])` calls that omit `updated_at` (Django only writes `auto_now` fields named
-  in `update_fields`): session `state` in `apps/chat/bots.py` and `apps/experiments/tasks.py`,
-  message `metadata` in `apps/chat/bots.py` and `ChatMessage.add_attachment_id`. The moderation
-  service already includes `updated_at` for this reason.
+- `save(update_fields=[...])` (Django writes an `auto_now` field only when `update_fields` names it).
+  Eight such saves of session `state`, `status` and `ended_at`, and message `metadata`, existed.
+  `UpdatedAtOnPartialSaveMixin` (`apps/utils/models.py`) on `ExperimentSession` and `ChatMessage`
+  adds `updated_at` to every partial save, so new call sites are covered too.
 - Tag changes write `CustomTaggedItem` rows and never touch the tagged row. Adding or removing a tag
-  on a message, or on a session's chat, sets that message's or session's `updated_at`.
+  on a message, or on a session's chat, sets that message's or session's `updated_at`, through
+  `touch_tagged_object` in `apps/experiments/services.py`: a receiver on the tag row's save and delete,
+  plus an explicit call after evaluator tag rules `bulk_create` their rows, which sends no signal.
 
 **Context.** The cursor only sees what moves `updated_at`. Each gap above is a change a consumer would
 never receive.
 
-**Consequences.** The team-export API, which pages by the same column, picks up these changes too.
-New code writing these fields with `update_fields` must list `updated_at`; a test per model guards the
-fixed paths.
+**Consequences.** The team-export API, which pages by the same column, picks up these changes too. A
+`QuerySet.update()` on these models must set `updated_at` itself.
 
-**Alternatives considered.** Add `updated_at` to `update_fields` in `BaseModel.save` for every model:
-rejected for this work, it changes write behaviour across the whole codebase. Leave tags out of the
+**Alternatives considered.** The mixin on `BaseModel`, for every model: rejected for this work, it
+changes write behaviour across the whole codebase. Fixing each call site: rejected, the next partial
+save would miss it again. Leave tags out of the
 response: rejected, tags are in the issue's field list and a common sync filter.
 
 ### D5: One scope, `sessions:read`
