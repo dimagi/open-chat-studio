@@ -9,12 +9,11 @@ import tenacity
 from django.conf import settings
 
 from apps.channels.datamodels import Attachment
+from apps.service_providers.auth_service.schemes import BLOCKED_HEADERS
 from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 logger = logging.getLogger("restricted_http")
-
-BLOCKED_HEADERS = {"host", "transfer-encoding"}
 
 SENSITIVE_LOG_HEADERS = {"authorization", "x-api-key", "cookie"}
 

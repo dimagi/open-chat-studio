@@ -1,5 +1,8 @@
 import httpx
 
+# Header names user-supplied config may not set on an outbound request.
+BLOCKED_HEADERS = {"host", "transfer-encoding"}
+
 
 class HeaderAuth(httpx.Auth):
     def __init__(self, key: str, value: str):
