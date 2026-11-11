@@ -123,8 +123,13 @@ def test_create_without_domains_shows_the_error_on_the_form(admin_client, experi
 
     response = admin_client.post(_create_url(experiment), data)
 
+    content = response.content.decode()
     assert not ExperimentChannel.objects.filter(experiment=experiment).exists()
-    assert "You must specify at least one domain" in response.content.decode()
+    assert "You must specify at least one domain" in content
+    assert '<label for="id_allowed_domains"' in content
+    assert 'id="id_allowed_domains"' in content
+    assert 'aria-describedby="id_allowed_domains_errors"' in content
+    assert 'id="id_allowed_domains_errors"' in content
 
 
 @pytest.mark.django_db()
