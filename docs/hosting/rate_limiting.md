@@ -23,6 +23,7 @@ window.
 | `public_chat` | 100/5m | the public web chat views |
 | `channels` | 3000/5m | inbound deliveries from messaging providers |
 | `credentials` | 100/5m | OAuth token endpoints, rejected API keys, Connect key exchange |
+| `custom_actions` | 1000/5m | outbound custom action calls, per auth provider |
 
 What counts as an identity differs by scope: a team, an API key, a chat session, a widget
 channel, an identifier carried in a webhook URL, or the caller's address where nothing better is
