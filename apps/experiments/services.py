@@ -1,11 +1,13 @@
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import DateTimeField, F, OuterRef, Q, Subquery
+from django.utils import timezone
 from field_audit.models import AuditAction
 
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 
@@ -124,3 +126,14 @@ def last_activity_subquery() -> Subquery:
         .values("last_activity_at")[:1],
         output_field=DateTimeField(),
     )
+
+
+def touch_tagged_object(content_type_id: int, object_id: int) -> None:
+    """Move ``updated_at`` on the message, or the chat's session, that a tag change applies to.
+
+    Tags are rows of their own, and the v2 sync API pages messages and sessions by ``updated_at``.
+    """
+    if content_type_id == ContentType.objects.get_for_model(ChatMessage).id:
+        ChatMessage.objects.filter(pk=object_id).update(updated_at=timezone.now())
+    elif content_type_id == ContentType.objects.get_for_model(Chat).id:
+        ExperimentSession.objects.filter(chat_id=object_id).update(updated_at=timezone.now())

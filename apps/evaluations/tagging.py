@@ -15,6 +15,7 @@ from django.db.models import Q
 
 from apps.annotations.models import CustomTaggedItem
 from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType, Evaluator
+from apps.experiments.services import touch_tagged_object
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
@@ -127,6 +128,8 @@ def apply_rules_to_result(
         ],
         ignore_conflicts=True,
     )
+    # bulk_create sends no save signal, so the tagged row is touched here.
+    touch_tagged_object(content_type.id, target.pk)
 
     AppliedTag.objects.bulk_create(
         [

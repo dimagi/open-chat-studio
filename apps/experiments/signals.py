@@ -1,15 +1,14 @@
-from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
-from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat
 from apps.teams.models import Team
 
 from ..teams.utils import current_team
 from .const import DEFAULT_CONSENT_TEXT
 from .models import ConsentForm, ExperimentSession
+from .services import touch_tagged_object
 
 
 @receiver(post_save, sender=Team)
@@ -38,12 +37,5 @@ def delete_chat_on_session_delete(sender, instance, **kwargs):
 
 @receiver([post_save, post_delete], sender=CustomTaggedItem)
 def touch_tagged_sync_rows(sender, instance, **kwargs):
-    """A tag change moves its message's or session's ``updated_at``, so the v2 sync API sends it again.
-
-    Tags are rows of their own, so the tagged message or session is touched here.
-    """
-    content_type_id = instance.content_type_id
-    if content_type_id == ContentType.objects.get_for_model(ChatMessage).id:
-        ChatMessage.objects.filter(pk=instance.object_id).update(updated_at=timezone.now())
-    elif content_type_id == ContentType.objects.get_for_model(Chat).id:
-        ExperimentSession.objects.filter(chat_id=instance.object_id).update(updated_at=timezone.now())
+    """A tag change moves its message's or session's ``updated_at``, so the v2 sync API sends it again."""
+    touch_tagged_object(instance.content_type_id, instance.object_id)
