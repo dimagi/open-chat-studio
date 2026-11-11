@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pytest
 
-from apps.api.export.views import CursorHelper
+from apps.api.keyset import decode_cursor
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import UnresolvedForeignKey
@@ -335,8 +335,7 @@ def _past_cursor(row, cursor):
         return True
     if cursor.isdigit():
         return row["id"] > int(cursor)
-    keyset = CursorHelper.decode(cursor)
-    return (datetime.fromisoformat(row["updated_at"]), row["id"]) > (keyset["updated_at"], keyset["id"])
+    return (datetime.fromisoformat(row["updated_at"]), row["id"]) > decode_cursor(cursor)
 
 
 @pytest.mark.usefixtures("keep_test_connection")
