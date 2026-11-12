@@ -13,7 +13,7 @@ _INLINE_SYNTAX = re.compile(r"([\\`*\[\]|])")
 # needs escaping. `[^\W_]` is a letter or digit: `\w` alone counts the underscore itself.
 _EDGE_UNDERSCORES = re.compile(r"(?<![^\W_])_+|_+(?![^\W_])")
 _LINE_START_MARKER = re.compile(r"^(\s*)([#+-])", re.MULTILINE)
-_LINE_START_NUMBER = re.compile(r"^(\s*\d+)\.", re.MULTILINE)
+_LINE_START_NUMBER = re.compile(r"^(\s*\d+)\.(?=[ \t])", re.MULTILINE)
 # A formatting character with a letter or digit on both sides can neither open nor close Slack formatting.
 _SLACK_MARKER = re.compile(r"(?<![^\W_])[*_~`]|[*_~`](?![^\W_])")
 # Setext underlines, `~~~` fences and indented code have no backslash escape, so the first character is an entity.

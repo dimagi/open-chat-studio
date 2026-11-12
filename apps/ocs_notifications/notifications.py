@@ -288,8 +288,8 @@ def deprecated_widget_version_notification(
     versions_text = ", ".join(sorted(versions))
     message = (
         f"{len(affected_chatbots)} chatbot(s) on your team use a deprecated chat widget "
-        f"version ({versions_text}). Support ends {sunset_at:%d %b %Y}. "
-        f"Please update the embed snippet on your site to version {latest_version}."
+        f"version ({literal(versions_text)}). Support ends {sunset_at:%d %b %Y}. "
+        f"Please update the embed snippet on your site to version {literal(latest_version)}."
     )
     create_notification(
         title="Chat Widget Version Deprecated",
@@ -312,7 +312,7 @@ def widget_version_release_notification(
     affected_chatbots: dict[str, str],
 ) -> None:
     """Notify a team that a new embedded chat widget version is available."""
-    message = f"Version {version} of the embedded chat widget is now available."
+    message = f"Version {literal(version)} of the embedded chat widget is now available."
     if notes:
         message += f" {notes}"
     message += " Update the embed snippet on your site to use the latest version."
@@ -348,7 +348,7 @@ def widget_auth_level_upgrade_notification(
     message = (
         f"{len(affected_chatbots)} chatbot(s) on your team now run an upgraded chat widget. "
         f"On {effective_date:%d %b %Y} the authentication required from these widgets will be raised. "
-        f"Make sure every embed of these chatbots is on widget version {min_version} or newer before "
+        f"Make sure every embed of these chatbots is on widget version {literal(min_version)} or newer before "
         f"then, or older embeds will stop connecting."
     )
     create_notification(
