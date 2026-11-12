@@ -247,3 +247,10 @@ def test_only_the_router_accepts_a_jev_provider(jev_ids, node_class, params):
 
 def test_the_router_accepts_a_jev_provider(jev_ids, session):
     assert _router(jev_ids, session).llm_provider_id == jev_ids["llm_provider_id"]
+
+
+def test_a_jev_model_takes_no_generation_parameters(jev_ids, session):
+    """Params saved while the router used an LLM can still hold a temperature."""
+    router = _router(jev_ids, session, llm_model_parameters={"temperature": 0.7})
+
+    assert router.llm_model_parameters == {}

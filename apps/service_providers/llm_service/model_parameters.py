@@ -80,6 +80,10 @@ class LLMModelParamBase(BaseModel):
         return {k: v for k, v in overrides.items() if k in known_fields}
 
 
+class NoParameters(LLMModelParamBase):
+    """For a model that takes no generation settings, such as Jev, which classifies instead of writing text."""
+
+
 class BasicParameters(LLMModelParamBase):
     """Parameters common to non-reasoning models"""
 

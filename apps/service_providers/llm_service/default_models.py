@@ -20,6 +20,7 @@ from apps.service_providers.llm_service.model_parameters import (
     GPT51Parameters,
     GPT52Parameters,
     GPT55Parameters,
+    NoParameters,
     OpenAIReasoningParameters,
 )
 from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel, LlmProviderTypes
@@ -168,7 +169,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     # Jev only classifies; the LLM Router node is the one node that calls it.
     "jev": [
-        Model("jev-latest", 64000, is_default=True),
+        Model("jev-latest", 64000, is_default=True, parameters=NoParameters),
     ],
     "google": [
         Model("gemini-4-carbon", 1048576),

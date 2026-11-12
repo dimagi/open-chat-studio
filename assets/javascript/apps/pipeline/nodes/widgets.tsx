@@ -1303,7 +1303,7 @@ export function LlmWidget(props: WidgetParams) {
           })}
         </select>
       </InputField>
-      {value && llmModelParamsSchema && (
+      {value && llmModelParamsSchema && Object.keys(llmModelParamsSchema.properties ?? {}).length > 0 && (
         <ModelParametersWidget
           nodeId={props.nodeId}
           schema={llmModelParamsSchema}
