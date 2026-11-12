@@ -41,7 +41,14 @@ beforeAll(() => {
     document.body.appendChild(el);
   };
   setScript('parameter-values', {
-    llm_provider_model_id: [{value: 'model-a', label: 'Model A', type: 'openai'}],
+    llm_provider_id: [
+      {value: 'provider-a', label: 'OpenAI', type: 'openai'},
+      {value: 'provider-j', label: 'Jev', type: 'jev'},
+    ],
+    llm_provider_model_id: [
+      {value: 'model-a', label: 'Model A', type: 'openai'},
+      {value: 'model-j', label: 'jev-latest', type: 'jev'},
+    ],
     built_in_tools: {openai: [{value: 'web_search', label: 'Web search'}]},
     tool_config: {},
   });
@@ -153,6 +160,32 @@ describe('BuiltInToolsWidget', () => {
       />,
     );
     expect(checkbox.checked).toBe(true);
+  });
+});
+
+describe('LlmWidget', () => {
+  const optionLabels = (schema: PropertySchema) => {
+    const Widget = getWidget('llm_provider_model', schema);
+    const {getAllByRole} = render(
+      <Widget {...baseProps} name="llm_provider_id" schema={schema} nodeParams={{name: 'x'}} paramValue="" />,
+    );
+    return getAllByRole('option').map((option) => option.textContent);
+  };
+
+  it('offers every provider when the node excludes no provider type', () => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model'} as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'Model A', 'jev-latest']);
+  });
+
+  it('leaves out the provider types the node excludes', () => {
+    const schema = {
+      type: 'integer',
+      'ui:widget': 'llm_provider_model',
+      'ui:excludedProviderTypes': ['jev'],
+    } as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'Model A']);
   });
 });
 

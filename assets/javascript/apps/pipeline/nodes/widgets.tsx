@@ -1255,6 +1255,11 @@ export function LlmWidget(props: WidgetParams) {
   }, {} as ProviderModelsByType);
 
 
+  const excludedProviderTypes = props.schema["ui:excludedProviderTypes"] ?? [];
+  const providers = parameterValues.llm_provider_id.filter(
+    (provider) => !excludedProviderTypes.includes(provider.type)
+  );
+
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
   const modelParameters = (props.nodeParams.llm_model_parameters ?? {}) as Record<string, unknown>;
@@ -1286,8 +1291,8 @@ export function LlmWidget(props: WidgetParams) {
           <option value="" disabled>
             Select a model
           </option>
-          {parameterValues.llm_provider_id.map((provider) => {
-            const providersWithSameType = parameterValues.llm_provider_id.filter(p => p.type === provider.type).length;
+          {providers.map((provider) => {
+            const providersWithSameType = providers.filter(p => p.type === provider.type).length;
 
             return providerModelsByType[provider.type] &&
               providerModelsByType[provider.type].map((providerModel) => (
