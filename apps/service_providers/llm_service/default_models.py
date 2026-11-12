@@ -95,11 +95,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "openai": [
         Model("gpt-4.1", 1000000, deprecated=True, replacement="gpt-6-luna"),
         Model("gpt-4.1-mini", 1000000, deprecated=True, replacement="gpt-6-luna"),
-        Model("o3", 128000, parameters=OpenAIReasoningParameters),
+        Model("o3", 128000, deprecated=True, replacement="gpt-5.6-sol", parameters=OpenAIReasoningParameters),
         Model("gpt-4o-mini", 128000, deprecated=True, replacement="gpt-6-luna"),
         Model("gpt-4o", 128000, deprecated=True, replacement="gpt-6-luna"),
         Model("gpt-3.5-turbo-1106", k(16), deprecated=True),
-        Model("gpt-5", k(400), deprecated=True, replacement="gpt-5.4", parameters=GPT5Parameters),
+        Model("gpt-5", k(400), deprecated=True, replacement="gpt-5.6-sol", parameters=GPT5Parameters),
         Model("gpt-5.1", k(400), parameters=GPT51Parameters),
         Model("gpt-5.2", k(400), parameters=GPT52Parameters),
         Model("gpt-5.2-pro", k(400), parameters=GPT52Parameters),
@@ -116,9 +116,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
         Model("gpt-6-sol", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6-luna", 1050000, is_default=True, is_translation_default=True, parameters=GPT6SolParameters),
-        Model("gpt-5-mini", k(400), deprecated=True, replacement="gpt-5.4-mini", parameters=GPT5Parameters),
-        Model("gpt-5-nano", k(400), deprecated=True, replacement="gpt-5.4-nano", parameters=GPT5Parameters),
-        Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.4-pro", parameters=GPT5ProParameters),
+        # OpenAI retires gpt-5, gpt-5-mini, gpt-5-nano, gpt-5-pro and o3 on 2026-12-11. Replacements are the
+        # successors OpenAI names; gpt-5-pro's is gpt-5.6-sol in pro reasoning mode, which OCS does not expose.
+        Model("gpt-5-mini", k(400), deprecated=True, replacement="gpt-5.6-terra", parameters=GPT5Parameters),
+        Model("gpt-5-nano", k(400), deprecated=True, replacement="gpt-5.6-luna", parameters=GPT5Parameters),
+        Model("gpt-5-pro", k(400), deprecated=True, replacement="gpt-5.6-sol", parameters=GPT5ProParameters),
     ],
     "groq": [
         # Groq publishes an odd 131,042 context window for this model, not the 131,072 its
