@@ -14,6 +14,8 @@ _INLINE_SYNTAX = re.compile(r"([\\`*\[\]|])")
 _EDGE_UNDERSCORES = re.compile(r"(?<![^\W_])_+|_+(?![^\W_])")
 _LINE_START_MARKER = re.compile(r"^(\s*)([#+-])", re.MULTILINE)
 _LINE_START_NUMBER = re.compile(r"^(\s*\d+)\.", re.MULTILINE)
+# A formatting character with a letter or digit on both sides can neither open nor close Slack formatting.
+_SLACK_MARKER = re.compile(r"(?<![^\W_])[*_~`]|[*_~`](?![^\W_])")
 # Setext underlines, `~~~` fences and indented code have no backslash escape, so the first character is an entity.
 _LINE_START_UNESCAPABLE = re.compile(r"^[ \t=~]", re.MULTILINE)
 
@@ -71,6 +73,7 @@ class _MrkdwnConverter(HTMLParser):
         self.href: str | None = None
         self.link_text: list[str] = []
         self.in_pre = False
+        self.in_code = False
 
     def handle_starttag(self, tag, attrs):
         self._dispatch("_start_", tag, dict(attrs))
@@ -80,6 +83,8 @@ class _MrkdwnConverter(HTMLParser):
 
     def _dispatch(self, prefix: str, tag: str, *args) -> None:
         tag = self._ALIASES.get(tag, tag)
+        if tag == "code":
+            self.in_code = prefix == "_start_"
         if tag in self._MARKERS:
             if not self.in_pre:
                 self._emit(self._MARKERS[tag])
@@ -142,6 +147,9 @@ class _MrkdwnConverter(HTMLParser):
         if not self.in_pre:
             # nl2br turned every line break into <br>; a newline left in the HTML is only layout.
             data = data.replace("\n", "")
+        if not (self.in_pre or self.in_code):
+            # Slack has no escape for its formatting characters, so a zero-width space beside one keeps it literal.
+            data = _SLACK_MARKER.sub("\u200b\\g<0>\u200b", data)
         self._emit(_slack_escape(data))
 
     def _emit(self, text: str) -> None:
