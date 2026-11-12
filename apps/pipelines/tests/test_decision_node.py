@@ -120,6 +120,13 @@ class TestValidation:
 
         assert [decision.key for decision in node.decisions] == ["intent", "frustration", "wants_refund"]
 
+    def test_option_names_are_stored_without_surrounding_spaces(self, jev_ids):
+        decision = {**INTENT, "options": [{"name": " billing "}, {"name": "support"}]}
+
+        node = _node(jev_ids, decisions=[decision])
+
+        assert [option.name for option in node.decisions[0].options] == ["billing", "support"]
+
     def test_rejects_a_model_that_is_not_jev(self, db):
         provider = LlmProviderFactory.create()
         model = LlmProviderModelFactory.create(team=provider.team)

@@ -37,6 +37,12 @@ class ChoiceOption(BaseModel):
     name: str = Field(description="The value written to the temporary state when this option is chosen.")
     description: str = Field(default="", description="When this option applies. Optional.")
 
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, name: str) -> str:
+        """A Static Router matches the written value exactly, so surrounding spaces would miss its route."""
+        return name.strip()
+
 
 class Decision(BaseModel):
     key: str = Field(
