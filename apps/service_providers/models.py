@@ -1054,6 +1054,7 @@ class ModerationProvider(BaseTeamModel, ProviderMixin):
 
     class Meta:
         ordering = ("type", "name")
+        indexes = [models.Index(fields=["updated_at", "id"], name="modprovider_updated_at_id_idx")]
 
     def __str__(self):
         return f"{self.type_enum.label}: {self.name}"

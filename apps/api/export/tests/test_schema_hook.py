@@ -6,10 +6,10 @@ import pytest
 from django.urls import resolve
 from drf_spectacular.generators import SchemaGenerator
 
-from apps.api.export.serializers import component_name, resource_responses
+from apps.api.export.serializers import entry_component_name, resource_responses
 from apps.api.export.views import ResourceView, resource_view
 from apps.api.schema import EXPORT_DESCRIPTION
-from apps.teams.export.manifest import MANIFEST_ENTRIES, entry_model, get_manifest_entry
+from apps.teams.export.manifest import MANIFEST_ENTRIES, get_manifest_entry
 
 
 def test_each_resource_resolves_to_a_resourceview_carrying_its_name():
@@ -23,7 +23,7 @@ def test_resource_view_class_name_uses_the_component_name():
     """The generated view's class name is PascalCased and space-free (e.g. 'ChatbotResourceView'),
     matching how the rest of the export subsystem names things off the model's verbose_name."""
     for entry in MANIFEST_ENTRIES:
-        expected = f"{component_name(entry_model(entry.model))}ResourceView"
+        expected = f"{entry_component_name(entry)}ResourceView"
         assert resource_view(entry).__name__ == expected
 
 
@@ -75,7 +75,7 @@ def test_every_export_resource_publishes_its_row_component(export_components):
     rename flows through (Experiment -> 'ChatbotDetail')."""
     missing = []
     for entry in MANIFEST_ENTRIES:
-        expected = f"{component_name(entry_model(entry.model))}Detail"
+        expected = f"{entry_component_name(entry)}Detail"
         if expected not in export_components:
             missing.append(expected)
     assert not missing, f"export resources without a row component: {missing}"

@@ -2,6 +2,7 @@ from allauth.account.signals import user_signed_up
 from django.core.signals import request_finished
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete
 from django.dispatch import receiver
+from django.utils import timezone
 from field_audit.models import AuditAction
 
 from ..experiments.models import Experiment
@@ -49,9 +50,10 @@ def clear_count_when_migration_ends(sender, instance, **kwargs):
 
 @receiver(pre_delete, sender=ModerationProvider)
 def disable_moderation_on_provider_delete(sender, instance, **kwargs):
-    """Moderation stays off rather than enabled with no provider to check messages."""
-    Team.objects.filter(moderation_provider=instance, moderation_enabled=True).update(
-        moderation_enabled=False, audit_action=AuditAction.AUDIT
+    """Moderation stays off rather than enabled with no provider to check messages. ``updated_at`` is
+    moved because the team sync finds changed teams by it, and neither this update nor SET_NULL moves it."""
+    Team.objects.filter(moderation_provider=instance).update(
+        moderation_enabled=False, updated_at=timezone.now(), audit_action=AuditAction.AUDIT
     )
 
 
