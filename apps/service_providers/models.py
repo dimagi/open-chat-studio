@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditingManager, AuditingQuerySet
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
@@ -53,7 +53,13 @@ class VoiceProviderObjectManager(AuditingManager):
     pass
 
 
-class LlmProviderObjectManagerObjectManager(AuditingManager):
+class LlmProviderQuerySet(AuditingQuerySet):
+    def text_generating(self) -> "LlmProviderQuerySet":
+        """The providers that can write text, leaving out those that only classify."""
+        return self.exclude(type__in=LlmProviderTypes.router_only_slugs)
+
+
+class LlmProviderObjectManagerObjectManager(AuditingManager.from_queryset(LlmProviderQuerySet)):
     pass
 
 

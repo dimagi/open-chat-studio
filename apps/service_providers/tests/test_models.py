@@ -102,6 +102,14 @@ class TestServiceProviderModel:
 
 
 @pytest.mark.django_db()
+def test_text_generating_leaves_out_router_only_providers():
+    openai = LlmProviderFactory.create()
+    LlmProviderFactory.create(team=openai.team, type=str(LlmProviderTypes.jev))
+
+    assert list(openai.team.llmprovider_set.text_generating()) == [openai]
+
+
+@pytest.mark.django_db()
 def test_test_connection_raises_when_no_model_configured():
     """A provider with zero LlmProviderModel rows for its type has nothing to test against.
 

@@ -39,7 +39,7 @@ def prompt_builder_load_source_material(request, team_slug: str):
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
 def experiments_prompt_builder(request, team_slug: str):
-    llm_providers = list(request.team.llmprovider_set.all())
+    llm_providers = list(request.team.llmprovider_set.text_generating())
     default_llm_provider = llm_providers[0] if llm_providers else None
     default_llm_provider_model_id = None
     if default_llm_provider:
