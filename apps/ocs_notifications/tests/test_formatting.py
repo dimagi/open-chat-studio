@@ -9,9 +9,8 @@ from apps.utils.factories.notifications import NotificationEventFactory
 
 
 def _visible(rendered: str) -> str:
-    """The text a reader sees in rendered message HTML."""
-    without_breaks = re.sub(r"<br\s*/?>", "", rendered)
-    return html.unescape(re.sub(r"<[^>]+>", "", without_breaks)).strip()
+    """The text a reader sees in rendered message HTML, with whitespace collapsed as a browser does."""
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", rendered)).split())
 
 
 def _tags(rendered: str) -> set[str]:
@@ -32,10 +31,18 @@ def _tags(rendered: str) -> set[str]:
         pytest.param("C:\\temp\\file", id="backslashes"),
         pytest.param("snake_case_name", id="intraword-underscores"),
         pytest.param("first\n# not a heading\n1. not a list\n- not a bullet", id="line-start-markers"),
+        pytest.param("failed\n===", id="setext-equals"),
+        pytest.param("failed\n---", id="setext-dashes"),
+        pytest.param("first\n> not a quote", id="quote-marker"),
+        pytest.param("first\n~~~\nnot code\n~~~", id="tilde-fence"),
+        pytest.param("first\n\n    not code", id="indented-code"),
+        pytest.param("first\n\na | b\n:-- | --\nc | d", id="table"),
     ],
 )
 def test_an_interpolated_value_renders_exactly_as_written(value):
-    assert _visible(message_html(f"Failed: {markdown_literal(value)}")) == f"Failed: {value}"
+    rendered = message_html(f"Failed: {markdown_literal(value)}")
+    assert _tags(rendered) <= {"p", "br"}
+    assert _visible(rendered) == " ".join(f"Failed: {value}".split())
 
 
 def test_a_plain_message_renders_unchanged():
@@ -109,6 +116,7 @@ def test_the_in_app_list_shows_the_rendered_message():
     [
         pytest.param("KeyError: '__init__' in *beta*", id="inline-markers"),
         pytest.param("a & b <c> &amp;", id="entities"),
+        pytest.param("failed\n=== | x\n  ~~~", id="line-start"),
     ],
 )
 def test_message_text_drops_markdown_escapes(value):

@@ -8,12 +8,14 @@ import markdown
 import nh3
 from markdown.extensions import Extension
 
-_INLINE_SYNTAX = re.compile(r"([\\`*\[\]])")
+_INLINE_SYNTAX = re.compile(r"([\\`*\[\]|])")
 # Underscores between letters or digits (``snake_case``) never emphasise, so only a run touching an edge
 # needs escaping. `[^\W_]` is a letter or digit: `\w` alone counts the underscore itself.
 _EDGE_UNDERSCORES = re.compile(r"(?<![^\W_])_+|_+(?![^\W_])")
 _LINE_START_MARKER = re.compile(r"^(\s*)([#+-])", re.MULTILINE)
 _LINE_START_NUMBER = re.compile(r"^(\s*\d+)\.", re.MULTILINE)
+# Setext underlines, `~~~` fences and indented code have no backslash escape, so the first character is an entity.
+_LINE_START_UNESCAPABLE = re.compile(r"^[ \t=~]", re.MULTILINE)
 
 
 def markdown_literal(value) -> str:
@@ -22,7 +24,8 @@ def markdown_literal(value) -> str:
     text = _INLINE_SYNTAX.sub(r"\\\1", html.escape(str(value), quote=False))
     text = _EDGE_UNDERSCORES.sub(lambda run: "\\_" * len(run.group()), text)
     text = _LINE_START_MARKER.sub(r"\1\\\2", text)
-    return _LINE_START_NUMBER.sub(r"\1\\.", text)
+    text = _LINE_START_NUMBER.sub(r"\1\\.", text)
+    return _LINE_START_UNESCAPABLE.sub(lambda char: f"&#{ord(char.group())};", text)
 
 
 class _RawHtmlAsText(Extension):
