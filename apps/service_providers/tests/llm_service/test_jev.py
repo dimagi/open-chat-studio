@@ -169,6 +169,33 @@ def test_a_network_failure_is_a_jev_error(httpx_mock):
         _ask()
 
 
+@pytest.mark.parametrize(
+    "input_tokens",
+    [
+        pytest.param("-1", id="negative"),
+        pytest.param("true", id="boolean"),
+        pytest.param("1.9", id="fractional"),
+        pytest.param("1e999", id="overflowing"),
+        pytest.param('"120"', id="string"),
+    ],
+)
+def test_a_malformed_token_count_is_a_jev_error(httpx_mock, input_tokens):
+    """`input_tokens` is the raw JSON literal, so values Python would not serialise can be sent too."""
+    body = json.dumps({**ANSWER, "usage": {"input_tokens": "TOKENS", "output_tokens": 12}})
+    httpx_mock.add_response(url=URL, content=body.replace('"TOKENS"', input_tokens).encode())
+
+    with pytest.raises(JevError, match="input_tokens"):
+        _ask()
+
+
+def test_missing_token_counts_read_as_zero(httpx_mock):
+    httpx_mock.add_response(url=URL, json={**ANSWER, "usage": {"input_tokens": 120}})
+
+    usage = _ask().usage
+
+    assert (usage.input_tokens, usage.output_tokens) == (120, 0)
+
+
 def test_an_unreadable_body_is_a_jev_error(httpx_mock):
     httpx_mock.add_response(url=URL, content=b"<html>gateway</html>")
 

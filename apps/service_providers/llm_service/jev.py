@@ -151,10 +151,18 @@ def _parse_response(response: httpx.Response) -> JevResponse:
         return JevResponse(
             model=str(data.get("model", "")),
             answers=dict(data["answers"]),
-            usage=JevUsage(int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)),
+            usage=JevUsage(_token_count(usage, "input_tokens"), _token_count(usage, "output_tokens")),
         )
     except (ValueError, KeyError, TypeError, AttributeError) as e:
         raise JevError(f"Jev returned a response that could not be read: {e}", response.status_code) from e
+
+
+def _token_count(usage: dict, key: str) -> int:
+    """The count Jev reported under `key`, or 0 when it reported none."""
+    value = usage.get(key, 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"invalid {key}: {value!r}")
+    return value
 
 
 def json_safe(value: Any, depth: int = 0) -> Any:
