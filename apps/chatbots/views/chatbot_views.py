@@ -991,6 +991,9 @@ def _overwrite_copy(request, team_slug: str, copy: Experiment):
     if copy.acquire_version_operation_lock(f"overwrite-{copy.id}"):
         try:
             copy.overwrite_from_source()
+        except ValueError as e:
+            messages.error(request, str(e))
+            return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=copy.cloned_from_id)
         finally:
             Experiment.release_version_operation_lock(copy.id)
         messages.success(

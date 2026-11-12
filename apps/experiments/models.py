@@ -990,12 +990,17 @@ class Experiment(BaseTeamModel, VersionsMixin):
             raise ValueError("Can only overwrite a working copy of another chatbot")
         if source.is_archived:
             raise ValueError("Cannot overwrite a copy from an archived chatbot")
+        if source.pipeline is None:
+            raise ValueError(f"{source.name} has no pipeline to copy")
 
         for field in self.VERSIONED_CONTENT_FIELDS - {"name", "pipeline"}:
             setattr(self, field, getattr(source, field))
         self.save()
 
-        self.pipeline.replace_with_copy_of(source.pipeline)
+        if self.pipeline:
+            self.pipeline.replace_with_copy_of(source.pipeline)
+        else:
+            source._copy_pipeline_to_new_version(self, is_copy=True)
         sync_triggers(source, self, mode=TriggerSyncMode.COPY)
 
     def _revert_pipeline_to_version(self, version: Experiment) -> None:
