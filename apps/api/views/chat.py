@@ -944,7 +944,7 @@ def chat_poll_task_response(request, session_id, task_id):
     _verify_task_belongs_to_session(task_id, str(session_id))
 
     experiment = session.experiment
-    task_details = get_message_task_response(experiment, task_id)
+    task_details = get_message_task_response(task_id)
     if not task_details:
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 

@@ -213,7 +213,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     experiment = request.experiment
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    message_details = get_message_task_response(experiment, task_id)
+    message_details = get_message_task_response(task_id)
     if not message_details:
         # don't render empty messages
         return HttpResponse()
