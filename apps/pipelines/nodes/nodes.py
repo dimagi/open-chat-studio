@@ -52,6 +52,7 @@ from apps.pipelines.nodes.base import (
 )
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.decisions import (
+    JEV_MODEL_REQUIRED_MESSAGE,
     Decision,
     check_decision_keys,
     decision_questions,
@@ -1009,14 +1010,12 @@ class DecisionNode(PipelineNode, HistoryMixin):
 
     def check_provider_type(self, provider_type: str) -> None:
         if provider_type not in LlmProviderTypes.router_only_slugs:
-            raise PydanticCustomError(
-                "invalid_model", "The Decision Node needs a TypeSafe Jev model", {"field": "llm_provider_model_id"}
-            )
+            raise PydanticCustomError("invalid_model", JEV_MODEL_REQUIRED_MESSAGE, {"field": "llm_provider_model_id"})
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         llm_service = self.get_llm_service()
         if not isinstance(llm_service, JevLlmService):
-            raise NodeUserConfigRunError("The Decision Node needs a TypeSafe Jev model")
+            raise NodeUserConfigRunError(JEV_MODEL_REQUIRED_MESSAGE)
         try:
             response = ask_jev(self, context, decision_questions(self.decisions), llm_service.get_jev_client())
         except JevError as e:

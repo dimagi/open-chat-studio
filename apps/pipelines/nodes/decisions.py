@@ -16,6 +16,8 @@ from apps.service_providers.llm_service.jev import (
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
+JEV_MODEL_REQUIRED_MESSAGE = "The Decision Node needs a TypeSafe Jev model"
+
 # Keys the pipeline itself keeps in the temporary state.
 RESERVED_KEYS = frozenset({"user_input", "outputs", "attachments"})
 MAX_OPTIONS = 255
