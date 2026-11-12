@@ -1,6 +1,7 @@
 import pytest
 from django.contrib.auth.models import Permission
 from django.urls import reverse
+from field_audit.models import AuditAction
 
 from apps.experiments.models import Experiment
 from apps.utils.factories.experiment import ExperimentFactory
@@ -102,6 +103,43 @@ def test_overwrite_is_refused_while_the_copy_is_publishing(client, member, sourc
     copy.refresh_from_db()
     assert copy.seed_message == "v1"
     assert copy.create_version_task_id == "publishing"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param({"new_name": ""}, id="no-name"),
+        pytest.param({"overwrite": 999999}, id="stale-overwrite-choice"),
+    ],
+)
+@pytest.mark.django_db()
+def test_invalid_copy_request_tells_the_user(client, member, source, data):
+    chatbot_count = Experiment.objects.get_all().count()
+
+    response = client.post(_copy_url(source), data, follow=True)
+
+    assert response.redirect_chain[-1][0] == reverse("chatbots:single_chatbot_home", args=[source.team.slug, source.id])
+    assert "The chatbot was not copied" in response.content.decode()
+    assert Experiment.objects.get_all().count() == chatbot_count
+
+
+@pytest.mark.django_db()
+def test_overwrite_from_a_chatbot_without_a_pipeline_is_refused(client, member, source):
+    copy = source.create_new_version(is_copy=True, name="Test bot")
+    Experiment.objects.filter(id=source.id).update(pipeline=None, audit_action=AuditAction.AUDIT)
+
+    response = client.post(_copy_url(source), {"overwrite": copy.id}, follow=True)
+
+    assert "has no pipeline" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_copy_dialog_asks_for_an_explicit_overwrite_choice(client, member, source):
+    source.create_new_version(is_copy=True, name="Test bot")
+
+    response = client.get(reverse("chatbots:single_chatbot_home", args=[source.team.slug, source.id]))
+
+    assert '<option value="" disabled selected>Select a chatbot to overwrite</option>' in response.content.decode()
 
 
 @pytest.mark.django_db()

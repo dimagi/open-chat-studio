@@ -1,4 +1,5 @@
 import pytest
+from field_audit.models import AuditAction
 
 from apps.events.models import EventActionType, StaticTriggerType
 from apps.experiments.models import Experiment
@@ -143,6 +144,32 @@ def test_overwrite_rejects_a_chatbot_that_is_not_a_working_copy(make_target):
 
     with pytest.raises(ValueError, match="working copy"):
         target.overwrite_from_source()
+
+
+@pytest.mark.django_db()
+def test_overwrite_gives_a_copy_without_a_pipeline_its_own_copy():
+    source, _nodes = _source_with_pipeline()
+    copy = source.create_new_version(is_copy=True, name="Test bot")
+    Experiment.objects.filter(id=copy.id).update(pipeline=None, audit_action=AuditAction.AUDIT)
+    copy.refresh_from_db()
+
+    copy.overwrite_from_source()
+
+    copy.refresh_from_db()
+    assert copy.pipeline_id not in (None, source.pipeline_id)
+    assert set(copy.pipeline.node_ids).isdisjoint(source.pipeline.node_ids)
+    assert len(copy.pipeline.node_ids) == len(source.pipeline.node_ids)
+
+
+@pytest.mark.django_db()
+def test_overwrite_rejects_a_source_without_a_pipeline():
+    source = ExperimentFactory.create()
+    copy = source.create_new_version(is_copy=True, name="Test bot")
+    Experiment.objects.filter(id=source.id).update(pipeline=None, audit_action=AuditAction.AUDIT)
+    copy.refresh_from_db()
+
+    with pytest.raises(ValueError, match="has no pipeline"):
+        copy.overwrite_from_source()
 
 
 @pytest.mark.django_db()
