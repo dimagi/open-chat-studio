@@ -8,7 +8,7 @@ See https://docs.typesafe.ai/api/system-one.
 import json
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,10 +55,51 @@ class ChoiceQuestion:
 
 
 @dataclass(frozen=True)
+class ScoreQuestion:
+    """Answered with a score on the rubric `criteria`, one description per level from lowest to highest."""
+
+    criteria: Sequence[str]
+    instructions: str | None = None
+
+    def to_json(self) -> dict:
+        return {"type": "score", "instructions": self.instructions, "criteria": list(self.criteria)}
+
+
+@dataclass(frozen=True)
+class NoulQuestion:
+    """Answered with the probability that the statement in `instructions` is true.
+
+    `criteria`, when given, has a "true" and a "false" key, each saying what that answer means or None.
+    """
+
+    instructions: str | None = None
+    criteria: Mapping[str, str | None] | None = None
+
+    def to_json(self) -> dict:
+        criteria = dict(self.criteria) if self.criteria is not None else None
+        return {"type": "noul", "instructions": self.instructions, "criteria": criteria}
+
+
+Question = ChoiceQuestion | ScoreQuestion | NoulQuestion
+
+
+@dataclass(frozen=True)
 class ChoiceAnswer:
     choice: str
     confidence: float
     probabilities: dict[str, float]
+
+
+@dataclass(frozen=True)
+class ScoreAnswer:
+    score: float
+    confidence: float
+    probabilities: dict[str, float]
+
+
+@dataclass(frozen=True)
+class NoulAnswer:
+    noul: float
 
 
 @dataclass(frozen=True)
@@ -75,19 +116,55 @@ class JevResponse:
 
     def choice(self, name: str) -> ChoiceAnswer | None:
         """The answer to the choice question `name`, or None when there is no well-formed one."""
-        answer = self.answers.get(name)
-        if not isinstance(answer, dict) or answer.get("type") != "choice":
-            return None
+        answer = self._answer(name, "choice")
         try:
-            confidence = float(answer["confidence"])
-            choice = ChoiceAnswer(
+            return ChoiceAnswer(
                 choice=str(answer["choice"]),
-                confidence=confidence,
+                confidence=_probability(answer["confidence"]),
                 probabilities=dict(answer.get("probabilities") or {}),
             )
         except (KeyError, TypeError, ValueError):
             return None
-        return choice if 0.0 <= confidence <= 1.0 else None
+
+    def score(self, name: str) -> ScoreAnswer | None:
+        """The answer to the score question `name`, or None when there is no well-formed one."""
+        answer = self._answer(name, "score")
+        try:
+            return ScoreAnswer(
+                score=_finite(answer["score"]),
+                confidence=_probability(answer["confidence"]),
+                probabilities=dict(answer.get("probabilities") or {}),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def noul(self, name: str) -> NoulAnswer | None:
+        """The answer to the noul question `name`, or None when there is no well-formed one."""
+        answer = self._answer(name, "noul")
+        try:
+            return NoulAnswer(noul=_probability(answer["noul"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _answer(self, name: str, question_type: str) -> dict:
+        answer = self.answers.get(name)
+        if not isinstance(answer, dict) or answer.get("type") != question_type:
+            return {}
+        return answer
+
+
+def _finite(value: Any) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"not a finite number: {value!r}")
+    return number
+
+
+def _probability(value: Any) -> float:
+    number = float(value)
+    if not 0.0 <= number <= 1.0:
+        raise ValueError(f"not between 0 and 1: {value!r}")
+    return number
 
 
 class JevClient:
@@ -96,7 +173,7 @@ class JevClient:
         self.url = base_url.rstrip("/") + SYSTEM_ONE_PATH
         self.timeout = timeout
 
-    def ask(self, model: str, state: Any, questions: Mapping[str, ChoiceQuestion]) -> JevResponse:
+    def ask(self, model: str, state: Any, questions: Mapping[str, Question]) -> JevResponse:
         """Ask every question in `questions` about `state` in one request."""
         body = {
             "model": model,

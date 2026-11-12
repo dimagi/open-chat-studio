@@ -13,6 +13,10 @@ from apps.service_providers.llm_service.jev import (
     JevAuthenticationError,
     JevClient,
     JevError,
+    NoulAnswer,
+    NoulQuestion,
+    ScoreAnswer,
+    ScoreQuestion,
     json_safe,
 )
 
@@ -97,6 +101,83 @@ def test_a_missing_or_malformed_answer_reads_as_none(httpx_mock, answer):
     httpx_mock.add_response(url=URL, json={**ANSWER, "answers": answers})
 
     assert _ask().choice("route") is None
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        pytest.param(
+            ScoreQuestion(criteria=["Calm", "Annoyed", "Angry"], instructions="How frustrated?"),
+            {"type": "score", "instructions": "How frustrated?", "criteria": ["Calm", "Annoyed", "Angry"]},
+            id="score",
+        ),
+        pytest.param(
+            NoulQuestion(criteria={"true": "Asks for money back", "false": None}),
+            {"type": "noul", "instructions": None, "criteria": {"true": "Asks for money back", "false": None}},
+            id="noul",
+        ),
+        pytest.param(
+            NoulQuestion(instructions="Mentions a refund?"),
+            {"type": "noul", "instructions": "Mentions a refund?", "criteria": None},
+            id="noul-without-criteria",
+        ),
+    ],
+)
+def test_sends_score_and_noul_questions(httpx_mock, question, expected):
+    httpx_mock.add_response(url=URL, json=ANSWER)
+
+    JevClient(api_key="k").ask("jev-latest", "hi", {"q": question})
+
+    assert json.loads(httpx_mock.get_request().content)["questions"] == {"q": expected}
+
+
+def test_reads_score_and_noul_answers(httpx_mock):
+    answers = {
+        "frustration": {
+            "type": "score",
+            "score": 1.7,
+            "confidence": 0.55,
+            "legend": {"0": "Calm", "1": "Annoyed", "2": "Angry"},
+            "probabilities": {"0": 0.1, "1": 0.1, "2": 0.8},
+        },
+        "refund": {"type": "noul", "noul": 0.98},
+    }
+    httpx_mock.add_response(url=URL, json={**ANSWER, "answers": answers})
+
+    response = _ask()
+
+    assert response.score("frustration") == ScoreAnswer(1.7, 0.55, {"0": 0.1, "1": 0.1, "2": 0.8})
+    assert response.noul("refund") == NoulAnswer(0.98)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param({"type": "choice", "choice": "A", "confidence": 0.5}, id="other-type"),
+        pytest.param({"type": "score", "confidence": 0.5}, id="no-score"),
+        pytest.param({"type": "score", "score": "Infinity", "confidence": 0.5}, id="infinite-score"),
+        pytest.param({"type": "score", "score": 1, "confidence": 2}, id="confidence-above-one"),
+    ],
+)
+def test_a_malformed_score_answer_reads_as_none(httpx_mock, answer):
+    httpx_mock.add_response(url=URL, json={**ANSWER, "answers": {"q": answer}})
+
+    assert _ask().score("q") is None
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param({"type": "score", "score": 1, "confidence": 0.5}, id="other-type"),
+        pytest.param({"type": "noul"}, id="no-noul"),
+        pytest.param({"type": "noul", "noul": "yes"}, id="not-a-number"),
+        pytest.param({"type": "noul", "noul": 1.2}, id="above-one"),
+    ],
+)
+def test_a_malformed_noul_answer_reads_as_none(httpx_mock, answer):
+    httpx_mock.add_response(url=URL, json={**ANSWER, "answers": {"q": answer}})
+
+    assert _ask().noul("q") is None
 
 
 @pytest.mark.parametrize("status_code", [pytest.param(429, id="rate-limited"), pytest.param(529, id="overloaded")])
