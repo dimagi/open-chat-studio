@@ -977,6 +977,8 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             # create default version for copied chatbot
             start_version_creation(new_experiment, make_default=True)
             return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
+        messages.error(request, "The chatbot was not copied. Enter a new name or choose a copy to overwrite.")
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment.id)
     experiment_id = kwargs["pk"]
     return single_chatbot_home(request, team_slug, experiment_id)
 
