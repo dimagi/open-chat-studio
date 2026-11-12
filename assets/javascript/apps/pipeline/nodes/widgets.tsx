@@ -770,7 +770,7 @@ type Decision = {
 const DECISION_TYPES: {value: DecisionType; label: string}[] = [
   {value: "choice", label: "Choice"},
   {value: "score", label: "Score"},
-  {value: "noul", label: "True or false"},
+  {value: "noul", label: "Probability true"},
 ];
 
 const INSTRUCTIONS_PLACEHOLDER: Record<DecisionType, string> = {
@@ -911,6 +911,7 @@ function DecisionCard({number, decision, readOnly, onChange, onRemove}: {
               onChange={(event) => set({false_description: event.target.value})}
               readOnly={readOnly}
             />
+            <span className="text-xs opacity-70">Writes a number from 0 to 1: the probability that the statement is true.</span>
           </>
         )}
         {decision.type !== "noul" && (
