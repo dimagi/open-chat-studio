@@ -141,7 +141,31 @@ export function getDefaultParamValues(schema: JsonSchema): NodeParams {
       (value) => value !== undefined && value !== null
     ) ?? null;
   }
+  const providerField = schema.properties.llm_provider_id;
+  if (providerField?.["ui:includedProviderTypes"]) {
+    Object.assign(defaults, firstOfferedModel(providerField));
+  }
   return defaults;
+}
+
+/** Whether the provider field described by `schema` offers providers of `type`. */
+export function offersProviderType(schema: PropertySchema, type: string): boolean {
+  const included = schema["ui:includedProviderTypes"];
+  if (included) {
+    return included.includes(type);
+  }
+  return !(schema["ui:excludedProviderTypes"] ?? []).includes(type);
+}
+
+/** The first provider and model the field offers, since the site-wide default may be of a type it leaves out. */
+function firstOfferedModel(providerField: PropertySchema) {
+  const {parameterValues} = getCachedData();
+  const provider = parameterValues.llm_provider_id.find((option) => offersProviderType(providerField, option.type));
+  const model = provider && parameterValues.llm_provider_model_id.find((option) => option.type === provider.type);
+  return {
+    llm_provider_id: provider && model ? provider.value : null,
+    llm_provider_model_id: provider && model ? model.value : null,
+  };
 }
 
 /** A fresh node of this type, before it is given an id and a place on the canvas. */

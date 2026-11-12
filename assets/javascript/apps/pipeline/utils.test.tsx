@@ -1,5 +1,6 @@
 import {beforeAll, describe, expect, it} from 'vitest';
-import {getCachedData, renderRouterPromptPreview} from './utils';
+import {getCachedData, getDefaultParamValues, renderRouterPromptPreview} from './utils';
+import type {JsonSchema} from './types/nodeParams';
 import {readFileSync} from 'node:fs';
 
 // Shared with the router's own tests in apps/pipelines/tests/test_router_prompt.py, so the preview
@@ -27,8 +28,17 @@ beforeAll(() => {
     el.textContent = JSON.stringify(data);
     document.body.appendChild(el);
   };
-  setScript('parameter-values', {});
-  setScript('default-values', {});
+  setScript('parameter-values', {
+    llm_provider_id: [
+      {value: 1, label: 'OpenAI', type: 'openai'},
+      {value: 2, label: 'Jev', type: 'jev'},
+    ],
+    llm_provider_model_id: [
+      {value: 10, label: 'OpenAI: gpt-x', type: 'openai'},
+      {value: 20, label: 'TypeSafe Jev: jev-latest', type: 'jev'},
+    ],
+  });
+  setScript('default-values', {llm_provider_id: 1, llm_provider_model_id: 10});
   setScript('node-schemas', [{title: 'RouterNode', 'ui:label': 'Router', properties: {}}]);
   setScript('flags-enabled', []);
   setScript('llm-model-params', {});
@@ -45,6 +55,34 @@ describe('getCachedData', () => {
     const secondValues = getCachedData().parameterValues;
     expect(secondSchemas).toBe(firstSchemas);
     expect(secondValues).toBe(firstValues);
+  });
+});
+
+describe('getDefaultParamValues', () => {
+  const schema = (provider: Record<string, unknown>) => ({
+    title: 'X',
+    properties: {
+      llm_provider_id: {type: 'integer', ...provider},
+      llm_provider_model_id: {type: 'integer'},
+    },
+  }) as unknown as JsonSchema;
+
+  it('starts a node on the team default model', () => {
+    const params = getDefaultParamValues(schema({}));
+
+    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([1, 10]);
+  });
+
+  it('starts a node that takes only some provider types on the first model of those types', () => {
+    const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['jev']}));
+
+    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([2, 20]);
+  });
+
+  it('leaves the model unset when the team has none of the included types', () => {
+    const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['groq']}));
+
+    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([null, null]);
   });
 });
 

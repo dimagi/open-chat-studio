@@ -24,6 +24,7 @@ export type PropertySchema = {
   "ui:keepValueWhenHidden"?: boolean | undefined;
   "ui:rows"?: number | undefined;
   "ui:excludedProviderTypes"?: string[] | undefined;
+  "ui:includedProviderTypes"?: string[] | undefined;
   [k: string]: unknown;
 }
 

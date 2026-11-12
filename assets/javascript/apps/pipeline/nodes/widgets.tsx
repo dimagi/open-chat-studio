@@ -9,6 +9,7 @@ import {
   getCachedData,
   getDocumentationLink,
   getSelectOptions,
+  offersProviderType,
   renderRouterPromptPreview,
 } from "../utils";
 import {JsonSchema, NodeParams, PropertySchema, ToolConfigField} from "../types/nodeParams";
@@ -64,6 +65,8 @@ export function getWidget(name: string, params: PropertySchema) {
         return KeyValuePairsWidget
     case "router_prompt_mode":
         return RouterPromptModeWidget
+    case "decisions":
+        return DecisionsWidget
     default:
       if (params.enum) {
         return SelectWidget
@@ -751,6 +754,287 @@ function KeyValuePairsWidget(props: WidgetParams) {
   );
 }
 
+type DecisionType = "choice" | "score" | "noul";
+
+type Decision = {
+  key: string;
+  type: DecisionType;
+  instructions: string;
+  options: {name: string; description: string}[];
+  levels: string[];
+  true_description: string;
+  false_description: string;
+  threshold: number | null;
+};
+
+const DECISION_TYPES: {value: DecisionType; label: string}[] = [
+  {value: "choice", label: "Choice"},
+  {value: "score", label: "Score"},
+  {value: "noul", label: "True or false"},
+];
+
+const INSTRUCTIONS_PLACEHOLDER: Record<DecisionType, string> = {
+  choice: "The question to answer",
+  score: "What to score",
+  noul: "The statement to judge, e.g. The participant asks for a refund",
+};
+
+/** A decision of `type` holding only the params that type reads, so a type change leaves nothing stale behind. */
+function decisionOfType(decision: Pick<Decision, "key" | "instructions">, type: DecisionType): Decision {
+  return {
+    key: decision.key,
+    type,
+    instructions: decision.instructions,
+    options: type === "choice" ? [{name: "", description: ""}] : [],
+    levels: type === "score" ? [""] : [],
+    true_description: "",
+    false_description: "",
+    threshold: null,
+  };
+}
+
+function isDecisionList(value: unknown): value is Decision[] {
+  return Array.isArray(value) && value.every((item) => typeof item?.key === "string" && typeof item?.type === "string");
+}
+
+/** Edits a Decision Node's decisions: one card per decision, with the fields its type reads. */
+function DecisionsWidget(props: WidgetParams) {
+  const setNode = usePipelineStore((state) => state.setNode);
+  const stored = props.nodeParams[props.name];
+  const decisions = isDecisionList(stored) ? stored : [];
+
+  const setDecisions = (update: (current: Decision[]) => Decision[]) => {
+    setNode(props.nodeId, (old) =>
+      produce(old, (next) => {
+        const current = next.data.params[props.name];
+        next.data.params[props.name] = update(isDecisionList(current) ? current : []);
+      })
+    );
+  };
+  const updateDecision = (index: number, update: (decision: Decision) => Decision) =>
+    setDecisions((current) => current.map((decision, i) => (i === index ? update(decision) : decision)));
+
+  return (
+    <InputField label={props.label} help_text={props.helpText} inputError={props.inputError}>
+      <div className="flex flex-col gap-3 normal-case">
+        {decisions.map((decision, index) => (
+          <DecisionCard
+            key={index}
+            number={index + 1}
+            decision={decision}
+            readOnly={props.readOnly}
+            onChange={(update) => updateDecision(index, update)}
+            onRemove={() => setDecisions((current) => current.filter((_, i) => i !== index))}
+          />
+        ))}
+        {!props.readOnly && (
+          <button
+            type="button"
+            className="btn btn-xs btn-ghost self-start"
+            onClick={() => setDecisions((current) => [...current, decisionOfType({key: "", instructions: ""}, "choice")])}
+          >
+            <i className="fa-solid fa-plus"></i> Add decision
+          </button>
+        )}
+      </div>
+    </InputField>
+  );
+}
+
+function DecisionCard({number, decision, readOnly, onChange, onRemove}: {
+  number: number;
+  decision: Decision;
+  readOnly: boolean;
+  onChange: (update: (decision: Decision) => Decision) => void;
+  onRemove: () => void;
+}) {
+  const set = (fields: Partial<Decision>) => onChange((current) => ({...current, ...fields}));
+  const of = `decision ${number}`;
+
+  return (
+    <div className="card card-border card-sm bg-base-200">
+      <div className="card-body gap-2 p-3">
+        <div className="flex items-center gap-2">
+          <input
+            className="input input-sm w-full font-mono"
+            aria-label={`Key of ${of}`}
+            placeholder="temp_state key"
+            value={decision.key}
+            onChange={(event) => set({key: event.target.value})}
+            readOnly={readOnly}
+          />
+          <select
+            className="select select-sm appearance-none w-40"
+            aria-label={`Type of ${of}`}
+            value={decision.type}
+            onChange={(event) => onChange((current) => decisionOfType(current, event.target.value as DecisionType))}
+            disabled={readOnly}
+          >
+            {DECISION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+          </select>
+          {!readOnly && (
+            <button type="button" className="btn btn-xs btn-ghost" aria-label={`Remove ${of}`} onClick={onRemove}>
+              <i className="fa-solid fa-trash"></i>
+            </button>
+          )}
+        </div>
+        <textarea
+          className="textarea textarea-sm w-full nodrag"
+          aria-label={`Instructions for ${of}`}
+          placeholder={INSTRUCTIONS_PLACEHOLDER[decision.type]}
+          rows={2}
+          value={decision.instructions}
+          onChange={(event) => set({instructions: event.target.value})}
+          readOnly={readOnly}
+        />
+        {decision.type === "choice" && (
+          <ChoiceOptions of={of} options={decision.options} readOnly={readOnly} onChange={(options) => set({options})} />
+        )}
+        {decision.type === "score" && (
+          <ScoreLevels of={of} levels={decision.levels} readOnly={readOnly} onChange={(levels) => set({levels})} />
+        )}
+        {decision.type === "noul" && (
+          <>
+            <input
+              className="input input-sm w-full"
+              aria-label={`True means, for ${of}`}
+              placeholder="What a true statement means (optional)"
+              value={decision.true_description}
+              onChange={(event) => set({true_description: event.target.value})}
+              readOnly={readOnly}
+            />
+            <input
+              className="input input-sm w-full"
+              aria-label={`False means, for ${of}`}
+              placeholder="What a false statement means (optional)"
+              value={decision.false_description}
+              onChange={(event) => set({false_description: event.target.value})}
+              readOnly={readOnly}
+            />
+          </>
+        )}
+        {decision.type !== "noul" && (
+          <label className="flex items-center gap-2 text-sm">
+            Threshold
+            <input
+              className="input input-sm w-24"
+              aria-label={`Threshold of ${of}`}
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              placeholder="none"
+              value={decision.threshold ?? ""}
+              onChange={(event) => set({threshold: event.target.value === "" ? null : Number(event.target.value)})}
+              readOnly={readOnly}
+            />
+            <span className="text-xs opacity-70">Below this confidence, the key is set to null.</span>
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChoiceOptions({of, options, readOnly, onChange}: {
+  of: string;
+  options: Decision["options"];
+  readOnly: boolean;
+  onChange: (options: Decision["options"]) => void;
+}) {
+  const update = (index: number, field: "name" | "description", value: string) =>
+    onChange(options.map((option, i) => (i === index ? {...option, [field]: value} : option)));
+  return (
+    <div className="flex flex-col gap-1">
+      {options.map((option, index) => (
+        <div className="flex items-center gap-2" key={index}>
+          <input
+            className="input input-sm w-1/3"
+            aria-label={`Option ${index + 1} of ${of}`}
+            placeholder="Option"
+            value={option.name}
+            onChange={(event) => update(index, "name", event.target.value)}
+            readOnly={readOnly}
+          />
+          <input
+            className="input input-sm w-full"
+            aria-label={`Description of option ${index + 1} of ${of}`}
+            placeholder="When it applies (optional)"
+            value={option.description}
+            onChange={(event) => update(index, "description", event.target.value)}
+            readOnly={readOnly}
+          />
+          {!readOnly && (
+            <button
+              type="button"
+              className="btn btn-xs btn-ghost"
+              aria-label={`Remove option ${index + 1} of ${of}`}
+              onClick={() => onChange(options.filter((_, i) => i !== index))}
+            >
+              <i className="fa-solid fa-minus"></i>
+            </button>
+          )}
+        </div>
+      ))}
+      {!readOnly && (
+        <button
+          type="button"
+          className="btn btn-xs btn-ghost self-start"
+          aria-label={`Add option to ${of}`}
+          onClick={() => onChange([...options, {name: "", description: ""}])}
+        >
+          <i className="fa-solid fa-plus"></i> Add option
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ScoreLevels({of, levels, readOnly, onChange}: {
+  of: string;
+  levels: string[];
+  readOnly: boolean;
+  onChange: (levels: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      {levels.map((level, index) => (
+        <div className="flex items-center gap-2" key={index}>
+          <span className="badge badge-sm badge-ghost w-8">{index}</span>
+          <input
+            className="input input-sm w-full"
+            aria-label={`Level ${index} of ${of}`}
+            placeholder={index === 0 ? "Lowest level" : "Next level up"}
+            value={level}
+            onChange={(event) => onChange(levels.map((current, i) => (i === index ? event.target.value : current)))}
+            readOnly={readOnly}
+          />
+          {!readOnly && (
+            <button
+              type="button"
+              className="btn btn-xs btn-ghost"
+              aria-label={`Remove level ${index} of ${of}`}
+              onClick={() => onChange(levels.filter((_, i) => i !== index))}
+            >
+              <i className="fa-solid fa-minus"></i>
+            </button>
+          )}
+        </div>
+      ))}
+      {!readOnly && levels.length < 10 && (
+        <button
+          type="button"
+          className="btn btn-xs btn-ghost self-start"
+          aria-label={`Add level to ${of}`}
+          onClick={() => onChange([...levels, ""])}
+        >
+          <i className="fa-solid fa-plus"></i> Add level
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * Chooses how an LLM Router's prompt is built, and previews the standard prompt.
  *
@@ -1255,10 +1539,7 @@ export function LlmWidget(props: WidgetParams) {
   }, {} as ProviderModelsByType);
 
 
-  const excludedProviderTypes = props.schema["ui:excludedProviderTypes"] ?? [];
-  const providers = parameterValues.llm_provider_id.filter(
-    (provider) => !excludedProviderTypes.includes(provider.type)
-  );
+  const providers = parameterValues.llm_provider_id.filter((provider) => offersProviderType(props.schema, provider.type));
 
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
