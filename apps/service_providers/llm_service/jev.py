@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel
 
 DEFAULT_JEV_API_BASE = "https://api.typesafe.ai"
+JEV_ROUTER_ONLY_MESSAGE = "Jev can only be used by the LLM Router node"
 SYSTEM_ONE_PATH = "/v1/systemone"
 JEV_TIMEOUT_SECONDS = 10.0
 

@@ -5,6 +5,9 @@
       "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
+      "ui:excludedProviderTypes": [
+        "jev"
+      ],
       "ui:optionsSource": "llm_provider_id",
       "ui:widget": "llm_provider_model"
     },

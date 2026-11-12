@@ -545,6 +545,7 @@ paths:
                       RESCHEDULE: Moving an existing appointment
                       CANCEL: Cancelling an appointment
                     default_keyword_index: 2
+                    confidence_threshold: 0.0
                     tag_output_message: true
                     history_type: named
                     history_name: triage-history
@@ -555,7 +556,8 @@ paths:
                   are uppercased on save. The standard prompt lists each keyword with
                   its `route_descriptions` entry; `custom_context` adds to it, and
                   `prompt` is used only when `prompt_mode` is `custom`. `prompt_template_version`
-                  picks the standard prompt version; omit it for the latest.'
+                  picks the standard prompt version; omit it for the latest. `confidence_threshold`
+                  is used only with a Jev provider.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -4781,6 +4783,12 @@ components:
             type: string
           description: What each route is for, keyed by keyword. The ``{routes}``
             prompt variable renders each keyword with its description.
+        confidence_threshold:
+          type: number
+          format: double
+          description: 'Only used with a Jev provider: below this confidence in the
+            chosen route, the router takes the default route. ``0`` always takes the
+            chosen route.'
     ScheduledTriggerWrite:
       type: object
       description: A chatbot trigger and the action it runs.

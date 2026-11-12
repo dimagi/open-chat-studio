@@ -183,6 +183,13 @@ class RouterNodeParams(_HistoryParams, _RouterParams):
             "keyword with its description."
         ),
     )
+    confidence_threshold = serializers.FloatField(
+        required=False,
+        help_text=(
+            "Only used with a Jev provider: below this confidence in the chosen route, the router takes the "
+            "default route. ``0`` always takes the chosen route."
+        ),
+    )
 
 
 @extend_schema_serializer(component_name="StaticRouterNodeParams")

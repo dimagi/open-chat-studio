@@ -27,7 +27,7 @@ from apps.service_providers.llm_service.index_managers import (
     OpenAIRemoteIndexManager,
     VoyageAILocalIndexManager,
 )
-from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE, JevClient
+from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE, JEV_ROUTER_ONLY_MESSAGE, JevClient
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
@@ -556,9 +556,6 @@ class VoyageAILlmService(LlmService):
 
     def get_reranker(self, model: str) -> Reranker:
         return VoyageReranker(api_key=self.voyage_api_key, model=model)
-
-
-JEV_ROUTER_ONLY_MESSAGE = "Jev can only be used by the LLM Router node"
 
 
 class JevLlmService(LlmService):
