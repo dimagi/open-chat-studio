@@ -160,12 +160,13 @@ export function offersProviderType(schema: PropertySchema, type: string): boolea
 /** The first provider and model the field offers, since the site-wide default may be of a type it leaves out. */
 function firstOfferedModel(providerField: PropertySchema) {
   const {parameterValues} = getCachedData();
-  const provider = parameterValues.llm_provider_id.find((option) => offersProviderType(providerField, option.type));
-  const model = provider && parameterValues.llm_provider_model_id.find((option) => option.type === provider.type);
-  return {
-    llm_provider_id: provider && model ? provider.value : null,
-    llm_provider_model_id: provider && model ? model.value : null,
-  };
+  for (const provider of parameterValues.llm_provider_id) {
+    const model = parameterValues.llm_provider_model_id.find((option) => option.type === provider.type);
+    if (model && offersProviderType(providerField, provider.type)) {
+      return {llm_provider_id: provider.value, llm_provider_model_id: model.value};
+    }
+  }
+  return {llm_provider_id: null, llm_provider_model_id: null};
 }
 
 /** A fresh node of this type, before it is given an id and a place on the canvas. */

@@ -30,6 +30,7 @@ beforeAll(() => {
   };
   setScript('parameter-values', {
     llm_provider_id: [
+      {value: 3, label: 'Groq', type: 'groq'},
       {value: 1, label: 'OpenAI', type: 'openai'},
       {value: 2, label: 'Jev', type: 'jev'},
     ],
@@ -75,6 +76,12 @@ describe('getDefaultParamValues', () => {
 
   it('starts a node that takes only some provider types on the first model of those types', () => {
     const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['jev']}));
+
+    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([2, 20]);
+  });
+
+  it('skips an included provider that has no model', () => {
+    const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['groq', 'jev']}));
 
     expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([2, 20]);
   });
