@@ -480,6 +480,7 @@ class Widgets(StrEnum):
     voice_widget = "voice_widget"
     jinja_template = "jinja_template"
     router_prompt_mode = "router_prompt_mode"
+    decisions = "decisions"
 
 
 class OptionsSource(StrEnum):
@@ -541,6 +542,7 @@ _UI_SCHEMA_KEYS = {
     "default_on_show": "ui:onShowDefault",
     "keep_value_when_hidden": "ui:keepValueWhenHidden",
     "excluded_provider_types": "ui:excludedProviderTypes",
+    "included_provider_types": "ui:includedProviderTypes",
 }
 
 
@@ -577,6 +579,9 @@ class UiSchema(BaseModel):
 
     # LLM provider types the provider widget leaves out of its options.
     excluded_provider_types: list[str] | None = None
+
+    # When set, the provider widget offers only these LLM provider types.
+    included_provider_types: list[str] | None = None
 
     def __call__(self, schema: JsonDict):
         for field, schema_key in _UI_SCHEMA_KEYS.items():

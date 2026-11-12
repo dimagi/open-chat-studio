@@ -26,6 +26,7 @@ SERVED_TYPES = [node_type["type"] for node_type in get_node_types()]
 #: fails when a new node type is served and no class here sends it a full body.
 FULL_PAYLOAD_TYPES = {
     "CodeNode",
+    "DecisionNode",
     "ExtractParticipantData",
     "ExtractStructuredData",
     "LLMResponseWithPrompt",
@@ -250,6 +251,49 @@ class TestRouterNode(FullPayload):
             {"handle": "output_1", "label": "RESCHEDULE"},
             {"handle": "output_2", "label": "CANCEL"},
         ]
+
+
+@pytest.mark.django_db()
+class TestDecisionNode(FullPayload):
+    """Takes only a Jev model. Each decision is stored with every field its model declares, so the
+    payload names the fields a decision of another type leaves empty."""
+
+    node_type = "DecisionNode"
+    label = "Assess the request"
+
+    @pytest.fixture()
+    def params(self, jev_llm):
+        provider, model = jev_llm
+        unset = {"options": [], "levels": [], "true_description": "", "false_description": "", "threshold": None}
+        return {
+            "name": "assess",
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+            "llm_model_parameters": {},
+            "history_type": "named",
+            "history_name": "assess-history",
+            "history_mode": "max_history_length",
+            "user_max_token_limit": 4000,
+            "max_history_length": 6,
+            "decisions": [
+                {
+                    **unset,
+                    "key": "intent",
+                    "type": "choice",
+                    "instructions": "What is the participant asking for?",
+                    "options": [{"name": "billing", "description": "Payments"}, {"name": "support", "description": ""}],
+                    "threshold": 0.6,
+                },
+                {**unset, "key": "frustration", "type": "score", "instructions": "", "levels": ["Calm", "Angry"]},
+                {
+                    **unset,
+                    "key": "wants_refund",
+                    "type": "noul",
+                    "instructions": "The participant asks for a refund.",
+                    "true_description": "Asks for money back",
+                },
+            ],
+        }
 
 
 @pytest.mark.django_db()

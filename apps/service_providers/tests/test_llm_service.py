@@ -163,7 +163,7 @@ def test_jev_service_builds_a_client(config, expected_url):
 def test_jev_service_cannot_build_a_chat_model():
     service = LlmProviderTypes.jev.get_llm_service({"jev_api_key": "test"})
 
-    with pytest.raises(ServiceProviderConfigError, match="Jev can only be used by the LLM Router node"):
+    with pytest.raises(ServiceProviderConfigError, match="Jev can only be used by the LLM Router and Decision nodes"):
         service.get_chat_model("jev-latest")
 
 

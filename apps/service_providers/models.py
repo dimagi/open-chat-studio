@@ -131,7 +131,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
 
     @property
     def router_only(self) -> bool:
-        """Whether this type classifies instead of generating text, so only the LLM Router node can use it."""
+        """Whether this type only classifies, so only the LLM Router and Decision nodes can use it."""
         return self == LlmProviderTypes.jev
 
     @classproperty

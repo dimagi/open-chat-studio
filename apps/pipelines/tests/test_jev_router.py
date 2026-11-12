@@ -21,7 +21,6 @@ from apps.pipelines.nodes.nodes import (
 )
 from apps.pipelines.repository import ORMRepository
 from apps.service_providers.tracing.metrics import MetricsCollector
-from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 URL = "https://api.typesafe.ai/v1/systemone"
@@ -40,18 +39,6 @@ def _answer(choice="billing", confidence=0.9):
         },
         "usage": {"input_tokens": 120, "output_tokens": 12},
     }
-
-
-@pytest.fixture()
-def jev_ids(db):
-    provider = LlmProviderFactory.create(type="jev", config={"jev_api_key": "test-key"})
-    model = LlmProviderModelFactory.create(team=provider.team, type="jev", name="jev-latest")
-    return {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
-
-
-@pytest.fixture()
-def session(db):
-    return ExperimentSessionFactory.create()
 
 
 @pytest.fixture(autouse=True)
@@ -258,8 +245,8 @@ class TestUsage:
         pytest.param(ExtractParticipantData, {"data_schema": '{"name": "a name"}'}, id="extract-participant-data"),
     ],
 )
-def test_only_the_router_accepts_a_jev_provider(jev_ids, node_class, params):
-    with pytest.raises(PydanticValidationError, match="Jev can only be used by the LLM Router node"):
+def test_a_text_generating_node_rejects_a_jev_provider(jev_ids, node_class, params):
+    with pytest.raises(PydanticValidationError, match="Jev can only be used by the LLM Router and Decision nodes"):
         node_class(node_id="node", django_node=None, name="node", **jev_ids, **params)
 
 

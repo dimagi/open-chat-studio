@@ -956,6 +956,7 @@ DOCUMENTATION_LINKS = {
     "node_llm": "/concepts/pipelines/nodes/#llm-node",
     "node_llm_router": "/concepts/pipelines/router_nodes/#llm-router-node",
     "node_static_router": "/concepts/pipelines/router_nodes/#static-router-node",
+    "node_decision": "/concepts/pipelines/nodes/#decision-node",
     "node_code": "/concepts/pipelines/nodes/#python-node",
     "node_template": "/concepts/pipelines/nodes/#template",
     "node_email": "/concepts/pipelines/nodes/#email-node",

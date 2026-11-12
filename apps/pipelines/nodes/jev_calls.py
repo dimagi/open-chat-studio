@@ -22,9 +22,9 @@ from apps.service_providers.models import LlmProviderTypes
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
-    from apps.pipelines.nodes.nodes import RouterNode
+    from apps.pipelines.nodes.nodes import DecisionNode, RouterNode
 
-    JevNode = RouterNode
+    JevNode = RouterNode | DecisionNode
 
 # Jev reads at most 64k tokens per request. These bounds keep the conversation well inside that.
 HISTORY_LIMIT = 20

@@ -74,16 +74,22 @@ class OutputMessageTagMixin(BaseModel):
         return tags
 
 
-def llm_provider_id_field(accepts_router_only_providers: bool = False) -> Any:
+def llm_provider_id_field(
+    accepts_router_only_providers: bool = False,
+    included_provider_types: list[str] | None = None,
+    title: str = "LLM Model",
+    description: str = "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
+) -> Any:
     excluded_provider_types = None if accepts_router_only_providers else LlmProviderTypes.router_only_slugs
     return Field(
         ...,
-        title="LLM Model",
-        description="The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
+        title=title,
+        description=description,
         json_schema_extra=UiSchema(
             widget=Widgets.llm_provider_model,
             options_source=OptionsSource.llm_provider_id,
             excluded_provider_types=excluded_provider_types,
+            included_provider_types=included_provider_types,
         ),
     )
 
@@ -143,14 +149,18 @@ class LLMResponseMixin(BaseModel):
                 {"field": "llm_provider_model_id"},
             ) from None
 
-        if model.type in LlmProviderTypes.router_only_slugs and not self.accepts_router_only_providers:
-            raise PydanticCustomError("invalid_model", JEV_ROUTER_ONLY_MESSAGE, {"field": "llm_provider_model_id"})
+        self.check_provider_type(model.type)
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
             params_cls.model_validate(self.llm_model_parameters)
 
         return self
+
+    def check_provider_type(self, provider_type: str) -> None:
+        """Raise when this node cannot use a model of `provider_type`."""
+        if provider_type in LlmProviderTypes.router_only_slugs and not self.accepts_router_only_providers:
+            raise PydanticCustomError("invalid_model", JEV_ROUTER_ONLY_MESSAGE, {"field": "llm_provider_model_id"})
 
     def get_llm_service(self) -> LlmService:
         try:

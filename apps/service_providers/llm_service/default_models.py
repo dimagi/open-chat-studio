@@ -167,7 +167,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2", 200000),
     ],
-    # Jev only classifies; the LLM Router node is the one node that calls it.
+    # Jev only classifies; the LLM Router and Decision nodes are the ones that call it.
     "jev": [
         Model("jev-latest", 64000, is_default=True, parameters=NoParameters),
     ],

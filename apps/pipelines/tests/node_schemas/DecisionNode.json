@@ -1,0 +1,220 @@
+{
+  "description": "Answers several questions about the conversation in one Jev call and writes the answers to the temporary state",
+  "properties": {
+    "llm_provider_id": {
+      "description": "The TypeSafe Jev provider this node calls.",
+      "title": "Model",
+      "type": "integer",
+      "ui:includedProviderTypes": [
+        "jev"
+      ],
+      "ui:optionsSource": "llm_provider_id",
+      "ui:widget": "llm_provider_model"
+    },
+    "llm_provider_model_id": {
+      "description": "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- an OpenAI provider cannot run an Anthropic model.",
+      "title": "Llm Provider Model Id",
+      "type": "integer",
+      "ui:optionsSource": "llm_provider_model_id",
+      "ui:widget": "none"
+    },
+    "llm_model_parameters": {
+      "additionalProperties": true,
+      "description": "Generation settings passed to the model, such as `temperature`. Which keys are accepted depends on the model; leave empty to use its defaults.",
+      "title": "Llm Model Parameters",
+      "type": "object",
+      "ui:widget": "none"
+    },
+    "history_type": {
+      "enum": [
+        "node",
+        "named",
+        "global",
+        "none"
+      ],
+      "title": "PipelineChatHistoryTypes",
+      "type": "string",
+      "default": "global",
+      "description": "Which past messages to put in the prompt. `none` sends only the current input; `node` remembers just this node's own turns; `named` shares one history between every node set to the same `history_name`; `global` uses the participant's whole conversation.",
+      "ui:enumLabels": [
+        "Node",
+        "Named",
+        "Global",
+        "No History"
+      ],
+      "ui:widget": "history"
+    },
+    "history_name": {
+      "default": null,
+      "description": "The shared history to read and write. Only used when `history_type` is `named`.",
+      "title": "History Name",
+      "ui:widget": "none",
+      "type": "string"
+    },
+    "history_mode": {
+      "enum": [
+        "summarize",
+        "truncate_tokens",
+        "max_history_length"
+      ],
+      "title": "PipelineChatHistoryModes",
+      "type": "string",
+      "default": "summarize",
+      "description": "How to shrink history that outgrows its limit: `summarize` replaces old messages with a summary, `truncate_tokens` drops them to fit `user_max_token_limit`, and `max_history_length` keeps only the most recent `max_history_length` messages.",
+      "ui:enumLabels": [
+        "Summarize",
+        "Truncate Tokens",
+        "Max History Length"
+      ],
+      "ui:widget": "history_mode"
+    },
+    "user_max_token_limit": {
+      "default": null,
+      "description": "Maximum number of tokens before messages are summarized or truncated.",
+      "title": "Token Limit",
+      "ui:visibleWhen": {
+        "field": "history_mode",
+        "operator": "in",
+        "value": [
+          "summarize",
+          "truncate_tokens"
+        ]
+      },
+      "type": "integer"
+    },
+    "max_history_length": {
+      "default": 10,
+      "description": "Chat history will only keep the most recent messages up to this limit.",
+      "title": "Max History Length",
+      "type": "integer",
+      "ui:visibleWhen": {
+        "field": "history_mode",
+        "operator": "==",
+        "value": "max_history_length"
+      }
+    },
+    "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
+      "title": "Node Name",
+      "type": "string",
+      "ui:widget": "node_name"
+    },
+    "decisions": {
+      "description": "The questions to answer, all in one call. Each answer is written to the temporary state under its decision's `key`, and the node passes its input on unchanged.",
+      "items": {
+        "properties": {
+          "key": {
+            "description": "The temporary state key the answer is written to. Choice and score decisions also write their confidence to `<key>_confidence`.",
+            "title": "Key",
+            "type": "string"
+          },
+          "type": {
+            "default": "choice",
+            "description": "`choice` writes the chosen option's name, `score` writes a number from 0 to the highest level, and `noul` writes the probability, from 0 to 1, that the statement in `instructions` is true.",
+            "enum": [
+              "choice",
+              "score",
+              "noul"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "instructions": {
+            "default": "",
+            "description": "The question to answer. For a `noul` decision, the statement to judge.",
+            "title": "Instructions",
+            "type": "string"
+          },
+          "options": {
+            "description": "Choice only. The options to choose between, 1 to 255.",
+            "items": {
+              "properties": {
+                "name": {
+                  "description": "The value written to the temporary state when this option is chosen.",
+                  "title": "Name",
+                  "type": "string"
+                },
+                "description": {
+                  "default": "",
+                  "description": "When this option applies. Optional.",
+                  "title": "Description",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "title": "ChoiceOption",
+              "type": "object"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "levels": {
+            "description": "Score only. The rubric, one description per level from lowest (0) to highest, 1 to 10 levels.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "true_description": {
+            "default": "",
+            "description": "Noul only. What a true statement means. Optional.",
+            "title": "True Description",
+            "type": "string"
+          },
+          "false_description": {
+            "default": "",
+            "description": "Noul only. What a false statement means. Optional.",
+            "title": "False Description",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Choice and score only. When the confidence is below this, null is written instead of the answer, so a Static Router reading the key takes its default route. Leave empty to always write the answer.",
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "Decision",
+        "type": "object"
+      },
+      "title": "Decisions",
+      "type": "array",
+      "ui:widget": "decisions"
+    }
+  },
+  "required": [
+    "llm_provider_id",
+    "llm_provider_model_id",
+    "name"
+  ],
+  "title": "DecisionNode",
+  "type": "object",
+  "ui:can_add": true,
+  "ui:can_delete": true,
+  "ui:deprecated": false,
+  "ui:documentation_link": "/concepts/pipelines/nodes/#decision-node",
+  "ui:flow_node_type": "pipelineNode",
+  "ui:icon": "fa-solid fa-list-check",
+  "ui:label": "Decision Node",
+  "ui:order": [
+    "llm_provider_id",
+    "history_type",
+    "decisions"
+  ],
+  "ui:removed": false
+}

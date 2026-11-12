@@ -89,9 +89,22 @@ class TestExamplesAreAccepted:
     """Each example sent as documented, bar the placeholder ids."""
 
     @pytest.fixture()
-    def reference_ids(self, llm, source_material, media_collection, collection_indexes, custom_action, synthetic_voice):
-        """Real ids for the params whose example values are placeholders, keyed by param name."""
-        provider, model = llm
+    def reference_ids(
+        self,
+        node_type,
+        llm,
+        jev_llm,
+        source_material,
+        media_collection,
+        collection_indexes,
+        custom_action,
+        synthetic_voice,
+    ):
+        """Real ids for the params whose example values are placeholders, keyed by param name.
+
+        A Decision Node takes only a Jev model, so its LLM ids are the Jev provider's.
+        """
+        provider, model = jev_llm if node_type == "DecisionNode" else llm
         support_kb, billing_kb = collection_indexes
         return {
             "llm_provider_id": provider.id,
