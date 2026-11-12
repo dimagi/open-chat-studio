@@ -22,7 +22,8 @@ from apps.service_providers.models import LlmProviderTypes
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
-    from apps.pipelines.nodes.nodes import DecisionNode, RouterNode
+    from apps.pipelines.nodes.decision_node import DecisionNode
+    from apps.pipelines.nodes.nodes import RouterNode
 
     JevNode = RouterNode | DecisionNode
 

@@ -1,6 +1,7 @@
 """The decisions a Decision Node asks Jev, and the temporary state its answers become."""
 
 import logging
+from collections.abc import Callable
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -16,8 +17,6 @@ from apps.service_providers.llm_service.jev import (
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
-JEV_MODEL_REQUIRED_MESSAGE = "The Decision Node needs a TypeSafe Jev model"
-
 # Keys the pipeline itself keeps in the temporary state.
 RESERVED_KEYS = frozenset({"user_input", "outputs", "attachments"})
 MAX_OPTIONS = 255
@@ -30,6 +29,8 @@ TYPE_PARAMS = {
     "noul": {"true_description", "false_description"},
 }
 ALL_TYPE_PARAMS = set().union(*TYPE_PARAMS.values())
+
+Answer = tuple[Any, float | None]
 
 
 class ChoiceOption(BaseModel):
@@ -91,93 +92,150 @@ class Decision(BaseModel):
 
     @model_validator(mode="after")
     def check_type_params(self) -> Self:
-        for param in sorted(ALL_TYPE_PARAMS - TYPE_PARAMS[self.type]):
-            if getattr(self, param):
-                raise self._error("{param} does not apply to a {type} decision", param=param, type=self.type)
-        if self.type == "choice":
-            self._check_options()
-        elif self.type == "score":
-            self._check_levels()
+        stray = [param for param in sorted(ALL_TYPE_PARAMS - TYPE_PARAMS[self.type]) if getattr(self, param)]
+        if stray:
+            raise decision_error(self, "{param} does not apply to a {type} decision", param=stray[0], type=self.type)
+        TYPE_CHECKS[self.type](self)
         return self
-
-    def _check_options(self) -> None:
-        if not 1 <= len(self.options) <= MAX_OPTIONS:
-            raise self._error("Decision {key} needs 1 to 255 options")
-        names = [option.name.strip().lower() for option in self.options]
-        if not all(names):
-            raise self._error("Every option of decision {key} needs a name")
-        if len(set(names)) != len(names):
-            raise self._error("Decision {key} has an option named more than once")
-
-    def _check_levels(self) -> None:
-        if not 1 <= len(self.levels) <= MAX_LEVELS:
-            raise self._error("Decision {key} needs 1 to 10 levels")
-        if not all(level.strip() for level in self.levels):
-            raise self._error("Decision {key} must describe every level")
-
-    def _error(self, message: str, **context: str) -> PydanticCustomError:
-        return PydanticCustomError("invalid_decision", message, {"key": self.key, **context})
 
     @property
     def confidence_key(self) -> str | None:
         return None if self.type == "noul" else f"{self.key}_confidence"
 
     def question(self) -> Question:
-        instructions = self.instructions.strip() or None
-        if self.type == "choice":
-            criteria = {option.name: option.description.strip() or None for option in self.options}
-            return ChoiceQuestion(criteria=criteria, instructions=instructions)
-        if self.type == "score":
-            return ScoreQuestion(criteria=self.levels, instructions=instructions)
-        return NoulQuestion(instructions=instructions, criteria=self._noul_criteria())
+        return QUESTION_BUILDERS[self.type](self)
 
-    def _noul_criteria(self) -> dict[str, str | None] | None:
-        if not (self.true_description.strip() or self.false_description.strip()):
-            return None
-        return {"true": self.true_description.strip() or None, "false": self.false_description.strip() or None}
-
-    def answer(self, response: JevResponse) -> tuple[Any, float | None]:
+    def answer(self, response: JevResponse) -> Answer:
         """The value and confidence Jev gave, each None where it gave none."""
-        if self.type == "choice":
-            choice = response.choice(self.key)
-            return (self._option_named(choice.choice), choice.confidence) if choice else (None, None)
-        if self.type == "score":
-            score = response.score(self.key)
-            return (score.score, score.confidence) if score else (None, None)
-        noul = response.noul(self.key)
-        return (noul.noul if noul else None), None
+        return ANSWER_READERS[self.type](self, response)
 
     def temp_state(self, value: Any, confidence: float | None) -> dict[str, Any]:
         """The entries this decision writes: null for the value when the confidence is below the threshold."""
-        below_threshold = self.threshold is not None and confidence is not None and confidence < self.threshold
-        values = {self.key: None if below_threshold else value}
+        values = {self.key: None if self._below_threshold(confidence) else value}
         if self.confidence_key:
             values[self.confidence_key] = confidence
         return values
 
-    def _option_named(self, name: str) -> str | None:
-        for option in self.options:
-            if option.name.strip().lower() == name.strip().lower():
-                return option.name
-        return None
+    def _below_threshold(self, confidence: float | None) -> bool:
+        if self.threshold is None or confidence is None:
+            return False
+        return confidence < self.threshold
+
+
+def decision_error(decision: Decision, message: str, **context: str) -> PydanticCustomError:
+    return PydanticCustomError("invalid_decision", message, {"key": decision.key, **context})
+
+
+def _check_options(decision: Decision) -> None:
+    names = [_normalized(option.name) for option in decision.options]
+    if not 1 <= len(names) <= MAX_OPTIONS:
+        raise decision_error(decision, "Decision {key} needs 1 to 255 options")
+    if not all(names):
+        raise decision_error(decision, "Every option of decision {key} needs a name")
+    if len(set(names)) != len(names):
+        raise decision_error(decision, "Decision {key} has an option named more than once")
+
+
+def _check_levels(decision: Decision) -> None:
+    if not 1 <= len(decision.levels) <= MAX_LEVELS:
+        raise decision_error(decision, "Decision {key} needs 1 to 10 levels")
+    if not all(level.strip() for level in decision.levels):
+        raise decision_error(decision, "Decision {key} must describe every level")
+
+
+TYPE_CHECKS: dict[str, Callable[[Decision], None]] = {
+    "choice": _check_options,
+    "score": _check_levels,
+    "noul": lambda decision: None,
+}
+
+
+def _normalized(name: str) -> str:
+    return name.strip().lower()
+
+
+def _optional(text: str) -> str | None:
+    return text.strip() or None
+
+
+def _choice_question(decision: Decision) -> Question:
+    criteria = {option.name: _optional(option.description) for option in decision.options}
+    return ChoiceQuestion(criteria=criteria, instructions=_optional(decision.instructions))
+
+
+def _score_question(decision: Decision) -> Question:
+    return ScoreQuestion(criteria=decision.levels, instructions=_optional(decision.instructions))
+
+
+def _noul_question(decision: Decision) -> Question:
+    criteria = {"true": _optional(decision.true_description), "false": _optional(decision.false_description)}
+    has_criteria = any(criteria.values())
+    return NoulQuestion(instructions=_optional(decision.instructions), criteria=criteria if has_criteria else None)
+
+
+QUESTION_BUILDERS: dict[str, Callable[[Decision], Question]] = {
+    "choice": _choice_question,
+    "score": _score_question,
+    "noul": _noul_question,
+}
+
+
+def _read_choice(decision: Decision, response: JevResponse) -> Answer:
+    choice = response.choice(decision.key)
+    if choice is None:
+        return None, None
+    return _option_named(decision, choice.choice), choice.confidence
+
+
+def _read_score(decision: Decision, response: JevResponse) -> Answer:
+    score = response.score(decision.key)
+    if score is None:
+        return None, None
+    return score.score, score.confidence
+
+
+def _read_noul(decision: Decision, response: JevResponse) -> Answer:
+    noul = response.noul(decision.key)
+    return (noul.noul if noul else None), None
+
+
+ANSWER_READERS: dict[str, Callable[[Decision, JevResponse], Answer]] = {
+    "choice": _read_choice,
+    "score": _read_score,
+    "noul": _read_noul,
+}
+
+
+def _option_named(decision: Decision, name: str) -> str | None:
+    """The configured option Jev named, matched without regard to case or surrounding space."""
+    wanted = _normalized(name)
+    return next((option.name for option in decision.options if _normalized(option.name) == wanted), None)
 
 
 def check_decision_keys(decisions: list[Decision]) -> list[Decision]:
     """Each decision writes keys no other decision writes."""
     if not decisions:
         raise PydanticCustomError("invalid_decisions", "Add at least one decision")
-    keys = [decision.key for decision in decisions]
-    confidence_keys = {decision.confidence_key: decision.key for decision in decisions if decision.confidence_key}
+    _check_unique_keys([decision.key for decision in decisions])
+    _check_confidence_keys(decisions)
+    return decisions
+
+
+def _check_unique_keys(keys: list[str]) -> None:
     for index, key in enumerate(keys):
         if key in keys[:index]:
             raise PydanticCustomError("invalid_decisions", "More than one decision writes to '{key}'", {"key": key})
-        if key in confidence_keys:
-            raise PydanticCustomError(
-                "invalid_decisions",
-                "The key '{key}' is where {owner} writes its confidence",
-                {"key": key, "owner": confidence_keys[key]},
-            )
-    return decisions
+
+
+def _check_confidence_keys(decisions: list[Decision]) -> None:
+    owners = {decision.confidence_key: decision.key for decision in decisions if decision.confidence_key}
+    clash = next((decision.key for decision in decisions if decision.key in owners), None)
+    if clash:
+        raise PydanticCustomError(
+            "invalid_decisions",
+            "The key '{key}' is where {owner} writes its confidence",
+            {"key": clash, "owner": owners[clash]},
+        )
 
 
 def decision_questions(decisions: list[Decision]) -> dict[str, Question]:
