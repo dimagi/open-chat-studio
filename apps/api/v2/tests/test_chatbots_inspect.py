@@ -805,7 +805,6 @@ def _expected_full_response(bot):
             "conversational_consent_enabled": False,
             "voice_response_behaviour": "reciprocal",
             "echo_transcript": True,
-            "debug_mode_enabled": False,
             "file_uploads_enabled": False,
         },
         "consent_form": {
