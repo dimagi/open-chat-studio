@@ -1361,6 +1361,9 @@ paths:
   /api/export/moderation_providers/:
     get:
       operationId: moderation_providers
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
       summary: Moderation Providers
       parameters:
       - in: query
