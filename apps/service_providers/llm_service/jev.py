@@ -160,7 +160,8 @@ def _parse_response(response: httpx.Response) -> JevResponse:
 def _token_count(usage: dict, key: str) -> int:
     """The count Jev reported under `key`, or 0 when it reported none."""
     value = usage.get(key, 0)
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    # `type` rather than `isinstance`: bool is a subclass of int, and `true` is not a count.
+    if type(value) is not int or value < 0:
         raise ValueError(f"invalid {key}: {value!r}")
     return value
 
