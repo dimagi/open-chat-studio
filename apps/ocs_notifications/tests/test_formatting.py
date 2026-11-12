@@ -14,6 +14,10 @@ def _visible(rendered: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", without_breaks)).strip()
 
 
+def _tags(rendered: str) -> set[str]:
+    return set(re.findall(r"<(\w+)", rendered))
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -21,6 +25,8 @@ def _visible(rendered: str) -> str:
         pytest.param("Weather *beta*", id="asterisks"),
         pytest.param("<Response [500]>", id="html-like"),
         pytest.param("a & b < c", id="ampersand"),
+        pytest.param("&amp; &lt;", id="entities"),
+        pytest.param("<https://example.com>", id="autolink"),
         pytest.param("[docs](https://example.com)", id="link-syntax"),
         pytest.param("`code`", id="backticks"),
         pytest.param("C:\\temp\\file", id="backslashes"),
@@ -43,10 +49,28 @@ def test_authored_markdown_formats():
     assert re.search(r'<a href="https://example.com/docs"[^>]*>embed snippet</a>', rendered)
 
 
-def test_html_in_a_message_is_shown_not_run():
-    rendered = message_html("<script>alert(1)</script>")
-    assert "<script" not in rendered
-    assert _visible(rendered) == "<script>alert(1)</script>"
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        pytest.param("Run `a & b`", "<p>Run <code>a &amp; b</code></p>", id="code-span"),
+        pytest.param("```\na & b < c\n```", "<pre><code>a &amp; b &lt; c\n</code></pre>", id="fenced-code"),
+    ],
+)
+def test_code_shows_its_text_as_written(message, expected):
+    assert message_html(message) == expected
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        pytest.param("<script>alert(1)</script>", id="script"),
+        pytest.param('<img src="x" onerror="alert(1)">', id="onerror"),
+    ],
+)
+def test_html_in_a_message_is_shown_not_run(message):
+    rendered = message_html(message)
+    assert _tags(rendered) == {"p"}
+    assert _visible(rendered) == message
 
 
 @pytest.mark.parametrize(
@@ -80,6 +104,12 @@ def test_the_in_app_list_shows_the_rendered_message():
     assert "**" not in rendered
 
 
-def test_message_text_drops_markdown_escapes():
-    value = "KeyError: '__init__' in *beta*"
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("KeyError: '__init__' in *beta*", id="inline-markers"),
+        pytest.param("a & b <c> &amp;", id="entities"),
+    ],
+)
+def test_message_text_drops_markdown_escapes(value):
     assert message_text(f"Failed: {markdown_literal(value)}") == f"Failed: {value}"

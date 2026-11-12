@@ -6,6 +6,7 @@ from html.parser import HTMLParser
 
 import markdown
 import nh3
+from markdown.extensions import Extension
 
 _INLINE_SYNTAX = re.compile(r"([\\`*\[\]])")
 # Underscores between letters or digits (``snake_case``) never emphasise, so only a run touching an edge
@@ -17,26 +18,33 @@ _LINE_START_NUMBER = re.compile(r"^(\s*\d+)\.", re.MULTILINE)
 
 def markdown_literal(value) -> str:
     """``value`` escaped so a markdown message shows it exactly as written."""
-    text = _INLINE_SYNTAX.sub(r"\\\1", str(value))
+    # Entities keep `&amp;` and `<https://...>` in the value from rendering as `&` and a link.
+    text = _INLINE_SYNTAX.sub(r"\\\1", html.escape(str(value), quote=False))
     text = _EDGE_UNDERSCORES.sub(lambda run: "\\_" * len(run.group()), text)
     text = _LINE_START_MARKER.sub(r"\1\\\2", text)
     return _LINE_START_NUMBER.sub(r"\1\\.", text)
 
 
+class _RawHtmlAsText(Extension):
+    """Treats HTML in the message as text, so ``<Response [500]>`` shows as written instead of being stripped."""
+
+    def extendMarkdown(self, md):
+        md.preprocessors.deregister("html_block")
+        md.inlinePatterns.deregister("html")
+
+
 def message_html(message: str) -> str:
     """Sanitised HTML for a notification message.
 
-    HTML in the message is escaped first, so text such as ``<Response [500]>`` shows as written
-    instead of being parsed as a tag and stripped. Single newlines stay line breaks, as they were
-    when messages rendered as plain text.
+    Single newlines stay line breaks, as they were when messages rendered as plain text.
     """
-    rendered = markdown.markdown(html.escape(message, quote=False), extensions=["nl2br", "fenced_code", "tables"])
+    rendered = markdown.markdown(message, extensions=["nl2br", "fenced_code", "tables", _RawHtmlAsText()])
     return nh3.clean(rendered, attributes={"a": {"href", "title"}})
 
 
 def message_text(message: str) -> str:
     """The message with markdown escapes removed, for plain-text fallbacks."""
-    return re.sub(r"\\(.)", r"\1", message)
+    return html.unescape(re.sub(r"\\(.)", r"\1", message))
 
 
 def message_mrkdwn(message: str) -> str:
