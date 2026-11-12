@@ -22,6 +22,7 @@
             </label>
             <select id="overwrite-chatbot" name="overwrite" class="select select-bordered w-full"
                     :disabled="mode !== 'overwrite'" required>
+              <option value="" disabled selected>Select a chatbot to overwrite</option>
               {% for copy in copies %}
                 <option value="{{ copy.id }}">{{ copy.name }}</option>
               {% endfor %}
