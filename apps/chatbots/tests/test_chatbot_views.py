@@ -1563,7 +1563,7 @@ def test_settings_page_has_no_debug_mode_setting(client, experiment):
     ],
 )
 def test_settings_save_ignores_a_posted_removed_field(client, experiment, field, stored, posted):
-    """The settings form no longer has the field, so a posted value for it is inert -- the save
+    """The settings form no longer has the field, so a posted value for it is ignored. The save
     still succeeds and the column is untouched."""
     setattr(experiment, field, stored)
     experiment.save(update_fields=[field])
