@@ -380,7 +380,7 @@ def deleted_model_notification(
     caller and a duplicate.
     """
     if replacement_model_name:
-        action_text = f"References have been automatically updated to use '{replacement_model_name}'."
+        action_text = f"References have been automatically updated to use '{literal(replacement_model_name)}'."
     else:
         action_text = "References have been cleared and will need to be updated manually."
 

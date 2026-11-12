@@ -201,6 +201,12 @@ class TestTraceErrorNotification:
             "An error occurred while synthesizing a voice response for 'Weather *beta*'",
             id="name-with-markdown-syntax",
         ),
+        pytest.param(
+            lambda: deleted_model_notification(TeamFactory.create(), "old-model", "Weather *beta*", _affected()),
+            "The model 'old-model' has been removed from the platform. some resources were affected. "
+            "References have been automatically updated to use 'Weather *beta*'.",
+            id="replacement-model-name",
+        ),
     ],
 )
 def test_runtime_values_render_as_written(build, expected):
