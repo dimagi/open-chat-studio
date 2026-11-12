@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 from apps.chat.exceptions import ProviderConfigurationError
+from apps.pipelines.models import PipelineChatHistoryModes
 from apps.service_providers.llm_service.error_classification import AUTHENTICATION_MESSAGE
 from apps.service_providers.llm_service.jev import (
     ChoiceQuestion,
@@ -53,11 +54,21 @@ def build_state(node: "RouterNode", context: "NodeContext") -> dict:
     history = node.get_history(exclude_message_id=context.input_message_id) if context.session else []
     return {
         "input": context.input,
-        "history": [_history_entry(message) for message in history[-HISTORY_LIMIT:]],
+        "history": [_history_entry(message) for message in _recent(history, _history_limit(node))],
         "participant_data": context.state.participant_data or {},
         "session_state": context.state.session_state or {},
         "temp_state": context.state.temp or {},
     }
+
+
+def _history_limit(node: "RouterNode") -> int:
+    if node.get_history_mode() == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+        return min(node.max_history_length, HISTORY_LIMIT)
+    return HISTORY_LIMIT
+
+
+def _recent(history: list[BaseMessage], limit: int) -> list[BaseMessage]:
+    return history[-limit:] if limit > 0 else []
 
 
 def _history_entry(message: BaseMessage) -> dict:

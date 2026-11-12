@@ -140,6 +140,24 @@ class TestRequest:
         assert len(history) == HISTORY_LIMIT
         assert history[-2]["content"] == f"question {HISTORY_LIMIT - 1}"
 
+    @pytest.mark.parametrize(
+        ("max_history_length", "expected"),
+        [
+            pytest.param(3, ["SUPPORT", "question 3", "SUPPORT"], id="three"),
+            pytest.param(0, [], id="zero"),
+        ],
+    )
+    def test_max_history_length_caps_the_history(self, httpx_mock, jev_ids, session, max_history_length, expected):
+        httpx_mock.add_response(url=URL, json=_answer())
+        router = _router(jev_ids, session, history_mode="max_history_length", max_history_length=max_history_length)
+        for turn in range(4):
+            router.save_history(f"question {turn}", "SUPPORT")
+
+        _route(router, session)
+
+        history = _sent(httpx_mock)["state"]["history"]
+        assert [entry["content"] for entry in history] == expected
+
     def test_no_history_is_sent_when_history_is_off(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, json=_answer())
         router = _router(jev_ids, session, history_type="none")
