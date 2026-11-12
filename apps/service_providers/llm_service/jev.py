@@ -79,13 +79,15 @@ class JevResponse:
         if not isinstance(answer, dict) or answer.get("type") != "choice":
             return None
         try:
-            return ChoiceAnswer(
+            confidence = float(answer["confidence"])
+            choice = ChoiceAnswer(
                 choice=str(answer["choice"]),
-                confidence=float(answer["confidence"]),
+                confidence=confidence,
                 probabilities=dict(answer.get("probabilities") or {}),
             )
         except (KeyError, TypeError, ValueError):
             return None
+        return choice if 0.0 <= confidence <= 1.0 else None
 
 
 class JevClient:
