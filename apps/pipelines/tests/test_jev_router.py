@@ -11,7 +11,7 @@ from apps.chat.exceptions import ProviderConfigurationError
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
-from apps.pipelines.nodes.jev_router import HISTORY_LIMIT
+from apps.pipelines.nodes.jev_calls import HISTORY_LIMIT
 from apps.pipelines.nodes.nodes import (
     ExtractParticipantData,
     ExtractStructuredData,
