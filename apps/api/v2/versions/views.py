@@ -182,7 +182,6 @@ def _check_pipeline_can_go_live(chatbot: Experiment) -> None:
 class ChatbotVersionStatusView(APIView):
     """Report where the chatbot's version history stands."""
 
-    # The read is held to the publish allowlist: a token that may not publish has no publish to follow.
     permission_classes = [
         *BASE_PERMISSION_CLASSES,
         ChatbotCompositionPermission,

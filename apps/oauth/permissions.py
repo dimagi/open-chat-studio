@@ -106,6 +106,17 @@ def token_reaches_all_data(token) -> bool:
     return not is_client_credentials_token(token) or token.application.all_data
 
 
+def token_allowed_chatbots(token, chatbots):
+    """Narrow `chatbots`, a queryset of working versions, to the ones `token` may reach.
+
+    The collection-side counterpart of `token_allows_chatbot`: a list has no one chatbot to refuse, so
+    the ones a limited machine token may not reach are left out of it.
+    """
+    if token_reaches_all_data(token):
+        return chatbots
+    return chatbots.filter(oauth_applications=token.application)
+
+
 def applications_allowing_chatbot(experiment):
     """The team's machine applications that may reach `experiment` -- inverse of `token_allows_chatbot`.
 

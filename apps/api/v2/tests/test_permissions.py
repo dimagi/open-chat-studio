@@ -67,6 +67,6 @@ def test_a_listed_chatbot_addressed_by_one_of_its_versions_is_admitted():
     assert ApplicationAllowsChatbot().has_object_permission(request, None, version) is True
 
 
-def test_the_refusal_message_is_the_one_the_endpoints_have_always_sent():
-    """Clients may match on it."""
-    assert ApplicationAllowsChatbot.message == "This application is not authorized to modify this chatbot."
+def test_the_refusal_reads_the_same_whatever_the_verb():
+    """The class carries no verb logic, so one message serves reads and writes; clients may match on it."""
+    assert ApplicationAllowsChatbot.message == "This application is not authorized to access this chatbot."
