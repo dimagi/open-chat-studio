@@ -350,14 +350,15 @@ class Importer:
             raise UnresolvedForeignKey(
                 f"{model_label}:{source_pk} has no imported row to update", target_label=model_label
             )
-        field_values = {}
+        named = set(_NAMED_LINK_FIELDS.get(model_label, []))
+        field_values, timestamps = {}, {}
         nulled_fk = False
         for name in fields:
             field = model._meta.get_field(name)
             nulled_fk |= self._collect_concrete_field(
-                field=field, row=row, named=set(), field_values=field_values, timestamps={}
+                field=field, row=row, named=named, field_values=field_values, timestamps=timestamps
             )
-        _update_without_auto_now(model=model, pk=target_pk, values=field_values)
+        _update_without_auto_now(model=model, pk=target_pk, values={**field_values, **timestamps})
         # A nulled FK keeps no timestamp, so a later re-read applies the row again.
         source_updated_at = None if nulled_fk else row.get("updated_at")
         self.store.record(
