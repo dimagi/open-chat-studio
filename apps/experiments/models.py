@@ -985,14 +985,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         and versions. Only the working version changes, so the published version stays live until
         the next publish and remains available to revert to.
         """
-        source = self.cloned_from
-        if not self.is_working_version or source is None:
-            raise ValueError("Can only overwrite a working copy of another chatbot")
-        if source.is_archived:
-            raise ValueError("Cannot overwrite a copy from an archived chatbot")
-        if source.pipeline is None:
-            raise ValueError(f"{source.name} has no pipeline to copy")
-
+        source = self._overwrite_source()
         for field in self.VERSIONED_CONTENT_FIELDS - {"name", "pipeline"}:
             setattr(self, field, getattr(source, field))
         self.save()
@@ -1002,6 +995,17 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             source._copy_pipeline_to_new_version(self, is_copy=True)
         sync_triggers(source, self, mode=TriggerSyncMode.COPY)
+
+    def _overwrite_source(self) -> Experiment:
+        """The chatbot this copy can be overwritten from, or ValueError saying why it can't."""
+        source = self.cloned_from
+        if not self.is_working_version or source is None:
+            raise ValueError("Can only overwrite a working copy of another chatbot")
+        if source.is_archived:
+            raise ValueError("Cannot overwrite a copy from an archived chatbot")
+        if source.pipeline is None:
+            raise ValueError(f"{source.name} has no pipeline to copy")
+        return source
 
     def _revert_pipeline_to_version(self, version: Experiment) -> None:
         """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
