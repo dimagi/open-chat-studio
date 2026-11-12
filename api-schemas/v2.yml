@@ -2640,9 +2640,6 @@ components:
           nullable: true
           description: Overrides the trace provider's sample rate for this chatbot.
             Leave blank to use the provider's own setting.
-        debug_mode_enabled:
-          type: boolean
-          readOnly: true
         conversational_consent_enabled:
           type: boolean
           readOnly: true
@@ -2665,7 +2662,6 @@ components:
       required:
       - consent_form_id
       - conversational_consent_enabled
-      - debug_mode_enabled
       - description
       - echo_transcript
       - file_uploads_enabled
@@ -3633,13 +3629,10 @@ components:
           type: boolean
           description: When the participant sends a voice message, also reply with
             the text the bot transcribed.
-        debug_mode_enabled:
-          type: boolean
         file_uploads_enabled:
           type: boolean
       required:
       - conversational_consent_enabled
-      - debug_mode_enabled
       - echo_transcript
       - file_uploads_enabled
       - seed_message
@@ -4200,8 +4193,6 @@ components:
           nullable: true
           description: Overrides the trace provider's sample rate for this chatbot.
             Leave blank to use the provider's own setting.
-        debug_mode_enabled:
-          type: boolean
         conversational_consent_enabled:
           type: boolean
           description: 'If enabled, the consent form will be sent at the start of
