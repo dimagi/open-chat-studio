@@ -1377,11 +1377,22 @@ def test_a_partial_row_is_skipped_only_once_it_was_applied(store):
     assert importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS) == 0
 
 
+def test_a_partial_row_with_an_unimported_fk_target_raises_for_a_catch_up(store):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    with pytest.raises(UnresolvedForeignKey) as exc_info:
+        importer.import_rows("teams.team", [team_settings_row(moderation_provider=40)], fields=TEAM_SETTINGS_FIELDS)
+
+    assert exc_info.value.target_label == "service_providers.moderationprovider"
+    assert Team.objects.get(pk=importer.target_team.pk).moderation_enabled is False
+
+
 def test_a_partial_row_whose_fk_was_nulled_is_reapplied_on_reread(store):
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     row = team_settings_row(moderation_provider=40)
-    importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS)
+    importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS, null_unresolved_fks=True)
     assert Team.objects.get(pk=importer.target_team.pk).moderation_provider is None
 
     provider = ModerationProviderFactory(team=importer.target_team)

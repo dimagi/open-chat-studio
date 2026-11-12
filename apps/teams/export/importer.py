@@ -316,10 +316,17 @@ class Importer:
         # applied to.
         self.kept_target_edits: dict[str, set[int]] = defaultdict(set)
 
-    def import_rows(self, model_label: str, rows: Iterable[dict], fields: Sequence[str] = ()) -> int:
+    def import_rows(
+        self, model_label: str, rows: Iterable[dict], fields: Sequence[str] = (), null_unresolved_fks: bool = False
+    ) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
         ``fields`` marks the rows as partial (see ``ManifestEntry.fields``). Returns the number of rows
-        imported this pass (for the sync's progress report)."""
+        imported this pass (for the sync's progress report).
+
+        A partial row is read once, after which its resource cursor moves past it, so a nullable FK
+        whose synced target isn't imported yet raises ``UnresolvedForeignKey`` for the sync to catch
+        the target up. ``null_unresolved_fks`` nulls it instead, for a target the catch-up didn't find.
+        A full row always nulls such an FK."""
         model = entry_model(model_label)
         secret_fields = SECRET_REGISTRY.get(model_label, [])
         # The full row was recorded with the same updated_at, so a partial row keeps its own checkpoint.
@@ -331,7 +338,12 @@ class Importer:
                 continue
             if fields:
                 self._import_partial_row(
-                    model_label=model_label, model=model, fields=fields, checkpoint_label=checkpoint_label, row=row
+                    model_label=model_label,
+                    model=model,
+                    fields=fields,
+                    checkpoint_label=checkpoint_label,
+                    row=row,
+                    null_unresolved_fks=null_unresolved_fks,
                 )
             else:
                 if self.private_key and secret_fields:
@@ -341,7 +353,13 @@ class Importer:
         return count
 
     def _import_partial_row(
-        self, model_label: str, model: type[models.Model], fields: Sequence[str], checkpoint_label: str, row: dict
+        self,
+        model_label: str,
+        model: type[models.Model],
+        fields: Sequence[str],
+        checkpoint_label: str,
+        row: dict,
+        null_unresolved_fks: bool,
     ) -> None:
         """Update the listed fields on the row an earlier step imported."""
         source_pk = row["id"]
@@ -355,9 +373,15 @@ class Importer:
         nulled_fk = False
         for name in fields:
             field = model._meta.get_field(name)
-            nulled_fk |= self._collect_concrete_field(
+            if self._collect_concrete_field(
                 field=field, row=row, named=named, field_values=field_values, timestamps=timestamps
-            )
+            ):
+                if not null_unresolved_fks:
+                    target_label = field.related_model._meta.label_lower
+                    raise UnresolvedForeignKey(
+                        f"{model_label}.{name} -> {target_label}:{row[name]}", target_label=target_label
+                    )
+                nulled_fk = True
         _update_without_auto_now(model=model, pk=target_pk, values={**field_values, **timestamps})
         # A nulled FK keeps no timestamp, so a later re-read applies the row again.
         source_updated_at = None if nulled_fk else row.get("updated_at")
