@@ -8,7 +8,7 @@ See https://docs.typesafe.ai/api/system-one.
 import json
 import math
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -116,41 +116,34 @@ class JevResponse:
 
     def choice(self, name: str) -> ChoiceAnswer | None:
         """The answer to the choice question `name`, or None when there is no well-formed one."""
-        answer = self._answer(name, "choice")
-        try:
-            return ChoiceAnswer(
-                choice=str(answer["choice"]),
-                confidence=_probability(answer["confidence"]),
-                probabilities=dict(answer.get("probabilities") or {}),
-            )
-        except (KeyError, TypeError, ValueError):
-            return None
+        return self._read(name, "choice", _choice_answer)
 
     def score(self, name: str) -> ScoreAnswer | None:
         """The answer to the score question `name`, or None when there is no well-formed one."""
-        answer = self._answer(name, "score")
-        try:
-            return ScoreAnswer(
-                score=_finite(answer["score"]),
-                confidence=_probability(answer["confidence"]),
-                probabilities=dict(answer.get("probabilities") or {}),
-            )
-        except (KeyError, TypeError, ValueError):
-            return None
+        return self._read(name, "score", _score_answer)
 
     def noul(self, name: str) -> NoulAnswer | None:
         """The answer to the noul question `name`, or None when there is no well-formed one."""
-        answer = self._answer(name, "noul")
+        return self._read(name, "noul", lambda answer: NoulAnswer(noul=_probability(answer["noul"])))
+
+    def _read[T](self, name: str, question_type: str, parse: Callable[[dict], T]) -> T | None:
+        answer = self.answers.get(name)
+        if not isinstance(answer, dict) or answer.get("type") != question_type:
+            return None
         try:
-            return NoulAnswer(noul=_probability(answer["noul"]))
+            return parse(answer)
         except (KeyError, TypeError, ValueError):
             return None
 
-    def _answer(self, name: str, question_type: str) -> dict:
-        answer = self.answers.get(name)
-        if not isinstance(answer, dict) or answer.get("type") != question_type:
-            return {}
-        return answer
+
+def _choice_answer(answer: dict) -> ChoiceAnswer:
+    probabilities = dict(answer.get("probabilities") or {})
+    return ChoiceAnswer(str(answer["choice"]), _probability(answer["confidence"]), probabilities)
+
+
+def _score_answer(answer: dict) -> ScoreAnswer:
+    probabilities = dict(answer.get("probabilities") or {})
+    return ScoreAnswer(_finite(answer["score"]), _probability(answer["confidence"]), probabilities)
 
 
 def _finite(value: Any) -> float:
