@@ -89,31 +89,22 @@ class TestExamplesAreAccepted:
     """Each example sent as documented, bar the placeholder ids."""
 
     @pytest.fixture()
-    def reference_ids(
-        self,
-        node_type,
-        llm,
-        jev_llm,
-        source_material,
-        media_collection,
-        collection_indexes,
-        custom_action,
-        synthetic_voice,
-    ):
+    def reference_ids(self, request, node_type, llm_node_resources):
         """Real ids for the params whose example values are placeholders, keyed by param name.
 
         A Decision Node takes only a Jev model, so its LLM ids are the Jev provider's.
         """
-        provider, model = jev_llm if node_type == "DecisionNode" else llm
-        support_kb, billing_kb = collection_indexes
+        provider, model = request.getfixturevalue("jev_llm" if node_type == "DecisionNode" else "llm")
+        resources = llm_node_resources
+        support_kb, billing_kb = resources.collection_indexes
         return {
             "llm_provider_id": provider.id,
             "llm_provider_model_id": model.id,
-            "source_material_id": source_material.id,
-            "collection_id": media_collection.id,
+            "source_material_id": resources.source_material.id,
+            "collection_id": resources.media_collection.id,
             "collection_index_ids": [support_kb.id, billing_kb.id],
-            "custom_actions": [f"{custom_action.id}:weather_get"],
-            "synthetic_voice_id": synthetic_voice.id,
+            "custom_actions": [f"{resources.custom_action.id}:weather_get"],
+            "synthetic_voice_id": resources.synthetic_voice.id,
         }
 
     @pytest.mark.parametrize("node_type", SERVED_TYPES, ids=SERVED_TYPES)
