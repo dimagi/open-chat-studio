@@ -48,7 +48,7 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("service_providers.messagingprovider", "messaging_providers", "pk", secret=True),
     ManifestEntry("service_providers.authprovider", "auth_providers", "pk", secret=True),
     ManifestEntry("service_providers.traceprovider", "trace_providers", "pk", secret=True),
-    ManifestEntry("service_providers.moderationprovider", "moderation_providers", "pk", secret=True),
+    ManifestEntry("service_providers.moderationprovider", "moderation_providers", "updated_at_id", secret=True),
     ManifestEntry(TEAM_MODEL, "team_settings", "updated_at_id", fields=TEAM_SETTINGS_FIELDS),
     ManifestEntry("service_providers.llmprovidermodel", "llm_provider_models", "pk"),
     ManifestEntry("service_providers.embeddingprovidermodel", "embedding_provider_models", "pk"),
