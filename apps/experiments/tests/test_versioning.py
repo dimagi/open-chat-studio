@@ -474,23 +474,15 @@ class TestExperimentFieldClassification:
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("field", "value", "diff_name"),
-    [
-        pytest.param("participant_allowlist", ["+27123456789"], "allowlist", id="participant-allowlist"),
-        pytest.param("debug_mode_enabled", True, "debug_mode_enabled", id="debug-mode"),
-    ],
-)
-def test_removed_field_is_gone_from_the_version_diff_but_still_cloned(field, value, diff_name):
-    experiment = ExperimentFactory.create(**{field: value})
+def test_allowlist_is_gone_from_the_version_diff_but_still_cloned():
+    experiment = ExperimentFactory.create(participant_allowlist=["+27123456789"])
 
-    assert diff_name not in [version_field.name for version_field in experiment.version_details.fields]
+    assert "allowlist" not in [field.name for field in experiment.version_details.fields]
 
     version = experiment.create_new_version()
     # Phase 1 of the two-phase drop: the column and its VERSIONED_CONTENT_FIELDS entry
-    # survive to Phase 2 (#4278 for the allowlist, #4375 for debug mode), so the dormant value is
-    # still cloned.
-    assert getattr(version, field) == value
+    # survive to Phase 2 (#4278), so the dormant value is still cloned.
+    assert version.participant_allowlist == ["+27123456789"]
 
 
 class TestVersionFieldPreservesFalsyValues:
