@@ -27,7 +27,9 @@ def markdown_literal(value) -> str:
     text = _EDGE_UNDERSCORES.sub(lambda run: "\\_" * len(run.group()), text)
     text = _LINE_START_MARKER.sub(r"\1\\\2", text)
     text = _LINE_START_NUMBER.sub(r"\1\\.", text)
-    return _LINE_START_UNESCAPABLE.sub(lambda char: f"&#{ord(char.group())};", text)
+    text = _LINE_START_UNESCAPABLE.sub(lambda char: f"&#{ord(char.group())};", text)
+    # Each line of a multi-line value is its own paragraph, so its lines stay apart where newlines are not breaks.
+    return text.replace("\n", "\n\n")
 
 
 class _RawHtmlAsText(Extension):
@@ -38,12 +40,16 @@ class _RawHtmlAsText(Extension):
         md.inlinePatterns.deregister("html")
 
 
-def message_html(message: str) -> str:
+def message_html(message: str, line_breaks: bool = True) -> str:
     """Sanitised HTML for a notification message.
 
-    Single newlines stay line breaks, as they were when messages rendered as plain text.
+    With ``line_breaks``, single newlines become ``<br>``, as they were when messages rendered as plain text.
+    Email leaves them out, since email clients lay out paragraphs on their own.
     """
-    rendered = markdown.markdown(message, extensions=["nl2br", "fenced_code", "tables", _RawHtmlAsText()])
+    extensions = ["fenced_code", "tables", _RawHtmlAsText()]
+    if line_breaks:
+        extensions.append("nl2br")
+    rendered = markdown.markdown(message, extensions=extensions)
     return nh3.clean(rendered, attributes={"a": {"href", "title"}})
 
 

@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from time_machine import travel
 
+from apps.ocs_notifications.formatting import markdown_literal
 from apps.ocs_notifications.models import (
     EventType,
     EventUser,
@@ -39,15 +40,26 @@ from apps.web.meta import absolute_url
 
 @pytest.mark.django_db()
 class TestSendNotificationEmail:
-    def test_email_renders_the_message_as_markdown(self, team_with_users, mailoutbox):
+    @pytest.mark.parametrize(
+        ("message", "expected"),
+        [
+            pytest.param("**Update** now\nor later", "<p><strong>Update</strong> now\nor later</p>", id="authored"),
+            pytest.param(
+                f"Failed: {markdown_literal('line one\nline two')}",
+                "<p>Failed: line one</p>\n<p>line two</p>",
+                id="multi-line-value",
+            ),
+        ],
+    )
+    def test_email_renders_the_message_as_markdown(self, team_with_users, mailoutbox, message, expected):
         user = team_with_users.members.first()
-        event = NotificationEventFactory.create(team=team_with_users, message="**Update** now\nor later")
+        event = NotificationEventFactory.create(team=team_with_users, message=message)
 
         send_notification_email([user], event)
 
         body = mailoutbox[0].alternatives[0][0]
-        assert "<p><strong>Update</strong> now<br>\nor later</p>" in body
-        assert "**" not in body
+        assert expected in body
+        assert "<br" not in body
 
     def test_email_not_sent_when_preference_doesnt_exist(self, team_with_users, mailoutbox):
         """

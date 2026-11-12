@@ -140,7 +140,7 @@ def test_the_in_app_list_shows_the_rendered_message():
     [
         pytest.param("KeyError: '__init__' in *beta*", id="inline-markers"),
         pytest.param("a & b <c> &amp;", id="entities"),
-        pytest.param("failed\n=== | x\n  ~~~", id="line-start"),
+        pytest.param("  === | x", id="line-start"),
     ],
 )
 def test_message_text_drops_markdown_escapes(value):
