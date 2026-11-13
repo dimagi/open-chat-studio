@@ -15,6 +15,7 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from openapi_pydantic import DataType, Parameter, Reference, Schema
 from pydantic import BaseModel, Field
 
+from apps.chat.agent.request_log import RequestAttempt, log_request
 from apps.ocs_notifications.notifications import (
     custom_action_api_failure_notification,
     custom_action_unexpected_error_notification,
@@ -126,21 +127,40 @@ class OpenAPIOperationExecutor:
         self, http_client: httpx.Client, url: str, method: str, **kwargs
     ) -> tuple[str, ToolArtifact | None]:
         logger.info("[%s] %s %s", self.function_def.name, method.upper(), url)
-        with http_client.stream(method.upper(), url, follow_redirects=False, **kwargs) as response:
+        request = http_client.build_request(method.upper(), url, **kwargs)
+        attempt = RequestAttempt(
+            tool_name=self.function_def.name,
+            custom_action_name=self.custom_action.name if self.custom_action else None,
+            request=request,
+            unauthenticated_headers=dict(request.headers),
+        )
+        try:
+            attempt.response = http_client.send(request, follow_redirects=False, stream=True)
             try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError:
-                response.read()  # read the response to get the error message
-                raise
-            if content_disposition := response.headers.get("content-disposition"):
-                filename = self._get_filename_from_header(content_disposition)
-                if filename:
-                    logger.info("[%s] response with attachment: %s", self.function_def.name, filename)
-                    return self._get_artifact_response(content_disposition, filename, response)
+                return self._read_response(attempt.response)
+            finally:
+                attempt.response.close()
+        except Exception as e:
+            attempt.error = e
+            raise
+        finally:
+            log_request(attempt)
 
-            logger.info("[%s] response with content", self.function_def.name)
-            response.read()
-            return response.text, None
+    def _read_response(self, response: httpx.Response) -> tuple[str, ToolArtifact | None]:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            response.read()  # read the response to get the error message
+            raise
+        if content_disposition := response.headers.get("content-disposition"):
+            filename = self._get_filename_from_header(content_disposition)
+            if filename:
+                logger.info("[%s] response with attachment: %s", self.function_def.name, filename)
+                return self._get_artifact_response(content_disposition, filename, response)
+
+        logger.info("[%s] response with content", self.function_def.name)
+        response.read()
+        return response.text, None
 
     def _get_artifact_response(self, content_disposition, filename, response):
         content_type = response.headers.get("Content-Type", "application/octet-stream")

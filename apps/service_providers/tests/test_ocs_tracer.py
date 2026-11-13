@@ -7,6 +7,7 @@ import pytest
 
 from apps.chat.exceptions import ProviderConfigurationError
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
+from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
 from apps.trace.models import Trace
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -61,6 +62,21 @@ class TestOCSTracer:
 
         trace = Trace.objects.get(trace_id=trace_context.id)
         assert trace.trace_metadata == metadata
+
+    def test_custom_action_requests_persisted(self, experiment):
+        """Custom action request events are saved on the trace; other custom events are not."""
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create()
+
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        with tracer.trace(trace_context=trace_context, session=session):
+            handler = tracer.get_langchain_callback()
+            handler.on_custom_event(CUSTOM_ACTION_REQUEST_EVENT, {"url": "https://a.example"}, run_id=uuid4())
+            handler.on_custom_event("something_else", {"url": "https://b.example"}, run_id=uuid4())
+
+        trace = Trace.objects.get(trace_id=trace_context.id)
+        assert trace.custom_action_requests == [{"url": "https://a.example"}]
+        assert tracer.custom_action_requests == []
 
     def test_trace_error_recording(self, experiment):
         """Test that errors during trace execution are captured in the trace record"""

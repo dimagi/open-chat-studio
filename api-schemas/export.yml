@@ -6503,6 +6503,9 @@ components:
           minimum: -2147483648
           nullable: true
           description: Number of tool invocations across all turns
+        custom_action_requests:
+          nullable: true
+          description: HTTP requests made by custom actions, with credentials redacted
         experiment:
           type: integer
           nullable: true

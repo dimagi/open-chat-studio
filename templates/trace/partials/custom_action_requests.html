@@ -1,0 +1,53 @@
+{% load json_tags %}
+<div class="card bg-base-100 shadow-md mb-6" data-testid="custom-action-requests">
+  <div class="card-header border-b border-base-200 px-6 py-4">
+    <h3 class="text-lg font-semibold text-base-content">Custom Action Requests</h3>
+    <p class="text-xs text-base-content/60 mt-1">Credentials are redacted and long bodies are truncated.</p>
+  </div>
+  <div class="card-body p-4 gap-2">
+    {% for log in requests %}
+      <details class="collapse collapse-arrow border border-base-300 bg-base-100">
+        <summary class="collapse-title text-sm min-h-0 py-3">
+          <div class="flex items-center gap-2 min-w-0">
+            {% if log.status_code is None %}
+              <c-ui.badge variant="error" size="sm">Failed</c-ui.badge>
+            {% elif log.status_code >= 400 %}
+              <c-ui.badge variant="error" size="sm">{{ log.status_code }}</c-ui.badge>
+            {% else %}
+              <c-ui.badge variant="success" size="sm">{{ log.status_code }}</c-ui.badge>
+            {% endif %}
+            <span class="font-mono font-semibold">{{ log.method }}</span>
+            <span class="font-mono truncate" title="{{ log.url }}">{{ log.url }}</span>
+            <span class="ml-auto pl-2 text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ log.duration_ms }} ms</span>
+          </div>
+          <div class="text-xs text-base-content/60 mt-1">{{ log.custom_action|default:"Custom action" }} · {{ log.tool }}</div>
+        </summary>
+        <div class="collapse-content space-y-4 text-sm">
+          {% if log.error %}
+            <div class="text-sm text-error bg-error/10 rounded-lg p-3 whitespace-pre-wrap break-words">{{ log.error }}</div>
+          {% endif %}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="space-y-3 min-w-0">
+              <h4 class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Request</h4>
+              <pre class="highlight-json text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ log.request_headers|highlight_json }}</pre>
+              {% if log.request_body %}
+                <pre class="text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words">{{ log.request_body }}</pre>
+              {% endif %}
+            </div>
+            <div class="space-y-3 min-w-0">
+              <h4 class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Response</h4>
+              {% if log.status_code is None %}
+                <p class="text-base-content/60">No response received.</p>
+              {% else %}
+                <pre class="highlight-json text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">{{ log.response_headers|highlight_json }}</pre>
+                {% if log.response_body %}
+                  <pre class="text-xs bg-base-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-96">{{ log.response_body }}</pre>
+                {% endif %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+</div>
