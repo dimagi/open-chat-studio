@@ -62,6 +62,9 @@ def test_list_sessions_with_tag(experiment):
 
     session1.chat.add_tag(tags[0], team, user)
     session2.chat.add_tag(tags[1], team, user)
+    # Tagging a session's chat moves the session's updated_at.
+    session1.refresh_from_db()
+    session2.refresh_from_db()
 
     client = ApiTestClient(user, team)
     # Filter by tag

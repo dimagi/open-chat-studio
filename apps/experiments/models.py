@@ -55,7 +55,7 @@ from apps.utils.deletion import (
     has_related_pipeline_references,
 )
 from apps.utils.fields import SanitizedJSONField
-from apps.utils.models import BaseModel
+from apps.utils.models import BaseModel, UpdatedAtOnPartialSaveMixin
 from apps.utils.time import seconds_to_human
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 from apps.web.meta import absolute_url
@@ -1571,7 +1571,7 @@ class ExperimentSessionObjectManager(models.Manager):
         return queryset.annotate_with_message_count().order_by(last_activity_expression().desc())
 
 
-class ExperimentSession(BaseTeamModel):
+class ExperimentSession(UpdatedAtOnPartialSaveMixin, BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
