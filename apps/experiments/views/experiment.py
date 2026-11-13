@@ -213,7 +213,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     experiment = request.experiment
     session = request.experiment_session
     last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    message_details = get_message_task_response(experiment, task_id)
+    message_details = get_message_task_response(task_id)
     if not message_details:
         # don't render empty messages
         return HttpResponse()
@@ -736,6 +736,7 @@ def _build_session_messages_context(request, session, experiment) -> tuple[dict,
         "total_pages": total_pages,
         "total_messages": len(messages_queryset),
         "page_size": page_size,
+        "prefetch_trigger_index": page_size // 2,
         "page_start_index": page_start_index,
         "selected_tags": selected_tags,
         "tag_match_count": len(matched_ids),
@@ -815,6 +816,7 @@ def experiment_session_messages_fragment_view(request, team_slug: str, experimen
     """
     session = request.experiment_session
     context, _messages_queryset = _build_session_messages_context(request, session, request.experiment)
+    context["is_fragment"] = True
     return TemplateResponse(request, "experiments/components/session_messages_list.html", context)
 
 

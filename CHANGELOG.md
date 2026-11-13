@@ -50,6 +50,10 @@ version section when a release is cut.
   `410 Gone`. Invitations can no longer be created or sent. A new daily Celery beat task,
   `ocs_notifications.tasks.notify_http_sunsets` (02:30), notifies teams still using the legacy
   chat; Celery beat must be running for those notices to go out.
+- The chatbot debug mode setting is removed (#4375). `debug_mode_enabled` is gone from the v2
+  chatbot inspect and PATCH responses, and a v2 create or PATCH that sends it gets `400`. The v1
+  task poll (`/api/chat/{session_id}/{task_id}/poll/`) returns the generic error message for
+  every chatbot; it no longer returns the raw error for chatbots that had debug mode on.
 - Message `metadata` in the sessions API no longer has `cited_files` or `generated_files` keys.
   The file ids they held are under `ocs_attachment_file_ids`. The message's `attachments` field
   still lists every attached file. (#1901)
