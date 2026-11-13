@@ -2441,6 +2441,7 @@ export class OcsChat {
           <button
             class="file-attachment-button kiosk-new-chat"
             onClick={() => this.showConfirmationDialog()}
+            disabled={this.isUploadingFiles || this.isLoading}
             title={this.translationManager.get('window.newChat')}
             aria-label={this.translationManager.get('window.newChat')}
           >

@@ -249,10 +249,8 @@ describe('ocs-chat kiosk restart after session end', () => {
 
       const sending = page.rootInstance.sendMessage('with a file');
       await page.waitForChanges();
-      newChatButton(page).click();
-      await page.waitForChanges();
-      (page.root?.shadowRoot?.querySelector('.confirmation-button-confirm') as HTMLButtonElement).click();
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // The kiosk button is disabled during the upload; the standard header button is not.
+      await page.rootInstance.confirmNewChat();
       await page.waitForChanges();
 
       finishUpload({ selectedFiles: [{ file, uploaded: true }], uploadedIds: [7] });
@@ -263,6 +261,23 @@ describe('ocs-chat kiosk restart after session end', () => {
       expect(page.rootInstance.messages).toEqual([]);
       expect(page.rootInstance.selectedFiles).toEqual([]);
       expect(page.rootInstance.activeSessionId).toBeUndefined();
+    });
+
+    it.each([
+      ['uploading files', 'isUploadingFiles'],
+      ['starting a session', 'isLoading'],
+    ])('is disabled while %s', async (_label, flag) => {
+      const page = await pageWithMessage(KIOSK_WITH_NEW_CHAT);
+      page.rootInstance[flag] = true;
+      await page.waitForChanges();
+      expect(newChatButton(page).hasAttribute('disabled')).toBe(true);
+    });
+
+    it('stays enabled while waiting for the reply', async () => {
+      const page = await pageWithMessage(KIOSK_WITH_NEW_CHAT);
+      page.rootInstance.isTyping = true;
+      await page.waitForChanges();
+      expect(newChatButton(page).hasAttribute('disabled')).toBe(false);
     });
 
     it('keeps the session when the confirmation is cancelled', async () => {
