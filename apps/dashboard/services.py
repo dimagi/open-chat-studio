@@ -203,10 +203,11 @@ class DashboardService:
         )
         stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
 
-        # Use sessions base (already constrained/deduped) to avoid message join inflation
+        # Completed in the window, the same reading as the overview card, so the per-chatbot
+        # completion rate's numerator and denominator describe one window (ADR-0051).
         session_durations = (
             querysets["sessions"]
-            .filter(ended_at__isnull=False)
+            .filter(ended_at__gte=start, ended_at__lt=end)
             .values("experiment_id")
             .annotate(
                 completed_sessions_count=Count("id", distinct=True),
@@ -315,11 +316,11 @@ class DashboardService:
             if stats[participant_field] in participants
         ]
 
-        # Session length distribution
+        # Session length distribution, over the sessions that completed in the window.
         session_lengths = (
             querysets["sessions"]
             .order_by()
-            .filter(ended_at__isnull=False)
+            .filter(ended_at__gte=start, ended_at__lt=end)
             .annotate(duration=ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField()))
         ).values_list("duration", flat=True)
 
@@ -481,7 +482,8 @@ class DashboardService:
         return histogram
 
     def _series_cache_key(self, granularity: str, filters: dict) -> str:
-        return self._cache_key({**filters, "granularity": granularity})
+        """Bucketed series depend on the timezone they are truncated in, so it keys the cache with the filters."""
+        return self._cache_key({**filters, "granularity": granularity, "tz": timezone.get_current_timezone_name()})
 
     def _format_participant_data(self, participant, stats: dict, cost_map: dict | None = None) -> dict[str, Any]:
         """Format participant data for engagement analysis. `stats` is one

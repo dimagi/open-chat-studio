@@ -1,5 +1,6 @@
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import ANY
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.utils import timezone
@@ -328,6 +329,42 @@ class TestDashboardService:
 
         bucket = bucket_start(message.created_at.astimezone(UTC), granularity).isoformat()
         assert data["sessions"] == [{"date": bucket, "active_sessions": 1}]
+
+    def test_series_are_cached_per_timezone(self, team, experiment, participant, experiment_session, chat):
+        """A bucket edge depends on the zone the series is truncated in, so a series computed for one
+        zone is not served to a viewer in another."""
+        ChatMessage.objects.create(
+            chat=chat,
+            message_type=ChatMessageType.HUMAN,
+            content="late",
+            created_at=datetime(2026, 6, 9, 23, 30, tzinfo=UTC),
+        )
+        window = {"start_date": datetime(2026, 6, 1, tzinfo=UTC), "end_date": datetime(2026, 6, 15, tzinfo=UTC)}
+
+        in_utc = DashboardService(team).get_session_analytics_data(granularity="daily", **window)
+        with timezone.override(ZoneInfo("Africa/Johannesburg")):
+            in_johannesburg = DashboardService(team).get_session_analytics_data(granularity="daily", **window)
+
+        assert in_utc["sessions"][0]["date"] == "2026-06-09T00:00:00+00:00"
+        assert in_johannesburg["sessions"][0]["date"] == "2026-06-10T00:00:00+02:00"
+
+    def test_bot_performance_completion_rate_counts_sessions_that_ended_in_the_window(
+        self, team, experiment, participant
+    ):
+        """The per-chatbot rate reads like the overview card: completed means ended inside the window."""
+        now = timezone.now()
+        ended_in_window, ended_after, _never_ended = (
+            _create_session(experiment, participant, team, now) for _ in range(3)
+        )
+        ExperimentSession.objects.filter(pk=ended_in_window.pk).update(ended_at=now)
+        ExperimentSession.objects.filter(pk=ended_after.pk).update(ended_at=now + timedelta(days=2))
+
+        data = DashboardService(team).get_bot_performance_summary(
+            start_date=now - timedelta(days=1), end_date=now + timedelta(days=1)
+        )
+
+        assert data["results"][0]["sessions"] == 3
+        assert data["results"][0]["completion_rate"] == pytest.approx(1 / 3)
 
     def test_histogram_creation(self, team):
         """Test histogram creation utility"""
