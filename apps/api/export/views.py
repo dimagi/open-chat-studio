@@ -3,11 +3,6 @@ and a generic, team-scoped, keyset-paginated resource endpoint. The manifest dou
 allowlist: the resource endpoint refuses any resource not listed in it. ``resource_view`` is the
 factory the URLConf uses to mount one documented copy of the generic endpoint per resource."""
 
-import base64
-import json
-
-from django.db.models import Q
-from django.utils.dateparse import parse_datetime
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status
@@ -17,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.export.permissions import IsTeamAdmin
+from apps.api.keyset import encode_cursor, keyset_page
 from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.versioning import ExportVersioning
 from apps.teams.export.chatbot_scope import read_selection
@@ -129,26 +125,6 @@ class ResourceView(_ExportAPIView):
         return Response({"cursor": next_cursor, "has_more": has_more, "results": serializer.data})
 
 
-class CursorHelper:
-    """Encode/decode the keyset-pagination cursor as a base64-wrapped JSON blob."""
-
-    @staticmethod
-    def encode(keyset: dict) -> str:
-        return base64.b64encode(json.dumps(keyset).encode()).decode()
-
-    @staticmethod
-    def decode(cursor: str) -> dict:
-        try:
-            keyset = json.loads(base64.b64decode(cursor))
-            keyset["id"] = int(keyset["id"])
-            keyset["updated_at"] = parse_datetime(keyset["updated_at"])
-        except (ValueError, TypeError, KeyError) as e:
-            raise ValidationError("Invalid pagination cursor.") from e
-        if keyset["updated_at"] is None:
-            raise ValidationError("Invalid pagination cursor.")
-        return keyset
-
-
 def _parse_limit(raw) -> int:
     try:
         limit = int(raw)
@@ -177,18 +153,8 @@ def _paginate(queryset, cursor_type, cursor, limit):
         next_cursor = str(rows[-1].id) if has_more and rows else None
         return rows, next_cursor, has_more
 
-    queryset = queryset.order_by("updated_at", "id")
-    if cursor:
-        keyset = CursorHelper.decode(cursor)
-        timestamp = keyset["updated_at"]
-        queryset = queryset.filter(Q(updated_at__gt=timestamp) | Q(updated_at=timestamp, id__gt=keyset["id"]))
-    rows = list(queryset[: limit + 1])
-    has_more = len(rows) > limit
-    rows = rows[:limit]
-    if has_more and rows:
-        next_cursor = CursorHelper.encode({"updated_at": rows[-1].updated_at.isoformat(), "id": rows[-1].id})
-    else:
-        next_cursor = None
+    rows, has_more = keyset_page(queryset, cursor, limit)
+    next_cursor = encode_cursor(rows[-1]) if has_more and rows else None
     return rows, next_cursor, has_more
 
 

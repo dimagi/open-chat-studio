@@ -171,7 +171,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         session = super().get_object()
         if self.action == "retrieve":
             chat = session.chat
-            ChatMessage.prefetch_attached_files(chat=chat, messages=chat._prefetched_messages)
+            ChatMessage.prefetch_attached_files(chat._prefetched_messages)
         return session
 
     def get_queryset(self):
