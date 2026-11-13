@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.postgres.forms import SimpleArrayField  # ty: ignore[unresolved-import]
 from django.core.exceptions import ValidationError
 from django.urls import reverse
+from django.utils.functional import cached_property
 from django.utils.html import format_html
 
 from apps.channels import widget_versions
@@ -14,6 +15,7 @@ from apps.channels.forms.base import ExtraFormBase
 from apps.channels.forms.widgets import CredentialModeSelect, WidgetParams
 from apps.channels.models import CredentialMode, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS, validate_domain_or_wildcard
+from apps.chatbots.version_resolver import resolve_published_or_working
 
 # Floor for the per-channel session lifetime override: anything shorter would make every
 # session on the channel dead on arrival.
@@ -21,6 +23,8 @@ MIN_SESSION_TOKEN_LIFETIME = timedelta(minutes=5)
 
 
 class EmbeddedWidgetChannelForm(ExtraFormBase):
+    oauth_mode = CredentialMode.OAUTH.value
+
     credential_mode = forms.ChoiceField(
         label="Credential",
         choices=CredentialMode.choices,
@@ -84,14 +88,14 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self._credential_mode = self.channel.credential_mode if self.channel else CredentialMode.EMBED_KEY
         self.fields["credential_mode"].help_text = self._credential_mode_help_text()
         self.fields["credential_mode"].widget = CredentialModeSelect(
-            experiment=self.experiment, choices=CredentialMode.choices
+            experiment=self.experiment, choices=CredentialMode.choices, attrs={"class": "h-11 rounded-lg"}
         )
         self._seed_initial_from_channel()
 
         self.form_attrs = {
             "x-data": json.dumps(
                 {
-                    "allowAllDomains": self.initial.get("allow_all_domains", False),
+                    "allowAllDomains": bool(self["allow_all_domains"].value()),
                     # Seeded from the same value the select renders as chosen -- `BoundField.value()`
                     # is what `Select.get_context` is handed -- so `x-model` binding to it on init is
                     # a no-op rather than a silent change of the admin's selection.
@@ -102,6 +106,11 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["credential_mode"].widget.attrs["x-model"] = "credentialMode"
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
+
+    @cached_property
+    def serves_published_version(self) -> bool:
+        """Whether widget sessions run on the published version; without one they run on the working version."""
+        return resolve_published_or_working(self.experiment).is_default_version
 
     def _seed_initial_from_channel(self):
         if not self.channel:

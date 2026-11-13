@@ -1,0 +1,150 @@
+{% with name=form.name enabled=form.enabled message=form.disabled_message lifetime=extra_form.session_token_lifetime domains=extra_form.allowed_domains all_domains=extra_form.allow_all_domains %}
+  <div class="px-6 pt-6 pb-4 flex items-start gap-3">
+    <div class="size-10 shrink-0 rounded-lg bg-primary/10 text-primary grid place-items-center">
+      <i class="fa-regular fa-comment"></i>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h3 class="text-lg font-bold">Chat widget &amp; API channel</h3>
+      <p class="text-sm opacity-70 truncate">{{ experiment.name }} <span class="opacity-60 mx-1">/</span> {{ extra_form.serves_published_version|yesno:"Published Version,Working Version" }}</p>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close" onclick="this.closest('dialog').close()">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div class="px-6 border-b border-base-300 flex flex-wrap items-center justify-between gap-x-2">
+    <div role="tablist" class="tabs tabs-border flex-nowrap">
+      <button type="button" role="tab" class="tab font-semibold whitespace-nowrap" :class="tab === 'settings' && 'tab-active'"
+              :aria-selected="tab === 'settings'" @click="tab = 'settings'">Settings</button>
+      <button type="button" role="tab" class="tab font-semibold whitespace-nowrap" :class="tab === 'embed' && 'tab-active'"
+              :aria-selected="tab === 'embed'" @click="tab = 'embed'">Embed &amp; API</button>
+    </div>
+    {% if channel.widget_update_status or channel.pending_min_widget_version %}
+      <button type="button" class="btn btn-sm btn-soft btn-primary rounded-lg max-sm:mb-2"
+              @click="tab = 'embed'">
+        <i class="fa-solid fa-arrow-up"></i> Widget update available
+      </button>
+    {% endif %}
+  </div>
+
+  <div class="px-6 py-5 flex flex-col gap-5">
+    {{ form.non_field_errors }}{{ extra_form.non_field_errors }}
+    {% if success_message %}
+      <div role="alert" class="alert alert-success alert-soft"><span>{{ success_message }}</span></div>
+    {% endif %}
+    {% if warning_message %}
+      <div role="alert" class="alert alert-warning alert-soft"><span>{{ warning_message }}</span></div>
+    {% endif %}
+
+    <div role="tabpanel" class="flex flex-col gap-5" x-show="tab === 'settings'">
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_15rem] gap-x-4 gap-y-1.5">
+        <label for="{{ name.id_for_label }}" class="text-sm font-semibold">Name</label>
+        <label for="{{ lifetime.id_for_label }}" class="text-sm font-semibold max-sm:order-3">Session lifetime</label>
+        <input type="text" id="{{ name.id_for_label }}" name="{{ name.html_name }}" value="{{ name.value|default_if_none:'' }}"
+               class="input w-full h-11 rounded-lg max-sm:order-2" placeholder="{{ experiment.name }}">
+        <input type="text" id="{{ lifetime.id_for_label }}" name="{{ lifetime.html_name }}" value="{{ lifetime.value|default_if_none:'' }}"
+               class="input w-full h-11 rounded-lg font-mono max-sm:order-4" placeholder="12:00:00">
+        <p class="sm:col-span-2 text-sm opacity-70 max-sm:order-5">
+          Sessions end this long after they start; activity does not extend them. Leave blank for the system default.
+          Use <code>HH:MM:SS</code>, or <code>D HH:MM:SS</code> for days.
+        </p>
+        {% for error in name.errors %}<p class="sm:col-span-2 text-sm text-error max-sm:order-6">{{ error }}</p>{% endfor %}
+        {% for error in lifetime.errors %}<p class="sm:col-span-2 text-sm text-error max-sm:order-6">{{ error }}</p>{% endfor %}
+      </div>
+
+      <label class="flex items-center justify-between gap-4 rounded-lg bg-base-200 p-4 cursor-pointer">
+        <span>
+          <span class="block font-semibold">Channel enabled</span>
+          <span class="block text-sm opacity-70">Participants can start new sessions on the web widget and API.</span>
+        </span>
+        <input type="checkbox" name="{{ enabled.html_name }}" class="toggle toggle-primary"
+               x-model.boolean="channelEnabled" {% if enabled.value %}checked{% endif %}>
+      </label>
+
+      <div x-show="!channelEnabled" x-cloak>
+        <label for="{{ message.id_for_label }}" class="block text-sm font-semibold mb-1.5">
+          Disabled message <span class="font-normal opacity-60">Optional</span>
+        </label>
+        <textarea id="{{ message.id_for_label }}" name="{{ message.html_name }}" rows="3" class="textarea w-full rounded-lg"
+                  placeholder="This assistant is offline for maintenance. Please try again later.">{{ message.value|default_if_none:'' }}</textarea>
+        <p class="text-sm opacity-70 mt-1.5">
+          The chat API returns this when someone starts a chat while the channel is off. Leave blank for a generic
+          "currently unavailable" message. The web widget shows its own generic error instead.
+        </p>
+        {% for error in message.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+      </div>
+
+      <div>
+        <label for="{{ extra_form.credential_mode.id_for_label }}" class="block text-sm font-semibold mb-1.5">Credential</label>
+        {{ extra_form.credential_mode }}
+        <p class="text-sm opacity-70 mt-1.5">{{ extra_form.credential_mode.help_text }}</p>
+        {% for error in extra_form.credential_mode.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+      </div>
+
+      <div data-domains="{{ domains.value|default_if_none:'' }}"
+           x-data="{
+                   domains: [],
+                   draft: '',
+                   init() {
+                     this.domains = this.$el.dataset.domains.split('\n').map((d) => d.trim()).filter(Boolean);
+                   },
+                   add() {
+                     for (const domain of this.draft.split(/[\s,]+/)) {
+                       if (domain && !this.domains.includes(domain)) this.domains.push(domain);
+                     }
+                     this.draft = '';
+                   },
+                   }">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-sm font-semibold">Allowed domains</span>
+          <label class="flex items-center gap-2 text-sm opacity-80 cursor-pointer">
+            Allow all domains
+            <input type="checkbox" name="{{ all_domains.html_name }}" class="toggle toggle-sm toggle-primary"
+                   x-model.boolean="allowAllDomains" {% if all_domains.value %}checked{% endif %}>
+          </label>
+        </div>
+        <textarea name="{{ domains.html_name }}" class="hidden" :value="domains.join('\n')" :disabled="allowAllDomains">{{ domains.value|default_if_none:'' }}</textarea>
+        <div :class="allowAllDomains && 'opacity-50 pointer-events-none'">
+          <div class="flex flex-wrap gap-2 mb-2" x-show="domains.length">
+            <template x-for="(domain, index) in domains" :key="domain">
+              <span class="inline-flex items-center gap-2 rounded-lg border border-base-300 bg-base-200 px-3 py-1.5 font-mono text-sm">
+                <span x-text="domain"></span>
+                <button type="button" class="opacity-60 hover:opacity-100" :aria-label="`Remove ${domain}`"
+                        @click="domains.splice(index, 1)"><i class="fa-solid fa-xmark text-xs"></i></button>
+              </span>
+            </template>
+          </div>
+          <div class="flex gap-2">
+            <input type="text" class="input flex-1 h-11 rounded-lg font-mono" placeholder="app.example.org"
+                   aria-label="Domain to allow" x-model="draft" @keydown.enter.prevent="add()">
+            <button type="button" class="btn h-11 rounded-lg" @click="add()">Add domain</button>
+          </div>
+        </div>
+        <p class="text-sm opacity-70 mt-1.5">
+          Only pages served from these domains can load the widget. Wildcards allowed, e.g. <code>*.mysite.org</code>.
+          <span x-show="credentialMode === '{{ extra_form.oauth_mode }}'" x-cloak>
+            With an OAuth token, an empty list makes the channel server-only: every browser request is refused.
+          </span>
+        </p>
+        {% for error in domains.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
+      </div>
+    </div>
+
+    <div role="tabpanel" x-show="tab === 'embed'" x-cloak>
+      {{ extra_form.widget_token }}
+    </div>
+  </div>
+
+  <div class="px-6 py-4 border-t border-base-300 bg-base-200/50 flex items-center gap-2">
+    <button type="button" class="btn btn-ghost text-error h-11 rounded-lg"
+            hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}"
+            hx-target="#channel_create_edit_modal_placeholder"
+            hx-disabled-elt="input, select, textarea, button"
+            hx-swap="innerHTML">
+      <i class="fa-regular fa-trash-can"></i> Delete channel
+    </button>
+    <span class="flex-1"></span>
+    <span class="loading loading-spinner loading-sm htmx-indicator"></span>
+    <button type="button" class="btn h-11 rounded-lg" onclick="this.closest('dialog').close()">Cancel</button>
+    <button type="submit" class="btn btn-primary h-11 rounded-lg">Save changes</button>
+  </div>
+{% endwith %}

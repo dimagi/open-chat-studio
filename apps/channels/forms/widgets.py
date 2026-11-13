@@ -27,6 +27,7 @@ class WidgetParams(forms.Widget):
         if self.channel:
             context["widget"]["oauth"] = self.channel.credential_mode == CredentialMode.OAUTH
             context["widget"]["oauth_mode"] = CredentialMode.OAUTH.value
+            context["widget"]["saved_mode"] = self.channel.credential_mode
             context["widget"]["version"] = self.channel.widget_version
             context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
             context["widget"]["version_status"] = self.channel.widget_update_status
