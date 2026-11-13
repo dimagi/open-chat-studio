@@ -2671,6 +2671,11 @@ components:
           readOnly: true
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          readOnly: true
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         file_uploads_enabled:
           type: boolean
           readOnly: true
@@ -2689,6 +2694,7 @@ components:
       - synthetic_voice_id
       - trace_provider_id
       - trace_sample_rate
+      - unavailable_message
       - version_number
       - voice_provider_id
       - voice_response_behaviour
@@ -3636,6 +3642,10 @@ components:
           type: string
           description: Message used to start the conversation before the participant
             says anything.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         conversational_consent_enabled:
           type: boolean
         voice_response_behaviour:
@@ -3656,6 +3666,7 @@ components:
       - echo_transcript
       - file_uploads_enabled
       - seed_message
+      - unavailable_message
       - voice_response_behaviour
     InspectStaticTrigger:
       type: object
@@ -4227,6 +4238,10 @@ components:
           type: string
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         file_uploads_enabled:
           type: boolean
           description: Enables file attachments in the web chat interface.
