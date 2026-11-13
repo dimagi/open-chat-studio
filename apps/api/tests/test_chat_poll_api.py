@@ -69,8 +69,6 @@ def test_chat_poll_task_response_with_file_attachments(api_client, session, mock
 
 @pytest.mark.django_db()
 def test_chat_poll_task_response_hides_the_raw_error(api_client, session):
-    session.experiment.debug_mode_enabled = True
-    session.experiment.save(update_fields=["debug_mode_enabled"])
     progress = {"complete": True, "success": True, "result": {"error": "KeyError: 'api_key'"}}
 
     url = reverse("api:chat:task-poll-response", kwargs={"session_id": session.external_id, "task_id": "test-task-125"})

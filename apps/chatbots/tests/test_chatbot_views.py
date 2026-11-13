@@ -1539,34 +1539,11 @@ def test_settings_page_has_no_allowlist_section(client, experiment):
 
 
 @pytest.mark.django_db()
-def test_settings_page_has_no_debug_mode_setting(client, experiment):
-    client.force_login(experiment.team.members.first())
-    url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
-
-    edit = client.get(url)
-    saved = client.post(
-        url, data={"name": experiment.name, "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL}
-    )
-
-    for response in (edit, saved):
-        assert response.status_code == 200
-        assert b"debug_mode_enabled" not in response.content
-        assert b"Debug Mode" not in response.content
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("field", "stored", "posted"),
-    [
-        pytest.param("participant_allowlist", ["+27123456789"], "+27999999999", id="participant-allowlist"),
-        pytest.param("debug_mode_enabled", False, "on", id="debug-mode"),
-    ],
-)
-def test_settings_save_ignores_a_posted_removed_field(client, experiment, field, stored, posted):
-    """The settings form no longer has the field, so a posted value for it is ignored. The save
-    still succeeds and the column is untouched."""
-    setattr(experiment, field, stored)
-    experiment.save(update_fields=[field])
+def test_settings_save_ignores_a_posted_allowlist(client, experiment):
+    """The settings form no longer has a `participant_allowlist` field, so a posted value for it
+    is inert -- the save still succeeds and the column is untouched."""
+    experiment.participant_allowlist = ["+27123456789"]
+    experiment.save(update_fields=["participant_allowlist"])
     client.force_login(experiment.team.members.first())
     url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
 
@@ -1575,20 +1552,20 @@ def test_settings_save_ignores_a_posted_removed_field(client, experiment, field,
         data={
             "name": "Updated Chatbot Name",
             "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
-            field: posted,
+            "participant_allowlist": "+27999999999",
         },
     )
 
     assert response.status_code == 200
     experiment.refresh_from_db()
     assert experiment.name == "Updated Chatbot Name"
-    assert getattr(experiment, field) == stored
+    assert experiment.participant_allowlist == ["+27123456789"]
 
 
 @pytest.mark.django_db()
 def test_legacy_chat_shows_no_trace_links_or_routing_badge(client, team_with_users):
     user = team_with_users.members.first()
-    experiment = ExperimentFactory.create(team=team_with_users, debug_mode_enabled=True)
+    experiment = ExperimentFactory.create(team=team_with_users)
     session = ExperimentSessionFactory.create(experiment=experiment, participant__user=user)
     message = ChatMessage.objects.create(
         chat=session.chat,
