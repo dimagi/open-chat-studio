@@ -122,6 +122,11 @@ export namespace Components {
          */
         "showButton": boolean;
         /**
+          * In kiosk mode, show a new-chat button beside the message input. Kiosk mode has no header, so without this the user can only start over once the session ends. Standard mode always shows the new-chat button in the header.
+          * @default false
+         */
+        "showNewChatButton": boolean;
+        /**
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
@@ -279,6 +284,11 @@ declare namespace LocalJSX {
          */
         "showButton"?: boolean;
         /**
+          * In kiosk mode, show a new-chat button beside the message input. Kiosk mode has no header, so without this the user can only start over once the session ends. Standard mode always shows the new-chat button in the header.
+          * @default false
+         */
+        "showNewChatButton"?: boolean;
+        /**
           * Array of starter questions that users can click to send (JSON array of strings)
          */
         "starterQuestions"?: string;
@@ -333,6 +343,7 @@ declare namespace LocalJSX {
         "persistentSession": string;
         "persistentSessionExpire": number;
         "allowFullScreen": boolean;
+        "showNewChatButton": boolean;
         "allowAttachments": boolean;
         "disabled": boolean;
         "bannerMessage": string;

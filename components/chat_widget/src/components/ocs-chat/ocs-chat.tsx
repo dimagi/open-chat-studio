@@ -233,6 +233,13 @@ export class OcsChat {
   @Prop() allowFullScreen: boolean = true;
 
   /**
+   * In kiosk mode, show a new-chat button beside the message input. Kiosk mode has
+   * no header, so without this the user can only start over once the session ends.
+   * Standard mode always shows the new-chat button in the header.
+   */
+  @Prop() showNewChatButton: boolean = false;
+
+  /**
    * Allow the user to attach files to their messages.
    */
   @Prop() allowAttachments: boolean = false;
@@ -2201,6 +2208,11 @@ export class OcsChat {
     return this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && !this.isReadOnly();
   }
 
+  /** The kiosk counterpart of the header's new-chat button; the restart button replaces it once the session ends. */
+  private shouldShowKioskNewChat(): boolean {
+    return this.isKioskMode() && this.showNewChatButton && this.messages.length > 0 && !this.isSessionBound() && !this.isReadOnly() && !this.isConversationClosed();
+  }
+
   private isSessionBound(): boolean {
     return !!this.sessionId;
   }
@@ -2421,6 +2433,16 @@ export class OcsChat {
           disabled={this.isComposerLocked()}
         ></textarea>
         {this.renderAttachmentControls()}
+        {this.shouldShowKioskNewChat() && (
+          <button
+            class="file-attachment-button kiosk-new-chat"
+            onClick={() => this.showConfirmationDialog()}
+            title={this.translationManager.get('window.newChat')}
+            aria-label={this.translationManager.get('window.newChat')}
+          >
+            <PlusWithCircleIcon />
+          </button>
+        )}
         <button
           class={`send-button ${this.isSendReady() ? 'send-button-enabled' : 'send-button-disabled'}`}
           onClick={() => this.sendMessage(this.messageInput)}
@@ -2530,8 +2552,8 @@ export class OcsChat {
               </div>
             )}
 
-            {!this.isKioskMode() && this.showNewChatConfirmation && (
-              <div class="confirmation-overlay">
+            {this.showNewChatConfirmation && (
+              <div class={`confirmation-overlay${this.isKioskMode() ? ' confirmation-overlay-kiosk' : ''}`}>
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
                     <h3 class="confirmation-title">{this.translationManager.get('modal.newChatTitle')}</h3>
