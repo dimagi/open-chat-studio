@@ -390,6 +390,44 @@ class TestErrorMessageGeneration:
         assert result == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
 
 
+UNAVAILABLE = "We are down for maintenance until 18:00 UTC."
+DEFAULT_THEN_UNAVAILABLE = f"{MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT}\n\n{UNAVAILABLE}"
+
+
+class TestUnavailableMessage:
+    """The chatbot's unavailable message follows the default error reply wherever the participant can only wait."""
+
+    def _ctx(self):
+        return make_context(experiment=MagicMock(unavailable_message=UNAVAILABLE))
+
+    def test_follows_the_reply_to_a_configuration_error(self):
+        ctx = self._ctx()
+        _pipeline(core=[_make_stage(side_effect=ProviderConfigurationError("no credit"))]).process(ctx)
+        assert ctx.early_exit_response == DEFAULT_THEN_UNAVAILABLE
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_replaces_the_eventbot_call_for_an_unexpected_error(self, mock_trace_info, mock_event_bot_cls):
+        """The LLM is likely what failed, so no model is asked to phrase the apology."""
+        assert (
+            _pipeline()._generate_error_message(self._ctx(), RuntimeError("provider down")) == DEFAULT_THEN_UNAVAILABLE
+        )
+        mock_event_bot_cls.assert_not_called()
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_follows_the_fallback_when_eventbot_fails(self, mock_trace_info, mock_event_bot_cls):
+        mock_event_bot_cls.return_value.get_user_message.side_effect = RuntimeError("EventBot down")
+        assert _pipeline()._generate_error_message(self._ctx(), ChatException("bad input")) == DEFAULT_THEN_UNAVAILABLE
+
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
+    def test_is_not_added_to_a_participant_actionable_error(self, mock_trace_info, mock_event_bot_cls):
+        mock_event_bot_cls.return_value.get_user_message.side_effect = RuntimeError("EventBot down")
+        error = UserActionableError("`x.bmp` is not a supported image type")
+        assert _pipeline()._generate_error_message(self._ctx(), error) == str(error)
+
+
 class TestModelRefusedTurn:
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_records_the_outcome_on_the_reply_and_the_human_message(self, mock_gen):

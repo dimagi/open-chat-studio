@@ -604,6 +604,56 @@ class TestPostEndpointBackwardCompatibility:
         pipeline.refresh_from_db()
         assert pipeline.edit_revision == 1
 
+    def test_post_with_a_stale_revision_does_not_overwrite_a_newer_save(self, authed_client, pipeline, team_with_users):
+        """A full save from a tab still on an older revision must not clobber what another session saved since."""
+        pipeline.edit_revision = 1
+        pipeline.save(update_fields=["edit_revision"])
+        original_name = pipeline.name
+
+        post_data = {
+            "name": "From the stale tab",
+            "base_revision": 0,
+            "data": {
+                "nodes": [
+                    {"id": "start", "type": "startNode", "data": {"id": "start", "type": StartNode.__name__}},
+                    {"id": "end", "type": "endNode", "data": {"id": "end", "type": EndNode.__name__}},
+                ],
+                "edges": [],
+            },
+        }
+        response = authed_client.post(
+            self._post_url(team_with_users.slug, pipeline.id),
+            data=json.dumps(post_data),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 409
+        assert response.json()["current_revision"] == 1
+        pipeline.refresh_from_db()
+        assert (pipeline.name, pipeline.edit_revision) == (original_name, 1)
+
+    def test_post_with_the_current_revision_saves(self, authed_client, pipeline, team_with_users):
+        post_data = {
+            "name": "Saved",
+            "base_revision": 0,
+            "data": {
+                "nodes": [
+                    {"id": "start", "type": "startNode", "data": {"id": "start", "type": StartNode.__name__}},
+                    {"id": "end", "type": "endNode", "data": {"id": "end", "type": EndNode.__name__}},
+                ],
+                "edges": [],
+            },
+        }
+        response = authed_client.post(
+            self._post_url(team_with_users.slug, pipeline.id),
+            data=json.dumps(post_data),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        pipeline.refresh_from_db()
+        assert (pipeline.name, pipeline.edit_revision) == ("Saved", 1)
+
     def test_post_persists_layout_only_data(self, authed_client, pipeline, team_with_users):
         team_slug = team_with_users.slug
         post_data = {

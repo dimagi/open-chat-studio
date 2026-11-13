@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 import pydantic
 from django.contrib.sites.models import Site
-from django.db.models import Q
 from langchain_core.messages import AIMessage, HumanMessage
 from openai import NOT_GIVEN, OpenAI
 from pydantic import BaseModel
@@ -32,6 +31,7 @@ from apps.service_providers.llm_service.parsers import parse_output_for_anthropi
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
+    get_cited_files,
     get_openai_container_file_contents,
 )
 from apps.service_providers.openai_client import build_openai_client
@@ -142,13 +142,11 @@ class LlmService(pydantic.BaseModel):
 
         cited_file_ids.extend(extract_file_ids_from_ocs_citations(final_text))
 
-        cited_files = []
+        cited_files = set()
         if include_citations:
-            cited_files = File.objects.filter(
-                Q(external_id__in=cited_file_ids_remote) | Q(id__in=cited_file_ids), team_id=session.team_id
-            ).all()
+            cited_files = get_cited_files(session.team_id, file_ids=cited_file_ids, external_ids=cited_file_ids_remote)
 
-        return LlmChatResponse(text=final_text, cited_files=set(cited_files), generated_files=set(generated_files))
+        return LlmChatResponse(text=final_text, cited_files=cited_files, generated_files=set(generated_files))
 
     def get_remote_index_manager(self, index_id: str | None = None) -> IndexManager:
         raise NotImplementedError

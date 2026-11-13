@@ -1,0 +1,81 @@
+"""Every v2 endpoint that reaches a chatbot is held to the application's allowlist (#4552).
+
+There are two ways a new endpoint can escape the gate: leave `ApplicationAllowsChatbot` off its
+permissions, or declare it and then resolve the chatbot without running object permissions. One
+test per way. Neither names an endpoint, so a new chatbot route is covered the moment it is
+registered, and passes once it declares the class and resolves through `get_authorized_chatbot`.
+"""
+
+from pathlib import Path
+
+import pytest
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
+
+import apps.api.v2
+from apps.api.v2 import urls as v2_urls
+from apps.api.v2.permissions import ApplicationAllowsChatbot
+from apps.utils.tests.url_helpers import iter_view_callbacks
+
+#: How a route under ``/chatbots/{id}/`` spells its parameter: ``path()`` on the one hand, the
+#: router's compiled regex on the other.
+CHATBOT_ROUTE_MARKERS = ("chatbots/<str:id>/", "chatbots/(?P<id>")
+
+
+def _allowed_methods(callback) -> set[str]:
+    """The verbs a DRF view serves on this route, OPTIONS and HEAD excluded."""
+    if actions := getattr(callback, "actions", None):
+        methods = set(actions)
+    else:
+        cls, initkwargs = callback.cls, callback.initkwargs
+        names = initkwargs.get("http_method_names", cls.http_method_names)
+        methods = {name for name in names if hasattr(cls, name)}
+    return {method.upper() for method in methods} - {"OPTIONS", "HEAD"}
+
+
+def _permissions_for(callback, method: str) -> list:
+    """The permission instances the view behind ``callback`` applies to ``method``."""
+    view = callback.cls(**callback.initkwargs)
+    view.request = Request(APIRequestFactory().generic(method, "/"))
+    if actions := getattr(callback, "actions", None):
+        view.action = actions[method.lower()]
+    return view.get_permissions()
+
+
+def _chatbot_routes():
+    """Every ``(callback, method)`` under ``/chatbots/{id}/``; each must declare the allowlist permission."""
+    for route, callback in iter_view_callbacks(v2_urls.urlpatterns):
+        if not any(marker in route for marker in CHATBOT_ROUTE_MARKERS):
+            continue
+        for method in sorted(_allowed_methods(callback)):
+            yield pytest.param(callback, method, id=f"{callback.cls.__name__}:{method}")
+
+
+CHATBOT_ROUTES = list(_chatbot_routes())
+
+
+def test_the_walk_finds_the_chatbot_routes():
+    """Guards the guard: if the url layout changes shape, this fails rather than the walk going quiet."""
+    assert len(CHATBOT_ROUTES) >= 8
+
+
+@pytest.mark.parametrize(("callback", "method"), CHATBOT_ROUTES)
+def test_every_chatbot_route_declares_the_allowlist_permission(callback, method):
+    """The first escape: a view that reaches a chatbot without the permission on its list."""
+    permissions = _permissions_for(callback, method)
+
+    assert any(isinstance(permission, ApplicationAllowsChatbot) for permission in permissions), (
+        f"{callback.cls.__name__} serves {method} on a chatbot without declaring ApplicationAllowsChatbot"
+    )
+
+
+def test_views_resolve_chatbots_through_the_authorized_lookup_only():
+    """`get_working_chatbot` runs no object permissions; outside `lookups.py` the resolver is the only entry."""
+    package = Path(apps.api.v2.__file__).parent
+    offenders = sorted(
+        str(source.relative_to(package))
+        for source in package.rglob("*.py")
+        if "tests" not in source.parts and source.name != "lookups.py" and "get_working_chatbot(" in source.read_text()
+    )
+
+    assert offenders == []
