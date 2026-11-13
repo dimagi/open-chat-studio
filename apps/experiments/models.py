@@ -544,6 +544,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "is_archived",
             "version_description",
             "create_version_task_id",
+            "cloned_from",
         }
     )
     """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
@@ -641,6 +642,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
     )
     debug_mode_enabled = models.BooleanField(default=False)
     create_version_task_id = models.CharField(max_length=128, blank=True)
+    # Set on a working chatbot made with "Copy"; versions and other chatbots leave it empty.
+    cloned_from = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copies",
+    )
     file_uploads_enabled = models.BooleanField(
         default=False,
         help_text="Enables file attachments in the web chat interface.",
@@ -935,6 +944,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         if is_copy:
             new_version.name = name if name is not None else new_version.name + "_copy"
             new_version.version_number = 1
+        new_version.cloned_from_id = self.get_working_version_id() if is_copy else None
         new_version.save()
 
         if not is_copy:
@@ -974,6 +984,36 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         self._revert_pipeline_to_version(version)
         sync_triggers(version, self, mode=TriggerSyncMode.REVERT)
+
+    @transaction.atomic()
+    def overwrite_from_source(self) -> None:
+        """Replace this copy's content with the current working content of the chatbot it was copied from.
+
+        Takes everything a fresh copy would take, but keeps this chatbot's name, channels, sessions
+        and versions. Only the working version changes, so the published version stays live until
+        the next publish and remains available to revert to.
+        """
+        source = self._overwrite_source()
+        for field in self.VERSIONED_CONTENT_FIELDS - {"name", "pipeline"}:
+            setattr(self, field, getattr(source, field))
+        self.save()
+
+        if self.pipeline:
+            self.pipeline.replace_with_copy_of(source.pipeline)
+        else:
+            source._copy_pipeline_to_new_version(self, is_copy=True)
+        sync_triggers(source, self, mode=TriggerSyncMode.COPY)
+
+    def _overwrite_source(self) -> Experiment:
+        """The chatbot this copy can be overwritten from, or ValueError saying why it can't."""
+        source = self.cloned_from
+        if not self.is_working_version or source is None:
+            raise ValueError("Can only overwrite a working copy of another chatbot")
+        if source.is_archived:
+            raise ValueError("Cannot overwrite a copy from an archived chatbot")
+        if source.pipeline is None:
+            raise ValueError(f"{source.name} has no pipeline to copy")
+        return source
 
     def _revert_pipeline_to_version(self, version: Experiment) -> None:
         """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""

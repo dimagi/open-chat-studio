@@ -381,6 +381,31 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         self.clear_node_caches()
 
     @transaction.atomic()
+    def replace_with_copy_of(self, source: "Pipeline") -> None:
+        """Reset this working pipeline to a copy of ``source``, another working pipeline.
+
+        Node ids are regenerated the same way ``create_new_version(is_copy=True)`` does it, so the two
+        pipelines never share a flow_id. Params are taken verbatim and keep pointing at the source's
+        working records.
+        """
+        node_types = dict(source.node_set.values_list("flow_id", "type"))
+        data, id_mapping = duplicate_pipeline_with_new_ids(source.data, node_types)
+        node_data: dict[str, FlowNode | None] = {}
+        for source_node in source.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
+            flow_node = source_node.to_flow_node()
+            new_id = id_mapping[source_node.flow_id]
+            flow_node.id = flow_node.data.id = new_id
+            if not source_node.node_type.is_server_managed and source_node.name == source_node.flow_id:
+                flow_node.data.params["name"] = new_id
+            node_data[new_id] = flow_node
+
+        self.data = FlowWithoutNodes(**data).model_dump()
+        self.edit_revision += 1
+        self.save(update_fields=["data", "edit_revision"])
+        self.update_nodes_from_data(node_data)
+        self.clear_node_caches()
+
+    @transaction.atomic()
     def archive(self) -> bool:
         """
         Archive this record only when it is not still being referenced by other records. If this record is the working
