@@ -15,6 +15,8 @@ from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.discovery.node_types import served_node_type
+from apps.api.v2.lookups import get_authorized_chatbot
+from apps.api.v2.permissions import ApplicationAllowsChatbot
 from apps.api.v2.write.base import CHATBOT_ID, ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
@@ -124,7 +126,12 @@ class PipelineFacadeView(GenericAPIView):
     is not deleting the chatbot.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    permission_classes = [
+        *BASE_PERMISSION_CLASSES,
+        ChatbotCompositionPermission,
+        TokenHasOAuthResourceScope,
+        ApplicationAllowsChatbot,
+    ]
     required_scopes = ["chatbots"]
     # Only here so the generic view has a queryset; permissions are not derived from it.
     queryset = Pipeline.objects.none()
@@ -134,8 +141,13 @@ class PipelineFacadeView(GenericAPIView):
     write_response_serializer: type[LeadsWithWhatWasWritten]
 
     def _edit(self, request, chatbot_id: str, plan) -> dict:
-        """Run one façade edit and build its response. ``plan`` is all that differs per endpoint."""
-        return edit_pipeline(request, chatbot_id, plan, self._write_response)
+        """Run one façade edit and build its response. ``plan`` is all that differs per endpoint.
+
+        The chatbot is resolved and authorized before the façade opens its transaction: neither
+        writes, and a 404 or a 403 has no reason to open one.
+        """
+        chatbot = get_authorized_chatbot(self, chatbot_id)
+        return edit_pipeline(chatbot, plan, self._write_response)
 
     def _write_response(self, pipeline: Pipeline, written_ids: list[str]) -> dict:
         """The pipeline's build state, and in front of it whatever this write created or changed.

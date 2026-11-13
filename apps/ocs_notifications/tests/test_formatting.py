@@ -1,0 +1,147 @@
+import html
+import re
+
+import pytest
+from django.template.loader import render_to_string
+
+from apps.ocs_notifications.formatting import markdown_literal, message_html, message_mrkdwn, message_text
+from apps.utils.factories.notifications import NotificationEventFactory
+
+ZWSP = "\u200b"
+
+
+def _visible(rendered: str) -> str:
+    """The text a reader sees in rendered message HTML, with whitespace collapsed as a browser does."""
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", rendered)).split())
+
+
+def _slack_visible(mrkdwn: str) -> str:
+    return " ".join(html.unescape(mrkdwn.replace(ZWSP, "")).split())
+
+
+def _tags(rendered: str) -> set[str]:
+    return set(re.findall(r"<(\w+)", rendered))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("KeyError: '__init__'", id="dunder"),
+        pytest.param("Weather *beta*", id="asterisks"),
+        pytest.param("<Response [500]>", id="html-like"),
+        pytest.param("a & b < c", id="ampersand"),
+        pytest.param("&amp; &lt;", id="entities"),
+        pytest.param("<https://example.com>", id="autolink"),
+        pytest.param("[docs](https://example.com)", id="link-syntax"),
+        pytest.param("`code`", id="backticks"),
+        pytest.param("C:\\temp\\file", id="backslashes"),
+        pytest.param("snake_case_name", id="intraword-underscores"),
+        pytest.param("first\n# not a heading\n1. not a list\n- not a bullet", id="line-start-markers"),
+        pytest.param("failed\n===", id="setext-equals"),
+        pytest.param("failed\n---", id="setext-dashes"),
+        pytest.param("first\n> not a quote", id="quote-marker"),
+        pytest.param("first\n~~~\nnot code\n~~~", id="tilde-fence"),
+        pytest.param("first\n\n    not code", id="indented-code"),
+        pytest.param("first\n\na | b\n:-- | --\nc | d", id="table"),
+    ],
+)
+def test_an_interpolated_value_renders_exactly_as_written(value):
+    message = f"Failed: {markdown_literal(value)}"
+    expected = " ".join(f"Failed: {value}".split())
+
+    rendered = message_html(message)
+    assert _tags(rendered) <= {"p", "br"}
+    assert _visible(rendered) == expected
+    assert _slack_visible(message_mrkdwn(message)) == expected
+
+
+def test_a_plain_message_renders_unchanged():
+    message = "The model 'gpt-4.1-nano' has been deprecated and will be removed soon."
+    assert message_html(message) == f"<p>{message}</p>"
+
+
+def test_authored_markdown_formats():
+    rendered = message_html("**Update** the [embed snippet](https://example.com/docs)")
+    assert "<strong>Update</strong>" in rendered
+    assert re.search(r'<a href="https://example.com/docs"[^>]*>embed snippet</a>', rendered)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        pytest.param("Run `a & b`", "<p>Run <code>a &amp; b</code></p>", id="code-span"),
+        pytest.param("```\na & b < c\n```", "<pre><code>a &amp; b &lt; c\n</code></pre>", id="fenced-code"),
+    ],
+)
+def test_code_shows_its_text_as_written(message, expected):
+    assert message_html(message) == expected
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        pytest.param("<script>alert(1)</script>", id="script"),
+        pytest.param('<img src="x" onerror="alert(1)">', id="onerror"),
+    ],
+)
+def test_html_in_a_message_is_shown_not_run(message):
+    rendered = message_html(message)
+    assert _tags(rendered) == {"p"}
+    assert _visible(rendered) == message
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        pytest.param("**Update** now", "*Update* now", id="bold"),
+        pytest.param("*soon*", "_soon_", id="italic"),
+        pytest.param("Run `inv dev`", "Run `inv dev`", id="inline-code"),
+        pytest.param("Run `*a_b*`", "Run `*a_b*`", id="code-keeps-markers"),
+        pytest.param(
+            "See [docs](https://example.com/a?b=1&c=2)", "See <https://example.com/a?b=1&amp;c=2|docs>", id="link"
+        ),
+        pytest.param("- one\n- two", "• one\n• two", id="bullets"),
+        pytest.param("1. one\n2. two", "1. one\n2. two", id="numbered"),
+        pytest.param("# Title\nbody", "*Title*\n\nbody", id="heading"),
+        pytest.param("line one\nline two", "line one\nline two", id="line-break"),
+        pytest.param("a < b & c", "a &lt; b &amp; c", id="slack-reserved-characters"),
+    ],
+)
+def test_message_mrkdwn(message, expected):
+    assert message_mrkdwn(message) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("Weather *beta*", f"Weather {ZWSP}*{ZWSP}beta{ZWSP}*{ZWSP}", id="asterisks"),
+        pytest.param("~old~ `x`", f"{ZWSP}~{ZWSP}old{ZWSP}~{ZWSP} {ZWSP}`{ZWSP}x{ZWSP}`{ZWSP}", id="tildes-backticks"),
+        pytest.param("_init", f"{ZWSP}_{ZWSP}init", id="leading-underscore"),
+        pytest.param("snake_case_name", "snake_case_name", id="intraword-underscores"),
+    ],
+)
+def test_a_literal_value_cannot_format_in_slack(value, expected):
+    """Slack has no escape for its formatting characters, so a zero-width space beside one keeps it literal."""
+    assert message_mrkdwn(markdown_literal(value)) == expected
+
+
+@pytest.mark.django_db()
+def test_the_in_app_list_shows_the_rendered_message():
+    event = NotificationEventFactory.create(message="**Update** the [embed snippet](https://example.com/docs)")
+
+    rendered = render_to_string("ocs_notifications/components/notification_event_content.html", {"record": event})
+
+    assert "<strong>Update</strong>" in rendered
+    assert "**" not in rendered
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("KeyError: '__init__' in *beta*", id="inline-markers"),
+        pytest.param("a & b <c> &amp;", id="entities"),
+        pytest.param("  === | x", id="line-start"),
+    ],
+)
+def test_message_text_drops_markdown_escapes(value):
+    assert message_text(f"Failed: {markdown_literal(value)}") == f"Failed: {value}"

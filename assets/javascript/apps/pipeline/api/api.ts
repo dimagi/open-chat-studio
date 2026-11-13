@@ -36,12 +36,13 @@ class ApiClient {
   public async updatePipeline(
     pipelineId: number,
     updatedPipeline: PipelineType,
+    baseRevision: number,
   ): Promise<PipelineSaveResponse> {
     const client = this.createClient();
     try {
       const response = await client.post(
         `/pipelines/data/${pipelineId}/`,
-        updatedPipeline,
+        {...updatedPipeline, base_revision: baseRevision},
       );
 
       if (response?.status !== 200) {

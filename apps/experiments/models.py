@@ -513,6 +513,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "description",
             "pipeline",
             "seed_message",
+            "unavailable_message",
             "consent_form",
             "voice_provider",
             "synthetic_voice",
@@ -567,6 +568,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default="",
         help_text="If set, send this message to the bot when the session starts, "
         "and prompt the user with the initial response.",
+    )
+    unavailable_message = models.TextField(
+        blank=True,
+        default="",
+        db_default="",
+        help_text="Sent after the default error reply when the chatbot cannot respond, "
+        "for example when its LLM provider is unavailable.",
     )
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
@@ -1102,6 +1110,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             VersionField(group_name="General", name="name", raw_value=self.name),
             VersionField(group_name="General", name="description", raw_value=self.description),
             VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
+            VersionField(group_name="General", name="unavailable_message", raw_value=self.unavailable_message),
             # Consent
             VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
             VersionField(
