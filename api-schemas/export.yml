@@ -6967,6 +6967,7 @@ components:
       - elevenlabs
       - intron
       - minimax
+      - gemini
       type: string
       description: |-
         * `aws` - AWS Polly
@@ -6976,6 +6977,7 @@ components:
         * `elevenlabs` - ElevenLabs
         * `intron` - Intron
         * `minimax` - MiniMax
+        * `gemini` - Google Gemini Transcription
     VoiceProviderList:
       type: object
       properties:
