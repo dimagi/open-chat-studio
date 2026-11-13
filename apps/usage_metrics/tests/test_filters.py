@@ -35,6 +35,7 @@ METRIC_SURFACES = [
         "apps/cost_tracking/services/reporting.py", (EVALUATIONS_LITERAL, SETUP_LITERAL), id="cost_tracking.reporting"
     ),
     pytest.param("apps/admin/queries.py", (EVALUATIONS_LITERAL, SETUP_LITERAL), id="admin.queries"),
+    pytest.param("apps/chatbots/views/chatbot_views.py", (EVALUATIONS_LITERAL,), id="chatbots.table"),
 ]
 
 
