@@ -169,6 +169,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "google": [
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),
+        Model("gemini-4-hydrogen", 1048576),
         Model("gemini-3.8-flash", 1048576, is_default=True, is_translation_default=True),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576),
@@ -182,6 +183,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "google_vertex_ai": [
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),
+        Model("gemini-4-hydrogen", 1048576),
         Model("gemini-3.8-flash", 1048576, is_translation_default=True),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576),
