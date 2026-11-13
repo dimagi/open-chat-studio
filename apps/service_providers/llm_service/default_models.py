@@ -159,9 +159,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         # MiniMax takes `reasoning_effort` on Chat Completions, but OpenAIGenericService sends effort as
         # `reasoning`, which that endpoint rejects, so effort is not exposed. MiniMax defaults it to `max`.
         Model("MiniMax-M3.1-Flash", 1000000),
-        # MiniMax retires the M2.7 and M2.5 families on 2026-11-18.
-        Model("MiniMax-M2.7", 204800, deprecated=True, replacement="MiniMax-M3"),
-        Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2", 200000),
     ],
     "google": [
@@ -267,6 +264,9 @@ DELETED_MODELS = [
     ("perplexity", "llama-3.1-sonar-huge-128k-online"),
     ("perplexity", "llama-3.1-sonar-small-128k-chat", "sonar"),
     ("perplexity", "llama-3.1-sonar-large-128k-chat", "sonar-pro"),
+    # MiniMax
+    ("minimax", "MiniMax-M2.7", "MiniMax-M3"),
+    ("minimax", "MiniMax-M2.5", "MiniMax-M3"),
     # Google
     ("google", "gemini-1.5-flash"),
     ("google", "gemini-1.5-flash-8b"),
