@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from langchain_core.prompts import PromptTemplate
 
-from apps.service_providers.llm_service.main import (
-    AnthropicBuiltinTool,
-    OpenAIBuiltinTool,
-)
 from apps.service_providers.llm_service.utils import exclude_disabled_tools
 
 
@@ -28,17 +24,3 @@ class BaseAdapter:
 
     def get_allowed_tools(self):
         return exclude_disabled_tools(self.tools, self.disabled_tools)
-
-    def get_callable_tools(self):
-        """Filter out tools that are not OCS tools. `AgentExecutor` expects a list of runnable tools, so we need to
-        remove all tools that are run by the LLM provider
-        """
-        from google.ai.generativelanguage_v1beta.types import (  # noqa: PLC0415 - lazy: optional Google AI lib
-            Tool as GenAITool,
-        )
-
-        return [
-            t
-            for t in self.get_allowed_tools()
-            if not isinstance(t, OpenAIBuiltinTool | GenAITool | AnthropicBuiltinTool)
-        ]
