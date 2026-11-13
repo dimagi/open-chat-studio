@@ -36,3 +36,16 @@ def get_working_chatbot(team: Team, public_id: str, *, lock: bool = False) -> Ex
     if lock:
         queryset = queryset.select_for_update()
     return get_object_or_404(queryset, public_id=public_id)
+
+
+def get_authorized_chatbot(view, public_id: str, *, lock: bool = False) -> Experiment:
+    """The team's working chatbot named by ``public_id``, once every object permission on ``view``
+    has admitted it, or ``Http404`` / ``PermissionDenied``.
+
+    Resolution runs first, so an unknown, archived or other-team chatbot is "not found" rather than
+    "forbidden". This is the one way a v2 view obtains a chatbot it is about to modify: the
+    allowlist gate (``ApplicationAllowsChatbot``) is declared on the view and runs here.
+    """
+    chatbot = get_working_chatbot(view.request.team, public_id, lock=lock)
+    view.check_object_permissions(view.request, chatbot)
+    return chatbot

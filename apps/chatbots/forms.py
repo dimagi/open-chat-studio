@@ -60,21 +60,16 @@ class ChatbotSettingsForm(forms.ModelForm):
             "echo_transcript",
             "trace_provider",
             "trace_sample_rate",
-            "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form",
             "seed_message",
+            "unavailable_message",
             "file_uploads_enabled",
         ]
+        widgets = {"unavailable_message": forms.Textarea(attrs={"rows": 2})}
         labels = {
             "voice_provider": "Speech Provider",
             "voice_response_behaviour": "Response Provider",
-        }
-        help_texts = {
-            "debug_mode_enabled": (
-                "Enabling this tags each AI message in the web UI with the bot responsible for generating it. "
-                "This is applicable only for router bots."
-            ),
         }
 
     def __init__(self, request, *args, **kwargs):

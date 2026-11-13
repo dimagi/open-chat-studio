@@ -11,8 +11,23 @@
       <span class="ml-2">Loading...</span>
     </div>
   </div>
-  <div class="flex flex-col" x-data="{commentsRow: null}">
-    {% include "experiments/components/session_messages_list.html" %}
+  <div id="session-messages-list"
+       class="flex flex-col"
+       x-data="{commentsRow: null}">{% include "experiments/components/session_messages_list.html" %}</div>
+  <div id="messages-loading-more"
+       class="htmx-indicator flex items-center justify-center gap-2 p-4"
+       role="status"
+       aria-live="polite">
+    <span class="loading loading-spinner loading-sm"></span>
+    <span>Loading more...</span>
+  </div>
+  <div id="messages-loading-more-error"
+       class="hidden flex items-center justify-center gap-2 p-4 text-error"
+       role="alert">
+    <span>Unable to load more messages.</span>
+    <button id="messages-loading-more-retry"
+            type="button"
+            class="btn btn-ghost btn-xs">Retry</button>
   </div>
   <div id="update_dataset_modal"></div>
 </div>

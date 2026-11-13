@@ -63,6 +63,17 @@ let pendingSave = false;
 //                            set, so the retry recomputes its diff against a current
 //                            revision. Without this the deferred edit would be silently
 //                            dropped with no scheduled retry.
+function saveSettled(): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = usePipelineStore.subscribe((state) => {
+      if (!state.isSaving) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+}
+
 function settleDeferredSave(
   store: PipelineManagerStoreType,
   saveSucceeded: boolean,
@@ -509,14 +520,23 @@ const createPipelineManagerStore: StateCreator<
 
     get()._patchPipeline(diff);
   },
-  savePipeline: (pipeline: PipelineType) => {
-    set({isSaving: true, conflictDetected: false});
+  savePipeline: async (pipeline: PipelineType) => {
+    // An autosave in flight is about to bump the revision this save is checked against.
+    while (get().isSaving) {
+      await saveSettled();
+    }
+    if (get().conflictDetected) {
+      throw new Error("Conflict: reload the pipeline before saving.");
+    }
+    // Edits made during the wait may already be in that revision, so send the graph as it is now.
+    pipeline = {...pipeline, data: {nodes: get().nodes, edges: get().edges}};
+    set({isSaving: true});
     if (saveTimeoutId) {
       clearTimeout(saveTimeoutId);
     }
     return new Promise<void>((resolve, reject) => {
       let saveSucceeded = false;
-      apiClient.updatePipeline(get().currentPipelineId!, pipeline)
+      apiClient.updatePipeline(get().currentPipelineId!, pipeline, get().currentRevision)
         .then((saveResponse: PipelineSaveResponse) => {
           if (saveResponse) {
             saveSucceeded = true;
