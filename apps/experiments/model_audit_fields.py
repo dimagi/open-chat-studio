@@ -2,6 +2,7 @@ EXPERIMENT_FIELDS = [
     "owner",
     "name",
     "seed_message",
+    "unavailable_message",
     "consent_form",
     "voice_provider",
     "synthetic_voice",

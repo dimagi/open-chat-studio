@@ -7,6 +7,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.chat.models import ChatMessage
+from apps.experiments.task_utils import DEFAULT_ERROR_MESSAGE
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 
@@ -64,6 +65,21 @@ def test_chat_poll_task_response_with_file_attachments(api_client, session, mock
     assert attachments[0]["download_url"] == (
         f"http://testserver/api/chat/{session.external_id}/files/{test_file.id}/content/"
     )
+
+
+@pytest.mark.django_db()
+def test_chat_poll_task_response_hides_the_raw_error(api_client, session):
+    session.experiment.debug_mode_enabled = True
+    session.experiment.save(update_fields=["debug_mode_enabled"])
+    progress = {"complete": True, "success": True, "result": {"error": "KeyError: 'api_key'"}}
+
+    url = reverse("api:chat:task-poll-response", kwargs={"session_id": session.external_id, "task_id": "test-task-125"})
+    with mock.patch("apps.experiments.task_utils.Progress") as mock_progress_cls:
+        mock_progress_cls.return_value.get_info.return_value = progress
+        response = api_client.get(url)
+
+    assert response.status_code == 500
+    assert response.json() == {"error": DEFAULT_ERROR_MESSAGE, "status": "error"}
 
 
 @pytest.mark.django_db()

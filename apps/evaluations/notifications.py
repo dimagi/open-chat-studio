@@ -2,6 +2,7 @@ import logging
 
 from apps.evaluations.const import FAILED_FILTER_PARAM
 from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationRun, EvaluationRunStatus, EvaluationRunType
+from apps.ocs_notifications.formatting import markdown_literal as literal
 from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.utils import create_notification
 from apps.utils.decorators import silence_exceptions
@@ -15,8 +16,8 @@ def auto_population_rule_disabled_notification(rule: DatasetAutoPopulationRule, 
     create_notification(
         title="Auto-population rule disabled",
         message=(
-            f"The auto-population rule for dataset '{rule.dataset.name}' "
-            f"(source: {rule.source_experiment.name}) was automatically disabled: {reason}."
+            f"The auto-population rule for dataset '{literal(rule.dataset.name)}' "
+            f"(source: {literal(rule.source_experiment.name)}) was automatically disabled: {literal(reason)}."
         ),
         level=LevelChoices.WARNING,
         team=rule.team,
@@ -34,7 +35,7 @@ def evaluation_run_outcome_notification(run: EvaluationRun) -> None:
         return
     if run.status == EvaluationRunStatus.FAILED:
         title = f"Evaluation '{run.config.name}' failed"
-        message = f"The evaluation run stopped before it finished: {run.error_message}"
+        message = f"The evaluation run stopped before it finished: {literal(run.error_message)}"
         level = LevelChoices.ERROR
         links = {"View run": run.get_absolute_url()}
     else:
