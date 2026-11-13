@@ -14,9 +14,7 @@ from django.db import transaction
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import get_object_or_404
 
-from apps.api.v2.lookups import get_working_chatbot
 from apps.experiments.models import Experiment
-from apps.oauth.permissions import enforce_application_chatbot_write
 from apps.pipelines.flow import EdgeDiff, Flow, NodeDiff, PipelineDiffPayload
 from apps.pipelines.models import NODE_RESOURCE_PREFETCHES, Pipeline
 from apps.pipelines.patching import apply_pipeline_patch
@@ -44,24 +42,20 @@ def graph_diff(nodes: NodeDiff | None = None, edges: EdgeDiff | None = None) -> 
 
 
 def edit_pipeline(
-    request,
-    public_id: str,
+    chatbot: Experiment,
     plan: Callable[[Flow], PipelineEdit],
     respond: Callable[[Pipeline, list[str]], dict],
 ) -> dict:
-    """Apply one façade edit to the chatbot's working pipeline, under a row lock.
+    """Apply one façade edit to ``chatbot``'s working pipeline, under a row lock.
 
     ``plan`` is handed the current graph and returns the edit to make. ``respond`` builds the
     response body. Both run inside the lock: what ``plan`` reads is what gets written, and a body
     that cannot be built takes the write down with it, rather than persisting a node the server
     cannot parse and then 500ing on every later read of the pipeline.
 
-    The chatbot lookup and the permission check sit outside the transaction: neither writes, and a
-    404 or a 403 has no reason to open one. The lock is on the ``Pipeline`` row, and
-    ``_locked_pipeline`` restates the team boundary under it.
+    ``chatbot`` is the caller's already-authorized working chatbot. The lock is on the ``Pipeline``
+    row, and ``_locked_pipeline`` restates the team boundary under it.
     """
-    chatbot = get_working_chatbot(request.team, public_id)
-    enforce_application_chatbot_write(request, chatbot)
     with transaction.atomic():
         pipeline = _locked_pipeline(chatbot)
         # Nodes are rebuilt from their rows, since ``Pipeline.data`` no longer lists them (ADR-0049).

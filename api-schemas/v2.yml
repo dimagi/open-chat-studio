@@ -3,6 +3,8 @@ info:
   title: Open Chat Studio
   version: v2
   description: Build, deploy and monitor chatbots.
+  contact:
+    email: devops+openchatstudio@dimagi.com
 paths:
   /api/v2/chatbot/options/:
     get:
@@ -57,7 +59,8 @@ paths:
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
-      description: List the chatbots belonging to the API key's team.
+      description: List the chatbots belonging to the API key's team. A machine (client-credentials)
+        token lists only the chatbots its application is authorised for.
       summary: List Chatbots
       parameters:
       - name: cursor
@@ -141,6 +144,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Chatbot'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to read this
+            chatbot: either its role lacks permission to view chatbots, or it is a
+            machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
     patch:
       operationId: chatbot_update
       description: Update the working (draft) chatbot's settings and its wiring to
@@ -263,6 +272,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to read this
+            chatbot: either its role lacks permission to view chatbots, or it is a
+            machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
   /api/v2/chatbots/{id}/pipeline/edges/:
     post:
       operationId: pipeline_edge_create
@@ -2691,9 +2706,6 @@ components:
           nullable: true
           description: Overrides the trace provider's sample rate for this chatbot.
             Leave blank to use the provider's own setting.
-        debug_mode_enabled:
-          type: boolean
-          readOnly: true
         conversational_consent_enabled:
           type: boolean
           readOnly: true
@@ -2709,6 +2721,11 @@ components:
           readOnly: true
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          readOnly: true
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         file_uploads_enabled:
           type: boolean
           readOnly: true
@@ -2716,7 +2733,6 @@ components:
       required:
       - consent_form_id
       - conversational_consent_enabled
-      - debug_mode_enabled
       - description
       - echo_transcript
       - file_uploads_enabled
@@ -2727,6 +2743,7 @@ components:
       - synthetic_voice_id
       - trace_provider_id
       - trace_sample_rate
+      - unavailable_message
       - version_number
       - voice_provider_id
       - voice_response_behaviour
@@ -3720,6 +3737,10 @@ components:
           type: string
           description: Message used to start the conversation before the participant
             says anything.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         conversational_consent_enabled:
           type: boolean
         voice_response_behaviour:
@@ -3730,16 +3751,14 @@ components:
           type: boolean
           description: When the participant sends a voice message, also reply with
             the text the bot transcribed.
-        debug_mode_enabled:
-          type: boolean
         file_uploads_enabled:
           type: boolean
       required:
       - conversational_consent_enabled
-      - debug_mode_enabled
       - echo_transcript
       - file_uploads_enabled
       - seed_message
+      - unavailable_message
       - voice_response_behaviour
     InspectStaticTrigger:
       type: object
@@ -4297,8 +4316,6 @@ components:
           nullable: true
           description: Overrides the trace provider's sample rate for this chatbot.
             Leave blank to use the provider's own setting.
-        debug_mode_enabled:
-          type: boolean
         conversational_consent_enabled:
           type: boolean
           description: 'If enabled, the consent form will be sent at the start of
@@ -4311,6 +4328,10 @@ components:
           type: string
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         file_uploads_enabled:
           type: boolean
           description: Enables file attachments in the web chat interface.
@@ -5628,12 +5649,18 @@ tags:
 - name: Chatbot Triggers
   description: Add, change and archive the triggers that run an action on a conversation
     event, after inactivity, or at a set time.
+- name: Consent Forms
+  description: List, create, update and archive the consent forms a chatbot shows
+    before a conversation starts.
 - name: Me
   description: Information about the authenticated user and the team the token is
     scoped to.
 - name: Pipelines
   description: Discover the node types a pipeline may contain and the resource ids
     it may reference, and edit a chatbot's pipeline a node at a time.
+- name: Source Material
+  description: List, create, update and archive the source material that pipeline
+    nodes draw on.
 - name: Usage
   description: Inspect team usage and activity data (message counts, and more).
 externalDocs:

@@ -15,6 +15,7 @@ from apps.oauth.permissions import (
     applications_allowing_chatbot,
     is_client_credentials_request,
     is_client_credentials_token,
+    token_allowed_chatbots,
     token_allows_chatbot,
     validated_machine_token,
 )
@@ -207,6 +208,23 @@ def test_all_data_application_reaches_every_chatbot(client_credentials_token, te
     assert token_allows_chatbot(client_credentials_token, chatbot) is True
     assert token_allows_chatbot(client_credentials_token, chatbot.create_new_version()) is True
     assert list(applications_allowing_chatbot(chatbot)) == [application]
+
+
+@pytest.mark.django_db()
+def test_token_allowed_chatbots_is_the_allowlist_as_a_filter(client_credentials_token, team):
+    """The collection-side counterpart of `token_allows_chatbot`, so the two agree chatbot by chatbot."""
+    listed = ExperimentFactory.create(team=team)
+    unlisted = ExperimentFactory.create(team=team)
+    client_credentials_token.application.allowed_chatbots.add(listed)
+    chatbots = team.experiment_set.filter(working_version=None)
+
+    assert list(token_allowed_chatbots(client_credentials_token, chatbots)) == [listed]
+    assert set(token_allowed_chatbots(None, chatbots)) == {listed, unlisted}
+
+    client_credentials_token.application.all_data = True
+    client_credentials_token.application.save()
+
+    assert set(token_allowed_chatbots(client_credentials_token, chatbots)) == {listed, unlisted}
 
 
 def _chat_request(rf, token, experiment):

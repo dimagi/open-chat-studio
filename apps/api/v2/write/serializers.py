@@ -125,10 +125,10 @@ class ChatbotWriteSerializer(RejectsUnwritableKeys, serializers.ModelSerializer)
             "echo_transcript",
             "trace_provider_id",
             "trace_sample_rate",
-            "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form_id",
             "seed_message",
+            "unavailable_message",
             "file_uploads_enabled",
         ]
 
@@ -207,10 +207,10 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "echo_transcript",
             "trace_provider_id",
             "trace_sample_rate",
-            "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form_id",
             "seed_message",
+            "unavailable_message",
             "file_uploads_enabled",
         ]
         # Nothing here is writable: this serializer only ever renders a response. These are the
@@ -222,9 +222,9 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "voice_response_behaviour",
             "echo_transcript",
             "trace_sample_rate",
-            "debug_mode_enabled",
             "conversational_consent_enabled",
             "seed_message",
+            "unavailable_message",
             "file_uploads_enabled",
         ]
 
