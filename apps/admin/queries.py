@@ -5,29 +5,32 @@ from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, Q, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate
 
 from apps.admin.team_data import serialize_team_creator
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageRecord
+from apps.cost_tracking.services.reporting import COST_FIELD, QUANTITY_FIELD, ZERO
 from apps.documents.models import Collection
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
 from apps.trace.models import Trace
-
-_ZERO = Decimal(0)
-_COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
-_QUANTITY_FIELD = DecimalField(max_digits=18, decimal_places=4)
+from apps.usage_metrics.filters import (
+    CONVERSATION_MESSAGE_TYPES,
+    activity_messages,
+    activity_sessions,
+    conversation_messages,
+    evaluation_platform,
+)
 
 
 def get_message_stats(start: datetime, end: datetime):
     return (
-        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        activity_messages(ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end))
         .annotate(date=TruncDate("created_at"))
         .values("date")
         .annotate(count=Count("id"))
@@ -38,7 +41,7 @@ def get_message_stats(start: datetime, end: datetime):
 def get_participant_stats(start: datetime, end: datetime):
     return (
         Participant.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(platform=ChannelPlatform.EVALUATIONS)
+        .exclude(evaluation_platform())
         .annotate(date=TruncDate("created_at"))
         .values("date")
         .annotate(count=Count("id"))
@@ -70,7 +73,7 @@ def get_usage_data(start: datetime, end: datetime):
     totals = (
         UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .values("team_id")
-        .annotate(total_tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD))
+        .annotate(total_tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD))
     )
     tokens_by_team = {row["team_id"]: int(row["total_tokens"]) for row in totals}
     # Name and metadata are fetched by PK rather than grouped on, as in
@@ -93,8 +96,8 @@ def get_cost_usage_by_team(start: datetime, end: datetime):
         UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .values("team_id", "provider_type", "model_name", "currency")
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
-            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
         )
         .order_by("team_id", "-cost")
     )
@@ -270,11 +273,12 @@ def get_whatsapp_number_data():
 
 def get_whatsapp_message_stats(start: datetime, end: datetime):
     rows = (
-        ChatMessage.objects.filter(
-            created_at__gte=start,
-            created_at__lt=end,
-            chat__experiment_session__experiment_channel__platform=ChannelPlatform.WHATSAPP,
-            message_type__in=["human", "ai"],
+        conversation_messages(
+            ChatMessage.objects.filter(
+                created_at__gte=start,
+                created_at__lt=end,
+                chat__experiment_session__experiment_channel__platform=ChannelPlatform.WHATSAPP,
+            )
         )
         .values(
             "chat__team__name",
@@ -330,8 +334,7 @@ def get_whatsapp_message_stats(start: datetime, end: datetime):
 
 def get_top_teams(start: datetime, end: datetime, limit: int = 10):
     msg_data = (
-        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        activity_messages(ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end))
         .values("chat__team_id", "chat__team__name", "chat__team__slug", "chat__team__metadata")
         .annotate(
             msg_count=Count("id"),
@@ -341,8 +344,7 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
     )
 
     participant_data = (
-        ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(platform=ChannelPlatform.EVALUATIONS)
+        activity_sessions(ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end))
         .values("team_id")
         .annotate(participant_count=Count("participant", distinct=True))
     )
@@ -364,26 +366,16 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
 def get_team_stats(team: Team) -> dict[str, int]:
     """All-time resource counts for a single team, for the admin team detail page.
 
-    Versioned resources (chatbots, collections) are counted via their working-version
-    querysets so archived version snapshots aren't double-counted. Participants,
-    sessions and messages drop only the evaluations platform; a NULL/unset platform
-    isn't evaluations, so it's still counted (a plain ``.exclude(platform=...)`` would
-    silently drop those rows since ``NOT (NULL = x)`` is NULL).
+    Versioned resources (chatbots, collections) are counted via their working-version querysets so
+    archived version snapshots aren't double-counted. Sessions and messages are the activity
+    definitions every usage surface shares (ADR-0051).
     """
-    # ExperimentSession.platform is nullable, so keep NULL rows explicitly.
-    not_evaluations = Q(platform__isnull=True) | ~Q(platform=ChannelPlatform.EVALUATIONS)
     return {
         "chatbots": Experiment.objects.working_versions_queryset().filter(team=team).count(),
         "collections": Collection.objects.working_versions_queryset().filter(team=team).count(),
-        # Participant.platform is non-nullable, so a plain exclude is fine here.
-        "participants": Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
-        "sessions": ExperimentSession.objects.filter(team=team).filter(not_evaluations).count(),
-        "messages": ChatMessage.objects.filter(chat__team=team)
-        .filter(
-            Q(chat__experiment_session__platform__isnull=True)
-            | ~Q(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
-        )
-        .count(),
+        "participants": Participant.objects.filter(team=team).exclude(evaluation_platform()).count(),
+        "sessions": activity_sessions(ExperimentSession.objects.filter(team=team)).count(),
+        "messages": activity_messages(ChatMessage.objects.filter(chat__team=team)).count(),
         "members": team.membership_set.count(),
         "pending_invitations": team.pending_invitations().count(),
         "evaluation_configs": EvaluationConfig.objects.filter(team=team).count(),
@@ -394,14 +386,18 @@ def get_team_stats(team: Team) -> dict[str, int]:
 
 def get_platform_breakdown(start: datetime, end: datetime):
     rows = (
-        ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(Q(platform=ChannelPlatform.EVALUATIONS) | Q(platform__isnull=True) | Q(platform=""))
+        activity_sessions(ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end))
+        .exclude(Q(platform__isnull=True) | Q(platform=""))
         .values("platform")
         .annotate(
             session_count=Count("id"),
             msg_count=Count(
                 "chat__messages",
-                filter=Q(chat__messages__created_at__gte=start, chat__messages__created_at__lt=end),
+                filter=Q(
+                    chat__messages__message_type__in=CONVERSATION_MESSAGE_TYPES,
+                    chat__messages__created_at__gte=start,
+                    chat__messages__created_at__lt=end,
+                ),
             ),
         )
         .order_by("-session_count")
@@ -424,8 +420,7 @@ def get_platform_breakdown(start: datetime, end: datetime):
 
 def get_team_activity_summary(start: datetime, end: datetime):
     active_team_ids = set(
-        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        activity_messages(ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end))
         .values_list("chat__team_id", flat=True)
         .distinct()
     )
@@ -443,28 +438,19 @@ def get_team_activity_summary(start: datetime, end: datetime):
 
 def get_period_totals(start: datetime, end: datetime):
     return {
-        "messages": (
-            ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-            .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
-            .count()
-        ),
+        "messages": activity_messages(ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)).count(),
         "participants": (
-            Participant.objects.filter(created_at__gte=start, created_at__lt=end)
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .count()
+            Participant.objects.filter(created_at__gte=start, created_at__lt=end).exclude(evaluation_platform()).count()
         ),
-        "sessions": (
+        "sessions": activity_sessions(
             ExperimentSession.objects.filter(created_at__gte=start, created_at__lt=end)
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .count()
-        ),
+        ).count(),
     }
 
 
 def get_top_experiments(start: datetime, end: datetime, limit: int = 10):
     rows = (
-        ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        activity_messages(ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end))
         .values(
             "chat__experiment_session__experiment__id",
             "chat__experiment_session__experiment__name",

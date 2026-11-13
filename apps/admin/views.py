@@ -132,11 +132,11 @@ def admin_home(request):
 
 
 def _make_aware_range(start_date, end_date):
-    """Convert date objects to timezone-aware datetimes spanning the full day range."""
+    """The half-open `[start, end)` window holding both dates in full, in the current timezone (ADR-0051)."""
     tz = timezone.get_current_timezone()
     return (
         datetime.combine(start_date, time.min, tzinfo=tz),
-        datetime.combine(end_date, time.max, tzinfo=tz),
+        datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=tz),
     )
 
 

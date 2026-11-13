@@ -20,6 +20,7 @@ from apps.admin.queries import (
 from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
 from apps.cost_tracking.models import ServiceKind, UsageSource
+from apps.experiments.models import SessionStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -167,7 +168,8 @@ class TestGetTeamStats:
 
     def test_counts_null_platform_sessions_and_messages(self):
         # ExperimentSession.platform is nullable; a NULL platform isn't the evaluations
-        # platform, so it must still be counted (a plain exclude would silently drop it).
+        # platform, so the row counts. The exclusion negates one lookup, which Django
+        # guards with IS NOT NULL (apps/usage_metrics/filters.py).
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team, experiment__team=team, platform=None)
         ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
@@ -175,6 +177,16 @@ class TestGetTeamStats:
         stats = get_team_stats(team)
         assert stats["sessions"] == 1
         assert stats["messages"] == 1
+
+    def test_counts_the_shared_activity_definitions(self):
+        """SETUP sessions and SYSTEM messages are not activity on any usage surface (ADR-0051)."""
+        team = TeamFactory.create()
+        _session_with_a_turn_and_a_system_message(team)
+        _session_with_a_turn_and_a_system_message(team, status=SessionStatus.SETUP)
+
+        stats = get_team_stats(team)
+
+        assert (stats["sessions"], stats["messages"]) == (1, 1)
 
 
 @pytest.mark.django_db()
@@ -254,6 +266,17 @@ class TestGetPeriodTotals:
         assert result["messages"] >= 2
         assert result["participants"] >= 1
         assert result["sessions"] >= 1
+
+    def test_counts_the_shared_activity_definitions(self, date_range):
+        """SETUP sessions and SYSTEM messages are not activity on any usage surface (ADR-0051)."""
+        start, end = date_range
+        team = TeamFactory.create()
+        _session_with_a_turn_and_a_system_message(team)
+        _session_with_a_turn_and_a_system_message(team, status=SessionStatus.SETUP)
+
+        result = get_period_totals(start, end)
+
+        assert (result["sessions"], result["messages"]) == (1, 1)
 
 
 @pytest.mark.django_db()
@@ -449,6 +472,13 @@ class TestGetUsageData:
         UsageRecordFactory.create(team=team, quantity=99999, at=start - timedelta(seconds=1))
 
         assert list(get_usage_data(start, end)) == [("T", 10, {})]
+
+
+def _session_with_a_turn_and_a_system_message(team, *, status=SessionStatus.ACTIVE):
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team, status=status)
+    ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+    ChatMessageFactory.create(chat=session.chat, message_type="system", content="bookkeeping")
+    return session
 
 
 class TestComputeGrowth:
