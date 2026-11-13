@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from io import BytesIO
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Self
 
 from django.conf import settings
 from django.core import validators
@@ -14,7 +14,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from jinja2.sandbox import SecurityError as JinjaSandboxSecurityError
 from langchain.agents import create_agent
 from langchain.agents.structured_output import StructuredOutputValidationError
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.constants import END
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, BeforeValidator, Field, field_serializer, field_validator, model_validator
@@ -52,10 +52,12 @@ from apps.pipelines.nodes.base import (
 )
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
+from apps.pipelines.nodes.jev_router import route_with_jev
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.nodes.restricted_http import RestrictedHttpClient
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
+from apps.service_providers.llm_service import JevLlmService
 from apps.service_providers.llm_service.outcomes import provider_reason
 from apps.service_providers.llm_service.prompt_context import (
     PipelineParticipantDataProxy,
@@ -76,6 +78,7 @@ from .mixins import (
     RouterMixin,
     RouteTagMixin,
     StructuredDataSchemaValidatorMixin,
+    llm_provider_id_field,
 )
 
 if TYPE_CHECKING:
@@ -691,10 +694,14 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
                 "custom_context",
                 "prompt",
                 "keywords",
+                "confidence_threshold",
                 "tag_output_message",
             ],
         )
     )
+    accepts_router_only_providers: ClassVar[bool] = True
+
+    llm_provider_id: int = llm_provider_id_field(accepts_router_only_providers=True)
     prompt_mode: RouterPromptMode = Field(
         RouterPromptMode.STANDARD,
         title="Prompt Mode",
@@ -757,6 +764,17 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         ),
         json_schema_extra=UiSchema(widget=Widgets.none),
     )
+    confidence_threshold: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        title="Confidence Threshold",
+        description=(
+            "Only used with a Jev provider. When Jev's confidence in the route it chose is below this, "
+            "the router takes the default route instead. 0 always takes the chosen route."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.range),
+    )
 
     @field_validator("route_descriptions", mode="before")
     @classmethod
@@ -815,8 +833,20 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
 
     def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
-        node_input = context.input
-        session = context.session
+        system_message = self._system_message(context, default_keyword)
+        llm_service = self.get_llm_service()
+        if isinstance(llm_service, JevLlmService):
+            keyword = route_with_jev(self, context, system_message.text, llm_service.get_jev_client())
+        else:
+            keyword = self._route_with_agent(context.input, system_message)
+
+        is_default_keyword = not keyword
+        keyword = keyword or default_keyword
+        if context.session:
+            self.save_history(context.input, keyword)
+        return keyword, is_default_keyword
+
+    def _system_message(self, context: "NodeContext", default_keyword: str | None) -> SystemMessage:
         extra_prompt_context = {
             "temp_state": context.state.temp,
             "session_state": context.state.session_state,
@@ -825,48 +855,37 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         }
         participant_data = context.state.participant_data or {}
         template_context = PromptTemplateContext(
-            session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
+            context.session, extra=extra_prompt_context, participant_data=participant_data, repo=self.repo
         )
-        system_message = get_system_message(
+        return get_system_message(
             prompt_template=self._system_prompt_template(default_keyword),
             prompt_context=template_context,
         )
 
-        # Build the agent
-        middleware = get_agent_middleware(self, system_message)
-
+    def _route_with_agent(self, node_input: str, system_message: SystemMessage) -> str | None:
         agent = create_agent(
             model=self.get_chat_model(),
             system_prompt=system_message,
-            middleware=middleware,
+            middleware=get_agent_middleware(self, system_message),
             response_format=self._create_router_schema(),
         )
 
         from langchain_openai.chat_models.base import OpenAIRefusalError  # noqa: PLC0415 - TID253: heavy lib
 
-        is_default_keyword = False
         try:
             # An upstream node can hand this node an empty output; an empty text content
             # block is rejected by Anthropic. See `ensure_non_empty_text`.
             agent_input = {"messages": [HumanMessage(content=ensure_non_empty_text(node_input))]}
             result = agent.invoke(agent_input, config=self._config)
-            keyword = self._route_from_agent_result(result)
+            return self._route_from_agent_result(result)
         except PydanticValidationError:
-            keyword = None
+            return None
         except OpenAIRefusalError:
             logger.warning("Router %s got a refusal from the model", self.name)
-            keyword = None
+            return None
         except StructuredOutputValidationError:
             logger.exception("Structured output validation error in RouterNode")
-            keyword = None
-
-        if not keyword:
-            keyword = default_keyword
-            is_default_keyword = True
-
-        if session:
-            self.save_history(node_input, keyword)
-        return keyword, is_default_keyword
+            return None
 
     def _system_prompt_template(self, default_keyword: str | None) -> str:
         if self.prompt_mode == RouterPromptMode.CUSTOM:

@@ -841,7 +841,7 @@ def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, s
         return redirect_to_messages_view(request, session)
     try:
         try:
-            llm_provider = LlmProvider.objects.get(id=provider_id, team=request.team)
+            llm_provider = LlmProvider.objects.text_generating().get(id=provider_id, team=request.team)
             llm_provider_model = LlmProviderModel.objects.get(id=model_id)
         except (LlmProvider.DoesNotExist, LlmProviderModel.DoesNotExist):
             messages.error(request, "Selected provider or model not found.")

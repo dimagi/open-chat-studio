@@ -41,7 +41,14 @@ beforeAll(() => {
     document.body.appendChild(el);
   };
   setScript('parameter-values', {
-    llm_provider_model_id: [{value: 'model-a', label: 'Model A', type: 'openai'}],
+    llm_provider_id: [
+      {value: 'provider-a', label: 'OpenAI', type: 'openai'},
+      {value: 'provider-j', label: 'Jev', type: 'jev'},
+    ],
+    llm_provider_model_id: [
+      {value: 'model-a', label: 'OpenAI: gpt-x', type: 'openai'},
+      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev'},
+    ],
     built_in_tools: {openai: [{value: 'web_search', label: 'Web search'}]},
     tool_config: {},
   });
@@ -52,8 +59,11 @@ beforeAll(() => {
   });
   setScript('node-schemas', []);
   setScript('flags-enabled', []);
-  setScript('llm-model-params', {});
-  setScript('llm-model-parameter-schemas', {});
+  setScript('llm-model-params', {'gpt-x': 'BasicParameters', 'jev-latest': 'NoParameters'});
+  setScript('llm-model-parameter-schemas', {
+    BasicParameters: {properties: {temperature: {type: 'number', title: 'Temperature', default: 0.7}}},
+    NoParameters: {properties: {}},
+  });
 });
 
 const baseProps: Omit<WidgetParams, 'schema' | 'nodeParams' | 'paramValue'> = {
@@ -153,6 +163,51 @@ describe('BuiltInToolsWidget', () => {
       />,
     );
     expect(checkbox.checked).toBe(true);
+  });
+});
+
+describe('LlmWidget', () => {
+  const optionLabels = (schema: PropertySchema) => {
+    const Widget = getWidget('llm_provider_model', schema);
+    const {getAllByRole} = render(
+      <Widget {...baseProps} name="llm_provider_id" schema={schema} nodeParams={{name: 'x'}} paramValue="" />,
+    );
+    return getAllByRole('option').map((option) => option.textContent);
+  };
+
+  it('offers every provider when the node excludes no provider type', () => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model'} as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'OpenAI: gpt-x', 'TypeSafe Jev: jev-latest']);
+  });
+
+  it('leaves out the provider types the node excludes', () => {
+    const schema = {
+      type: 'integer',
+      'ui:widget': 'llm_provider_model',
+      'ui:excludedProviderTypes': ['jev'],
+    } as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'OpenAI: gpt-x']);
+  });
+
+  it.each([
+    {modelId: 'model-a', providerId: 'provider-a', shown: true},
+    {modelId: 'model-j', providerId: 'provider-j', shown: false},
+  ])('shows model parameters only for a model that takes some ($modelId)', ({modelId, providerId, shown}) => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model'} as PropertySchema;
+    const Widget = getWidget('llm_provider_model', schema);
+    const {queryByText} = render(
+      <Widget
+        {...baseProps}
+        name="llm_provider_id"
+        schema={schema}
+        nodeParams={{name: 'x', llm_provider_id: providerId, llm_provider_model_id: modelId}}
+        paramValue={providerId}
+      />,
+    );
+
+    expect(queryByText('Model Parameters') !== null).toBe(shown);
   });
 });
 

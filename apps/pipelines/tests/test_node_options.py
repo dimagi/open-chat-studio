@@ -129,6 +129,21 @@ def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
 
 
 @pytest.mark.django_db()
+def test_get_node_default_values_skips_a_router_only_provider():
+    """Every node type starts from these defaults, and only the router accepts a Jev provider."""
+    team = TeamWithUsersFactory.create()
+    LlmProviderFactory.create(team=team, type="jev")
+    LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
+    provider = LlmProviderFactory.create(team=team, type="openai")
+    LlmProviderModelFactory.create(team=team, type="openai")
+
+    defaults = get_node_default_values(team)
+
+    assert defaults["llm_provider_id"] == provider.id
+    assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
+
+
+@pytest.mark.django_db()
 def test_the_builder_keeps_the_models_a_node_may_already_point_at(team):
     """The builder offers every model the team can see so a node pointing at a deprecated one, or at
     one whose provider has since been removed, still renders its selection. `usable_models_only`

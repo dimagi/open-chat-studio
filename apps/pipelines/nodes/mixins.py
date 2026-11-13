@@ -1,7 +1,7 @@
 import json
 import logging
 import unicodedata
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Self
 
 import tiktoken
 from langchain_core.messages import BaseMessage
@@ -38,9 +38,11 @@ from apps.pipelines.repository import ORMRepository, RepositoryLookupError, get_
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
+from apps.service_providers.llm_service.jev import JEV_ROUTER_ONLY_MESSAGE
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.json import dict_to_json_schema
 from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
@@ -72,13 +74,25 @@ class OutputMessageTagMixin(BaseModel):
         return tags
 
 
-class LLMResponseMixin(BaseModel):
-    llm_provider_id: int = Field(
+def llm_provider_id_field(accepts_router_only_providers: bool = False) -> Any:
+    excluded_provider_types = None if accepts_router_only_providers else LlmProviderTypes.router_only_slugs
+    return Field(
         ...,
         title="LLM Model",
         description="The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
-        json_schema_extra=UiSchema(widget=Widgets.llm_provider_model, options_source=OptionsSource.llm_provider_id),
+        json_schema_extra=UiSchema(
+            widget=Widgets.llm_provider_model,
+            options_source=OptionsSource.llm_provider_id,
+            excluded_provider_types=excluded_provider_types,
+        ),
     )
+
+
+class LLMResponseMixin(BaseModel):
+    # Jev classifies and cannot generate text, so only a node that overrides this can use it.
+    accepts_router_only_providers: ClassVar[bool] = False
+
+    llm_provider_id: int = llm_provider_id_field()
     llm_provider_model_id: int = Field(
         ...,
         description=(
@@ -128,6 +142,9 @@ class LLMResponseMixin(BaseModel):
                 str(e),
                 {"field": "llm_provider_model_id"},
             ) from None
+
+        if model.type in LlmProviderTypes.router_only_slugs and not self.accepts_router_only_providers:
+            raise PydanticCustomError("invalid_model", JEV_ROUTER_ONLY_MESSAGE, {"field": "llm_provider_model_id"})
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
