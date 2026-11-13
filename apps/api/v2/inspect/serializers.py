@@ -415,7 +415,6 @@ class InspectSettingsSerializer(serializers.Serializer):
     echo_transcript = serializers.BooleanField(
         help_text="When the participant sends a voice message, also reply with the text the bot transcribed."
     )
-    debug_mode_enabled = serializers.BooleanField()
     file_uploads_enabled = serializers.BooleanField()
 
 

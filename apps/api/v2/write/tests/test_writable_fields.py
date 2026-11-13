@@ -32,11 +32,11 @@ def test_patch_covers_every_versioned_field_except_the_pipeline():
     `pipeline` -- which has its own façade at /chatbots/{id}/pipeline/* -- is writable here, so a
     new versioned field has to be an explicit decision rather than an omission.
 
-    `participant_allowlist` is the one deliberate exception: its column and versioning stay in
-    place while the participant allowlist feature is removed in phases, but nothing writes to it
-    through this API any more."""
+    `participant_allowlist` and `debug_mode_enabled` are the deliberate exceptions: their columns
+    and versioning stay in place while each feature is removed in phases, but nothing writes to
+    them through this API any more."""
     assert _writable_model_fields(ChatbotWriteSerializer()) == (
-        Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline", "participant_allowlist"}
+        Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline", "participant_allowlist", "debug_mode_enabled"}
     )
 
 
