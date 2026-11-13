@@ -285,6 +285,9 @@ function dashboard() {
             }
 
             const sanitizedParams = this.sanitizeParams({...this.filters, ...params});
+            if (window.chartManager) {
+                window.chartManager.granularity = sanitizedParams.granularity || DEFAULTS.GRANULARITY;
+            }
             const urlParams = new URLSearchParams();
 
             for (const [key, value] of Object.entries(sanitizedParams)) {

@@ -18,6 +18,8 @@ export class ChartManager {
             light: '#F3F4F6',
             dark: '#374151'
         };
+        // The granularity the series being drawn were bucketed at; the dashboard sets it with its filters.
+        this.granularity = 'daily';
 
         this.setupChartDefaults();
     }
@@ -651,6 +653,9 @@ export class ChartManager {
 
     formatDateLabel(dateString) {
         const date = new Date(dateString);
+        if (this.granularity === 'hourly') {
+            return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        }
         const now = new Date();
         const diffTime = Math.abs(now - date);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
