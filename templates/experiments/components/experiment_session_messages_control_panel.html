@@ -134,20 +134,43 @@
 
 
       <div class="justify-end flex flex-row">
-        {% if total_pages > 1 or request.GET.show_all %}
-          <div>
-            Show all messages
-            <input
-              x-ref="showAllCheckbox"
-              type="checkbox"
-              name="show_all"
-              class="toggle"
-              hx-indicator="#show_all_spinner"
-              {% if request.GET.show_all == "on" %}checked{% endif %}>
-            <div id="show_all_spinner" class="htmx-show">
+        {% if request.GET.show_all == "on" %}
+          <div id="load-all-messages-control"
+               x-data="{ visible: true }"
+               x-init="setTimeout(() => visible = false, 3000)"
+               x-show="visible"
+               x-transition.opacity
+               class="flex items-center motion-reduce:transition-none"
+               role="status"
+               aria-live="polite">
+            All messages loaded
+          </div>
+        {% elif total_pages > 1 %}
+          <div id="load-all-messages-control"
+               data-load-all-messages-control
+               class="flex items-center gap-2">
+            <button type="button"
+                    class="btn btn-sm btn-outline"
+                    data-load-all-messages-button
+                    hx-get="{% url 'experiments:experiment_session_messages_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring show_all='on' %}"
+                    hx-target="#messages-container"
+                    hx-disabled-elt="this"
+                    hx-indicator="#load-all-messages-loading"
+                    hx-on::before-request="this.setAttribute('aria-busy', 'true'); this.closest('[data-load-all-messages-control]')?.querySelector('[data-load-all-messages-error]').classList.add('hidden')"
+                    hx-on::after-request="this.setAttribute('aria-busy', 'false'); if (!event.detail.successful) this.closest('[data-load-all-messages-control]')?.querySelector('[data-load-all-messages-error]').classList.remove('hidden')"
+                    aria-describedby="load-all-messages-loading">
+              Load all messages
+            </button>
+            <span id="load-all-messages-loading"
+                  class="htmx-indicator"
+                  role="status"
+                  aria-live="polite">
               <span class="loading loading-spinner loading-sm"></span>
-              <span class="ml-2">Loading...</span>
-            </div>
+              <span class="ml-1">Loading all messages...</span>
+            </span>
+            <span data-load-all-messages-error class="hidden text-error" role="alert">
+              Unable to load all messages. Try again.
+            </span>
           </div>
         {% endif %}
 

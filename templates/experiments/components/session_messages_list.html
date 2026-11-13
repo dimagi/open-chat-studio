@@ -138,12 +138,14 @@
           </time>
         </span>
         {% if show_moderation_markers and message|is_flagged %}
-          <span class="badge badge-error badge-sm" title="The moderation provider flagged this message">
+          <span class="badge badge-error badge-sm"
+                title="The moderation provider flagged this message">
             <i class="fa-solid fa-flag mr-1"></i>flagged: {{ message.moderation_detail|flagged_strike_categories|join:", " }}
           </span>
         {% endif %}
         {% if show_moderation_markers and message.moderation_detail.rules %}
-          <span class="badge badge-warning badge-sm" title="Abuse rules this message triggered">
+          <span class="badge badge-warning badge-sm"
+                title="Abuse rules this message triggered">
             <i class="fa-solid fa-triangle-exclamation mr-1"></i>rule: {{ message.moderation_detail.rules|join:", " }}
           </span>
         {% endif %}
@@ -178,6 +180,19 @@
       {% endif %}
     </div>
   </div>
+  {% if page < total_pages and forloop.counter == prefetch_trigger_index %}
+    <div data-session-message-page-trigger="{{ page }}"
+         hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
+         hx-trigger="intersect, click from:#messages-loading-more-retry"
+         hx-target="#session-messages-list"
+         hx-swap="beforeend"
+         hx-sync="this:drop"
+         hx-indicator="#messages-loading-more"
+         hx-on::before-request="document.getElementById('messages-loading-more-error').classList.add('hidden')"
+         hx-on::after-request="if (event.detail.successful) this.remove(); else document.getElementById('messages-loading-more-error').classList.remove('hidden');"
+         class="h-px"
+         aria-hidden="true"></div>
+  {% endif %}
 {% empty %}
   <div class="px-5 py-6 text-center text-base-content/60">
     {% if search %}
@@ -187,16 +202,15 @@
     {% endif %}
   </div>
 {% endfor %}
-{% if page < total_pages %}
-  <div hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
-       hx-trigger="intersect once"
-       hx-target="this"
-       hx-swap="outerHTML"
-       hx-indicator="#messages-loading-more-{{ page }}">
-    <div id="messages-loading-more-{{ page }}"
-         class="flex items-center justify-center p-4">
-      <span class="loading loading-spinner loading-sm"></span>
-      <span class="ml-2">Loading more...</span>
-    </div>
-  </div>
+{% if is_fragment and page == total_pages %}
+  <div id="load-all-messages-control"
+       data-load-all-messages-control
+       hx-swap-oob="outerHTML"
+       x-data="{ visible: true }"
+       x-init="setTimeout(() => visible = false, 3000)"
+       x-show="visible"
+       x-transition.opacity
+       class="flex items-center motion-reduce:transition-none"
+       role="status"
+       aria-live="polite">All messages loaded</div>
 {% endif %}
