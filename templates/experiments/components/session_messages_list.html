@@ -183,25 +183,15 @@
   {% if page < total_pages and forloop.counter == prefetch_trigger_index %}
     <div data-session-message-page-trigger="{{ page }}"
          hx-get="{% url 'experiments:experiment_session_messages_fragment_view' request.team.slug experiment.public_id experiment_session.external_id %}{% querystring page=page|add:'1' %}"
-         hx-trigger="intersect, click"
+         hx-trigger="intersect, click from:#messages-loading-more-retry"
          hx-target="#session-messages-list"
          hx-swap="beforeend"
          hx-sync="this:drop"
-         hx-indicator="#messages-loading-more-{{ page }}"
-         hx-on::before-request="this.querySelector('[data-session-message-load-error]').classList.add('hidden')"
-         hx-on::after-request="if (event.detail.successful) this.remove(); else this.querySelector('[data-session-message-load-error]').classList.remove('hidden');">
-      <div id="messages-loading-more-{{ page }}"
-           class="flex items-center justify-center p-4">
-        <span class="loading loading-spinner loading-sm"></span>
-        <span class="ml-2">Loading more...</span>
-      </div>
-      <div data-session-message-load-error
-           class="hidden flex items-center justify-center gap-2 p-4 text-error"
-           role="alert">
-        <span>Unable to load more messages.</span>
-        <button type="button" class="btn btn-ghost btn-xs">Retry</button>
-      </div>
-    </div>
+         hx-indicator="#messages-loading-more"
+         hx-on::before-request="document.getElementById('messages-loading-more-error').classList.add('hidden')"
+         hx-on::after-request="if (event.detail.successful) this.remove(); else document.getElementById('messages-loading-more-error').classList.remove('hidden');"
+         class="h-px"
+         aria-hidden="true"></div>
   {% endif %}
 {% empty %}
   <div class="px-5 py-6 text-center text-base-content/60">

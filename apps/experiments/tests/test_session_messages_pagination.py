@@ -68,7 +68,11 @@ class TestSessionMessagesLoadOnScroll:
         assert 'hx-target="#session-messages-list"' in content
         assert 'hx-swap="beforeend"' in content
         assert 'hx-sync="this:drop"' in content
+        assert 'hx-indicator="#messages-loading-more"' in content
+        assert content.index("Message 9") < content.index('id="messages-loading-more"')
+        assert content.index('data-session-message-page-trigger="1"') < content.index('id="messages-loading-more"')
         assert 'data-session-message-page-trigger="2"' in next_page_content
+        assert b"Loading more..." not in next_page_content
 
     def test_each_page_has_only_one_next_page_trigger(self, client, experiment, session_with_messages):
         """Render one active trigger per page so an appended fragment cannot duplicate requests."""
