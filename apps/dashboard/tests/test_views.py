@@ -10,6 +10,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant
 
 from ...utils.factories.team import MembershipFactory, TeamFactory
+from ...utils.factories.traces import TraceFactory
 from ..forms import DashboardFilterForm
 from ..models import DashboardFilter
 
@@ -132,6 +133,18 @@ class TestDashboardApiViews:
 
         hour = message.created_at.replace(minute=0, second=0, microsecond=0)
         assert data["sessions"] == [{"date": hour.isoformat(), "active_sessions": 1}]
+
+    def test_average_response_time_api(
+        self, authenticated_client, team, experiment, participant, experiment_session, chat
+    ):
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        trace = TraceFactory.create(team=team, session=experiment_session, experiment=experiment, duration=1500)
+        url = reverse("dashboard:api_average_response_time", kwargs={"team_slug": team.slug})
+
+        data = authenticated_client.get(url, {"granularity": "hourly"}).json()
+
+        hour = trace.timestamp.replace(minute=0, second=0, microsecond=0)
+        assert data == [{"date": hour.isoformat(), "avg_response_time_sec": 1.5}]
 
     def test_channel_breakdown_api(self, authenticated_client, team):
         """Test channel breakdown API endpoint"""

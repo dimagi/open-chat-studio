@@ -30,6 +30,10 @@ from apps.utils.tests.clients import ApiTestClient
 USAGE_URL = "api:v2:usage"
 
 
+def _utc(year, month, day, hour=0, minute=0):
+    return datetime.datetime(year, month, day, hour, minute, tzinfo=datetime.UTC)
+
+
 def _add_messages(session, *, human=0, ai=0, when=None):
     kwargs = {"created_at": when} if when else {}
     for message_type, count in ((ChatMessageType.HUMAN, human), (ChatMessageType.AI, ai)):
@@ -242,6 +246,47 @@ def test_grouped_cost_and_tokens_per_group():
     assert row["participant"]["identifier"] == "alice@example.com"
     assert row["cost"]["total"] == "3.00000000"
     assert row["tokens"] == {"prompt": 1000, "completion": 400, "total": 1400}
+
+
+@pytest.mark.django_db()
+def test_grouped_cost_and_tokens_bucket_by_granularity():
+    """Cost and tokens expand to one row per (group, bucket) like the activity metrics, zero-filled
+    where a group spent nothing in a bucket."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    alice = ParticipantFactory.create(team=team, identifier="alice@example.com", platform="web")
+    session = ExperimentSessionFactory.create(team=team, participant=alice, platform="web")
+    _add_messages(session, human=1, when=_utc(2026, 7, 1, 9))
+    for day, cost, quantity in ((1, "1", 100), (3, "2", 400)):
+        UsageRecordFactory.create(
+            team=team,
+            participant=alice,
+            session=session,
+            service_kind=ServiceKind.LLM_INPUT,
+            quantity=quantity,
+            cost=Decimal(cost),
+            at=_utc(2026, 7, day, 10),
+        )
+
+    client = ApiTestClient(user, team)
+    response = client.get(
+        reverse(USAGE_URL),
+        {
+            "metric": ["cost", "tokens"],
+            "group_by": "participant",
+            "granularity": "daily",
+            "start": "2026-07-01",
+            "end": "2026-07-04",
+        },
+    )
+
+    assert response.status_code == 200
+    rows = response.json()["results"]
+    assert [(row["bucket_start"][:10], row["cost"]["total"], row["tokens"]["prompt"]) for row in rows] == [
+        ("2026-07-01", "1.00000000", 100),
+        ("2026-07-02", "0.00000000", 0),
+        ("2026-07-03", "2.00000000", 400),
+    ]
 
 
 @pytest.mark.django_db()
