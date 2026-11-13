@@ -126,8 +126,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         # Groq publishes an odd 131,042 context window for this model, not the 131,072 its
         # siblings use.
         Model("qwen/qwen3.8-27b", 131042),
-        Model("llama-3.3-70b-versatile", k(128), deprecated=True, replacement="openai/gpt-oss-120b"),
-        Model("llama-3.1-8b-instant", k(128), deprecated=True, replacement="openai/gpt-oss-20b"),
         Model("openai/gpt-oss-120b", 131072, is_default=True, is_translation_default=True),
         Model("openai/gpt-oss-20b", 131072),
     ],
@@ -264,6 +262,8 @@ DELETED_MODELS = [
     # Groq retired gemma-7b-it in favour of gemma2-9b-it, itself already deleted, so references
     # follow that chain to the Groq small-model default.
     ("groq", "gemma-7b-it", "openai/gpt-oss-20b"),
+    ("groq", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"),
+    ("groq", "llama-3.1-8b-instant", "openai/gpt-oss-20b"),
     # Perplexity
     ("perplexity", "sonar-reasoning"),
     ("perplexity", "llama-3.1-sonar-small-128k-online"),
