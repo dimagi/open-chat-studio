@@ -11,12 +11,11 @@ and :func:`group_rows`. See ``docs/design/usage-api.md``.
 
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
-from dateutil.relativedelta import relativedelta
 from django.db.models import Count, F, QuerySet
 
 from apps.chat.models import ChatMessage
@@ -24,14 +23,9 @@ from apps.cost_tracking.services import reporting
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.models import Team
 from apps.usage_metrics import metrics as usage_metrics
+from apps.usage_metrics.buckets import Granularity, bucket_key, bucket_starts, by_bucket
 from apps.usage_metrics.filters import UsageFilters
-from apps.usage_metrics.metrics import (
-    GRANULARITY_TRUNC,
-    MESSAGE_ANNOTATIONS,
-    MessageCounts,
-    bucket_date,
-    message_counts_from_row,
-)
+from apps.usage_metrics.metrics import MESSAGE_ANNOTATIONS, MessageCounts, message_counts_from_row
 
 # Metric identifiers. Later slices extend SUPPORTED_METRICS; the param serializer validates against it.
 METRIC_MESSAGES = "messages"
@@ -47,12 +41,12 @@ PERIOD_PREVIOUS_MONTH = "previous_month"
 PERIOD_CHOICES = (PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH)
 
 # Time-bucketing of results. ``total`` collapses the window to a single object; the others emit one
-# row per bucket, truncated in the request timezone.
+# row per bucket, truncated in the request timezone. Hourly stays off the public surface.
 GRANULARITY_TOTAL = "total"
-GRANULARITY_DAILY = "daily"
-GRANULARITY_WEEKLY = "weekly"
-GRANULARITY_MONTHLY = "monthly"
-GRANULARITY_CHOICES = (GRANULARITY_TOTAL, GRANULARITY_DAILY, GRANULARITY_WEEKLY, GRANULARITY_MONTHLY)
+GRANULARITY_CHOICES = (
+    GRANULARITY_TOTAL,
+    *(granularity.value for granularity in (Granularity.DAILY, Granularity.WEEKLY, Granularity.MONTHLY)),
+)
 
 # Dimensions the results may be broken down by. When set, the response is one row per group (or per
 # (group, bucket) at a finer granularity), cursor-paginated. v2 vocabulary says ``chatbot``, not
@@ -65,15 +59,6 @@ GROUP_BY_CHOICES = (GROUP_PARTICIPANT, GROUP_CHATBOT, GROUP_PLATFORM)
 # Ceiling on the rows a single grouped page may materialise (``groups × buckets``); see
 # :func:`grouped_page_size_cap`.
 MAX_GROUPED_ROWS = 10_000
-
-# DB truncation per bucketed granularity lives in apps.usage_metrics
-# (GRANULARITY_TRUNC); Django's TruncWeek starts weeks on Monday, matching the
-# Python-side bucket boundaries below.
-_STEP = {
-    GRANULARITY_DAILY: relativedelta(days=1),
-    GRANULARITY_WEEKLY: relativedelta(weeks=1),
-    GRANULARITY_MONTHLY: relativedelta(months=1),
-}
 
 
 class CostBlock(TypedDict):
@@ -302,7 +287,7 @@ def group_rows(query: UsageQuery, page: list) -> list[dict]:
             row: dict = {query.group_by: identity}
             if bucket is not None:
                 row["bucket_start"] = bucket
-            row.update(index[(key, _bucket_key(bucket, query.tz))])
+            row.update(index[(key, bucket)])
             rows.append(row)
     return rows
 
@@ -329,7 +314,7 @@ def _group_buckets(query: UsageQuery) -> list:
     tz-aware bucket-start datetimes covering the window (one row per group per bucket)."""
     if query.granularity == GRANULARITY_TOTAL:
         return [None]
-    return list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
+    return list(bucket_starts(query.start, query.end, query.granularity, query.tz))
 
 
 def grouped_page_size_cap(query: UsageQuery) -> int:
@@ -340,39 +325,28 @@ def grouped_page_size_cap(query: UsageQuery) -> int:
     return max(1, MAX_GROUPED_ROWS // len(_group_buckets(query)))
 
 
-def _bucket_key(bucket: datetime | None, tz: ZoneInfo):
-    """The local calendar date keying a bucket in the metric index; ``None`` at ``total`` granularity.
-    Delegates to :func:`~apps.usage_metrics.metrics.bucket_date` so the Python-generated bucket starts
-    and the DB truncation results
-    normalise to their local date the same way (they must agree for the index and rows to join)."""
-    return None if bucket is None else bucket_date(bucket, tz)
-
-
-def _grouped_rows(queryset: QuerySet, *, group_field: str | None, trunc, tz: ZoneInfo, **annotations):
-    """Aggregate ``queryset`` by an optional dimension ``group_field`` and an optional tz time bucket
-    (``trunc``), applying ``annotations``. Yields ``(group_key, bucket_key, row)`` where each key is
-    ``None`` when that axis isn't requested. The single home of the ``.values(...).annotate(...)`` +
-    bucket-date boilerplate, shared by the grouped breakdown and the ungrouped timeseries."""
-    value_fields = [group_field] if group_field else []
-    if trunc is not None:
-        queryset = queryset.annotate(bucket=trunc("created_at", tzinfo=tz))
-        value_fields.append("bucket")
-    for row in queryset.values(*value_fields).annotate(**annotations):
-        group_key = row[group_field] if group_field else None
-        bucket_key = bucket_date(row["bucket"], tz) if trunc is not None else None
-        yield group_key, bucket_key, row
+def _grouped_rows(queryset: QuerySet, *, group_field: str, granularity: str | None, tz: ZoneInfo, **annotations):
+    """Aggregate ``queryset`` by ``group_field``, and by tz time bucket when ``granularity`` is set,
+    applying ``annotations``. Yields ``(group_key, bucket_start, row)``; ``bucket_start`` is ``None``
+    at ``total``."""
+    if granularity is None:
+        for row in queryset.values(group_field).annotate(**annotations):
+            yield row[group_field], None, row
+        return
+    for bucket, row in by_bucket(queryset, granularity, tz, group_by=group_field, **annotations):
+        yield row[group_field], bucket, row
 
 
 def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
-    """``{(group_key, bucket_key): {metric: block}}`` for every (group, bucket) on the page, zero-filled.
-    Each metric runs a single query grouped by the dimension (and, at a finer granularity, the time
-    bucket) restricted to ``keys``; results are keyed back onto the page's (group, bucket) cells."""
-    bucket_keys = [_bucket_key(bucket, query.tz) for bucket in buckets]
-    index = {(key, bucket_key): {} for key in keys for bucket_key in bucket_keys}
+    """``{(group_key, bucket_start): {metric: block}}`` for every (group, bucket) on the page,
+    zero-filled. Each metric runs a single query grouped by the dimension (and, at a finer
+    granularity, the time bucket) restricted to ``keys``; results are keyed back onto the page's
+    (group, bucket) cells, the DB's truncation and the generated bucket starts naming the same instant."""
+    index = {(key, bucket): {} for key in keys for bucket in buckets}
 
     for metric, rows in _grouped_non_cost_metric_rows(query, keys):
-        for group_key, bucket_key, value in rows:
-            index[(group_key, bucket_key)][metric] = value
+        for group_key, bucket, value in rows:
+            index[(group_key, bucket)][metric] = value
     if METRIC_COST in query.metrics or METRIC_TOKENS in query.metrics:
         _fill_grouped_cost_tokens(query, keys, index)
 
@@ -384,14 +358,14 @@ def _grouped_non_cost_metric_rows(query: UsageQuery, keys: list) -> list:
     """``(metric, (group_key, bucket_key, value) iterator)`` for each requested non-cost metric, built
     conditionally so a metric's query only runs when asked for. Cost/tokens share one UsageRecord read
     and are filled separately by the caller."""
-    trunc = None if query.granularity == GRANULARITY_TOTAL else GRANULARITY_TRUNC[query.granularity]
+    granularity = None if query.granularity == GRANULARITY_TOTAL else query.granularity
     spec = _GROUP_SPECS[query.group_by]
 
     def by_group(queryset, group_field, **annotations):
         return _grouped_rows(
             queryset.filter(**{f"{group_field}__in": keys}),
             group_field=group_field,
-            trunc=trunc,
+            granularity=granularity,
             tz=query.tz,
             **annotations,
         )
@@ -438,8 +412,8 @@ def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> Non
         )
     )
     for row in rows:
-        bucket_key = None if granularity is None else bucket_date(row["bucket"], query.tz)
-        cell = index.get((row["key"], bucket_key))
+        bucket = None if granularity is None else bucket_key(row["bucket"], query.tz)
+        cell = index.get((row["key"], bucket))
         if cell is None:
             continue
         if METRIC_COST in query.metrics:
@@ -478,8 +452,8 @@ def _aggregate(query: UsageQuery) -> dict:
 def _bucketed(query: UsageQuery) -> list[dict]:
     """One row per time bucket in ``[start, end)``, zero-filled so every bucket in the window appears
     (the max-window guard in the param serializer bounds how many that can be). Each metric runs a
-    single grouped query truncated in ``tz``; results are keyed back onto the buckets by local date."""
-    starts = list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
+    single grouped query truncated in ``tz``; results are keyed back onto the buckets by their start."""
+    starts = list(bucket_starts(query.start, query.end, query.granularity, query.tz))
     rows: list[dict] = [{"bucket_start": bucket} for bucket in starts]
 
     metric_specs = (
@@ -490,10 +464,10 @@ def _bucketed(query: UsageQuery) -> list[dict]:
     for metric, counts_by_bucket in metric_specs:
         if metric not in query.metrics:
             continue
-        by_date = counts_by_bucket(query)
+        by_start = counts_by_bucket(query)
         for row in rows:
             # _EMPTY_METRIC factory (not a shared value) so each empty bucket gets its own object.
-            row[metric] = by_date.get(row["bucket_start"].date(), _EMPTY_METRIC[metric]())
+            row[metric] = by_start.get(row["bucket_start"], _EMPTY_METRIC[metric]())
 
     _fill_cost_tokens_buckets(query, rows)
     return rows
@@ -505,9 +479,9 @@ def _fill_cost_tokens_buckets(query: UsageQuery, rows: list[dict]) -> None:
     ``total``-granularity figures; buckets with no records are zero-filled."""
     if METRIC_COST not in query.metrics and METRIC_TOKENS not in query.metrics:
         return
-    by_date = _cost_tokens_by_bucket(query)
+    by_start = _cost_tokens_by_bucket(query)
     for row in rows:
-        block = by_date.get(row["bucket_start"].date())
+        block = by_start.get(row["bucket_start"])
         if METRIC_COST in query.metrics:
             row[METRIC_COST] = block["cost"] if block else _EMPTY_METRIC[METRIC_COST]()
         if METRIC_TOKENS in query.metrics:
@@ -515,8 +489,8 @@ def _fill_cost_tokens_buckets(query: UsageQuery, rows: list[dict]) -> None:
 
 
 def _cost_tokens_by_bucket(query: UsageQuery) -> dict:
-    """``{local date: {'cost': CostBlock, 'tokens': TokenCounts}}`` for the window. A participant filter
-    that matches nobody yields ``{}`` so every bucket zero-fills, matching ``_cost``/``_token_counts``."""
+    """``{bucket start: {'cost': CostBlock, 'tokens': TokenCounts}}`` for the window. A participant
+    filter that matches nobody yields ``{}`` so every bucket zero-fills, matching ``_cost``/``_token_counts``."""
     cost_filter = _cost_filter(query)
     if cost_filter.is_empty:
         return {}
@@ -529,7 +503,7 @@ def _cost_tokens_by_bucket(query: UsageQuery) -> dict:
         filters=cost_filter.filters,
     )
     return {
-        bucket_date(row["bucket"], query.tz): {
+        bucket_key(row["bucket"], query.tz): {
             "cost": CostBlock(total=row["cost"], currency=row["currency"]),
             "tokens": TokenCounts(prompt=row["prompt"], completion=row["completion"], total=row["total"]),
         }
@@ -578,7 +552,7 @@ def _usage_filters(query: UsageQuery) -> UsageFilters:
     return UsageFilters(
         experiment_ids=query.experiment_ids,
         participant_ids=query.participant_ids,
-        platform=query.platform,
+        platforms=[query.platform] if query.platform else None,
     )
 
 
@@ -652,23 +626,3 @@ def _participant_counts_by_bucket(query: UsageQuery) -> dict:
         tz=query.tz,
         filters=_usage_filters(query),
     )
-
-
-def _iter_bucket_starts(start: datetime, end: datetime, granularity: str, tz: ZoneInfo):
-    """Yield the tz-aware bucket-start datetimes covering ``[start, end)``, oldest first. The first
-    bucket is ``start`` truncated to the granularity boundary in ``tz`` (so it may precede ``start``
-    for an unaligned explicit window); the DB query still only counts activity from ``start`` on."""
-    step = _STEP[granularity]
-    cursor = _truncate_local(start.astimezone(tz), granularity)
-    while cursor < end:
-        yield cursor
-        cursor = cursor + step
-
-
-def _truncate_local(dt: datetime, granularity: str) -> datetime:
-    midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    if granularity == GRANULARITY_DAILY:
-        return midnight
-    if granularity == GRANULARITY_WEEKLY:
-        return midnight - timedelta(days=midnight.weekday())  # Monday, matching Django's TruncWeek
-    return midnight.replace(day=1)  # monthly
