@@ -10,6 +10,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration() moved to 0102_delete_groq_llama_models so it runs only once per deploy.
         load_pricing_data(),
     ]
