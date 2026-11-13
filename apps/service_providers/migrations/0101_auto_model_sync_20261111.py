@@ -10,6 +10,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration() moved to 0102_auto_model_sync_20261113
         load_pricing_data(),
     ]
