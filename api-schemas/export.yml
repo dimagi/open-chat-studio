@@ -5,6 +5,8 @@ info:
   description: Read-only, team-scoped endpoints for the Open Chat Studio data sync/export.
     **Unversioned and intended only for OCS export** — it carries no backwards-compatibility
     guarantee and may change without notice.
+  contact:
+    email: devops+openchatstudio@dimagi.com
 paths:
   /api/export/analysis_queries/:
     get:
@@ -7020,7 +7022,13 @@ components:
     tokenAuth:
       type: http
       scheme: bearer
-tags: []
+tags:
+- name: Manifest
+  description: 'Discover the export surface before authenticating: resource call order,
+    per-model config and a schema checksum.'
+- name: Team
+  description: Export the team resolved from the API key and every resource nested
+    under it, paginated by `updated_at`.
 externalDocs:
   url: https://docs.openchatstudio.com/api/
   description: API Guides

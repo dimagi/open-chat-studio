@@ -616,6 +616,8 @@ def _apply_session_data(session, user, session_data) -> None:
             summary="Session started with published version",
             value={
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "session_token": "<signed token; send as X-Session-Token>",
+                "expires_at": "2026-01-01T12:00:00Z",
                 "chatbot": {
                     "id": "123e4567-e89b-12d3-a456-426614174000",
                     "name": "Example Bot",
@@ -633,6 +635,8 @@ def _apply_session_data(session, user, session_data) -> None:
             summary="Session started with specific version",
             value={
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "session_token": "<signed token; send as X-Session-Token>",
+                "expires_at": "2026-01-01T12:00:00Z",
                 "chatbot": {
                     "id": "123e4567-e89b-12d3-a456-426614174000",
                     "name": "Example Bot",

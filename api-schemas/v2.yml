@@ -3,6 +3,8 @@ info:
   title: Open Chat Studio
   version: v2
   description: Build, deploy and monitor chatbots.
+  contact:
+    email: devops+openchatstudio@dimagi.com
 paths:
   /api/v2/chatbot/options/:
     get:
@@ -5544,12 +5546,18 @@ tags:
 - name: Chatbot Triggers
   description: Add, change and archive the triggers that run an action on a conversation
     event, after inactivity, or at a set time.
+- name: Consent Forms
+  description: List, create, update and archive the consent forms a chatbot shows
+    before a conversation starts.
 - name: Me
   description: Information about the authenticated user and the team the token is
     scoped to.
 - name: Pipelines
   description: Discover the node types a pipeline may contain and the resource ids
     it may reference, and edit a chatbot's pipeline a node at a time.
+- name: Source Material
+  description: List, create, update and archive the source material that pipeline
+    nodes draw on.
 - name: Usage
   description: Inspect team usage and activity data (message counts, and more).
 externalDocs:

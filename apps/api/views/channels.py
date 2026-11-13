@@ -177,26 +177,26 @@ class TriggerBotMessageView(APIView):
                 summary="Generates a bot message and sends it to the user (auto-creates participant if needed).",
                 value={
                     "identifier": "+15556793",
-                    "experiment": "exp1",
+                    "experiment": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
                     "platform": "whatsapp",
                     "prompt_text": "Tell the user to do something",
                     "session_data": {"key": "value"},
                     "participant_data": {"key": "value"},
                 },
-                status_codes=[200],
+                request_only=True,
             ),
             OpenApiExample(
                 name="SendMessageDirectly",
                 summary="Send a pre-written message directly to the participant, bypassing the bot/LLM.",
                 value={
                     "identifier": "+15556793",
-                    "experiment": "exp1",
+                    "experiment": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
                     "platform": "whatsapp",
                     "message_text": "Your appointment is confirmed for tomorrow at 10am.",
                     "session_data": {"key": "value"},
                     "participant_data": {"key": "value"},
                 },
-                status_codes=[200],
+                request_only=True,
             ),
             OpenApiExample(
                 name="ExperimentChannelNotFound",
@@ -204,12 +204,14 @@ class TriggerBotMessageView(APIView):
                 value={
                     "detail": "Chatbot cannot send messages on the connect_messaging channel. Create the channel first."
                 },
+                response_only=True,
                 status_codes=[400],
             ),
             OpenApiExample(
                 name="ConsentNotGiven",
                 summary="User has not given consent",
                 value={"detail": "User has not given consent"},
+                response_only=True,
                 status_codes=[400],
             ),
         ],
