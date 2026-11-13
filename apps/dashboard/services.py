@@ -583,11 +583,14 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
+        start, end = querysets["start_date"], querysets["end_date"]
 
-        # Calculate key metrics
+        # The cards read "active of total", so a total is what the team had by the end of the window,
+        # and a completed session is an active one that ended inside it: the completion rate's
+        # numerator and denominator then describe the same window (ADR-0051).
         stats = {
-            "total_experiments": querysets["experiments"].count(),
-            "total_participants": querysets["participants"].count(),
+            "total_experiments": querysets["experiments"].filter(created_at__lt=end).count(),
+            "total_participants": querysets["participants"].filter(created_at__lt=end).count(),
             "total_sessions": querysets["sessions"].count(),
             "total_messages": conversation_message_total(querysets["messages"]),
             "active_experiments": querysets["experiments"]
@@ -595,7 +598,7 @@ class DashboardService:
             .distinct()
             .count(),
             "active_participants": distinct_active_participants(querysets["messages"]),
-            "completed_sessions": querysets["sessions"].filter(ended_at__isnull=False).count(),
+            "completed_sessions": querysets["sessions"].filter(ended_at__gte=start, ended_at__lt=end).count(),
         }
 
         # Calculate derived metrics

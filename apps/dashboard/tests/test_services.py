@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -110,6 +110,36 @@ class TestDashboardService:
         assert stats["total_participants"] >= 1
         assert stats["total_sessions"] >= 1
         assert stats["total_messages"] >= 2
+
+    def test_overview_totals_are_what_the_team_had_by_the_end_of_the_window(self, team, experiment, participant):
+        """A chatbot or participant created after the window is not part of its totals."""
+        end = timezone.now()
+        for later in (
+            Experiment.objects.create(name="Later", team=team, owner=experiment.owner),
+            Participant.objects.create(identifier="later", team=team, platform="web"),
+        ):
+            later.created_at = end + timedelta(seconds=1)
+            later.save()
+
+        stats = DashboardService(team).get_overview_stats(start_date=end - timedelta(days=30), end_date=end)
+
+        assert (stats["total_experiments"], stats["total_participants"]) == (1, 1)
+
+    def test_completed_sessions_are_the_active_sessions_that_ended_in_the_window(self, team, experiment, participant):
+        """The completion rate's numerator and denominator describe the same window (ADR-0051)."""
+        end = timezone.now()
+        start = end - timedelta(days=30)
+        active_on = start + timedelta(days=10)
+        ended_inside = _create_session(experiment, participant, team, active_on)
+        ended_after = _create_session(experiment, participant, team, active_on)
+        _create_session(experiment, participant, team, active_on)
+        ExperimentSession.objects.filter(pk=ended_inside.pk).update(ended_at=active_on + timedelta(hours=1))
+        ExperimentSession.objects.filter(pk=ended_after.pk).update(ended_at=end + timedelta(hours=1))
+
+        stats = DashboardService(team).get_overview_stats(start_date=start, end_date=end)
+
+        assert (stats["total_sessions"], stats["completed_sessions"]) == (3, 1)
+        assert stats["completion_rate"] == pytest.approx(100 / 3)
 
     def test_get_session_analytics_data(self, team, experiment, participant, experiment_session, chat):
         """Test session analytics data generation"""
