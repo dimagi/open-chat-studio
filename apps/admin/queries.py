@@ -23,7 +23,6 @@ from apps.usage_metrics.filters import (
     CONVERSATION_MESSAGE_TYPES,
     activity_messages,
     activity_sessions,
-    conversation_messages,
     evaluation_platform,
 )
 
@@ -273,7 +272,7 @@ def get_whatsapp_number_data():
 
 def get_whatsapp_message_stats(start: datetime, end: datetime):
     rows = (
-        conversation_messages(
+        activity_messages(
             ChatMessage.objects.filter(
                 created_at__gte=start,
                 created_at__lt=end,

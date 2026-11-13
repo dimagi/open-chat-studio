@@ -346,6 +346,29 @@ class TestGetWhatsappMessageStats:
         assert row["human_count"] == 2
         assert row["ai_count"] == 1
 
+    def test_leaves_out_sessions_that_are_not_activity(self, date_range):
+        """A session still in SETUP counts on no usage surface (ADR-0051), its seed message included."""
+        start, end = date_range
+        team = TeamFactory.create(name="WA Team 3")
+        number = "+15550003333"
+        channel = ExperimentChannelFactory.create(
+            team=team, platform=ChannelPlatform.WHATSAPP, extra_data={"number": number}
+        )
+        session_kwargs = {
+            "team": team,
+            "experiment": channel.experiment,
+            "experiment_channel": channel,
+            "platform": ChannelPlatform.WHATSAPP,
+        }
+        counted = ExperimentSessionFactory.create(**session_kwargs)
+        in_setup = ExperimentSessionFactory.create(status=SessionStatus.SETUP, **session_kwargs)
+        ChatMessageFactory.create(chat=counted.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=in_setup.chat, message_type="ai", content="seed")
+
+        rows = [row for row in get_whatsapp_message_stats(start, end) if row["number"] == number]
+
+        assert [(row["human_count"], row["ai_count"]) for row in rows] == [(1, 0)]
+
     def test_pivot_marks_channel_inactive_when_all_channels_deleted(self, date_range):
         start, end = date_range
         team = TeamFactory.create(name="WA Team 2")
