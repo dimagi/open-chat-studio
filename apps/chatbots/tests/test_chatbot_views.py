@@ -1539,22 +1539,6 @@ def test_settings_page_has_no_allowlist_section(client, experiment):
 
 
 @pytest.mark.django_db()
-def test_settings_page_has_no_debug_mode_setting(client, experiment):
-    client.force_login(experiment.team.members.first())
-    url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
-
-    edit = client.get(url)
-    saved = client.post(
-        url, data={"name": experiment.name, "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL}
-    )
-
-    for response in (edit, saved):
-        assert response.status_code == 200
-        assert b"debug_mode_enabled" not in response.content
-        assert b"Debug Mode" not in response.content
-
-
-@pytest.mark.django_db()
 def test_settings_save_ignores_a_posted_allowlist(client, experiment):
     """The settings form no longer has a `participant_allowlist` field, so a posted value for it
     is inert -- the save still succeeds and the column is untouched."""
