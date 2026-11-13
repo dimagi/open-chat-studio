@@ -185,6 +185,17 @@
     </div>
   </div>
 
+  <div class="mb-6" id="unavailable-message-section">
+    <h4 class="text-md font-bold mb-2">Unavailable Message</h4>
+    <div class="p-4 bg-base-200 rounded-md" id="unavailable_message-{% if edit_mode %}edit{% else %}content{% endif %}">
+      {% if edit_mode %}
+        {% render_form_fields form "unavailable_message" %}
+      {% else %}
+        <p>{{ experiment.unavailable_message|default:"No unavailable message configured" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="mb-6" id="webchat-section">
     <h4 class="text-md font-bold mb-2">Web Chat Features</h4>
     <div class="p-4 bg-base-200 rounded-md">

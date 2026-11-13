@@ -47,7 +47,7 @@ def test_machine_token_lists_sessions_without_membership(session):
 
 @pytest.mark.django_db()
 def test_machine_token_lists_chatbots_without_membership(session):
-    client = _machine_client(session.team, scopes=["chatbots:read"])
+    client = _machine_client(session.team, scopes=["chatbots:read"], allowed_chatbots=[session.experiment])
     response = client.get(reverse("api:v2:chatbot-list"))
     assert response.status_code == 200
     ids = {result["id"] for result in response.json()["results"]}

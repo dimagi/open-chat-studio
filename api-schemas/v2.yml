@@ -57,7 +57,8 @@ paths:
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
-      description: List the chatbots belonging to the API key's team.
+      description: List the chatbots belonging to the API key's team. A machine (client-credentials)
+        token lists only the chatbots its application is authorised for.
       summary: List Chatbots
       parameters:
       - name: cursor
@@ -141,6 +142,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Chatbot'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to read this
+            chatbot: either its role lacks permission to view chatbots, or it is a
+            machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
     patch:
       operationId: chatbot_update
       description: Update the working (draft) chatbot's settings and its wiring to
@@ -263,6 +270,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to read this
+            chatbot: either its role lacks permission to view chatbots, or it is a
+            machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
   /api/v2/chatbots/{id}/pipeline/edges/:
     post:
       operationId: pipeline_edge_create
@@ -2655,6 +2668,11 @@ components:
           readOnly: true
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          readOnly: true
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         file_uploads_enabled:
           type: boolean
           readOnly: true
@@ -2672,6 +2690,7 @@ components:
       - synthetic_voice_id
       - trace_provider_id
       - trace_sample_rate
+      - unavailable_message
       - version_number
       - voice_provider_id
       - voice_response_behaviour
@@ -3619,6 +3638,10 @@ components:
           type: string
           description: Message used to start the conversation before the participant
             says anything.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         conversational_consent_enabled:
           type: boolean
         voice_response_behaviour:
@@ -3636,6 +3659,7 @@ components:
       - echo_transcript
       - file_uploads_enabled
       - seed_message
+      - unavailable_message
       - voice_response_behaviour
     InspectStaticTrigger:
       type: object
@@ -4205,6 +4229,10 @@ components:
           type: string
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         file_uploads_enabled:
           type: boolean
           description: Enables file attachments in the web chat interface.

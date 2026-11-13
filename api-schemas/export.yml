@@ -4484,6 +4484,10 @@ components:
           type: string
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         public_id:
           type: string
           format: uuid

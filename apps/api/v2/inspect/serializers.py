@@ -400,6 +400,11 @@ class InspectSettingsSerializer(serializers.Serializer):
     seed_message = serializers.CharField(
         allow_blank=True, help_text="Message used to start the conversation before the participant says anything."
     )
+    unavailable_message = serializers.CharField(
+        allow_blank=True,
+        help_text="Sent after the default error reply when the chatbot cannot respond, "
+        "for example when its LLM provider is unavailable.",
+    )
     conversational_consent_enabled = serializers.BooleanField()
     voice_response_behaviour = serializers.CharField(
         help_text=(
