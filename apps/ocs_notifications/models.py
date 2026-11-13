@@ -3,7 +3,9 @@ from django.db import models
 from django.db.models.functions import JSONObject
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.safestring import SafeString, mark_safe
 
+from apps.ocs_notifications.formatting import message_html as render_message_html
 from apps.teams.models import BaseTeamModel
 from apps.utils.fields import SanitizedJSONField
 from apps.web.meta import ensure_absolute_url
@@ -79,6 +81,11 @@ class NotificationEvent(BaseTeamModel):
     title = models.CharField(max_length=255)
     message = models.TextField()
     links = SanitizedJSONField(null=True)
+
+    @property
+    def message_html(self) -> SafeString:
+        """The message rendered from markdown and sanitised, for the in-app list and email."""
+        return mark_safe(render_message_html(self.message))
 
     @property
     def absolute_links(self) -> dict[str, str]:
