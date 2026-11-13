@@ -41,7 +41,14 @@ beforeAll(() => {
     document.body.appendChild(el);
   };
   setScript('parameter-values', {
-    llm_provider_model_id: [{value: 'model-a', label: 'Model A', type: 'openai'}],
+    llm_provider_id: [
+      {value: 'provider-a', label: 'OpenAI', type: 'openai'},
+      {value: 'provider-j', label: 'Jev', type: 'jev'},
+    ],
+    llm_provider_model_id: [
+      {value: 'model-a', label: 'OpenAI: gpt-x', type: 'openai'},
+      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev'},
+    ],
     built_in_tools: {openai: [{value: 'web_search', label: 'Web search'}]},
     tool_config: {},
   });
@@ -52,8 +59,11 @@ beforeAll(() => {
   });
   setScript('node-schemas', []);
   setScript('flags-enabled', []);
-  setScript('llm-model-params', {});
-  setScript('llm-model-parameter-schemas', {});
+  setScript('llm-model-params', {'gpt-x': 'BasicParameters', 'jev-latest': 'NoParameters'});
+  setScript('llm-model-parameter-schemas', {
+    BasicParameters: {properties: {temperature: {type: 'number', title: 'Temperature', default: 0.7}}},
+    NoParameters: {properties: {}},
+  });
 });
 
 const baseProps: Omit<WidgetParams, 'schema' | 'nodeParams' | 'paramValue'> = {
@@ -153,6 +163,61 @@ describe('BuiltInToolsWidget', () => {
       />,
     );
     expect(checkbox.checked).toBe(true);
+  });
+});
+
+describe('LlmWidget', () => {
+  const optionLabels = (schema: PropertySchema) => {
+    const Widget = getWidget('llm_provider_model', schema);
+    const {getAllByRole} = render(
+      <Widget {...baseProps} name="llm_provider_id" schema={schema} nodeParams={{name: 'x'}} paramValue="" />,
+    );
+    return getAllByRole('option').map((option) => option.textContent);
+  };
+
+  it('offers every provider when the node excludes no provider type', () => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model'} as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'OpenAI: gpt-x', 'TypeSafe Jev: jev-latest']);
+  });
+
+  it('leaves out the provider types the node excludes', () => {
+    const schema = {
+      type: 'integer',
+      'ui:widget': 'llm_provider_model',
+      'ui:excludedProviderTypes': ['jev'],
+    } as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'OpenAI: gpt-x']);
+  });
+
+  it('offers only the provider types the node includes', () => {
+    const schema = {
+      type: 'integer',
+      'ui:widget': 'llm_provider_model',
+      'ui:includedProviderTypes': ['jev'],
+    } as PropertySchema;
+
+    expect(optionLabels(schema)).toEqual(['Select a model', 'TypeSafe Jev: jev-latest']);
+  });
+
+  it.each([
+    {modelId: 'model-a', providerId: 'provider-a', shown: true},
+    {modelId: 'model-j', providerId: 'provider-j', shown: false},
+  ])('shows model parameters only for a model that takes some ($modelId)', ({modelId, providerId, shown}) => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model'} as PropertySchema;
+    const Widget = getWidget('llm_provider_model', schema);
+    const {queryByText} = render(
+      <Widget
+        {...baseProps}
+        name="llm_provider_id"
+        schema={schema}
+        nodeParams={{name: 'x', llm_provider_id: providerId, llm_provider_model_id: modelId}}
+        paramValue={providerId}
+      />,
+    );
+
+    expect(queryByText('Model Parameters') !== null).toBe(shown);
   });
 });
 
@@ -267,6 +332,128 @@ describe('KeyValuePairsWidget', () => {
     const {getByText} = render(<Harness inputError="Duplicate metadata filter key: district" />);
 
     expect(getByText('Duplicate metadata filter key: district')).toBeInTheDocument();
+  });
+});
+
+describe('DecisionsWidget', () => {
+  const choice = {
+    key: 'intent', type: 'choice', instructions: 'What do they want?',
+    options: [{name: 'billing', description: 'Payments'}], levels: [],
+    true_description: '', false_description: '', threshold: 0.6,
+  };
+
+  const seedNode = (decisions: unknown) =>
+    usePipelineStore.setState({
+      nodes: [{
+        id: 'node-1', type: 'test', position: {x: 0, y: 0},
+        data: {type: 'DecisionNode', label: '', params: {name: 'x', decisions}},
+      }] as never,
+    });
+
+  const stored = () => usePipelineStore.getState().nodes[0].data.params.decisions as Record<string, unknown>[];
+
+  function Harness({readOnly = false, inputError}: {readOnly?: boolean; inputError?: string}) {
+    const params = usePipelineStore((state) => state.nodes[0].data.params);
+    const Widget = getWidget('decisions', {type: 'array'} as PropertySchema);
+    return (
+      <Widget
+        {...baseProps}
+        name="decisions"
+        label="Decisions"
+        schema={{type: 'array'} as PropertySchema}
+        nodeParams={params}
+        paramValue={[]}
+        readOnly={readOnly}
+        inputError={inputError}
+      />
+    );
+  }
+
+  it('shows each decision with its key, type, instructions, options and threshold', () => {
+    seedNode([choice]);
+    const {getByLabelText} = render(<Harness />);
+
+    expect(getByLabelText('Key of decision 1')).toHaveValue('intent');
+    expect(getByLabelText('Type of decision 1')).toHaveValue('choice');
+    expect(getByLabelText('Instructions for decision 1')).toHaveValue('What do they want?');
+    expect(getByLabelText('Option 1 of decision 1')).toHaveValue('billing');
+    expect(getByLabelText('Description of option 1 of decision 1')).toHaveValue('Payments');
+    expect(getByLabelText('Threshold of decision 1')).toHaveValue(0.6);
+  });
+
+  it('adds a choice decision with one empty option', () => {
+    seedNode(null);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Add decision'}));
+
+    expect(stored()).toEqual([{
+      key: '', type: 'choice', instructions: '', options: [{name: '', description: ''}], levels: [],
+      true_description: '', false_description: '', threshold: null,
+    }]);
+  });
+
+  it('writes an edited key, option and threshold back to the node', () => {
+    seedNode([choice]);
+    const {getByLabelText, getByRole} = render(<Harness />);
+
+    fireEvent.change(getByLabelText('Key of decision 1'), {target: {value: 'topic'}});
+    fireEvent.click(getByRole('button', {name: 'Add option to decision 1'}));
+    fireEvent.change(getByLabelText('Option 2 of decision 1'), {target: {value: 'support'}});
+    fireEvent.change(getByLabelText('Threshold of decision 1'), {target: {value: ''}});
+
+    expect(stored()[0]).toMatchObject({
+      key: 'topic',
+      options: [{name: 'billing', description: 'Payments'}, {name: 'support', description: ''}],
+      threshold: null,
+    });
+  });
+
+  it.each([
+    {type: 'score', expected: {options: [], levels: [''], threshold: null}, label: 'Level 0 of decision 1'},
+    {type: 'noul', expected: {options: [], levels: [], threshold: null}, label: 'True means, for decision 1'},
+  ])('switching to $type clears the other types\' params', ({type, expected, label}) => {
+    seedNode([choice]);
+    const {getByLabelText, queryByLabelText} = render(<Harness />);
+
+    fireEvent.change(getByLabelText('Type of decision 1'), {target: {value: type}});
+
+    expect(stored()[0]).toMatchObject({key: 'intent', type, ...expected});
+    expect(getByLabelText(label)).toBeInTheDocument();
+    expect(queryByLabelText('Option 1 of decision 1')).not.toBeInTheDocument();
+  });
+
+  it('shows no threshold for a noul decision', () => {
+    seedNode([{...choice, type: 'noul', options: [], threshold: null}]);
+    const {queryByLabelText} = render(<Harness />);
+
+    expect(queryByLabelText('Threshold of decision 1')).not.toBeInTheDocument();
+  });
+
+  it('removes the chosen decision', () => {
+    seedNode([choice, {...choice, key: 'other'}]);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Remove decision 1'}));
+
+    expect(stored().map((decision) => decision.key)).toEqual(['other']);
+  });
+
+  it('offers no add or remove and blocks typing when read-only', () => {
+    seedNode([choice]);
+    const {getByLabelText, queryByRole} = render(<Harness readOnly />);
+
+    expect(queryByRole('button', {name: 'Add decision'})).not.toBeInTheDocument();
+    expect(queryByRole('button', {name: 'Remove decision 1'})).not.toBeInTheDocument();
+    expect(getByLabelText('Key of decision 1')).toHaveAttribute('readonly');
+    expect(getByLabelText('Type of decision 1')).toBeDisabled();
+  });
+
+  it('shows the validation error for the field', () => {
+    seedNode([choice]);
+    const {getByText} = render(<Harness inputError="Decision intent needs 1 to 255 options" />);
+
+    expect(getByText('Decision intent needs 1 to 255 options')).toBeInTheDocument();
   });
 });
 

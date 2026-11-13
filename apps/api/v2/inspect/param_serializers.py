@@ -183,6 +183,28 @@ class RouterNodeParams(_HistoryParams, _RouterParams):
             "keyword with its description."
         ),
     )
+    confidence_threshold = serializers.FloatField(
+        required=False,
+        help_text=(
+            "Only used with a Jev provider: below this confidence in the chosen route, the router takes the "
+            "default route. ``0`` always takes the chosen route."
+        ),
+    )
+
+
+@extend_schema_serializer(component_name="DecisionNodeParams")
+class DecisionNodeParams(_HistoryParams):
+    decisions = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        help_text=(
+            "The questions answered in one call to the TypeSafe Jev model. Each has a ``key``, a ``type`` "
+            "(``choice``, ``score`` or ``noul``), ``instructions``, ``options`` for a choice, ``levels`` for a "
+            "score, ``true_description`` and ``false_description`` for a noul, and an optional ``threshold``. "
+            "The answer is written to ``temp_state[key]``, and a choice or score's confidence to "
+            "``temp_state[key + '_confidence']``."
+        ),
+    )
 
 
 @extend_schema_serializer(component_name="StaticRouterNodeParams")
@@ -250,6 +272,7 @@ NODE_PARAM_SERIALIZERS = {
     "LLMResponseWithPrompt": LLMResponseWithPromptParams,
     "RouterNode": RouterNodeParams,
     "StaticRouterNode": StaticRouterNodeParams,
+    "DecisionNode": DecisionNodeParams,
     "BooleanNode": BooleanNodeParams,
     "SendEmail": SendEmailParams,
     "ExtractStructuredData": ExtractStructuredDataParams,

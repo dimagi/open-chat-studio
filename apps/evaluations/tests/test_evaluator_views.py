@@ -252,6 +252,34 @@ class TestEvaluatorPickerInitialState:
 
 
 @pytest.mark.django_db()
+class TestJevIsNotOffered:
+    """An evaluator's judge writes its verdict, and Jev cannot write text."""
+
+    def test_the_picker_leaves_it_out(self, client_with_user, team):
+        jev = LlmProviderFactory.create(team=team, type=str(LlmProviderTypes.jev))
+        openai = LlmProviderFactory.create(team=team)
+
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        offered = {option["value"] for option in response.context_data["parameter_values"]["LlmProviderId"]}
+        assert openai.id in offered
+        assert jev.id not in offered
+
+    def test_a_posted_jev_provider_is_rejected(self, client_with_user, team, evaluator):
+        jev = LlmProviderFactory.create(team=team, type=str(LlmProviderTypes.jev))
+        jev_model = LlmProviderModelFactory.create(team=team, type=str(LlmProviderTypes.jev), name="jev-latest")
+
+        data = _post_data(evaluator, {}, [], llm_provider=jev.id, llm_provider_model=jev_model.id)
+
+        response = client_with_user.post(_edit_url(team, evaluator), data)
+
+        assert response.status_code == 200
+        assert "The selected LLM provider is not available to this team" in response.content.decode()
+        evaluator.refresh_from_db()
+        assert evaluator.llm_provider_id != jev.id
+
+
+@pytest.mark.django_db()
 class TestEvaluatorLlmProviderSelection:
     def test_a_valid_selection_repoints_the_fks(self, client_with_user, team, evaluator):
         new_provider = LlmProviderFactory.create(team=team)

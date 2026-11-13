@@ -204,7 +204,7 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
     if not provider_models_by_type:
         return {}
 
-    for provider in team.llmprovider_set.all():
+    for provider in team.llmprovider_set.text_generating():
         providers[provider.id] = {
             "models": provider_models_by_type[provider.type],
         }
@@ -213,7 +213,7 @@ def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]
 
 def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
     """Get LLM provider model dropdown choices for the team"""
-    llm_providers = LlmProvider.objects.filter(team=team).all()
+    llm_providers = LlmProvider.objects.filter(team=team).text_generating()
     llm_provider_models_by_type = {}
     for model in LlmProviderModel.objects.for_team(team):
         llm_provider_models_by_type.setdefault(model.type, []).append(model)
@@ -239,7 +239,7 @@ def get_embedding_provider_choices(team) -> dict[str, list[dict[str, Any]]]:
 
 def get_first_llm_provider_by_team(team_id):
     try:
-        return LlmProvider.objects.filter(team_id=team_id).order_by("id").first()
+        return LlmProvider.objects.filter(team_id=team_id).text_generating().order_by("id").first()
     except LlmProvider.DoesNotExist:
         return None
 
@@ -257,7 +257,7 @@ def get_first_llm_provider_model(llm_provider, team_id):
 
 
 def get_llm_provider_by_team(team):
-    return LlmProvider.objects.filter(team=team).order_by("id")
+    return LlmProvider.objects.filter(team=team).text_generating().order_by("id")
 
 
 def get_models_by_provider(provider, team):
@@ -266,7 +266,7 @@ def get_models_by_provider(provider, team):
 
 
 def get_models_by_team_grouped_by_provider(team):
-    provider_types = LlmProvider.objects.filter(team=team).values_list("type", flat=True)
+    provider_types = LlmProvider.objects.filter(team=team).text_generating().values_list("type", flat=True)
     model_objects = LlmProviderModel.objects.for_team(team).filter(type__in=provider_types)
 
     provider_dict = defaultdict(list)

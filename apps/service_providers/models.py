@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditingManager, AuditingQuerySet
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
@@ -53,7 +53,13 @@ class VoiceProviderObjectManager(AuditingManager):
     pass
 
 
-class LlmProviderObjectManagerObjectManager(AuditingManager):
+class LlmProviderQuerySet(AuditingQuerySet):
+    def text_generating(self) -> "LlmProviderQuerySet":
+        """The providers that can write text, leaving out those that only classify."""
+        return self.exclude(type__in=LlmProviderTypes.router_only_slugs)
+
+
+class LlmProviderObjectManagerObjectManager(AuditingManager.from_queryset(LlmProviderQuerySet)):
     pass
 
 
@@ -93,6 +99,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
+    jev = "jev", _("TypeSafe Jev")
 
     def __str__(self):
         return str(self.value)
@@ -115,11 +122,21 @@ class LlmProviderTypes(LlmProviderType, Enum):
     def supports_connection_test(self) -> bool:
         """Whether this type has a chat endpoint a credential check could reach.
 
-        Voyage AI is embeddings-only, so there is no request to send, nothing the user could
-        do to make it testable, and no verification state worth keeping for it. Lives on the
-        type rather than the row because the create page has a type and no row yet.
+        Voyage AI is embeddings-only and Jev only classifies, so neither has a chat request
+        to send, nothing the user could do to make it testable, and no verification state
+        worth keeping for it. Lives on the type rather than the row because the create page
+        has a type and no row yet.
         """
-        return self != LlmProviderTypes.voyage
+        return self not in (LlmProviderTypes.voyage, LlmProviderTypes.jev)
+
+    @property
+    def router_only(self) -> bool:
+        """Whether this type only classifies, so only the LLM Router and Decision nodes can use it."""
+        return self == LlmProviderTypes.jev
+
+    @classproperty
+    def router_only_slugs(cls) -> list[str]:
+        return [member.slug for member in cls if member.router_only]
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -149,6 +166,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.GoogleVertexAIConfigForm
             case LlmProviderTypes.voyage:
                 return forms.VoyageAIConfigForm
+            case LlmProviderTypes.jev:
+                return forms.JevConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> "llm_service.LlmService":
@@ -190,6 +209,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.GoogleVertexAILlmService(**config)
             case LlmProviderTypes.voyage:
                 return llm_service.VoyageAILlmService(**config)
+            case LlmProviderTypes.jev:
+                return llm_service.JevLlmService(**config)
         return None
 
 

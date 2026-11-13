@@ -141,6 +141,19 @@ def test_provider_without_a_chat_model_is_skipped():
 
 
 @pytest.mark.django_db()
+def test_a_jev_provider_is_skipped():
+    """Jev has a model of its own but cannot write the event's message."""
+    session = ExperimentSessionFactory.create()
+    team = session.experiment.team
+    LlmProviderModelFactory.create(team=team, type="jev", name=get_default_model("jev").name)
+    LlmProviderFactory.create(team=team, type="jev", extra_data=VERIFIED)
+    openai_model = LlmProviderModelFactory.create(team=team, type="openai", name=get_default_model("openai").name)
+    openai = LlmProviderFactory.create(team=team, type="openai", extra_data=UNCHECKED)
+
+    assert _event_bot(session).get_provider_and_model() == (openai, openai_model)
+
+
+@pytest.mark.django_db()
 def test_provider_with_only_a_team_model_uses_that_model():
     session = ExperimentSessionFactory.create()
     team = session.experiment.team

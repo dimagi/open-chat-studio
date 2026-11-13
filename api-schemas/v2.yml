@@ -560,6 +560,7 @@ paths:
                       RESCHEDULE: Moving an existing appointment
                       CANCEL: Cancelling an appointment
                     default_keyword_index: 2
+                    confidence_threshold: 0.0
                     tag_output_message: true
                     history_type: named
                     history_name: triage-history
@@ -570,7 +571,57 @@ paths:
                   are uppercased on save. The standard prompt lists each keyword with
                   its `route_descriptions` entry; `custom_context` adds to it, and
                   `prompt` is used only when `prompt_mode` is `custom`. `prompt_template_version`
-                  picks the standard prompt version; omit it for the latest.'
+                  picks the standard prompt version; omit it for the latest. `confidence_threshold`
+                  is used only with a Jev provider.'
+              DecisionNode:
+                value:
+                  type: DecisionNode
+                  label: My DecisionNode
+                  params:
+                    name: assess
+                    llm_provider_id: 6
+                    llm_provider_model_id: 14
+                    llm_model_parameters: {}
+                    history_type: global
+                    history_name: null
+                    history_mode: max_history_length
+                    user_max_token_limit: null
+                    max_history_length: 10
+                    decisions:
+                    - key: intent
+                      type: choice
+                      instructions: What is the participant asking for?
+                      options:
+                      - name: billing
+                        description: Payments, invoices and refunds
+                      - name: support
+                        description: Help using the product
+                      levels: []
+                      true_description: ''
+                      false_description: ''
+                      threshold: 0.6
+                    - key: frustration
+                      type: score
+                      instructions: How frustrated is the participant?
+                      options: []
+                      levels:
+                      - Calm
+                      - Annoyed
+                      - Angry
+                      true_description: ''
+                      false_description: ''
+                      threshold: null
+                    - key: wants_refund
+                      type: noul
+                      instructions: The participant asks for a refund.
+                      options: []
+                      levels: []
+                      true_description: ''
+                      false_description: ''
+                      threshold: null
+                summary: 'DecisionNode: Needs a TypeSafe Jev model. Asks every decision
+                  in one call and writes each answer to `temp_state[key]`, plus `temp_state[key
+                  + ''_confidence'']` for choice and score decisions.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -3004,6 +3055,51 @@ components:
       - id
       - name
       - server_url
+    DecisionNodeParams:
+      type: object
+      properties:
+        llm_model_parameters:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Model call parameters (e.g. ``temperature``) keyed by name.
+            Older nodes may instead carry a flat ``llm_temperature``; both feed the
+            same underlying setting.
+        history_type:
+          type: string
+          description: 'Where this node''s chat history is scoped: ``global`` (whole
+            session), ``node`` (this node only), ``named`` (a shared, named history),
+            or ``none``.'
+        history_name:
+          type: string
+          nullable: true
+          description: Identifier of the shared history when ``history_type`` is ``named``;
+            otherwise null.
+        history_mode:
+          type: string
+          description: 'How history is compressed once it exceeds the limit: ``summarize``,
+            ``truncate_tokens``, or ``max_history_length``.'
+        max_history_length:
+          type: integer
+          nullable: true
+          description: Keep only the most recent messages up to this count.
+        user_max_token_limit:
+          type: integer
+          nullable: true
+          description: Token budget before history is summarized or truncated. Distinct
+            from the LLM model's own context window (reported under the node's ``llm``
+            object).
+        decisions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: The questions answered in one call to the TypeSafe Jev model.
+            Each has a ``key``, a ``type`` (``choice``, ``score`` or ``noul``), ``instructions``,
+            ``options`` for a choice, ``levels`` for a score, ``true_description``
+            and ``false_description`` for a noul, and an optional ``threshold``. The
+            answer is written to ``temp_state[key]``, and a choice or score's confidence
+            to ``temp_state[key + '_confidence']``.
     DefaultLlmProvider:
       type: object
       properties:
@@ -3536,6 +3632,7 @@ components:
       - $ref: '#/components/schemas/LLMResponseWithPromptParams'
       - $ref: '#/components/schemas/RouterNodeParams'
       - $ref: '#/components/schemas/StaticRouterNodeParams'
+      - $ref: '#/components/schemas/DecisionNodeParams'
       - $ref: '#/components/schemas/BooleanNodeParams'
       - $ref: '#/components/schemas/SendEmailParams'
       - $ref: '#/components/schemas/ExtractStructuredDataParams'
@@ -4802,6 +4899,12 @@ components:
             type: string
           description: What each route is for, keyed by keyword. The ``{routes}``
             prompt variable renders each keyword with its description.
+        confidence_threshold:
+          type: number
+          format: double
+          description: 'Only used with a Jev provider: below this confidence in the
+            chosen route, the router takes the default route. ``0`` always takes the
+            chosen route.'
     ScheduledTriggerWrite:
       type: object
       description: A chatbot trigger and the action it runs.

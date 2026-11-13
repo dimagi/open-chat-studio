@@ -70,12 +70,59 @@ FULL_PARAMS: dict[str, dict] = {
             "CANCEL": "Cancelling an appointment",
         },
         "default_keyword_index": 2,
+        "confidence_threshold": 0.0,
         "tag_output_message": True,
         "history_type": "named",
         "history_name": "triage-history",
         "history_mode": "max_history_length",
         "user_max_token_limit": 4000,
         "max_history_length": 25,
+    },
+    "DecisionNode": {
+        "name": "assess",
+        "llm_provider_id": 6,
+        "llm_provider_model_id": 14,
+        "llm_model_parameters": {},
+        "history_type": "global",
+        "history_name": None,
+        "history_mode": "max_history_length",
+        "user_max_token_limit": None,
+        "max_history_length": 10,
+        "decisions": [
+            {
+                "key": "intent",
+                "type": "choice",
+                "instructions": "What is the participant asking for?",
+                "options": [
+                    {"name": "billing", "description": "Payments, invoices and refunds"},
+                    {"name": "support", "description": "Help using the product"},
+                ],
+                "levels": [],
+                "true_description": "",
+                "false_description": "",
+                "threshold": 0.6,
+            },
+            {
+                "key": "frustration",
+                "type": "score",
+                "instructions": "How frustrated is the participant?",
+                "options": [],
+                "levels": ["Calm", "Annoyed", "Angry"],
+                "true_description": "",
+                "false_description": "",
+                "threshold": None,
+            },
+            {
+                "key": "wants_refund",
+                "type": "noul",
+                "instructions": "The participant asks for a refund.",
+                "options": [],
+                "levels": [],
+                "true_description": "",
+                "false_description": "",
+                "threshold": None,
+            },
+        ],
     },
     "StaticRouterNode": {
         "name": "route_on_plan",
@@ -129,7 +176,11 @@ NOTES: dict[str, str] = {
         "`keywords[i]` routes to handle `output_i`; keywords are uppercased on save. The standard prompt "
         "lists each keyword with its `route_descriptions` entry; `custom_context` adds to it, and `prompt` "
         "is used only when `prompt_mode` is `custom`. `prompt_template_version` picks the standard prompt "
-        "version; omit it for the latest."
+        "version; omit it for the latest. `confidence_threshold` is used only with a Jev provider."
+    ),
+    "DecisionNode": (
+        "Needs a TypeSafe Jev model. Asks every decision in one call and writes each answer to "
+        "`temp_state[key]`, plus `temp_state[key + '_confidence']` for choice and score decisions."
     ),
     "StaticRouterNode": "Routes on stored data instead of an LLM; takes no LLM params.",
     "LLMResponseWithPrompt": "A normal LLM node, with every optional param set.",

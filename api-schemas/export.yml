@@ -5021,6 +5021,7 @@ components:
       - google
       - google_vertex_ai
       - voyage
+      - jev
       type: string
       description: |-
         * `openai` - OpenAI
@@ -5035,6 +5036,7 @@ components:
         * `google` - Google Gemini
         * `google_vertex_ai` - Google Vertex AI
         * `voyage` - Voyage AI
+        * `jev` - TypeSafe Jev
     Manifest:
       type: object
       description: 'The sync manifest: the call order and per-model config, plus a
