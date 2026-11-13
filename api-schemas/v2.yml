@@ -57,7 +57,8 @@ paths:
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
-      description: List the chatbots belonging to the API key's team.
+      description: List the chatbots belonging to the API key's team. A machine (client-credentials)
+        token lists only the chatbots its application is authorised for.
       summary: List Chatbots
       parameters:
       - name: cursor
@@ -141,6 +142,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Chatbot'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to read this
+            chatbot: either its role lacks permission to view chatbots, or it is a
+            machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
     patch:
       operationId: chatbot_update
       description: Update the working (draft) chatbot's settings and its wiring to
@@ -263,6 +270,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to read this
+            chatbot: either its role lacks permission to view chatbots, or it is a
+            machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
   /api/v2/chatbots/{id}/pipeline/edges/:
     post:
       operationId: pipeline_edge_create
