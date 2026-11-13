@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0154_participant_strikes'),
+        ('experiments', '0155_experiment_unavailable_message'),
     ]
 
     operations = [
