@@ -235,6 +235,36 @@ describe('ocs-chat kiosk restart after session end', () => {
       expect(newChatButton(page)).toBeNull();
     });
 
+    it('drops an upload that finishes after a new chat was confirmed', async () => {
+      const page = await pageWithMessage(`${KIOSK_WITH_NEW_CHAT} allow-attachments="true"`);
+      const file = new File(['hello'], 'a.txt', { type: 'text/plain' });
+      let finishUpload: (result: unknown) => void;
+      jest.spyOn(page.rootInstance['attachmentManager'], 'uploadPendingFiles').mockReturnValue(
+        new Promise(resolve => {
+          finishUpload = resolve;
+        }),
+      );
+      page.rootInstance.selectedFiles = [{ file }];
+      mockSendMessage.mockClear();
+
+      const sending = page.rootInstance.sendMessage('with a file');
+      await page.waitForChanges();
+      newChatButton(page).click();
+      await page.waitForChanges();
+      (page.root?.shadowRoot?.querySelector('.confirmation-button-confirm') as HTMLButtonElement).click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await page.waitForChanges();
+
+      finishUpload({ selectedFiles: [{ file, uploaded: true }], uploadedIds: [7] });
+      await sending;
+      await page.waitForChanges();
+
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(page.rootInstance.messages).toEqual([]);
+      expect(page.rootInstance.selectedFiles).toEqual([]);
+      expect(page.rootInstance.activeSessionId).toBeUndefined();
+    });
+
     it('keeps the session when the confirmation is cancelled', async () => {
       const page = await pageWithMessage(KIOSK_WITH_NEW_CHAT);
       newChatButton(page).click();

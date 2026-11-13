@@ -959,6 +959,7 @@ export class OcsChat {
       return [];
     }
 
+    const epoch = this.sessionEpoch;
     this.isUploadingFiles = true;
     try {
       const service = this.getChatService();
@@ -970,6 +971,8 @@ export class OcsChat {
         participantName: this.userName,
         send: (url, body) => service.sessionFetch(sessionId, url, () => ({ method: 'POST', headers: service.getUploadHeaders(), body })),
       });
+      // A new chat started while the upload ran; its result belongs to the cleared session.
+      if (epoch !== this.sessionEpoch) return [];
       this.selectedFiles = uploadResult.selectedFiles;
       if (uploadResult.consent) {
         throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
@@ -1020,6 +1023,7 @@ export class OcsChat {
       let attachmentIds: number[] = [];
       if (this.allowAttachments && this.selectedFiles.length > 0) {
         attachmentIds = await this.uploadFiles();
+        if (epoch !== this.sessionEpoch) return;
 
         // Check if any files have errors after upload attempt
         const hasErrors = this.selectedFiles.some(sf => sf.error);
