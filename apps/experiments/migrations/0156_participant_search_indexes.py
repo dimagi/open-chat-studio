@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ("experiments", "0154_participant_strikes"),
+        ("experiments", "0155_experiment_unavailable_message"),
         ("web", "0002_auto_20241129_1504"),
     ]
 
