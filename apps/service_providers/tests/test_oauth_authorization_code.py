@@ -69,7 +69,7 @@ def test_authorization_code_provider_returns_bearer_service(team):
     provider.save(update_fields=["_auth_data"])
     service = provider.get_auth_service()
     assert isinstance(service, BearerTokenAuthService)
-    assert service.get_auth_headers() == {"authorization": "Bearer access"}
+    assert service.get_auth_headers()["authorization"] == "Bearer access"
 
 
 @pytest.mark.django_db()
@@ -223,7 +223,7 @@ def test_custom_action_uses_authorization_code_bearer_service(team):
     }
     provider.save(update_fields=["_auth_data"])
     action = CustomActionFactory.create(team=team, auth_provider=provider)
-    assert action.get_auth_service().get_auth_headers() == {"authorization": "Bearer action-token"}
+    assert action.get_auth_service().get_auth_headers()["authorization"] == "Bearer action-token"
 
 
 @pytest.mark.django_db()

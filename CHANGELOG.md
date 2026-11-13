@@ -55,6 +55,16 @@ version section when a release is cut.
      the process environment, whether or not it is required and whatever its
      default. Also a changed default that alters behavior. State the default and
      whether it is required. -->
+- `OUTBOUND_USER_AGENT` (optional, default unset) replaces the User-Agent sent on
+  every request made with an auth provider: custom actions, the HTTP pipeline
+  node, MCP servers, document sources and OAuth token requests. Left unset, those
+  requests send `OpenChatStudio (+<site URL>)`, built from the Site record, where
+  they previously sent httpx's `python-httpx/<version>`.
+- `RATE_LIMIT_CUSTOM_ACTIONS` (optional, default `1000/5m`) sets the rate for the
+  new `custom_actions` scope, which counts outbound custom action calls per auth
+  provider, or per action when it has none. Like the other scopes it only logs
+  `rate_limit.would_block` until `RATE_LIMIT_ENFORCE` is on; after that an
+  over-limit call is not sent and the LLM receives a tool error.
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,

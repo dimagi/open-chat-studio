@@ -90,6 +90,13 @@ def test_openapi_tool_headers(httpx_mock):
     _test_tool_call(spec, {"headers": {"x-custom-name": "bob"}})
 
 
+def test_openapi_tool_sends_outbound_user_agent(httpx_mock, settings):
+    settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+    httpx_mock.add_response(url="https://example.com/test")
+    _test_tool_call(make_openapi_schema({"parameters": []}), {})
+    assert httpx_mock.get_request().headers["User-Agent"] == "TestAgent/1.0"
+
+
 def test_openapi_tool_response_content_disposition_inline(httpx_mock):
     spec = make_openapi_schema({"parameters": []})
     httpx_mock.add_response(

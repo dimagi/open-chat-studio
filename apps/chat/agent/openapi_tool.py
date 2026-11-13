@@ -20,6 +20,7 @@ from apps.ocs_notifications.notifications import (
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.utils import rate_limit
 from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
@@ -96,6 +97,7 @@ class OpenAPIOperationExecutor:
         kwargs = {k: v.model_dump() if isinstance(v, BaseModel) else v for k, v in kwargs.items()}
 
         url = self._get_url(path_params)
+        self._check_rate_limit()
         with self.auth_service.get_http_client() as client:
             try:
                 return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
@@ -105,6 +107,18 @@ class OpenAPIOperationExecutor:
                 raise ToolException(f"Error making request: {e!s}") from None
             except httpx.HTTPError as e:
                 raise ToolException(f"Error making request: {e!s}") from None
+
+    def _check_rate_limit(self):
+        """Counts the request against its auth provider, or against the action when it has none."""
+        if self.custom_action is None:
+            return
+        if self.custom_action.auth_provider_id:
+            identity_type, identity = "auth_provider", self.custom_action.auth_provider_id
+        else:
+            identity_type, identity = "custom_action", self.custom_action.pk
+        result = rate_limit.check("custom_actions", identity_type, str(identity), team_id=self.custom_action.team_id)
+        if not result.allowed:
+            raise ToolException("Rate limit exceeded for this API. The request was not sent.")
 
     def call_api_with_notifications(self, **kwargs) -> Any:
         """Wrapper around call_api that creates notifications for monitoring custom action health.

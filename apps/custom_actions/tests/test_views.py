@@ -4,9 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from django.urls import reverse
+from waffle.testutils import override_flag
 
 from apps.custom_actions.schema_utils import APIOperationDetails
 from apps.custom_actions.views import _call_action_operation
+from apps.teams.flags import Flags
+from apps.utils.factories.custom_actions import CustomActionFactory
+from apps.utils.factories.service_provider_factories import AuthProviderFactory
 
 
 def make_operation(method="get", path="/items", operation_id="listItems"):
@@ -150,3 +155,29 @@ class TestCallActionOperation:
             result = _call_action_operation("https://api.example.com", op, {}, {}, {})
 
         assert result["status_code"] == 404
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "auth_provider",
+    [
+        pytest.param(None, id="no-provider"),
+        pytest.param({"type": "bearer", "config": {"token": "secret"}}, id="bearer"),
+    ],
+)
+def test_endpoint_tester_sends_outbound_user_agent(auth_provider, team_with_users, client, httpx_mock, settings):
+    settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+    provider = AuthProviderFactory.create(team=team_with_users, **auth_provider) if auth_provider else None
+    action = CustomActionFactory.create(team=team_with_users, auth_provider=provider)
+    httpx_mock.add_response(url="https://api.weather.com/weather?location=Cape+Town", json={"ok": True})
+    client.force_login(team_with_users.members.first())
+
+    with override_flag(Flags.TESTING_CUSTOM_ACTIONS.slug, active=True):
+        response = client.post(
+            reverse("custom_actions:test_endpoint", args=[team_with_users.slug, action.pk]),
+            data={"operation_id": "weather_get", "params": {"location": "Cape Town"}},
+            content_type="application/json",
+        )
+
+    assert response.status_code == 200, response.content
+    assert httpx_mock.get_request().headers["User-Agent"] == "TestAgent/1.0"

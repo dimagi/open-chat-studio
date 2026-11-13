@@ -7,7 +7,7 @@ import pytest
 
 from apps.documents.datamodels import GoogleDocsSourceConfig
 from apps.documents.source_loaders.google_docs import GoogleDocsDocumentLoader
-from apps.documents.source_loaders.google_docs_api import DOCS_API_URL
+from apps.documents.source_loaders.google_docs_api import DOCS_API_URL, fetch_google_document
 from apps.documents.source_loaders.google_docs_content import (
     extract_document_text,
     normalize_document_text,
@@ -15,6 +15,7 @@ from apps.documents.source_loaders.google_docs_content import (
 )
 from apps.documents.source_loaders.google_docs_errors import _google_api_error_message
 from apps.documents.source_loaders.google_docs_urls import extract_document_id
+from apps.service_providers.auth_service import BearerTokenAuthService
 from apps.service_providers.auth_service.oauth import OAuthTokenError
 from apps.service_providers.models import AuthProviderType
 
@@ -478,3 +479,15 @@ def test_loader_rejects_documents_without_extractable_text(httpx_mock):
     )
     with pytest.raises(ValueError, match="contains no extractable text"):
         list(loader.load_documents())
+
+
+def test_document_fetch_sends_outbound_user_agent(httpx_mock, settings):
+    settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+    provider = SimpleNamespace(get_auth_service=Mock(return_value=BearerTokenAuthService(token="token")))
+    httpx_mock.add_response(url=f"{DOCS_API_URL}/doc_123?includeTabsContent=true", json={"title": "Test"})
+
+    fetch_google_document(provider, "doc_123")
+
+    request = httpx_mock.get_request()
+    assert request.headers["User-Agent"] == "TestAgent/1.0"
+    assert request.headers["Authorization"] == "Bearer token"
