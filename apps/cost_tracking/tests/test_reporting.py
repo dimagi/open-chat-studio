@@ -750,7 +750,7 @@ class TestCostTimeseries:
         make_usage(team, cost="0.50", when=_NOW - timedelta(days=2))
         make_usage(team, cost="2.00", when=_NOW - timedelta(days=1))
 
-        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+        series = cost_timeseries(team, tz=UTC, start=_NOW - timedelta(days=30), end=_NOW)
 
         assert [point["chat"] for point in series] == [1.5, 2.0]
 
@@ -758,7 +758,7 @@ class TestCostTimeseries:
         team = TeamFactory.create()
         make_usage(team, cost="1.25", when=_NOW - timedelta(days=1))
 
-        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+        series = cost_timeseries(team, tz=UTC, start=_NOW - timedelta(days=30), end=_NOW)
 
         assert isinstance(series[0]["chat"], float)
 
@@ -768,7 +768,7 @@ class TestCostTimeseries:
         make_usage(team, cost="1.00", when=when)
         make_usage(team, cost="0.25", when=when, source=UsageSource.EVALUATION)
 
-        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+        series = cost_timeseries(team, tz=UTC, start=_NOW - timedelta(days=30), end=_NOW)
 
         assert len(series) == 1
         assert series[0]["chat"] == 1.0
@@ -781,7 +781,7 @@ class TestCostTimeseries:
         make_usage(team, cost="1.00", when=_NOW - timedelta(days=2))
         make_usage(team, cost="0.25", when=_NOW - timedelta(days=1), source=UsageSource.EVALUATION)
 
-        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+        series = cost_timeseries(team, tz=UTC, start=_NOW - timedelta(days=30), end=_NOW)
 
         assert series[0] == {"date": series[0]["date"], "chat": 1.0, "evaluation": 0.0}
         assert series[1] == {"date": series[1]["date"], "chat": 0.0, "evaluation": 0.25}
@@ -791,7 +791,7 @@ class TestCostTimeseries:
         other = TeamFactory.create()
         make_usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
-        assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
+        assert cost_timeseries(team, tz=UTC, start=_NOW - timedelta(days=30), end=_NOW) == []
 
 
 @pytest.mark.django_db()

@@ -19,6 +19,7 @@ from apps.api.v2.usage.services import (
     grouped_page_size_cap,
     resolve_query_filters,
 )
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.models import ServiceKind
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -487,3 +488,21 @@ def test_unknown_chatbot_filter_returns_zeroed_cost():
 
     assert response.status_code == 200
     assert response.json()["results"]["cost"] == {"total": "0.00000000", "currency": "USD"}
+
+
+@pytest.mark.django_db()
+def test_platform_grouping_and_the_ungrouped_total_agree_with_evaluation_activity_present():
+    """Grouped rows and the ungrouped total read one message universe, evaluation activity out of both
+    (ADR-0051), so the rows sum to the total. The team also runs a real session, so agreement on a
+    non-zero total is what is under test."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    _add_messages(ExperimentSessionFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS), human=1)
+    _add_messages(ExperimentSessionFactory.create(team=team, platform="web"), human=1, ai=1)
+
+    client = ApiTestClient(user, team)
+    total = client.get(reverse(USAGE_URL), {"metric": "messages"}).json()["results"]["messages"]["total"]
+    rows = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "platform"}).json()["results"]
+
+    assert total == 2
+    assert sum(row["messages"]["total"] for row in rows) == total

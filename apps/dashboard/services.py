@@ -1,41 +1,58 @@
 import hashlib
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
-from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ExperimentChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment, costs_by_participant
 from apps.experiments.models import Participant
+from apps.usage_metrics.buckets import by_bucket
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
-from apps.usage_metrics.filters import HUMAN_AUTHORED
+from apps.usage_metrics.filters import HUMAN_AUTHORED, UsageFilters
 from apps.usage_metrics.metrics import (
     CONVERSATION_MESSAGE_TYPES,
+    active_participants_timeseries,
     conversation_message_total,
-    conversation_messages,
     distinct_active_participants,
+    messages_timeseries,
+    sessions_active_timeseries,
 )
 
 from ..trace.models import Trace
 from .models import DashboardCache
 
+DEFAULT_WINDOW_DAYS = 30
+
+
+def usage_filters(params: dict) -> UsageFilters:
+    """The dashboard filter form's parameters as the shared filter shape. The chatbot list leaves
+    archived chatbots out, so enumeration excludes them."""
+    return UsageFilters(
+        experiment_ids=params.get("experiment_ids"),
+        participant_ids=params.get("participant_ids"),
+        platforms=params.get("platform_names"),
+        tag_ids=params.get("tag_ids"),
+        include_archived=False,
+    )
+
+
+def filter_window(params: dict) -> tuple[datetime, datetime]:
+    """The form's `[start_date, end_date)`; the last 30 days up to now when it set neither."""
+    end = params.get("end_date") or timezone.now()
+    start = params.get("start_date") or end - timedelta(days=DEFAULT_WINDOW_DAYS)
+    return start, end
+
 
 class DashboardService:
     """Service class for dashboard analytics operations"""
-
-    GRANULARITY_TRUNC_MAP = {
-        "hourly": TruncHour,
-        "daily": TruncDate,
-        "weekly": TruncWeek,
-        "monthly": TruncMonth,
-    }
 
     VALID_ORDER_FIELDS = [
         "participants",
@@ -52,120 +69,64 @@ class DashboardService:
         self.team = team
 
     def get_filtered_queryset_base(self, **filters) -> dict[str, Any]:
-        """Base querysets with common filters applied. The builder lives in
-        apps.usage_metrics (#3905) and owns the filter signature - see
-        `filtered_querysets` for the accepted keywords; this delegation keeps
-        the service API stable for the dashboard's charts and tests."""
-        return filtered_querysets(self.team, **filters)
+        """The dashboard's querysets for `filters`, the keyword form `DashboardFilterForm.get_filter_params` returns."""
+        return self._scope(filters)[2]
 
-    def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
-        """Get active participants chart data"""
-        cache_key = f"active_participants_{granularity}_{self._cache_key(filters)}"
-        cached_data = DashboardCache.get_cached_data(self.team, cache_key)
-        if cached_data:
-            return cached_data
-
-        querysets = self.get_filtered_queryset_base(**filters)
-        messages = querysets["messages"].filter(message_type=ChatMessageType.HUMAN)
-
-        trunc_func = self._get_trunc_function(granularity)
-
-        # Group by time period and count unique participants
-        participant_stats = (
-            messages.annotate(period=trunc_func("created_at"))
-            .values("period")
-            .annotate(active_participants=Count("chat__experiment_session__participant", distinct=True))
-            .order_by("period")
-        )
-
-        data = [
-            {
-                "date": self._format_period(stat["period"]),
-                "active_participants": stat["active_participants"],
-            }
-            for stat in participant_stats
-        ]
-
-        DashboardCache.set_cached_data(self.team, cache_key, data)
-        return data
+    def _scope(self, filters: dict) -> tuple[datetime, datetime, dict[str, Any]]:
+        """Resolve `filters` once: the window and the querysets over it."""
+        start, end = filter_window(filters)
+        querysets = filtered_querysets(self.team, start=start, end=end, filters=usage_filters(filters))
+        return start, end, querysets
 
     def get_session_analytics_data(self, granularity: str = "daily", **filters) -> dict[str, list[dict[str, Any]]]:
-        """Get session analytics data (total sessions and unique participants)"""
-        cache_key = f"session_analytics_{granularity}_{self._cache_key(filters)}"
+        """Active sessions and active participants per bucket, the two series the session analytics chart plots."""
+        cache_key = f"session_analytics_{self._series_cache_key(granularity, filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
 
-        querysets = self.get_filtered_queryset_base(**filters)
-        # Conversation turns only, so each period's session count is
-        # `sessions_active` restricted to that period and each period's
-        # participant count is `active_participants` restricted to it
-        # (ADR-0051). SETUP-session activity is already out of
-        # `querysets["messages"]`.
-        messages = conversation_messages(querysets["messages"])
-
-        trunc_func = self._get_trunc_function(granularity)
-
-        # Use messages queryset (already filtered by date) for period grouping
-        session_stats = (
-            messages.annotate(period=trunc_func("created_at"))
-            .values("period")
-            .annotate(
-                total_sessions=Count("chat__experiment_session", distinct=True),
-                unique_participants=Count(
-                    "chat__experiment_session__participant",
-                    distinct=True,
-                    filter=HUMAN_AUTHORED,
-                ),
-            )
-            .order_by("period")
-        )
-
-        data = {"sessions": [], "participants": []}
-
-        for stat in session_stats:
-            period_str = self._format_period(stat["period"])
-            data["sessions"].append({"date": period_str, "active_sessions": stat["total_sessions"]})
-            data["participants"].append({"date": period_str, "active_participants": stat["unique_participants"]})
+        start, end = filter_window(filters)
+        scope = {"start": start, "end": end, "granularity": granularity, "tz": timezone.get_current_timezone()}
+        sessions = sessions_active_timeseries(self.team, filters=usage_filters(filters), **scope)
+        participants = active_participants_timeseries(self.team, filters=usage_filters(filters), **scope)
+        data = {
+            "sessions": [{"date": bucket.isoformat(), "active_sessions": n} for bucket, n in sorted(sessions.items())],
+            "participants": [
+                {"date": bucket.isoformat(), "active_participants": n} for bucket, n in sorted(participants.items())
+            ],
+        }
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
 
     def get_message_volume_data(self, granularity: str = "daily", **filters) -> dict[str, list[dict[str, Any]]]:
-        """Get message volume trends (participant vs bot messages)"""
-        cache_key = f"message_volume_{granularity}_{self._cache_key(filters)}"
+        """Human and AI message counts per bucket for the message volume chart."""
+        cache_key = f"message_volume_{self._series_cache_key(granularity, filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
 
-        querysets = self.get_filtered_queryset_base(**filters)
-        messages = querysets["messages"]
-
-        trunc_func = self._get_trunc_function(granularity)
-
-        message_stats = (
-            messages.annotate(period=trunc_func("created_at"))
-            .values("period")
-            .annotate(
-                human_messages=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-                ai_messages=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-                total_messages=Count("id", filter=Q(message_type__in=CONVERSATION_MESSAGE_TYPES)),
-            )
-            .order_by("period")
+        start, end = filter_window(filters)
+        series = messages_timeseries(
+            self.team,
+            start=start,
+            end=end,
+            granularity=granularity,
+            tz=timezone.get_current_timezone(),
+            filters=usage_filters(filters),
         )
 
         data = {"human_messages": [], "ai_messages": [], "totals": []}
-
-        for stat in message_stats:
-            period_str = self._format_period(stat["period"])
-            data["human_messages"].append({"date": period_str, "count": stat["human_messages"]})
-            data["ai_messages"].append({"date": period_str, "count": stat["ai_messages"]})
+        for bucket, counts in sorted(series.items()):
+            period_str = bucket.isoformat()
+            data["human_messages"].append({"date": period_str, "count": counts["human"]})
+            data["ai_messages"].append({"date": period_str, "count": counts["ai"]})
             data["totals"].append(
                 {
                     "date": period_str,
-                    "human_messages": stat["human_messages"],
-                    "ai_messages": stat["ai_messages"],
-                    "total_messages": stat["total_messages"],
+                    "human_messages": counts["human"],
+                    "ai_messages": counts["ai"],
+                    "total_messages": counts["total"],
                 }
             )
 
@@ -219,14 +180,14 @@ class DashboardService:
 
     def _compute_bot_performance(self, cache_filters: dict) -> list[dict[str, Any]]:
         """Build the (uncached, unordered) per-experiment performance rows."""
-        querysets = self.get_filtered_queryset_base(**cache_filters)
+        start, end, querysets = self._scope(cache_filters)
         # Conversation turns inside the window, so this column agrees with the
         # headline message total rather than counting each chat's whole history
         # (ADR-0051).
         in_window_turns = Q(
             chat__messages__message_type__in=CONVERSATION_MESSAGE_TYPES,
-            chat__messages__created_at__gte=querysets["start_date"],
-            chat__messages__created_at__lt=querysets["end_date"],
+            chat__messages__created_at__gte=start,
+            chat__messages__created_at__lt=end,
         )
         # Pre-compute session stats.
         # The alternative for better performance would be to use a raw SQL Query
@@ -258,8 +219,8 @@ class DashboardService:
 
         cost_map = costs_by_experiment(
             self.team,
-            start=querysets["start_date"],
-            end=querysets["end_date"],
+            start=start,
+            end=end,
             filters=CostFilters(
                 experiment_ids=cache_filters.get("experiment_ids"),
                 platform_names=cache_filters.get("platform_names"),
@@ -311,13 +272,10 @@ class DashboardService:
         if cached_data:
             return cached_data
 
-        querysets = self.get_filtered_queryset_base(**filters)
+        start, end, querysets = self._scope(filters)
 
-        # Aggregate forward from the canonical message queryset, the same way
-        # `get_active_participants_data` does. Annotating the participant
-        # queryset instead re-enters ExperimentSession from the far side, which
-        # carries none of the SETUP, evaluation or tag exclusions the rest of
-        # the page counts by (ADR-0051).
+        # Aggregated forward from the message universe, which carries the SETUP,
+        # evaluation and tag exclusions the rest of the page counts by (ADR-0051).
         participant_field = "chat__experiment_session__participant"
         participant_stats = list(
             querysets["messages"]
@@ -339,8 +297,8 @@ class DashboardService:
         cost_map = (
             costs_by_participant(
                 self.team,
-                start=querysets["start_date"],
-                end=querysets["end_date"],
+                start=start,
+                end=end,
                 filters=CostFilters(
                     experiment_ids=filters.get("experiment_ids"),
                     platform_names=filters.get("platform_names"),
@@ -474,35 +432,21 @@ class DashboardService:
         return data
 
     def get_average_response_time_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
-        """Calculate average response time per period based on Trace table"""
-        cache_key = f"average_response_time_{granularity}_{self._cache_key(filters)}"
+        """Mean trace duration per bucket, over the traces the active sessions recorded in the window."""
+        cache_key = f"average_response_time_{self._series_cache_key(granularity, filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
 
-        querysets = self.get_filtered_queryset_base(**filters)
-        sessions = querysets["sessions"]
-
-        trunc_func = self._get_trunc_function(granularity)
-
-        avg_response_stats = (
-            Trace.objects.filter(
-                session__in=sessions,
-                timestamp__gte=querysets["start_date"],
-                timestamp__lt=querysets["end_date"],
-            )
-            .annotate(period=trunc_func("timestamp"))
-            .values("period")
-            .annotate(avg_duration_ms=Avg("duration"))
-            .order_by("period")
+        start, end, querysets = self._scope(filters)
+        traces = Trace.objects.filter(session__in=querysets["sessions"], timestamp__gte=start, timestamp__lt=end)
+        series = by_bucket(
+            traces, granularity, timezone.get_current_timezone(), field="timestamp", avg_duration_ms=Avg("duration")
         )
-
-        data = []
-
-        for stat in avg_response_stats:
-            period_str = self._format_period(stat["period"])
-            avg_sec = stat["avg_duration_ms"] / 1000 if stat["avg_duration_ms"] else 0
-            data.append({"date": period_str, "avg_response_time_sec": round(avg_sec, 2)})
+        data = [
+            {"date": bucket.isoformat(), "avg_response_time_sec": round((row["avg_duration_ms"] or 0) / 1000, 2)}
+            for bucket, row in sorted(series, key=lambda point: point[0])
+        ]
 
         DashboardCache.set_cached_data(self.team, cache_key, data)
         return data
@@ -536,13 +480,8 @@ class DashboardService:
 
         return histogram
 
-    def _get_trunc_function(self, granularity: str):
-        """Get the appropriate truncation function for the given granularity"""
-        return self.GRANULARITY_TRUNC_MAP.get(granularity, TruncDate)
-
-    def _format_period(self, period):
-        """Format a period object to ISO string"""
-        return period.isoformat() if hasattr(period, "isoformat") else str(period)
+    def _series_cache_key(self, granularity: str, filters: dict) -> str:
+        return self._cache_key({**filters, "granularity": granularity})
 
     def _format_participant_data(self, participant, stats: dict, cost_map: dict | None = None) -> dict[str, Any]:
         """Format participant data for engagement analysis. `stats` is one
@@ -582,8 +521,7 @@ class DashboardService:
         if cached_data:
             return cached_data
 
-        querysets = self.get_filtered_queryset_base(**filters)
-        start, end = querysets["start_date"], querysets["end_date"]
+        start, end, querysets = self._scope(filters)
 
         # The cards read "active of total", so a total is what the team had by the end of the window,
         # and a completed session is an active one that ended inside it: the completion rate's

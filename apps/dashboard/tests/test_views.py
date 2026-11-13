@@ -109,6 +109,30 @@ class TestDashboardApiViews:
             for field in expected_fields:
                 assert field in item
 
+    @pytest.mark.parametrize("granularity", ["bogus", ""])
+    def test_an_unknown_or_blank_granularity_yields_the_daily_series(
+        self, authenticated_client, team, experiment, participant, experiment_session, chat, granularity
+    ):
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        url = reverse("dashboard:api_session_analytics", kwargs={"team_slug": team.slug})
+
+        daily = authenticated_client.get(url, {"granularity": "daily"}).json()
+        fallback = authenticated_client.get(url, {"granularity": granularity}).json()
+
+        assert len(daily["sessions"]) == 1
+        assert fallback == daily
+
+    def test_hourly_granularity_buckets_by_the_hour(
+        self, authenticated_client, team, experiment, participant, experiment_session, chat
+    ):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        url = reverse("dashboard:api_session_analytics", kwargs={"team_slug": team.slug})
+
+        data = authenticated_client.get(url, {"granularity": "hourly"}).json()
+
+        hour = message.created_at.replace(minute=0, second=0, microsecond=0)
+        assert data["sessions"] == [{"date": hour.isoformat(), "active_sessions": 1}]
+
     def test_channel_breakdown_api(self, authenticated_client, team):
         """Test channel breakdown API endpoint"""
         url = reverse("dashboard:api_channel_breakdown", kwargs={"team_slug": team.slug})

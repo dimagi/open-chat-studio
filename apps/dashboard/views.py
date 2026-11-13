@@ -1,7 +1,8 @@
 import json
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from functools import cached_property
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import JsonResponse
@@ -24,12 +25,11 @@ from apps.cost_tracking.services.reporting import (
 )
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.usage_metrics.buckets import Granularity
 
 from .forms import DashboardFilterForm, SavedFilterForm
 from .models import DashboardCache, DashboardFilter
-from .services import DashboardService
-
-DEFAULT_COST_PERIOD_DAYS = 30
+from .services import DashboardService, filter_window
 
 
 def _cost_cache_key(prefix: str, filter_form: DashboardFilterForm) -> str:
@@ -121,24 +121,15 @@ def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
 
 def _cost_panel_scope(filter_form: DashboardFilterForm) -> tuple[datetime, datetime, CostFilters]:
     """Mirror the dashboard's date range and (chatbot / platform / participant
-    / tag) filters so the panel stays in sync with the rest of the charts.
-    Falls back to the last 30 days when no date range is set.
-    """
-    start = end = None
-    filters = CostFilters()
-    if filter_form.is_valid():
-        params = filter_form.get_filter_params()
-        start = params.get("start_date")
-        end = params.get("end_date")
-        filters = CostFilters(
-            experiment_ids=params.get("experiment_ids"),
-            platform_names=params.get("platform_names"),
-            participant_ids=params.get("participant_ids"),
-            tag_ids=params.get("tag_ids"),
-        )
-    if not (start and end):
-        end = timezone.now()
-        start = end - timedelta(days=DEFAULT_COST_PERIOD_DAYS)
+    / tag) filters so the panel stays in sync with the rest of the charts."""
+    params = filter_form.get_filter_params()
+    start, end = filter_window(params)
+    filters = CostFilters(
+        experiment_ids=params.get("experiment_ids"),
+        platform_names=params.get("platform_names"),
+        participant_ids=params.get("participant_ids"),
+        tag_ids=params.get("tag_ids"),
+    )
     return start, end, filters
 
 
@@ -195,13 +186,36 @@ class DashboardApiView(LoginAndTeamRequiredMixin, TemplateView):
     def get_dashboard_service(self):
         return DashboardService(self.request.team)
 
-    def get_filter_params(self):
-        """Extract filter parameters from request"""
-        filter_form = DashboardFilterForm(data=self.request.GET, team=self.request.team)
+    @cached_property
+    def filter_form(self) -> DashboardFilterForm:
+        return DashboardFilterForm(data=self.request.GET, team=self.request.team)
 
-        if filter_form.is_valid():
-            return filter_form.get_filter_params()
-        return {}
+    def get_filter_params(self):
+        """The validated filter parameters, none when the form is invalid."""
+        return self.filter_form.get_filter_params()
+
+    def get_granularity(self) -> Granularity:
+        """The validated granularity choice; daily when the form is invalid or the field was left blank."""
+        if self.filter_form.is_valid() and self.filter_form.cleaned_data.get("granularity"):
+            return Granularity(self.filter_form.cleaned_data["granularity"])
+        return Granularity.DAILY
+
+    def cost_series_response(self, prefix: str, series):
+        """Serve a bucketed cost `series` through the cache, keyed on the filters, the granularity and the zone."""
+        start, end, filters = _cost_panel_scope(self.filter_form)
+        granularity = self.get_granularity()
+        tz = timezone.get_current_timezone()
+        cache_key = f"{_cost_cache_key(prefix, self.filter_form)}_{granularity}_{tz}"
+        # The payload is already JSON-shaped (floats + dates), so both cache directions are
+        # identity; the JSON round-trip in _cached normalises the dates.
+        data = _cached(
+            self.request.team,
+            cache_key,
+            lambda: series(self.request.team, start=start, end=end, granularity=granularity, tz=tz, filters=filters),
+            decode=_identity,
+            encode=_identity,
+        )
+        return self.json_response(data)
 
     def json_response(self, data):
         """Return JSON response with proper serialization"""
@@ -225,9 +239,8 @@ class SessionAnalyticsApiView(DashboardApiView):
     def get(self, request, *args, **kwargs):
         service = self.get_dashboard_service()
         filter_params = self.get_filter_params()
-        granularity = request.GET.get("granularity", "daily")
 
-        data = service.get_session_analytics_data(granularity=granularity, **filter_params)
+        data = service.get_session_analytics_data(granularity=self.get_granularity(), **filter_params)
         return self.json_response(data)
 
 
@@ -237,9 +250,8 @@ class MessageVolumeApiView(DashboardApiView):
     def get(self, request, *args, **kwargs):
         service = self.get_dashboard_service()
         filter_params = self.get_filter_params()
-        granularity = request.GET.get("granularity", "daily")
 
-        data = service.get_message_volume_data(granularity=granularity, **filter_params)
+        data = service.get_message_volume_data(granularity=self.get_granularity(), **filter_params)
         return self.json_response(data)
 
 
@@ -270,26 +282,7 @@ class CostTrackingApiView(DashboardApiView):
     """Cost-tracking timeseries endpoint for the cost panel's line chart."""
 
     def get(self, request, *args, **kwargs):
-        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
-        start, end, filters = _cost_panel_scope(filter_form)
-        granularity = request.GET.get("granularity", "daily")
-        if granularity not in ("daily", "weekly", "monthly"):
-            # The value arrives raw from the query string and is folded into the
-            # cache key below; reporting falls back to daily for unknown values,
-            # so normalise first rather than minting a cache row per string.
-            granularity = "daily"
-        cache_key = f"{_cost_cache_key('cost_timeseries', filter_form)}_{granularity}"
-        # The payload is already JSON-shaped (floats + dates), so both cache
-        # directions are identity; the JSON round-trip in _cached normalises
-        # the dates the same way the previous inline encoding did.
-        data = _cached(
-            request.team,
-            cache_key,
-            lambda: cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters),
-            decode=_identity,
-            encode=_identity,
-        )
-        return self.json_response(data)
+        return self.cost_series_response("cost_timeseries", cost_timeseries)
 
 
 class CostBreakdownApiView(DashboardApiView):
@@ -299,11 +292,10 @@ class CostBreakdownApiView(DashboardApiView):
     """
 
     def get(self, request, *args, **kwargs):
-        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
-        start, end, filters = _cost_panel_scope(filter_form)
+        start, end, filters = _cost_panel_scope(self.filter_form)
         data = _cached(
             request.team,
-            _cost_cache_key("cost_breakdown", filter_form),
+            _cost_cache_key("cost_breakdown", self.filter_form),
             lambda: {
                 "by_model": costs_by_model(request.team, start=start, end=end, filters=filters),
                 "by_service_kind": costs_by_service_kind(request.team, start=start, end=end, filters=filters),
@@ -318,22 +310,7 @@ class CostP95ApiView(DashboardApiView):
     """p95 cost-per-trace series for the cost panel's line chart."""
 
     def get(self, request, *args, **kwargs):
-        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
-        start, end, filters = _cost_panel_scope(filter_form)
-        granularity = request.GET.get("granularity", "daily")
-        if granularity not in ("daily", "weekly", "monthly"):
-            # Same normalisation as the timeseries endpoint: reporting falls
-            # back to daily anyway, so don't mint a cache row per raw string.
-            granularity = "daily"
-        cache_key = f"{_cost_cache_key('cost_p95', filter_form)}_{granularity}"
-        data = _cached(
-            request.team,
-            cache_key,
-            lambda: p95_cost_per_trace(request.team, start=start, end=end, granularity=granularity, filters=filters),
-            decode=_identity,
-            encode=_identity,
-        )
-        return self.json_response(data)
+        return self.cost_series_response("cost_p95", p95_cost_per_trace)
 
 
 class UserEngagementApiView(DashboardApiView):
@@ -377,9 +354,8 @@ class AverageResponseTimeApiView(DashboardApiView):
     def get(self, request, *args, **kwargs):
         service = self.get_dashboard_service()
         filter_params = self.get_filter_params()
-        granularity = request.GET.get("granularity", "daily")
 
-        data = service.get_average_response_time_data(granularity=granularity, **filter_params)
+        data = service.get_average_response_time_data(granularity=self.get_granularity(), **filter_params)
         return self.json_response(data)
 
 

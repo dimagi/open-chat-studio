@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
 from django.db.models import Count, DecimalField, F, Q, Sum
-from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
@@ -21,20 +21,16 @@ from apps.evaluations.models import EvaluationConfig, EvaluationRun, Evaluator
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
+from apps.usage_metrics.buckets import GRANULARITY_TRUNC, Granularity
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
-from apps.usage_metrics.filters import chat_tag_exists_pair, conversation_messages
+from apps.usage_metrics.filters import UsageFilters, chat_tag_exists_pair, conversation_messages
 
 logger = logging.getLogger("ocs.cost_tracking")
 
-_ZERO = Decimal(0)
-_COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
-_QUANTITY_FIELD = DecimalField(max_digits=18, decimal_places=4)
-
-_GRANULARITY_TRUNC = {
-    "daily": TruncDate,
-    "weekly": TruncWeek,
-    "monthly": TruncMonth,
-}
+# The zero and the output fields every cost and token aggregate coalesces to.
+ZERO = Decimal(0)
+COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
+QUANTITY_FIELD = DecimalField(max_digits=18, decimal_places=4)
 
 # Token split for the usage API: `prompt` covers fresh + cached input, `completion` is output, and
 # `total` is every LLM kind (so cache-write tokens land in the total but neither sub-count).
@@ -292,17 +288,17 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
         _scoped_records(team, filters)
         .filter(timestamp__gte=previous_start, timestamp__lt=end)
         .aggregate(
-            total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
-            previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
+            total=Coalesce(Sum("cost", filter=period_q), ZERO, output_field=COST_FIELD),
+            previous=Coalesce(Sum("cost", filter=previous_q), ZERO, output_field=COST_FIELD),
             exact=Coalesce(
                 Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
-                _ZERO,
-                output_field=_COST_FIELD,
+                ZERO,
+                output_field=COST_FIELD,
             ),
             estimated=Coalesce(
                 Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
-                _ZERO,
-                output_field=_COST_FIELD,
+                ZERO,
+                output_field=COST_FIELD,
             ),
             estimated_rows=Count("id", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
             unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
@@ -340,12 +336,12 @@ def token_counts(team: Team, *, start: datetime, end: datetime, filters: CostFil
         .filter(timestamp__gte=start, timestamp__lt=end)
         .aggregate(
             prompt=Coalesce(
-                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
+                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), ZERO, output_field=QUANTITY_FIELD
             ),
             completion=Coalesce(
-                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), _ZERO, output_field=_QUANTITY_FIELD
+                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), ZERO, output_field=QUANTITY_FIELD
             ),
-            total=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            total=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
         )
     )
     return TokenCounts(prompt=int(agg["prompt"]), completion=int(agg["completion"]), total=int(agg["total"]))
@@ -364,10 +360,10 @@ def cost_total(team: Team, *, start: datetime, end: datetime, filters: CostFilte
         _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end)
         .values("currency")
-        .annotate(total=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(total=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
         .order_by()
     )
-    total = sum((row["total"] for row in rows), _ZERO)
+    total = sum((row["total"] for row in rows), ZERO)
     currency = rows[0]["currency"] if len(rows) == 1 else "USD"
     return CostTotal(total=total, currency=currency)
 
@@ -381,7 +377,7 @@ def _entity_cost_map(
         _attributable_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end, **{f"{field}__isnull": False})
         .values(f"{field}_id")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
     )
     return {row[f"{field}_id"]: row["cost"] for row in rows}
 
@@ -423,7 +419,7 @@ def costs_by_model(team: Team, *, start: datetime, end: datetime, filters: CostF
         _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end)
         .values("provider_type", "model_name")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
         .order_by("-cost", "provider_type", "model_name")
     )
     return [
@@ -447,8 +443,8 @@ def costs_by_service_kind(
         .filter(timestamp__gte=start, timestamp__lt=end)
         .values("service_kind")
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
-            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
         )
         .order_by()
     )
@@ -469,10 +465,11 @@ def p95_cost_per_trace(
     start: datetime,
     end: datetime,
     granularity: str = "daily",
+    tz: ZoneInfo,
     filters: CostFilters | None = None,
     top_n: int = P95_TOP_CHATBOTS,
 ) -> list[dict]:
-    """p95 of per-trace cost, per chatbot per time bucket, for the dashboard's
+    """p95 of per-trace cost, per chatbot per time bucket truncated in `tz`, for the dashboard's
     cost-per-trace chart. Per-trace cost is `Sum(cost)` grouped by
     (trace, experiment, bucket); the p95 is nearest-rank over those totals in
     Python. One series per chatbot, ordered by descending window spend, capped
@@ -483,13 +480,13 @@ def p95_cost_per_trace(
     The percentile is computed here in Python rather than in SQL; if that becomes a
     bottleneck at scale, Postgres's `percentile_cont` is the escape hatch.
     """
-    trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
+    trunc = GRANULARITY_TRUNC[Granularity(granularity)]
     rows = (
         _attributable_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end, trace__isnull=False, experiment__isnull=False)
-        .annotate(bucket=trunc("timestamp"))
+        .annotate(bucket=trunc("timestamp", tzinfo=tz))
         .values("trace_id", "experiment_id", "bucket")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
         .order_by()
     )
     per_bucket: dict[tuple, list[float]] = defaultdict(list)
@@ -543,7 +540,7 @@ def chatbot_usage_summary(team: Team, experiment_id: int, *, start: datetime, en
     even on a cache hit, defeating a chunk of the point of caching this at all.
     """
     cost = cost_summary(team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment_id]))
-    querysets = filtered_querysets(team, start_date=start, end_date=end, experiment_ids=[experiment_id])
+    querysets = filtered_querysets(team, start=start, end=end, filters=UsageFilters(experiment_ids=[experiment_id]))
     sessions_count = querysets["sessions"].count()
     messages_count = conversation_messages(querysets["messages"]).count()
     return ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
@@ -591,8 +588,8 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
         UsageRecord.objects.filter(team_id=session.team_id, session=session, source=UsageSource.CHAT)
         .values("model_name")
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
-            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
             unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
             estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
             unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
@@ -610,7 +607,7 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
         )
         for row in rows
     ]
-    total_cost = sum((row.cost for row in by_model), _ZERO)
+    total_cost = sum((row.cost for row in by_model), ZERO)
     return SessionUsage(
         total_cost=total_cost,
         has_unpriced=any(row.has_unpriced for row in by_model),
@@ -703,8 +700,8 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
     model_rows = (
         scoped.values("provider_type", "model_name")
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
-            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
             unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
             estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
             unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
@@ -727,8 +724,8 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
     evaluator_rows = list(
         scoped.values("extra__evaluator_id")
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
-            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
             unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
             estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
             unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
@@ -755,7 +752,7 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
     ]
 
     return EvaluationRunCost(
-        total_cost=sum((row.cost for row in by_model), _ZERO),
+        total_cost=sum((row.cost for row in by_model), ZERO),
         total_tokens=sum(row.tokens for row in by_model),
         currency=currency,
         has_unpriced=any(row.has_unpriced for row in by_model),
@@ -779,7 +776,7 @@ def evaluation_run_costs(config_id: int, run_ids: list[int]) -> dict[int, Decima
     rows = (
         UsageRecord.objects.filter(evaluation_config_id=config_id, extra__evaluation_run_id__in=run_ids)
         .values("extra__evaluation_run_id")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
         .order_by()
     )
     return {row["extra__evaluation_run_id"]: row["cost"] for row in rows}
@@ -799,7 +796,7 @@ def evaluation_message_tokens(config_id: int, run_id: int) -> dict[int, int]:
             evaluation_config_id=config_id, extra__evaluation_run_id=run_id, extra__message_id__isnull=False
         )
         .values("extra__message_id")
-        .annotate(tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD))
+        .annotate(tokens=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD))
         .order_by()
     )
     return {row["extra__message_id"]: int(row["tokens"]) for row in rows}
@@ -815,7 +812,7 @@ def evaluation_message_cost(config_id: int, run_id: int) -> dict[int, Decimal]:
             evaluation_config_id=config_id, extra__evaluation_run_id=run_id, extra__message_id__isnull=False
         )
         .values("extra__message_id")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
         .order_by()
     )
     return {row["extra__message_id"]: row["cost"] for row in rows}
@@ -831,11 +828,11 @@ def evaluation_config_cost_summary(config: EvaluationConfig) -> EvaluationConfig
     qs = UsageRecord.objects.filter(evaluation_config_id=config.id)
     recent_q = Q(timestamp__gte=timezone.now() - timedelta(days=30))
     agg = qs.aggregate(
-        all_time_cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+        all_time_cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
         all_time_unpriced=Count("id", filter=Q(pricing_rule__isnull=True)),
         all_time_estimated=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
         all_time_unknown=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
-        last_30_days_cost=Coalesce(Sum("cost", filter=recent_q), _ZERO, output_field=_COST_FIELD),
+        last_30_days_cost=Coalesce(Sum("cost", filter=recent_q), ZERO, output_field=COST_FIELD),
         last_30_days_unpriced=Count("id", filter=recent_q & Q(pricing_rule__isnull=True)),
         last_30_days_estimated=Count("id", filter=recent_q & Q(confidence=Confidence.ESTIMATED)),
         last_30_days_unknown=Count("id", filter=recent_q & Q(confidence=Confidence.UNKNOWN)),
@@ -877,7 +874,7 @@ def trace_token_usage(trace: Trace) -> TraceTokenUsage:
             cached_input_tokens=_kind_quantity(ServiceKind.LLM_CACHED_INPUT),
             cache_write_tokens=_kind_quantity(ServiceKind.LLM_CACHE_WRITE),
             output_tokens=_kind_quantity(ServiceKind.LLM_OUTPUT),
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
             unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
             estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
             unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
@@ -905,7 +902,7 @@ def trace_token_usage(trace: Trace) -> TraceTokenUsage:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total=input_tokens + output_tokens,
-        total_cost=sum((row.cost for row in by_model), _ZERO),
+        total_cost=sum((row.cost for row in by_model), ZERO),
         has_unpriced=any(row.has_unpriced for row in by_model),
         has_estimated=any(row.has_estimated for row in by_model),
         has_unknown=any(row.has_unknown for row in by_model),
@@ -942,9 +939,15 @@ def coverage_gaps(team: Team, *, start: datetime, end: datetime, filters: CostFi
 
 
 def cost_timeseries(
-    team: Team, *, start: datetime, end: datetime, granularity: str = "daily", filters: CostFilters | None = None
+    team: Team,
+    *,
+    start: datetime,
+    end: datetime,
+    granularity: str = "daily",
+    tz: ZoneInfo,
+    filters: CostFilters | None = None,
 ) -> list[dict]:
-    """Spend per time bucket in [start, end), split by source, ordered chronologically.
+    """Spend per time bucket in [start, end), truncated in `tz`, split by source, ordered chronologically.
 
     One row per non-empty bucket: ``{'date': bucket, <source>: float, ...}``, carrying a
     key for every source the read counts, zero-filled so the chart's stacked series stay
@@ -955,13 +958,13 @@ def cost_timeseries(
     """
     filters = filters or CostFilters()
     sources = [UsageSource.CHAT.value] if filters.narrows_to_entities else [source.value for source in UsageSource]
-    trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
+    trunc = GRANULARITY_TRUNC[Granularity(granularity)]
     rows = (
         _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end)
-        .annotate(bucket=trunc("timestamp"))
+        .annotate(bucket=trunc("timestamp", tzinfo=tz))
         .values("bucket", "source")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .annotate(cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD))
         .order_by("bucket")
     )
     buckets: dict = {}
@@ -984,23 +987,23 @@ def usage_timeseries(
     bucket: ``{'bucket', 'cost' (Decimal), 'currency', 'prompt', 'completion', 'total'}``. Empty buckets
     are absent (the caller zero-fills). Shares the scoped-record path with ``cost_total``/``token_counts``
     so a bucketed usage response reconciles with the same window's totals. This is the API read; the
-    dashboard's Chart.js series is ``cost_timeseries`` (float, UTC-bucketed, split by source).
+    dashboard's Chart.js series is ``cost_timeseries`` (float, split by source).
     """
-    trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
+    trunc = GRANULARITY_TRUNC[Granularity(granularity)]
     scoped = _scoped_records(team, filters).filter(timestamp__gte=start, timestamp__lt=end)
     currency = _single_currency(scoped)
     rows = (
         scoped.annotate(bucket=trunc("timestamp", tzinfo=tz))
         .values("bucket")
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
             prompt=Coalesce(
-                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
+                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), ZERO, output_field=QUANTITY_FIELD
             ),
             completion=Coalesce(
-                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), _ZERO, output_field=_QUANTITY_FIELD
+                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), ZERO, output_field=QUANTITY_FIELD
             ),
-            total=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            total=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
         )
         .order_by("bucket")
     )
@@ -1048,20 +1051,20 @@ def usage_by_group(
     currency = _single_currency(scoped) if resolve_currency else "USD"
     group_cols = ["key"]
     if breakdown.granularity:
-        trunc = _GRANULARITY_TRUNC.get(breakdown.granularity, TruncDate)
+        trunc = GRANULARITY_TRUNC[Granularity(breakdown.granularity)]
         scoped = scoped.annotate(bucket=trunc("timestamp", tzinfo=breakdown.tz))
         group_cols.append("bucket")
     rows = (
         scoped.values(*group_cols)
         .annotate(
-            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            cost=Coalesce(Sum("cost"), ZERO, output_field=COST_FIELD),
             prompt=Coalesce(
-                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
+                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), ZERO, output_field=QUANTITY_FIELD
             ),
             completion=Coalesce(
-                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), _ZERO, output_field=_QUANTITY_FIELD
+                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), ZERO, output_field=QUANTITY_FIELD
             ),
-            total=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            total=Coalesce(Sum("quantity"), ZERO, output_field=QUANTITY_FIELD),
         )
         .order_by()
     )
@@ -1088,7 +1091,7 @@ def _single_currency(scoped) -> str:
 
 def _kind_quantity(kind: ServiceKind):
     """Summed `quantity` for one service kind, zero when the group has no such rows."""
-    return Coalesce(Sum("quantity", filter=Q(service_kind=kind)), _ZERO, output_field=_QUANTITY_FIELD)
+    return Coalesce(Sum("quantity", filter=Q(service_kind=kind)), ZERO, output_field=QUANTITY_FIELD)
 
 
 def _coverage_gap_from_row(row: dict, call_count: int) -> ModelCoverageGap:

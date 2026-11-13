@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, timedelta
 from unittest.mock import ANY
 
 import pytest
@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.usage_metrics.buckets import Granularity, bucket_start
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -31,12 +32,7 @@ class TestDashboardService:
         # Test without filters
         querysets = service.get_filtered_queryset_base()
 
-        assert "experiments" in querysets
-        assert "sessions" in querysets
-        assert "messages" in querysets
-        assert "participants" in querysets
-        assert "start_date" in querysets
-        assert "end_date" in querysets
+        assert set(querysets) == {"experiments", "sessions", "messages", "participants"}
 
         # Verify team filtering
         experiments = querysets["experiments"]
@@ -153,9 +149,10 @@ class TestDashboardService:
         service = DashboardService(team)
 
         data = service.get_session_analytics_data(granularity="daily")
+        day = bucket_start(message.created_at.astimezone(UTC), Granularity.DAILY).isoformat()
         assert data == {
-            "sessions": [{"date": str(message.created_at.date()), "active_sessions": 1}],
-            "participants": [{"date": str(message.created_at.date()), "active_participants": 1}],
+            "sessions": [{"date": day, "active_sessions": 1}],
+            "participants": [{"date": day, "active_participants": 1}],
         }
 
     def test_get_message_volume_data(self, team, experiment, participant, experiment_session, chat):
@@ -321,21 +318,16 @@ class TestDashboardService:
         assert isinstance(data["most_active_participants"], list)
         assert isinstance(data["session_length_distribution"], list)
 
-    def test_granularity_options(self, team, experiment, participant, experiment_session, chat):
-        """Test different granularity options"""
-        service = DashboardService(team)
+    @pytest.mark.parametrize("granularity", [pytest.param(value, id=value.value) for value in Granularity])
+    def test_series_bucket_on_the_granularity(
+        self, team, experiment, participant, experiment_session, chat, granularity
+    ):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
 
-        # Create test message
-        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        data = DashboardService(team).get_session_analytics_data(granularity=granularity)
 
-        granularities = ["hourly", "daily", "weekly", "monthly"]
-
-        for granularity in granularities:
-            data = service.get_session_analytics_data(granularity=granularity)
-            assert isinstance(data, dict)
-
-            # Test that the function doesn't crash with different granularities
-            # The exact data will depend on when the test is run
+        bucket = bucket_start(message.created_at.astimezone(UTC), granularity).isoformat()
+        assert data["sessions"] == [{"date": bucket, "active_sessions": 1}]
 
     def test_histogram_creation(self, team):
         """Test histogram creation utility"""
