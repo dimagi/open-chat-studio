@@ -4,7 +4,6 @@ import anthropic
 import httpx
 import openai
 import pytest
-from google.genai import errors as google_errors
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.runnables import RunnableLambda
 
@@ -36,6 +35,7 @@ def _innermost_detail(error: BaseException) -> str:
 
 def _google_error(code: int, status: str, message: str) -> Exception:
     """What langchain-google-genai raises for a Google API failure: its own type, chained from the SDK's."""
+    from google.genai import errors as google_errors  # noqa: PLC0415 - heavy lib
     from langchain_google_genai import chat_models  # noqa: PLC0415 - TID253: heavy lib
 
     body = {"error": {"code": code, "message": message, "status": status}}
