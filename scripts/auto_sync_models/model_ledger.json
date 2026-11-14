@@ -942,6 +942,11 @@
     "verdict": "rejected",
     "reason": "Retired experimental LearnLM build."
   },
+  "google_vertex_ai/deep-research-preview-04-2026": {
+    "first_seen": "2026-11-14",
+    "verdict": "rejected",
+    "reason": "Deep-research agent model, not a chat model."
+  },
   "google_vertex_ai/deep-research-pro-preview-12-2025": {
     "first_seen": "2026-10-07",
     "verdict": "rejected",
