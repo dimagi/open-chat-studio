@@ -208,7 +208,7 @@ def test_chat_api_throttle_keys_on_the_channel_before_a_session_exists(experimen
         team=experiment.team, experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET
     )
     throttle = ChatAPIRateThrottle()
-    request = RequestFactory().post("/")
+    request = RequestFactory().post("/api/chat/start/")
     request.auth = channel
     request.successful_authenticator = EmbeddedWidgetAuthentication()
 

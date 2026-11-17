@@ -14,13 +14,13 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModel
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.api.admission import (
-    ChatAdmissionError,
     ChatCredentialKind,
     ChatEntryPoint,
     chat_entry_point_for_request,
     get_chat_admission,
 )
 from apps.api.authentication import channel_origin_allowed, embed_key_authorizes_channel
+from apps.api.exceptions import ChatAdmissionError
 from apps.api.session_tokens import parse_session_token, session_token_expired
 from apps.channels.models import WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached

@@ -129,6 +129,7 @@ class TestRequiresTeamPermission:
         """A machine token authenticates as AnonymousUser, so there is no membership-derived
         permission to check; authorization rests on the OAuth scope and the token's pinned team."""
         request = Mock(user=AnonymousUser(), auth=machine_token)
+        request.chat_session = None
 
         assert _NeedsChange().has_permission(request, view=None) is True
 

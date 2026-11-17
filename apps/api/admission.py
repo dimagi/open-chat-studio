@@ -290,7 +290,8 @@ def _resolve_unmarked_oauth_credential(auth, session):
 
 def _validate_oauth_session_team(session, oauth_team):
     """Reject an OAuth request that combines a token and session from different teams."""
-    if session is not None and session.team != oauth_team:
+    session_team = getattr(session, "team", None)
+    if session_team is not None and session_team != oauth_team:
         raise ChatAdmissionError("OAuth credential and session belong to different teams")
 
 
