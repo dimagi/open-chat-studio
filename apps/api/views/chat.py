@@ -613,6 +613,33 @@ def _prepare_start_session_participant(
     return user, participant, None
 
 
+def _prepare_start_session_context(
+    request,
+    experiment,
+    session_data,
+    embed_key_channel,
+    oauth_channel,
+    version_number,
+):
+    """Resolve access, version and channel before creating participant or session records."""
+    denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
+    if denied:
+        return denied
+
+    experiment_version = _get_requested_version(experiment, version_number)
+    team = experiment.team
+    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel, oauth_channel)
+    if disabled := _channel_disabled_response(experiment_channel):
+        return disabled
+
+    experiment_version, public_visitor, refusal = _resolve_start_session_version(
+        request, experiment, experiment_version, experiment_channel
+    )
+    if refusal:
+        return refusal
+    return experiment_version, public_visitor, team, experiment_channel
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -727,25 +754,17 @@ def chat_start_session(request):
 
     _, embed_key_channel, oauth_channel = _resolve_start_session_admission(request, experiment)
 
-    denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
-    if denied:
-        return denied
-
-    experiment_version = _get_requested_version(experiment, version_number)
-
-    team = experiment.team
-
-    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel, oauth_channel)
-
-    # Before the participant work below, which creates records as a side effect.
-    if disabled := _channel_disabled_response(experiment_channel):
-        return disabled
-
-    experiment_version, public_visitor, refusal = _resolve_start_session_version(
-        request, experiment, experiment_version, experiment_channel
+    start_context = _prepare_start_session_context(
+        request,
+        experiment,
+        session_data,
+        embed_key_channel,
+        oauth_channel,
+        version_number,
     )
-    if refusal:
-        return refusal
+    if isinstance(start_context, Response):
+        return start_context
+    experiment_version, public_visitor, team, experiment_channel = start_context
 
     user, participant, refusal = _prepare_start_session_participant(
         request,

@@ -3,24 +3,11 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from apps.api.admission_credentials import ChatCredentialKind, CredentialContext, resolve_credential
 from apps.api.exceptions import ChatAdmissionError
-from apps.api.models import UserAPIKey
 from apps.channels.models import ChannelPlatform, ExperimentChannel, WidgetAuthLevel
 from apps.oauth.models import OAuth2AccessToken
-from apps.oauth.permissions import is_client_credentials_token
 from apps.utils.rate_limit import client_ip
-
-
-class ChatCredentialKind(StrEnum):
-    """Credential mechanisms that can reach the Chat API."""
-
-    ANONYMOUS = "anonymous"
-    EMBED_KEY = "embed_key"
-    OAUTH_CLIENT_CREDENTIALS = "oauth_client_credentials"
-    OAUTH_AUTHORIZATION_CODE = "oauth_authorization_code"
-    SESSION_TOKEN = "session_token"
-    USER_SESSION = "user_session"
-    API_KEY = "api_key"
 
 
 class ChatEntryPoint(StrEnum):
@@ -86,16 +73,16 @@ def resolve_chat_admission(
         session = getattr(request, "chat_session", None)
 
     auth = getattr(request, "auth", None)
-    authenticator = getattr(request, "successful_authenticator", None)
-    validated_oauth_token = getattr(request, "chat_oauth_token", None)
-    credential_kind, channel, principal, team = _resolve_credential(
-        request,
-        auth=auth,
-        authenticator=authenticator,
-        session=session,
-        session_token_validated=session_token_validated,
-        validated_oauth_token=validated_oauth_token,
-        validated_embed_key_channel=validated_embed_key_channel,
+    credential_kind, channel, principal, team = resolve_credential(
+        CredentialContext(
+            request=request,
+            auth=auth,
+            authenticator=getattr(request, "successful_authenticator", None),
+            session=session,
+            session_token_validated=session_token_validated,
+            validated_oauth_token=getattr(request, "chat_oauth_token", None),
+            validated_embed_key_channel=validated_embed_key_channel,
+        )
     )
 
     return ChatAdmission(
@@ -108,116 +95,6 @@ def resolve_chat_admission(
         throttle_bucket=_throttle_bucket(request, entry_point, channel, auth, session),
         session_token_policy=_session_token_policy(channel),
     )
-
-
-def _resolve_session_token_credential(session):
-    """Resolve a session token after its caller has completed validation."""
-    if session is None:
-        raise ChatAdmissionError("Validated session-token admission requires a session")
-    return ChatCredentialKind.SESSION_TOKEN, session.experiment_channel, None, session.team
-
-
-def _resolve_credential(
-    request,
-    *,
-    auth,
-    authenticator,
-    session,
-    session_token_validated: bool,
-    validated_oauth_token,
-    validated_embed_key_channel: ExperimentChannel | None,
-) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
-    """Resolve credential identity and tenancy from DRF's already-authenticated objects."""
-    if session_token_validated:
-        return _resolve_session_token_credential(session)
-
-    if validated_embed_key_channel is not None:
-        return (
-            ChatCredentialKind.EMBED_KEY,
-            validated_embed_key_channel,
-            None,
-            validated_embed_key_channel.team,
-        )
-
-    credential_kind = getattr(authenticator, "chat_credential_kind", None)
-    if credential_kind in {ChatCredentialKind.EMBED_KEY, ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS}:
-        return _resolve_marked_credential(
-            credential_kind,
-            auth=auth,
-            session=session,
-            validated_oauth_token=validated_oauth_token,
-        )
-    return _resolve_unmarked_credential(request, auth=auth, session=session)
-
-
-def _resolve_marked_credential(
-    credential_kind: ChatCredentialKind,
-    *,
-    auth,
-    session,
-    validated_oauth_token,
-) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
-    """Resolve credentials identified by a Chat API authentication adapter."""
-    if credential_kind == ChatCredentialKind.EMBED_KEY:
-        return _resolve_embed_key_credential(auth)
-
-    return _resolve_marked_oauth_credential(auth, session, validated_oauth_token)
-
-
-def _resolve_embed_key_credential(auth):
-    """Resolve the Channel supplied by the validated Embed Key adapter."""
-    if not isinstance(auth, ExperimentChannel):
-        raise ChatAdmissionError("Embed Key admission has no Chat API Channel")
-    return ChatCredentialKind.EMBED_KEY, auth, None, auth.team
-
-
-def _resolve_marked_oauth_credential(auth, session, validated_oauth_token):
-    """Resolve an OAuth credential marked by the Chat API authentication adapter."""
-    if isinstance(auth, ExperimentChannel):
-        _validate_oauth_session_team(session, auth.team)
-        principal = _validated_oauth_principal(validated_oauth_token)
-        return ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS, auth, principal, auth.team
-
-    if isinstance(auth, OAuth2AccessToken) and is_client_credentials_token(auth):
-        _validate_oauth_session_team(session, auth.team)
-        return (
-            ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS,
-            getattr(session, "experiment_channel", None),
-            auth.application,
-            auth.team,
-        )
-
-    raise ChatAdmissionError("OAuth admission has no validated client credential")
-
-
-def _validated_oauth_principal(validated_oauth_token):
-    """Return the OAuth application for a validated client-credentials token, when present."""
-    if isinstance(validated_oauth_token, OAuth2AccessToken) and is_client_credentials_token(validated_oauth_token):
-        return validated_oauth_token.application
-    return None
-
-
-def _resolve_unmarked_credential(
-    request,
-    *,
-    auth,
-    session,
-) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
-    """Resolve ordinary API, OAuth, user-session, and anonymous credentials."""
-    if isinstance(auth, OAuth2AccessToken):
-        return _resolve_unmarked_oauth_credential(auth, session)
-
-    if isinstance(auth, UserAPIKey):
-        return ChatCredentialKind.API_KEY, None, auth.user, auth.team
-
-    user = getattr(request, "user", None)
-    if user is not None and user.is_authenticated:
-        return _resolve_user_session_credential(request, user)
-
-    if auth is None:
-        return ChatCredentialKind.ANONYMOUS, None, None, None
-
-    raise ChatAdmissionError("Unsupported or ambiguous Chat API credential")
 
 
 def get_chat_admission(
@@ -268,36 +145,6 @@ def chat_entry_point_for_request(request) -> ChatEntryPoint:
     if path.endswith("/token"):
         return ChatEntryPoint.RENEW_SESSION_TOKEN
     return ChatEntryPoint.CONTINUE_SESSION
-
-
-def _resolve_unmarked_oauth_credential(auth, session):
-    """Classify an OAuth token that was not marked by a dedicated Chat adapter."""
-    _validate_oauth_session_team(session, auth.team)
-    if is_client_credentials_token(auth):
-        return (
-            ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS,
-            getattr(session, "experiment_channel", None),
-            auth.application,
-            auth.team,
-        )
-    return (
-        ChatCredentialKind.OAUTH_AUTHORIZATION_CODE,
-        getattr(session, "experiment_channel", None),
-        auth.user,
-        auth.team,
-    )
-
-
-def _validate_oauth_session_team(session, oauth_team):
-    """Reject an OAuth request that combines a token and session from different teams."""
-    session_team = getattr(session, "team", None)
-    if session_team is not None and session_team != oauth_team:
-        raise ChatAdmissionError("OAuth credential and session belong to different teams")
-
-
-def _resolve_user_session_credential(request, user):
-    """Resolve an authenticated browser user as a team-scoped Chat credential."""
-    return ChatCredentialKind.USER_SESSION, None, user, getattr(request, "team", None)
 
 
 def _capabilities(entry_point: ChatEntryPoint, channel: ExperimentChannel | None) -> frozenset[ChatCapability]:
