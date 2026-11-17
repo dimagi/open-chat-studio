@@ -2,7 +2,6 @@ import pytest
 from django.db.models.fields.json import KeyTextTransform
 from pydantic import ValidationError
 
-from apps.annotations.models import TagCategories
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType, ModerationStatus
 from apps.chat.schemas import ModerationDetail, ModerationSkipReason
 from apps.pipelines.models import PipelineChatHistoryModes
@@ -38,19 +37,6 @@ def test_get_attached_files():
 
 @pytest.mark.django_db()
 class TestChatMessage:
-    def test_get_processor_bot_tag_name(self):
-        session = ExperimentSessionFactory.create()
-        human_message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="Hi")
-        ai_message_wo_tag = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")
-        ai_message_with_tag = ChatMessage.objects.create(
-            chat=session.chat, message_type=ChatMessageType.AI, content="Hi"
-        )
-        ai_message_with_tag.create_and_add_tag("some-bot", session.team, tag_category=TagCategories.BOT_RESPONSE)
-
-        assert human_message.get_processor_bot_tag_name() is None
-        assert ai_message_wo_tag.get_processor_bot_tag_name() is None
-        assert ai_message_with_tag.get_processor_bot_tag_name() == "some-bot"
-
     def test_add_version_tag(self):
         session = ExperimentSessionFactory.create()
         chat_message1 = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="Hi")

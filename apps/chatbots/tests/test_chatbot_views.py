@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils.html import escape
 from time_machine import travel
 
-from apps.annotations.models import Tag
+from apps.annotations.models import Tag, TagCategories
 from apps.api.session_tokens import parse_session_token
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -114,6 +114,37 @@ def test_chatbot_experiment_table_queryset_has_no_select_distinct(team_with_user
     view.kwargs = {"team_slug": team.slug}
     sql = str(view.get_queryset().query).lower()
     assert "select distinct" not in sql, sql
+
+
+@pytest.mark.django_db()
+def test_chatbot_experiment_table_counts_leave_out_sessions_that_are_not_activity(team_with_users):
+    """The session and participant columns count the sessions every usage surface counts (ADR-0051):
+    not evaluation-harness sessions, not sessions still in SETUP."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = Experiment.objects.create(
+        name="Counted",
+        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
+        owner=user,
+        team=team,
+    )
+    ExperimentSessionFactory.create(team=team, experiment=experiment)
+    ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+    ExperimentSessionFactory.create(team=team, experiment=experiment, platform=ChannelPlatform.EVALUATIONS)
+
+    request = RequestFactory().get(reverse("chatbots:table", args=[team.slug]))
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    set_current_team(team)
+    view = ChatbotExperimentTableView()
+    view.request = request
+    view.kwargs = {"team_slug": team.slug}
+
+    row = view.get_queryset().get(id=experiment.id)
+
+    assert (row.session_count, row.participant_count) == (1, 1)
 
 
 @pytest.mark.django_db()
@@ -1560,6 +1591,33 @@ def test_settings_save_ignores_a_posted_allowlist(client, experiment):
     experiment.refresh_from_db()
     assert experiment.name == "Updated Chatbot Name"
     assert experiment.participant_allowlist == ["+27123456789"]
+
+
+@pytest.mark.django_db()
+def test_legacy_chat_shows_no_trace_links_or_routing_badge(client, team_with_users):
+    user = team_with_users.members.first()
+    experiment = ExperimentFactory.create(team=team_with_users)
+    session = ExperimentSessionFactory.create(experiment=experiment, participant__user=user)
+    message = ChatMessage.objects.create(
+        chat=session.chat,
+        message_type=ChatMessageType.AI,
+        content="Hi there",
+        metadata={"trace_info": [{"trace_provider": "langfuse", "trace_url": "https://trace.example.com/1"}]},
+    )
+    message.create_and_add_tag("support-bot", team_with_users, tag_category=TagCategories.BOT_RESPONSE)
+    client.force_login(user)
+    url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team_with_users.slug, experiment.id, experiment.version_number, session.id],
+    )
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Hi there" in content
+    assert "https://trace.example.com/1" not in content
+    assert "Routed to" not in content
 
 
 @pytest.mark.django_db()

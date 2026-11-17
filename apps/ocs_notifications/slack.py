@@ -3,6 +3,7 @@ import logging
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
+from apps.ocs_notifications.formatting import message_mrkdwn
 from apps.ocs_notifications.models import NotificationChannel, NotificationEvent
 from apps.web.meta import absolute_url
 
@@ -20,6 +21,7 @@ def build_slack_message(notification_event: NotificationEvent) -> dict:
         reverse("ocs_notifications:notification_event_home", args=[notification_event.event_type_id])
     )
     link_text = " · ".join(f"<{url}|{label}>" for label, url in links.items())
+    details = message_mrkdwn(notification_event.message)
 
     blocks = [
         {
@@ -40,11 +42,11 @@ def build_slack_message(notification_event: NotificationEvent) -> dict:
         },
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*Details*\n```{notification_event.message}```"},
+            "text": {"type": "mrkdwn", "text": f"*Details*\n{details}"},
         },
     ]
 
-    lines = [f"*{notification_event.title}*", "", notification_event.message]
+    lines = [f"*{notification_event.title}*", "", details]
     lines.extend(f"- <{url}|{label}>" for label, url in links.items())
     return {"blocks": blocks, "text": "\n".join(lines)}
 
