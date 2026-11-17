@@ -566,6 +566,53 @@ def _apply_session_data(session, user, session_data) -> None:
         session.save(update_fields=["state"])
 
 
+def _resolve_start_session_admission(request, experiment):
+    """Resolve the admission and owning channels for a new Chat API session."""
+    admission = get_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+    oauth_channel = (
+        admission.channel if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS else None
+    )
+    embed_key_channel = _resolve_embed_key_channel(request, experiment, admission)
+    if embed_key_channel is not None and admission.credential_kind != ChatCredentialKind.EMBED_KEY:
+        admission = get_chat_admission(
+            request,
+            entry_point=ChatEntryPoint.START_SESSION,
+            validated_embed_key_channel=embed_key_channel,
+        )
+    return admission, embed_key_channel, oauth_channel
+
+
+def _resolve_start_session_version(request, experiment, experiment_version, experiment_channel):
+    """Resolve the requested version and public-channel admission for a new session."""
+    public_visitor = _is_public_visitor(request, experiment, experiment_channel)
+    published, refusal = _public_channel_admission(public_visitor, experiment)
+    if refusal:
+        return experiment_version, public_visitor, refusal
+    return experiment_version or published, public_visitor, None
+
+
+def _prepare_start_session_participant(
+    request,
+    experiment,
+    experiment_channel,
+    remote_id,
+    name,
+    participant_timezone,
+    public_visitor,
+    team,
+):
+    """Resolve, validate, and update the participant for a new session."""
+    user = _session_user(request, public_visitor)
+    participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
+    if refusal:
+        return user, participant, refusal
+    if is_participant_blocked(team=team, participant_id=participant.id):
+        raise ParticipantBlocked()
+    if name or participant_timezone:
+        _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
+    return user, participant, None
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -678,17 +725,7 @@ def chat_start_session(request):
         Experiment.objects.select_related("team"), public_id=experiment_id, working_version_id__isnull=True
     )
 
-    admission = get_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
-    oauth_channel = (
-        admission.channel if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS else None
-    )
-    embed_key_channel = _resolve_embed_key_channel(request, experiment, admission)
-    if embed_key_channel is not None and admission.credential_kind != ChatCredentialKind.EMBED_KEY:
-        admission = get_chat_admission(
-            request,
-            entry_point=ChatEntryPoint.START_SESSION,
-            validated_embed_key_channel=embed_key_channel,
-        )
+    _, embed_key_channel, oauth_channel = _resolve_start_session_admission(request, experiment)
 
     denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
     if denied:
@@ -704,21 +741,24 @@ def chat_start_session(request):
     if disabled := _channel_disabled_response(experiment_channel):
         return disabled
 
-    public_visitor = _is_public_visitor(request, experiment, experiment_channel)
-    published, refusal = _public_channel_admission(public_visitor, experiment)
+    experiment_version, public_visitor, refusal = _resolve_start_session_version(
+        request, experiment, experiment_version, experiment_channel
+    )
     if refusal:
         return refusal
-    experiment_version = experiment_version or published
 
-    user = _session_user(request, public_visitor)
-    participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
+    user, participant, refusal = _prepare_start_session_participant(
+        request,
+        experiment,
+        experiment_channel,
+        remote_id,
+        name,
+        participant_timezone,
+        public_visitor,
+        team,
+    )
     if refusal:
         return refusal
-    if is_participant_blocked(team=team, participant_id=participant.id):
-        raise ParticipantBlocked()
-
-    if name or participant_timezone:
-        _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
 
     session = _start_session(request, experiment, experiment_channel, participant, user, version_number)
     _apply_session_data(session, user, session_data)
