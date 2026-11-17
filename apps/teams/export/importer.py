@@ -145,13 +145,21 @@ def remap_event_action_params(params: dict, action_type: str, store: FKTranslati
     return result
 
 
+# Exports from before the attachment ids moved under one key still carry them under these.
+LEGACY_ATTACHMENT_KEYS = ("cited_files", "generated_files")
+
+
 def remap_message_attachment_ids(metadata: dict, store: FKTranslationStore) -> dict:
-    """Rewrite the file ids a chat message lists under ``ocs_attachment_file_ids``. Files the sync
-    doesn't copy have no translation and are left as-is, matching ``remap_node_params``."""
-    if not (file_ids := metadata.get(ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS)):
-        return metadata
-    remapped = [store.get_target("files.file", as_int(file_id)) or file_id for file_id in file_ids]
-    return {**metadata, ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS: remapped}
+    """Rewrite the file ids a chat message lists under ``ocs_attachment_file_ids``, folding in any
+    under the legacy keys. Files the sync doesn't copy have no translation and are left as-is,
+    matching ``remap_node_params``."""
+    key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
+    result = {name: value for name, value in metadata.items() if name not in LEGACY_ATTACHMENT_KEYS}
+    file_ids = [*metadata.get(key, []), *(i for name in LEGACY_ATTACHMENT_KEYS for i in metadata.get(name, []))]
+    if file_ids:
+        remapped = (store.get_target("files.file", as_int(file_id)) or file_id for file_id in file_ids)
+        result[key] = list(dict.fromkeys(remapped))
+    return result
 
 
 def unseal_secrets(row: dict, secret_fields: list[str], private_key) -> dict:
