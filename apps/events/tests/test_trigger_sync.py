@@ -1,7 +1,8 @@
 import pytest
 
 from apps.events.models import EventActionType, StaticTriggerType
-from apps.events.versioning import TriggerSyncMode, sync_triggers
+from apps.events.versioning import sync_triggers
+from apps.experiments.versioning import Operation
 from apps.utils.factories.events import (
     EventActionFactory,
     ScheduledTriggerFactory,
@@ -76,7 +77,7 @@ class TestSyncScheduledTriggers:
             fired_at="2024-01-01 00:00:00+00:00",
         )
 
-        sync_triggers(source, target, mode=TriggerSyncMode.PUBLISH)
+        sync_triggers(source, target, mode=Operation.PUBLISH)
 
         new_trigger = target.scheduled_triggers.get()
         assert new_trigger.trigger_date == source_trigger.trigger_date
@@ -93,7 +94,7 @@ class TestSyncScheduledTriggers:
         target = ExperimentFactory(team=source.team)
         ScheduledTriggerFactory(experiment=source, timezone="Africa/Lagos")
 
-        sync_triggers(source, target, mode=TriggerSyncMode.COPY)
+        sync_triggers(source, target, mode=Operation.COPY)
 
         new_trigger = target.scheduled_triggers.get()
         assert new_trigger.working_version_id is None
@@ -131,7 +132,7 @@ class TestEventActionParamRemap:
         pipeline = PipelineFactory(team=source.team)
         trigger = _pipeline_start_trigger(source, pipeline.id)
 
-        sync_triggers(source, target, mode=TriggerSyncMode.PUBLISH)
+        sync_triggers(source, target, mode=Operation.PUBLISH)
 
         pinned_id = target.static_triggers.get().action.params["pipeline_id"]
         pipeline.refresh_from_db()
@@ -147,7 +148,7 @@ class TestEventActionParamRemap:
         pipeline_version = pipeline.create_new_version()
         _pipeline_start_trigger(source, pipeline_version.id)
 
-        sync_triggers(source, target, mode=TriggerSyncMode.REVERT)
+        sync_triggers(source, target, mode=Operation.REVERT)
 
         new_trigger = target.static_triggers.get()
         assert new_trigger.action.params["pipeline_id"] == pipeline.id
@@ -158,7 +159,7 @@ class TestEventActionParamRemap:
         target = ExperimentFactory(team=source.team)
         _pipeline_start_trigger(source, 999999)
 
-        sync_triggers(source, target, mode=TriggerSyncMode.REVERT)
+        sync_triggers(source, target, mode=Operation.REVERT)
 
         assert target.static_triggers.get().action.params["pipeline_id"] is None
 
@@ -168,7 +169,7 @@ class TestEventActionParamRemap:
         pipeline = PipelineFactory(team=source.team)
         _pipeline_start_trigger(source, pipeline.id)
 
-        sync_triggers(source, target, mode=TriggerSyncMode.COPY)
+        sync_triggers(source, target, mode=Operation.COPY)
 
         pipeline.refresh_from_db()
         assert target.static_triggers.get().action.params["pipeline_id"] == pipeline.id
