@@ -495,6 +495,25 @@ def _chat_message_row(source_id, chat_src, message_type, created_at):
     }
 
 
+def _import_message_with_metadata(store, metadata):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows("chat.chat", [_chat_row(source_id=77)])
+    importer.import_rows("chat.chatmessage", [{**_chat_message_row(101, 77, "ai", PAST), "metadata": metadata}])
+    return ChatMessage.objects.get(pk=store.get_target("chat.chatmessage", 101)).metadata
+
+
+def test_message_attachment_ids_point_at_the_imported_files(store):
+    """A message's attachment ids are file pks; on the target the same files have new pks."""
+    first, second = FileFactory.create(), FileFactory.create()
+    store.record("files.file", 501, first.pk)
+    store.record("files.file", 502, second.pk)
+
+    metadata = _import_message_with_metadata(store, {"ocs_attachment_file_ids": [501, 502], "trace_info": {"t": 1}})
+
+    assert metadata == {"ocs_attachment_file_ids": [first.pk, second.pk], "trace_info": {"t": 1}}
+
+
 def test_muted_import_keeps_session_activity_timestamps_from_source(store):
     """Within mute_signals, importing chat messages no longer fires the ChatMessage post_save handler
     that would otherwise stamp the session's activity timestamps to the import time -- so the session
