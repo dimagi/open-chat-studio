@@ -19,7 +19,7 @@ from apps.utils.factories.documents import CollectionFactory, DocumentSourceFact
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, ParticipantFactory
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, ModerationProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -386,3 +386,32 @@ def test_a_resource_request_under_a_stale_selection_is_refused(team):
 def test_the_whole_team_selection_key_matches_an_empty_allowlist(team):
     client = ApiTestClient(_admin(team), team)
     assert client.get(_resource_url("chatbots"), {"selection": ALL_CHATBOTS_KEY}).status_code == 200
+
+
+def test_the_team_endpoint_leaves_out_the_team_settings_fields(team):
+    """They reference rows imported after the team, so the team_settings resource serves them instead."""
+    client = ApiTestClient(_admin(team), team)
+    body = client.get(reverse("api:export:team")).json()
+    assert not set(body) & {"created_by", "moderation_provider", "moderation_enabled", "auto_block_enabled"}
+
+
+def test_the_team_settings_resource_serves_only_the_team_settings_fields(team):
+    provider = ModerationProviderFactory(team=team)
+    team.moderation_provider = provider
+    team.moderation_enabled = True
+    team.save()
+    TeamWithUsersFactory()
+
+    client = ApiTestClient(_admin(team), team)
+    results = client.get(_resource_url("team_settings")).json()["results"]
+
+    assert results == [
+        {
+            "id": team.id,
+            "updated_at": results[0]["updated_at"],
+            "created_by": team.created_by_id,
+            "moderation_provider": provider.id,
+            "moderation_enabled": True,
+            "auto_block_enabled": False,
+        }
+    ]

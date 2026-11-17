@@ -13,7 +13,14 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import build_manifest
 from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
-from apps.teams.export.tests.sync_fakes import PAST, FakeClient, make_manifest, select_chatbots, team_row
+from apps.teams.export.tests.sync_fakes import (
+    PAST,
+    FakeClient,
+    make_manifest,
+    select_chatbots,
+    team_row,
+    team_settings_row,
+)
 from apps.teams.export.translation import ALL_CHATBOTS_KEY, selection_key
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
@@ -256,6 +263,33 @@ def test_run_sync_builds_team_and_resolves_secret_provider(make_store, tmp_path,
     assert provider.team_id == team.id
     assert provider.config == {"api_key": "sk-x"}
     assert store.has_unfilled_targets() is False
+
+
+def test_run_sync_applies_the_team_settings_once_the_provider_is_imported(make_store, tmp_path, keypair):
+    entries = [e for e in build_manifest()["entries"] if e["resource"] in ("moderation_providers", "team_settings")]
+    rows = {
+        "teams": [team_row()],
+        "moderation_providers": [
+            {
+                "id": 40,
+                "name": "Moderation",
+                "type": "openai",
+                "config": seal_mod.seal({"openai_api_key": "sk-x"}, keypair[0]),
+                "created_at": PAST,
+                "updated_at": PAST,
+            }
+        ],
+        "team_settings": [{**team_settings_row(moderation_provider=40), "auto_block_enabled": True}],
+    }
+    store = make_store(tmp_path / "t.sqlite")
+
+    run_sync(FakeClient(make_manifest(entries), rows), store, keypair[1])
+
+    team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    assert team.moderation_provider.name == "Moderation"
+    assert team.moderation_provider.team == team
+    assert team.moderation_enabled is True
+    assert team.auto_block_enabled is True
 
 
 def test_rerun_is_a_no_op_and_resumes_from_stored_cursor(make_store, tmp_path, keypair):
