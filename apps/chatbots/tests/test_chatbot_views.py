@@ -1638,14 +1638,41 @@ def test_export_chatbot_session_messages(client, team_with_users):
         "chatbots:export_chatbot_session_messages",
         args=[team.slug, session.experiment.public_id, session.external_id],
     )
-    response = client.get(url)
+    response = client.get(url, {"download_token": "test-download-token"})
 
     assert response.status_code == 200
     assert response["Content-Type"] == "text/csv"
     assert f'filename="{session.external_id}_messages_export.csv"' in response["Content-Disposition"]
+    assert response.cookies["session_export_download_test-download-token"].value == "1"
     content = b"".join(response.streaming_content).decode("utf-8-sig")
     assert "how do I populate a collection" in content
     assert "go to Collections and click Add new" in content
+
+
+@pytest.mark.django_db()
+def test_session_view_export_control_provides_request_feedback(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    session = ExperimentSessionFactory.create(experiment__team=team, status=SessionStatus.ACTIVE)
+    client.force_login(user)
+
+    response = client.get(
+        reverse(
+            "experiments:experiment_session_messages_view",
+            args=[team.slug, session.experiment.public_id, session.external_id],
+        )
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "data-session-export" in content
+    assert 'target="session-export-frame"' in content
+    assert 'x-data="sessionExport"' in content
+    assert '@click="start($event)"' in content
+    assert 'aria-live="polite"' in content
+    assert "Export failed. Try again." in content
+    assert "Download started." in content
+    assert "session-export-frame" in content
 
 
 @pytest.mark.django_db()
