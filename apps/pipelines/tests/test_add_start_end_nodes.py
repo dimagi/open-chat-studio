@@ -429,9 +429,12 @@ def test_pipeline_creation_with_llm(team):
     assert "nodes" not in pipeline.data
     assert "edges" in pipeline.data
     assert pipeline.node_set.count() == 3
-    params = pipeline.node_set.get(type="LLMResponseWithPrompt").params
-    assert params["llm_provider_id"] == mock_llm_provider.id
-    assert params["llm_provider_model_id"] == mock_llm_model.id
+    node = pipeline.node_set.get(type="LLMResponseWithPrompt")
+    assert node.llm_provider_id == mock_llm_provider.id
+    assert node.llm_provider_model_id == mock_llm_model.id
+    assert "llm_provider_id" not in node.params
+    assert "llm_provider_model_id" not in node.params
+    params = node.params
     assert params["llm_temperature"] == 0.7
     assert params["user_max_token_limit"] == mock_llm_model.max_token_limit
 

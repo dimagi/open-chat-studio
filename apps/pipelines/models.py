@@ -689,6 +689,14 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             }
         )
         self.params = ordinary_params
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            value = resource_params.get(param_name)
+            related_model = self._meta.get_field(field_name).related_model
+            if value not in (None, "") and not related_model._base_manager.filter(pk=as_int(value)).exists():
+                # Keep an invalid value visible to runtime validation. API callers reject it before
+                # this adapter, while internal and legacy callers need the existing error message.
+                self.params[param_name] = value
         self.save(update_fields=["params"])
         self._apply_resource_params(resource_params)
 
@@ -712,24 +720,88 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def resource_params(self) -> dict:
-        """Return resource IDs from the authoritative FK, M2M and operation rows."""
+        """Return resource IDs from relations, with a safe bridge for pre-cutover rows.
+
+        Relations win whenever they contain a value. A legacy JSON value is considered only when
+        its relation is empty and the referenced row still exists; this keeps old rows runnable
+        during the rolling deployment before the cutover migration, without resurrecting deleted
+        resources or overriding a relation that has already been cleared.
+        """
         resource_params = {
             f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
         }
+        legacy_params = self.params or {}
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            if resource_params[param_name] is not None or param_name not in legacy_params:
+                continue
+            value = as_int(legacy_params[param_name])
+            related_model = self._meta.get_field(field_name).related_model
+            if value is not None and related_model._base_manager.filter(pk=value).exists():
+                resource_params[param_name] = value
+
         # sorted because the related rows have no ordering of their own and the read must be stable.
-        resource_params["collection_index_ids"] = (
-            sorted(index.id for index in self.collection_indexes.all())
-            if self.node_type.declares("collection_index_ids")
-            else []
-        )
+        try:
+            declares_collection_indexes = self.node_type.declares("collection_index_ids")
+            declares_custom_actions = self.node_type.declares("custom_actions")
+        except TypeError:
+            declares_collection_indexes = declares_custom_actions = False
+
+        if declares_collection_indexes:
+            indexes = list(self.collection_indexes.all())
+            resource_params["collection_index_ids"] = sorted(index.id for index in indexes)
+            if not indexes and "collection_index_ids" in legacy_params:
+                resource_params["collection_index_ids"] = self._existing_legacy_collection_indexes(legacy_params)
+        else:
+            resource_params["collection_index_ids"] = []
+
         # Custom actions are relation-backed operation rows, rendered in the editor's composite-id
         # spelling for wire compatibility.
-        resource_params["custom_actions"] = (
-            sorted(operation.get_model_id(with_holder=False) for operation in self.custom_action_operations.all())
-            if self.node_type.declares("custom_actions")
-            else []
-        )
+        if declares_custom_actions:
+            operations = list(self.custom_action_operations.all())
+            resource_params["custom_actions"] = sorted(
+                operation.get_model_id(with_holder=False) for operation in operations
+            )
+            if not operations and "custom_actions" in legacy_params:
+                resource_params["custom_actions"] = self._existing_legacy_custom_actions(legacy_params)
+        else:
+            resource_params["custom_actions"] = []
         return resource_params
+
+    @staticmethod
+    def _existing_legacy_collection_indexes(params: dict) -> list[int]:
+        """Return existing collection-index IDs from a legacy node payload."""
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
+
+        raw_values = params.get("collection_index_ids") or []
+        if not isinstance(raw_values, list | tuple | set):
+            raw_values = [raw_values]
+        ids = [as_int(value) for value in raw_values]
+        return sorted(
+            Collection._base_manager.filter(id__in=[value for value in ids if value]).values_list("id", flat=True)
+        )
+
+    def _existing_legacy_custom_actions(self, params: dict) -> list[str]:
+        """Return legacy custom-action selections whose action rows still exist."""
+        from apps.custom_actions.models import CustomAction  # noqa: PLC0415 - avoid circular import
+
+        selections = []
+        action_ids = set()
+        for value in params.get("custom_actions") or []:
+            action_id, separator, operation_id = str(value).partition(":")
+            parsed_action_id = as_int(action_id)
+            if separator and parsed_action_id is not None and operation_id:
+                selections.append((parsed_action_id, operation_id, str(value)))
+                action_ids.add(parsed_action_id)
+        existing_actions = {
+            action.id: action
+            for action in CustomAction._base_manager.filter(id__in=action_ids).only("id", "allowed_operations")
+        }
+        return sorted(
+            value
+            for action_id, operation_id, value in selections
+            if action_id in existing_actions and operation_id in existing_actions[action_id].allowed_operations
+        )
 
     def runtime_params(self) -> dict:
         """Return ordinary params overlaid with relation-backed IDs for runtime validation/building."""
@@ -767,24 +839,21 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def _sync_resource_fk_fields(self):
         """Import legacy resource keys through the relation-authoritative write path."""
-        ordinary_params, resource_params = split_resource_params(self.params or {}, self.resource_param_names())
+        _ordinary_params, resource_params = split_resource_params(self.params or {}, self.resource_param_names())
+        update_fields = []
         for field_name in self.resource_fk_fields():
             param_name = f"{field_name}_id"
             value = as_int(resource_params.get(param_name))
             related_model = self._meta.get_field(field_name).related_model
             if value is not None and not related_model._base_manager.filter(pk=value).exists():
-                resource_params[param_name] = None
+                value = None
+            if getattr(self, f"{field_name}_id") != value:
+                setattr(self, f"{field_name}_id", value)
+                update_fields.append(f"{field_name}_id")
+        if update_fields:
+            self.save(update_fields=update_fields)
         if "collection_index_ids" in resource_params:
-            from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
-
-            raw_ids = resource_params["collection_index_ids"] or []
-            if not isinstance(raw_ids, list | tuple | set):
-                raw_ids = [raw_ids]
-            ids = [as_int(value) for value in raw_ids]
-            resource_params["collection_index_ids"] = list(
-                Collection.objects.filter(id__in=[value for value in ids if value]).values_list("id", flat=True)
-            )
-        self.update_from_params(resource_params, ordinary_params=ordinary_params)
+            self._sync_collection_indexes(resource_params)
 
     def _sync_collection_indexes(self, params: dict):
         """Apply legacy collection-index values for callers that still use this helper."""

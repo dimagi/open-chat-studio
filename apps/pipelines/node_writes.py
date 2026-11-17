@@ -78,8 +78,8 @@ def _create_node(pipeline: Pipeline, node: FlowNode) -> Node:
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: models imports this module
 
     content = node.data
-    params = content.node_type.params_to_store(content.params)
-    ordinary_params, resource_params = Node.split_resource_params(params)
+    ordinary_params, resource_params = Node.split_resource_params(content.params)
+    ordinary_params = content.node_type.params_to_store(ordinary_params)
     created = Node.objects.create(
         pipeline=pipeline,
         flow_id=node.id,
@@ -97,8 +97,8 @@ def _apply_content(existing: Node, node: FlowNode, update_fields: set[str], now)
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: models imports this module
 
     content = node.data
-    params = content.node_type.params_to_store(content.params)
-    ordinary_params, resource_params = Node.split_resource_params(params)
+    ordinary_params, resource_params = Node.split_resource_params(content.params)
+    ordinary_params = content.node_type.params_to_store(ordinary_params)
     existing_resources = existing.resource_params()
     resources_changed = (
         existing.type != content.type
