@@ -1,9 +1,12 @@
+from datetime import date, datetime
 from urllib.parse import quote
 
 import pytest
 from django.test import Client
 from django.urls import reverse
+from django.utils import timezone
 
+from apps.admin.views import _make_aware_range
 from apps.users.models import CustomUser
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
@@ -204,3 +207,13 @@ class TestTeamsApi:
         data = staff_client.get(reverse("ocs_admin:teams_api"), {"q": "Legacy"}).json()
 
         assert data[0]["created_by"] is None
+
+
+def test_the_day_range_is_half_open_and_holds_the_last_day_in_full():
+    """`[start, end)` up to the midnight after the last picked day (ADR-0051)."""
+    tz = timezone.get_current_timezone()
+
+    start, end = _make_aware_range(date(2026, 5, 1), date(2026, 5, 31))
+
+    assert start == datetime(2026, 5, 1, tzinfo=tz)
+    assert end == datetime(2026, 6, 1, tzinfo=tz)

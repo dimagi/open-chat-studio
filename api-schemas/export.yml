@@ -4536,8 +4536,6 @@ components:
           type: boolean
         version_description:
           type: string
-        debug_mode_enabled:
-          type: boolean
         create_version_task_id:
           type: string
           maxLength: 128
@@ -6969,6 +6967,7 @@ components:
       - elevenlabs
       - intron
       - minimax
+      - gemini
       type: string
       description: |-
         * `aws` - AWS Polly
@@ -6978,6 +6977,7 @@ components:
         * `elevenlabs` - ElevenLabs
         * `intron` - Intron
         * `minimax` - MiniMax
+        * `gemini` - Google Gemini Transcription
     VoiceProviderList:
       type: object
       properties:

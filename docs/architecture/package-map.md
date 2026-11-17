@@ -81,7 +81,7 @@ Features layered on top of the domain, plus supporting services.
 | `trace` | `Trace`/`Span` observability records for requests and pipeline steps. |
 | `events` | Event triggers and scheduled actions. |
 | `cost_tracking` | LLM usage and cost accounting. |
-| `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Definitions in ADR-0051. Models-free. |
+| `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard, usage API, admin reports and chatbot list: the exclusion predicates (`filters.py`), the granularity and bucket vocabulary (`buckets.py`) and the metric functions. Definitions in ADR-0051. Models-free. |
 | `analysis` | Analysis pipelines over conversation data. |
 | `moderation` | Abuse detection: the participant denylist (`DeniedParticipant`), the abuse rules, the `moderate_message` task that runs a message through the team's moderation provider, the services that record the result on the message and give strikes (blocking a participant automatically at the strike limit), the enforcement helpers, the message counts by moderation status, and the Moderation section of team settings. Moderation providers live in `service_providers`. Called from `channels`, `api`, `experiments` and `participants`. |
 | `ocs_notifications` | In-app notifications. |
