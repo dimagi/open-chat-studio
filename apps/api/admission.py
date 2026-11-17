@@ -113,6 +113,13 @@ def resolve_chat_admission(
     )
 
 
+def _resolve_session_token_credential(session):
+    """Resolve a session token after its caller has completed validation."""
+    if session is None:
+        raise ChatAdmissionError("Validated session-token admission requires a session")
+    return ChatCredentialKind.SESSION_TOKEN, session.experiment_channel, None, session.team
+
+
 def _resolve_credential(
     request,
     *,
@@ -125,9 +132,7 @@ def _resolve_credential(
 ) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
     """Resolve credential identity and tenancy from DRF's already-authenticated objects."""
     if session_token_validated:
-        if session is None:
-            raise ChatAdmissionError("Validated session-token admission requires a session")
-        return ChatCredentialKind.SESSION_TOKEN, session.experiment_channel, None, session.team
+        return _resolve_session_token_credential(session)
 
     if validated_embed_key_channel is not None:
         return (
@@ -157,20 +162,40 @@ def _resolve_marked_credential(
 ) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
     """Resolve credentials identified by a Chat API authentication adapter."""
     if credential_kind == ChatCredentialKind.EMBED_KEY:
-        if not isinstance(auth, ExperimentChannel):
-            raise ChatAdmissionError("Embed Key admission has no Chat API Channel")
-        return credential_kind, auth, None, auth.team
+        return _resolve_embed_key_credential(auth)
 
-    principal = None
+    return _resolve_marked_oauth_credential(auth, session, validated_oauth_token)
+
+
+def _resolve_embed_key_credential(auth):
+    """Resolve the Channel supplied by the validated Embed Key adapter."""
+    if not isinstance(auth, ExperimentChannel):
+        raise ChatAdmissionError("Embed Key admission has no Chat API Channel")
+    return ChatCredentialKind.EMBED_KEY, auth, None, auth.team
+
+
+def _resolve_marked_oauth_credential(auth, session, validated_oauth_token):
+    """Resolve an OAuth credential marked by the Chat API authentication adapter."""
     if isinstance(auth, ExperimentChannel):
-        if isinstance(validated_oauth_token, OAuth2AccessToken) and is_client_credentials_token(validated_oauth_token):
-            principal = validated_oauth_token.application
-        return credential_kind, auth, principal, auth.team
+        principal = _validated_oauth_principal(validated_oauth_token)
+        return ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS, auth, principal, auth.team
 
     if isinstance(auth, OAuth2AccessToken) and is_client_credentials_token(auth):
-        return credential_kind, getattr(session, "experiment_channel", None), auth.application, auth.team
+        return (
+            ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS,
+            getattr(session, "experiment_channel", None),
+            auth.application,
+            auth.team,
+        )
 
     raise ChatAdmissionError("OAuth admission has no validated client credential")
+
+
+def _validated_oauth_principal(validated_oauth_token):
+    """Return the OAuth application for a validated client-credentials token, when present."""
+    if isinstance(validated_oauth_token, OAuth2AccessToken) and is_client_credentials_token(validated_oauth_token):
+        return validated_oauth_token.application
+    return None
 
 
 def _resolve_unmarked_credential(
@@ -181,20 +206,14 @@ def _resolve_unmarked_credential(
 ) -> tuple[ChatCredentialKind, ExperimentChannel | None, object | None, object | None]:
     """Resolve ordinary API, OAuth, user-session, and anonymous credentials."""
     if isinstance(auth, OAuth2AccessToken):
-        if is_client_credentials_token(auth):
-            credential_kind = ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS
-            principal = auth.application
-        else:
-            credential_kind = ChatCredentialKind.OAUTH_AUTHORIZATION_CODE
-            principal = auth.user
-        return credential_kind, getattr(session, "experiment_channel", None), principal, auth.team
+        return _resolve_unmarked_oauth_credential(auth, session)
 
     if isinstance(auth, UserAPIKey):
         return ChatCredentialKind.API_KEY, None, auth.user, auth.team
 
     user = getattr(request, "user", None)
     if user is not None and user.is_authenticated:
-        return ChatCredentialKind.USER_SESSION, None, user, getattr(request, "team", None)
+        return _resolve_user_session_credential(request, user)
 
     if auth is None:
         return ChatCredentialKind.ANONYMOUS, None, None, None
@@ -252,6 +271,28 @@ def chat_entry_point_for_request(request) -> ChatEntryPoint:
     return ChatEntryPoint.CONTINUE_SESSION
 
 
+def _resolve_unmarked_oauth_credential(auth, session):
+    """Classify an OAuth token that was not marked by a dedicated Chat adapter."""
+    if is_client_credentials_token(auth):
+        return (
+            ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS,
+            getattr(session, "experiment_channel", None),
+            auth.application,
+            auth.team,
+        )
+    return (
+        ChatCredentialKind.OAUTH_AUTHORIZATION_CODE,
+        getattr(session, "experiment_channel", None),
+        auth.user,
+        auth.team,
+    )
+
+
+def _resolve_user_session_credential(request, user):
+    """Resolve an authenticated browser user as a team-scoped Chat credential."""
+    return ChatCredentialKind.USER_SESSION, None, user, getattr(request, "team", None)
+
+
 def _capabilities(entry_point: ChatEntryPoint, channel: ExperimentChannel | None) -> frozenset[ChatCapability]:
     """Return capabilities implied by the operation and Channel's token policy."""
     capabilities = {
@@ -261,39 +302,56 @@ def _capabilities(entry_point: ChatEntryPoint, channel: ExperimentChannel | None
             ChatEntryPoint.RENEW_SESSION_TOKEN: ChatCapability.RENEW_SESSION_TOKEN,
         }[entry_point]
     }
-    if (
-        entry_point in {ChatEntryPoint.START_SESSION, ChatEntryPoint.RENEW_SESSION_TOKEN}
-        and _session_token_policy(channel) == SessionTokenPolicy.ISSUE_AND_REQUIRE
-    ):
+    if _issues_session_token(entry_point, channel):
         capabilities.add(ChatCapability.ISSUE_SESSION_TOKEN)
     return frozenset(capabilities)
+
+
+def _issues_session_token(entry_point: ChatEntryPoint, channel: ExperimentChannel | None) -> bool:
+    """Return whether this entry point must issue a session token for the Channel."""
+    return (
+        entry_point in {ChatEntryPoint.START_SESSION, ChatEntryPoint.RENEW_SESSION_TOKEN}
+        and _session_token_policy(channel) == SessionTokenPolicy.ISSUE_AND_REQUIRE
+    )
 
 
 def _session_token_policy(channel: ExperimentChannel | None) -> SessionTokenPolicy:
     """Translate the durable Channel auth level into the session-token policy."""
     if channel is None:
         return SessionTokenPolicy.NOT_APPLICABLE
-    if channel.required_auth_level in (None, WidgetAuthLevel.SESSION_TOKEN):
-        return SessionTokenPolicy.ISSUE_AND_REQUIRE
-    return SessionTokenPolicy.DO_NOT_ISSUE
+    return {
+        None: SessionTokenPolicy.ISSUE_AND_REQUIRE,
+        WidgetAuthLevel.SESSION_TOKEN: SessionTokenPolicy.ISSUE_AND_REQUIRE,
+    }.get(channel.required_auth_level, SessionTokenPolicy.DO_NOT_ISSUE)
 
 
 def _throttle_bucket(request, entry_point, channel, auth, session) -> tuple[str, str]:
     """Select the existing Chat API throttle identity without inspecting raw credentials."""
     if entry_point == ChatEntryPoint.CONTINUE_SESSION:
-        if session_id := getattr(session, "external_id", None):
-            return "session", str(session_id)
-        parser_context = getattr(request, "parser_context", {})
-        kwargs = parser_context.get("kwargs", {}) if isinstance(parser_context, dict) else {}
-        if kwargs.get("session_id") is not None:
-            return "session", str(kwargs["session_id"])
+        return _session_throttle_bucket(request, session)
 
     if entry_point == ChatEntryPoint.RENEW_SESSION_TOKEN and isinstance(auth, OAuth2AccessToken):
         return "oauth_client", str(auth.application_id)
 
     if channel is not None:
-        if channel.platform == ChannelPlatform.PUBLIC:
-            return "ip", client_ip(request)
-        return "channel", str(channel.pk)
+        return _channel_throttle_bucket(request, channel)
 
     return "ip", client_ip(request)
+
+
+def _session_throttle_bucket(request, session) -> tuple[str, str]:
+    """Select a session throttle identity from the resolved session or URL context."""
+    if session_id := getattr(session, "external_id", None):
+        return "session", str(session_id)
+    parser_context = getattr(request, "parser_context", {})
+    kwargs = parser_context.get("kwargs", {}) if isinstance(parser_context, dict) else {}
+    if kwargs.get("session_id") is not None:
+        return "session", str(kwargs["session_id"])
+    return "ip", client_ip(request)
+
+
+def _channel_throttle_bucket(request, channel) -> tuple[str, str]:
+    """Select a public-IP or channel throttle identity for a resolved Channel."""
+    if channel.platform == ChannelPlatform.PUBLIC:
+        return "ip", client_ip(request)
+    return "channel", str(channel.pk)
