@@ -13,12 +13,19 @@ function currentMessageIndex(rows) {
   return last ? parseInt(last.dataset.messageIndex, 10) : null;
 }
 
-/** Reflects which message is on screen, relative to the total, as the width of `#scroll-progress-bar`. */
+/** Reflects which message is on screen, relative to the total, as the width of `#scroll-progress-fill`. */
 export function setupScrollProgress(containerSelector) {
-  const bar = document.getElementById('scroll-progress-bar');
-  if (!bar) {
+  const bar = document.getElementById('scroll-progress-fill');
+  const progressContainer = document.getElementById('scroll-progress-bar');
+  if (!bar || !progressContainer) {
     return;
   }
+
+  const setProgress = (progress) => {
+    const percentage = Math.round(progress * 100);
+    bar.style.width = `${percentage}%`;
+    progressContainer.setAttribute('aria-valuenow', `${percentage}`);
+  };
 
   const update = () => {
     const container = document.querySelector(containerSelector);
@@ -30,18 +37,18 @@ export function setupScrollProgress(containerSelector) {
     // topmost). Clamp the two ends explicitly rather than relying on row lookup to hit them.
     const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1;
     if (atBottom) {
-      bar.style.width = '100%';
+      setProgress(1);
       return;
     }
     if (window.scrollY <= 0) {
-      bar.style.width = '0%';
+      setProgress(0);
       return;
     }
     const totalMessages = parseInt(container.dataset.totalMessages, 10) || 0;
     const rows = container.querySelectorAll('[data-message-index]');
     const currentIndex = currentMessageIndex(rows);
     const progress = currentIndex === null ? 0 : computeMessageProgress({ currentIndex, totalMessages });
-    bar.style.width = `${progress * 100}%`;
+    setProgress(progress);
   };
 
   let ticking = false;
@@ -56,9 +63,34 @@ export function setupScrollProgress(containerSelector) {
     });
   };
 
+  let observedContainer = null;
+  const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null;
+  const observeContainer = () => {
+    const container = document.querySelector(containerSelector);
+    if (container && container !== observedContainer) {
+      if (observedContainer) {
+        resizeObserver?.disconnect();
+      }
+      resizeObserver?.observe(container);
+      observedContainer = container;
+    }
+    update();
+  };
+  const onHtmxSettle = () => observeContainer();
+  const onPageHide = (event) => {
+    if (event.persisted) {
+      return;
+    }
+    window.removeEventListener('scroll', onScroll);
+    htmx.off('htmx:afterSettle', onHtmxSettle);
+    resizeObserver?.disconnect();
+    window.removeEventListener('pagehide', onPageHide);
+  };
+
   window.addEventListener('scroll', onScroll, { passive: true });
-  htmx.on('htmx:afterSwap', update);
-  update();
+  htmx.on('htmx:afterSettle', onHtmxSettle);
+  window.addEventListener('pagehide', onPageHide);
+  observeContainer();
 }
 
 export default { setupScrollProgress };

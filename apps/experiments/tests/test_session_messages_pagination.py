@@ -47,7 +47,43 @@ class TestSessionMessagesLoadOnScroll:
         assert _fragment_url(experiment, session_with_messages).encode() in response.content
         assert b"page=2" in response.content
 
+    def test_next_page_trigger_is_halfway_through_the_current_page(self, client, experiment, session_with_messages):
+        """Place the prefetch trigger before the current page is exhausted."""
+        client.force_login(experiment.owner)
+        response = client.get(_messages_url(experiment, session_with_messages))
+
+        content = response.content.decode()
+        trigger_position = content.index('data-session-message-page-trigger="1"')
+        assert content.index("Message 4") < trigger_position < content.index("Message 5")
+
+    def test_page_fragments_use_a_beforeend_append_target(self, client, experiment, session_with_messages):
+        """Append each fragment to the existing message list and advance its trigger."""
+        client.force_login(experiment.owner)
+        first_page = client.get(_messages_url(experiment, session_with_messages))
+        next_page = client.get(_fragment_url(experiment, session_with_messages) + "?page=2")
+
+        content = first_page.content.decode()
+        next_page_content = next_page.content.decode()
+        assert 'data-session-message-page-trigger="1"' in content
+        assert 'hx-target="#session-messages-list"' in content
+        assert 'hx-swap="beforeend"' in content
+        assert 'hx-sync="this:drop"' in content
+        assert 'hx-indicator="#messages-loading-more"' in content
+        assert content.index("Message 9") < content.index('id="messages-loading-more"')
+        assert content.index('data-session-message-page-trigger="1"') < content.index('id="messages-loading-more"')
+        assert 'data-session-message-page-trigger="2"' in next_page_content
+        assert "Loading more..." not in next_page_content
+
+    def test_each_page_has_only_one_next_page_trigger(self, client, experiment, session_with_messages):
+        """Render one active trigger per page so an appended fragment cannot duplicate requests."""
+        client.force_login(experiment.owner)
+        for page in (1, 2):
+            response = client.get(_fragment_url(experiment, session_with_messages) + f"?page={page}")
+
+            assert response.content.count(b"data-session-message-page-trigger") == 1
+
     def test_next_page_request_renders_only_the_message_fragment(self, client, experiment, session_with_messages):
+        """Keep a paginated response to the message fragment while retaining the next trigger."""
         client.force_login(experiment.owner)
         url = _fragment_url(experiment, session_with_messages) + "?page=2"
         response = client.get(url)
@@ -55,7 +91,7 @@ class TestSessionMessagesLoadOnScroll:
         assert response.status_code == 200
         assert len(response.context["messages"]) == 10
         assert response.context["page"] == 2
-        # Fragment: no control panel or page wrapper duplicated in.
+        # Fragment: no control panel or full message container duplicated in.
         assert b'id="table-top"' not in response.content
         assert b'id="control-panel"' not in response.content
         # Still on a middle page, so the next trigger (for page 3) is present.
@@ -80,6 +116,40 @@ class TestSessionMessagesLoadOnScroll:
         assert len(response.context["messages"]) == 25
         assert response.context["total_pages"] == 1
         assert _fragment_url(experiment, session_with_messages).encode() not in response.content
+
+    def test_load_all_is_a_one_shot_button(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        response = client.get(_messages_url(experiment, session_with_messages))
+
+        content = response.content.decode()
+        assert "data-load-all-messages-button" in content
+        assert "Load all messages" in content
+        assert 'name="show_all"' not in content
+        assert "show_all=on" in content
+        assert 'hx-disabled-elt="this"' in content
+        assert 'aria-live="polite"' in content
+        assert "data-load-all-messages-error" in content
+
+    def test_load_all_response_displays_completion_state(self, client, experiment, session_with_messages):
+        client.force_login(experiment.owner)
+        response = client.get(_messages_url(experiment, session_with_messages) + "?show_all=on")
+
+        content = response.content.decode()
+        assert response.context["total_pages"] == 1
+        assert 'id="load-all-messages-control"' in content
+        assert "All messages loaded" in content
+        assert "data-load-all-messages-button" not in content
+
+    def test_last_fragment_replaces_load_all_control_with_completion_state(
+        self, client, experiment, session_with_messages
+    ):
+        client.force_login(experiment.owner)
+        response = client.get(_fragment_url(experiment, session_with_messages) + "?page=3")
+
+        content = response.content.decode()
+        assert 'hx-swap-oob="outerHTML"' in content
+        assert 'id="load-all-messages-control"' in content
+        assert "All messages loaded" in content
 
     def test_next_page_trigger_carries_the_search_filter_forward(self, client, experiment, session_with_messages):
         client.force_login(experiment.owner)

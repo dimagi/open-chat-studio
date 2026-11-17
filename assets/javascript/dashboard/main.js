@@ -285,6 +285,9 @@ function dashboard() {
             }
 
             const sanitizedParams = this.sanitizeParams({...this.filters, ...params});
+            if (window.chartManager) {
+                window.chartManager.granularity = sanitizedParams.granularity || DEFAULTS.GRANULARITY;
+            }
             const urlParams = new URLSearchParams();
 
             for (const [key, value] of Object.entries(sanitizedParams)) {
@@ -447,7 +450,7 @@ function dashboard() {
                     },
                     {
                         label: 'Active Participants',
-                        tooltip: 'Participants who sent a message in the selected date range, out of every participant on this team.',
+                        tooltip: 'Participants who sent a message in the selected date range, out of every participant the team had by the end of it.',
                         numerator: data.active_participants || 0,
                         denominator: data.total_participants || 0,
                         icon: 'fas fa-users',
@@ -455,7 +458,7 @@ function dashboard() {
                     },
                     {
                         label: 'Completed Sessions',
-                        tooltip: 'Completed sessions out of active sessions - those with a message sent or received in the selected date range.',
+                        tooltip: 'Sessions that ended in the selected date range, out of active sessions - those with a message sent or received in it.',
                         numerator: data.completed_sessions || 0,
                         denominator: data.total_sessions || 0,
                         icon: 'fas fa-comments',

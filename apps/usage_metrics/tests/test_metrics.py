@@ -1,7 +1,7 @@
 """Unit tests for the usage_metrics filter vocabulary and metric functions."""
 
 import dataclasses
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -23,13 +23,13 @@ class TestUsageFilters:
         filters = UsageFilters()
         assert filters.experiment_ids is None
         assert filters.participant_ids is None
-        assert filters.platform is None
+        assert filters.platforms is None
         assert filters.tag_ids is None
         assert filters.include_archived is True
 
     def test_is_frozen(self):
         with pytest.raises(dataclasses.FrozenInstanceError):
-            UsageFilters().platform = "web"  # type: ignore
+            UsageFilters().platforms = ["web"]  # type: ignore
 
 
 _TZ = ZoneInfo("UTC")
@@ -99,19 +99,39 @@ class TestMessages:
 
         assert counts["total"] == 0
 
-    def test_empty_id_list_means_matched_nobody(self):
+    def test_excludes_setup_session_turns(self):
+        """A session still in SETUP was never engaged, so nothing in it counts (ADR-0051)."""
+        team = TeamFactory.create()
+        in_setup = ExperimentSessionFactory.create(team=team, status=SessionStatus.SETUP)
+        _message(in_setup, message_type=ChatMessageType.HUMAN)
+        _message(in_setup, message_type=ChatMessageType.AI)
+
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters())
+
+        assert counts == {"human": 0, "ai": 0, "total": 0}
+
+    def test_counts_archived_chatbot_activity(self):
+        """The activity happened and the spend was real (ADR-0051)."""
+        team = TeamFactory.create()
+        archived = ExperimentFactory.create(team=team, is_archived=True)
+        _message(ExperimentSessionFactory.create(team=team, experiment=archived))
+
+        assert metrics.messages(team, start=_START, end=_END, filters=UsageFilters())["total"] == 1
+        assert metrics.sessions_started(team, start=_START, end=_END, filters=UsageFilters()) == 1
+
+    @pytest.mark.parametrize(
+        "filters",
+        [
+            pytest.param(UsageFilters(participant_ids=[]), id="participants"),
+            pytest.param(UsageFilters(experiment_ids=[]), id="experiments"),
+            pytest.param(UsageFilters(platforms=[]), id="platforms"),
+        ],
+    )
+    def test_empty_id_list_means_matched_nobody(self, filters):
         team = TeamFactory.create()
         _message(ExperimentSessionFactory.create(team=team))
 
-        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(participant_ids=[]))
-
-        assert counts["total"] == 0
-
-    def test_empty_experiment_id_list_means_matched_nobody(self):
-        team = TeamFactory.create()
-        _message(ExperimentSessionFactory.create(team=team))
-
-        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(experiment_ids=[]))
+        counts = metrics.messages(team, start=_START, end=_END, filters=filters)
 
         assert counts["total"] == 0
 
@@ -149,7 +169,7 @@ class TestMessages:
         _message(web)
         _message(api)
 
-        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(platform="web"))
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(platforms=["web"]))
 
         assert counts["total"] == 1
 
@@ -268,9 +288,7 @@ class TestSessionCounts:
         assert (started, in_setup) == (2, 1)
 
     def test_sessions_active_empty_id_list_means_matched_nobody_like_its_siblings(self):
-        """`sessions_active` delegates to `filtered_querysets`, whose truthiness
-        check would silently treat `[]` as "no filter" and return the team-wide
-        count. The module has one empty-list semantic: `[]` matched nobody."""
+        """The module has one empty-list semantic: `[]` matched nobody."""
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
         _message(session)
@@ -308,11 +326,24 @@ class TestActiveParticipants:
 
         assert metrics.active_participants(team, start=_START, end=_END, filters=UsageFilters()) == 1
 
+    @pytest.mark.parametrize(
+        "session_kwargs",
+        [
+            pytest.param({"status": SessionStatus.SETUP}, id="setup-session"),
+            pytest.param({"platform": ChannelPlatform.EVALUATIONS}, id="evaluation-session"),
+        ],
+    )
+    def test_authors_in_excluded_sessions_are_not_active(self, session_kwargs):
+        team = TeamFactory.create()
+        _message(ExperimentSessionFactory.create(team=team, **session_kwargs))
+
+        assert metrics.active_participants(team, start=_START, end=_END, filters=UsageFilters()) == 0
+
 
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("frozen_time")
 class TestTimeseries:
-    def test_messages_timeseries_keys_by_local_bucket_date(self):
+    def test_messages_timeseries_keys_by_bucket_start(self):
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         _message(session, when=datetime(2026, 6, 9, 23, 0, tzinfo=UTC))
@@ -323,27 +354,22 @@ class TestTimeseries:
         )
 
         assert series == {
-            date(2026, 6, 9): {"human": 1, "ai": 0, "total": 1},
-            date(2026, 6, 10): {"human": 1, "ai": 0, "total": 1},
+            datetime(2026, 6, 9, tzinfo=UTC): {"human": 1, "ai": 0, "total": 1},
+            datetime(2026, 6, 10, tzinfo=UTC): {"human": 1, "ai": 0, "total": 1},
         }
 
     def test_messages_timeseries_buckets_in_request_timezone(self):
-        """23:00 UTC on the 9th is already the 10th in UTC+2, so the bucket
-        date shifts with the tz - matching the API's TruncDate(tzinfo=tz)."""
+        """23:00 UTC on the 9th is already the 10th in UTC+2, so the bucket moves with the tz."""
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         _message(session, when=datetime(2026, 6, 9, 23, 0, tzinfo=UTC))
+        tz = ZoneInfo("Africa/Johannesburg")
 
         series = metrics.messages_timeseries(
-            team,
-            start=_START,
-            end=_END,
-            granularity="daily",
-            tz=ZoneInfo("Africa/Johannesburg"),
-            filters=UsageFilters(),
+            team, start=_START, end=_END, granularity="daily", tz=tz, filters=UsageFilters()
         )
 
-        assert list(series) == [date(2026, 6, 10)]
+        assert list(series) == [datetime(2026, 6, 10, tzinfo=tz)]
 
     def test_sessions_started_timeseries_buckets_on_creation(self):
         team = TeamFactory.create()
@@ -353,7 +379,7 @@ class TestTimeseries:
             team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
         )
 
-        assert series == {date(2026, 6, 10): 1}
+        assert series == {datetime(2026, 6, 10, tzinfo=UTC): 1}
 
     def test_active_participants_timeseries_counts_distinct_per_bucket(self):
         team = TeamFactory.create()
@@ -365,7 +391,7 @@ class TestTimeseries:
             team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
         )
 
-        assert series == {date(2026, 6, 10): 1}
+        assert series == {datetime(2026, 6, 10, tzinfo=UTC): 1}
 
     def test_sessions_in_setup_timeseries(self):
         team = TeamFactory.create()
@@ -375,7 +401,7 @@ class TestTimeseries:
             team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
         )
 
-        assert series == {date(2026, 6, 10): 1}
+        assert series == {datetime(2026, 6, 10, tzinfo=UTC): 1}
 
 
 @pytest.mark.django_db()
@@ -391,7 +417,7 @@ class TestSessionsActiveTimeseries:
             team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
         )
 
-        assert series == {date(2026, 6, 9): 1, date(2026, 6, 10): 1}
+        assert series == {datetime(2026, 6, 9, tzinfo=UTC): 1, datetime(2026, 6, 10, tzinfo=UTC): 1}
 
     def test_system_only_and_setup_sessions_are_absent(self):
         team = TeamFactory.create()
