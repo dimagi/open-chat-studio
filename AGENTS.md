@@ -19,7 +19,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 ## Architecture
 
 * Multi-tenancy: `BaseTeamModel` pattern; team membership + Waffle flags for feature control
-* Versioning: Experiments, Pipelines and their parts support working/published versions via `VersionsMixin`; each declares how it travels in a `VersionSpec` (see `docs/agents/django_model_versioning.md`)
+* Versioning: Experiments, Pipelines and their parts support working/published versions via `VersionsMixin`. `Experiment` declares how it travels in a `VersionSpec`; the other versioned models still carry their own `create_new_version` overrides until each is moved onto a spec (see `docs/agents/django_model_versioning.md`)
 * Async tasks: Celery + Redis for background ops (sync, evaluations, media processing)
 * API: DRF REST API (`/api/`) + OpenAI-compatible assistant endpoints
 * Frontend: React/TS (webpack) + HTMX + Alpine.js in Django templates

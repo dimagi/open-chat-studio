@@ -78,7 +78,8 @@ operations are generated from it. To version a model:
       (its `Strategy`), whether the target is `owned` (so a copy copies it and a revert resets it in
       place), and what it `provides` to members declared after it. An `OwnedSet` member carries rows
       reached through reverse accessors. Members run in class-body order; a member that `reads` a
-      key no earlier member `provides` raises `VersionSpecError` before any row is saved.
+      key no earlier member `provides` raises `VersionSpecError`, and the surrounding transaction
+      rolls back the clone and the advanced version number.
     - `on_publish(working, version, **options)` and `on_copy(working, copy, **options)` are the only
       place model-specific imperative code remains. They run after the members and before the
       snapshot's final save, with the options the caller passed to `create_new_version`.
