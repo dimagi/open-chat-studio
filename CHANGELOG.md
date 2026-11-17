@@ -30,11 +30,6 @@ version section when a release is cut.
 ### Upgrading
 <!-- Manual steps, in the order they must run relative to the deploy. Omit if
      the upgrade is "pull the new tag and deploy". -->
-- After deploying, run `python manage.py fold_message_attachment_ids` (#1901). It moves the file
-  ids that chat messages store under the `cited_files` and `generated_files` metadata keys into
-  `ocs_attachment_file_ids`, 10,000 message ids per transaction. `--dry-run` reports how many
-  messages it would change. A later release reruns it as a migration and stops reading the old
-  keys.
 
 ### Migrations
 <!-- Only migrations that are long-running or locking, irreversible, need a
@@ -45,6 +40,13 @@ version section when a release is cut.
   deploy makes the old release fail its chatbot queries until the new one is serving. Deploy a
   release that contains `0156` first, or stop the old release before migrating. The stored values
   are not kept; reversing the migration re-adds the column with every row `false`.
+- `chat.0033` moves the file ids chat messages store under the `cited_files` and `generated_files`
+  metadata keys into `ocs_attachment_file_ids`, now the only key read (#1901). It runs one `UPDATE`
+  per 10,000 message ids and reads every row of `chat_chatmessage`, so on a large table it takes a
+  while; it locks only the rows it changes. Releases before this one write the old keys, so a reply
+  the previous release saves after the migration starts keeps them and its files stop showing in the
+  transcript. Stop the previous release before migrating. Reversing the migration leaves the data as
+  it is.
 - `experiments.0158` builds three indexes on `experiments_participant` with
   `CREATE INDEX CONCURRENTLY` (#3796): trigram indexes on `UPPER(identifier)` and `UPPER(name)`,
   and a b-tree on `remote_id`. Writes continue during the build, which can take several minutes
