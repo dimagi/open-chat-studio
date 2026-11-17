@@ -447,15 +447,25 @@ class _SyncPass:
     def _import_row(self, position: int, row: dict) -> int:
         """Import one row. When it points at a parent the sync has not seen yet, run the next catch-up
         read for that parent and retry. A parent still missing once every catch-up has run is outside
-        the export (deleted, or not in the selection), so the error is raised. A catch-up ignores the
-        stop request, since the row waiting on it would otherwise fail."""
+        the export (deleted, or not in the selection), so the error is raised, except on a partial row,
+        which is retried with that FK nulled. A catch-up ignores the stop request, since the row waiting
+        on it would otherwise fail."""
+        entry = self.entries[position]
+        # A source on older code serves no partial entries, so its manifest has no ``fields``.
+        fields = entry.get("fields", ())
         catch_ups: dict[str | None, Iterator[tuple[int, bool]]] = {}
+        null_unresolved_fks = False
         while True:
             try:
-                return self.importer.import_rows(self.entries[position]["model"], [row])
+                return self.importer.import_rows(
+                    model_label=entry["model"], rows=[row], fields=fields, null_unresolved_fks=null_unresolved_fks
+                )
             except UnresolvedForeignKey as exc:
                 reads = catch_ups.setdefault(exc.target_label, self._catch_up_reads(position, exc.target_label))
                 if (read := next(reads, None)) is None:
+                    if fields and not null_unresolved_fks:
+                        null_unresolved_fks = True
+                        continue
                     raise
                 parent_position, reread = read
                 self.progress.catching_up(
@@ -468,9 +478,9 @@ class _SyncPass:
     def _catch_up_reads(self, before: int, model_label: str | None) -> Iterator[tuple[int, bool]]:
         """The reads that can bring in a missing ``model_label`` row, in order, as (position, reread):
         its entry from the cursor, then from the beginning when it is rereadable. Only an entry before
-        ``before`` qualifies."""
+        ``before`` qualifies. A partial entry never creates rows, so it can't bring one in."""
         for position, entry in enumerate(self.entries[:before]):
-            if entry["model"] == model_label:
+            if entry["model"] == model_label and not entry.get("fields"):
                 yield position, False
                 if self._rereadable(entry):
                     yield position, True
