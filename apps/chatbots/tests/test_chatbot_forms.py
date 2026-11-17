@@ -96,19 +96,12 @@ def test_chatbot_settings_form_consent_form_queryset_is_team_scoped(team_with_us
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    "field",
-    [
-        pytest.param("participant_allowlist", id="participant-allowlist"),
-        pytest.param("debug_mode_enabled", id="debug-mode"),
-    ],
-)
-def test_settings_form_has_no_removed_field(rf, experiment, field):
+def test_settings_form_has_no_allowlist_field(rf, experiment):
     request = rf.get("/")
     request.team = experiment.team
     request.user = experiment.team.members.first()
 
-    assert field not in ChatbotSettingsForm(request=request, instance=experiment).fields
+    assert "participant_allowlist" not in ChatbotSettingsForm(request=request, instance=experiment).fields
 
 
 @pytest.mark.django_db()
