@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ("service_providers", "0101_auto_model_sync_20261111"),
+        ("service_providers", "0104_voiceprovider_gemini"),
         ("teams", "0020_team_moderation_fields"),
     ]
 
