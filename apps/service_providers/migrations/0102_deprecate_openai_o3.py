@@ -7,6 +7,7 @@ from apps.service_providers.migration_utils import llm_model_migration
 class Migration(migrations.Migration):
     dependencies = [
         ("service_providers", "0101_auto_model_sync_20261111"),
+        ("pipelines", "0036_node_archived_with_pipeline"),
     ]
 
     operations = [

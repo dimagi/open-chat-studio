@@ -506,6 +506,7 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
 def _update_pipeline_node_param(node, param_name, param_value):
     """Update one pipeline node setting while preserving relation-backed resource selections."""
     # Node rows own ordinary params and relation-backed resources (ADR-0046); pipeline.data holds layout only.
+    node = Node._base_manager.select_for_update().get(pk=node.pk)
     params = node.runtime_params()
     params[param_name] = param_value
     node.set_params(params)

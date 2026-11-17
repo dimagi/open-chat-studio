@@ -1,6 +1,9 @@
 from django.db import migrations
 
-from apps.pipelines.migrations.utils.strip_node_resource_params import strip_node_resource_params
+from apps.pipelines.migrations.utils.strip_node_resource_params import (
+    restore_node_resource_params,
+    strip_node_resource_params,
+)
 
 
 class Migration(migrations.Migration):
@@ -17,5 +20,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(strip_node_resource_params, migrations.RunPython.noop),
+        migrations.RunPython(strip_node_resource_params, restore_node_resource_params),
     ]

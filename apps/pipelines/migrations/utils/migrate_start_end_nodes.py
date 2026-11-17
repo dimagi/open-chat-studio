@@ -1,9 +1,7 @@
+import logging
 from uuid import uuid4
 
-import logging
 from apps.pipelines.flow import FlowEdge, FlowNode, FlowNodeData
-from apps.pipelines.graph import PipelineGraph
-
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 
 logger = logging.getLogger(__name__)
@@ -41,7 +39,8 @@ def _drop_node(pipeline, node, Node):
 
 
 def add_missing_start_end_nodes(pipeline, Node):
-    nodes = pipeline.node_set.all()
+    """Add structural endpoints using only historical node rows and stored edge dictionaries."""
+    nodes = list(pipeline.node_set.all())
     data = pipeline.data
     has_start = False
     has_end = False
@@ -55,24 +54,29 @@ def add_missing_start_end_nodes(pipeline, Node):
             has_end = True
 
     if has_start and has_end:
-        return
+        return None
 
-    graph = PipelineGraph.build_from_pipeline(pipeline)
-
-    node_ids = {n.id for n in graph.nodes}
-    incoming = {e.source for e in graph.edges}
-    outgoing = {e.target for e in graph.edges}
+    node_ids = {node.flow_id for node in nodes}
+    edges = data.get("edges", [])
+    sources = {edge.get("source") for edge in edges}
+    targets = {edge.get("target") for edge in edges}
     new_nodes = []
     new_edges = []
 
     try:
-        current_start_id = list(node_ids - outgoing)[0]
-        current_end_id = list(node_ids - incoming)[0]
-        current_start_node = next(node for node in data["nodes"] if node["id"] == current_start_id)
-        current_end_node = next(node for node in data["nodes"] if node["id"] == current_end_id)
+        current_start_id = next(iter(node_ids - targets))
+        current_end_id = next(iter(node_ids - sources))
+        current_start_node = next(node for node in nodes if node.flow_id == current_start_id)
+        current_end_node = next(node for node in nodes if node.flow_id == current_end_id)
     except (IndexError, StopIteration):
-        new_nodes, new_edges = _get_default_nodes()  # Just add start and end nodes as the pipeline is in a bad state anyway...
-        logger.exception("A pipeline is in a bad state, either it is recursive or pipeline.data['nodes'] doesn't match pipeline.node_set. Pipeline id: %s, team: %s", pipeline.id, pipeline.team)
+        # Add default endpoints when the graph has no unambiguous boundary nodes.
+        new_nodes, new_edges = _get_default_nodes()
+        logger.exception(
+            "A pipeline is in a bad state, either it is recursive or pipeline.data['nodes'] "
+            "doesn't match pipeline.node_set. Pipeline id: %s, team: %s",
+            pipeline.id,
+            pipeline.team,
+        )
     else:
         if not has_start:
             start_id = str(uuid4())
@@ -124,6 +128,7 @@ def add_missing_start_end_nodes(pipeline, Node):
     # Set new nodes inline as this is run inside a migration
     _set_new_nodes(pipeline, Node)
     pipeline.save()
+    return None
 
 
 def _set_new_nodes(pipeline, Node):
@@ -147,22 +152,23 @@ def _set_new_nodes(pipeline, Node):
         )
 
 
-def _get_new_position(node: dict, x_offset: int):
-    try:
-        x = node["position"]["x"] + x_offset
-    except KeyError:
-        x = x_offset
-
-    try:
-        y = node["position"]["y"]
-    except KeyError:
-        y = 200
+def _get_new_position(node, x_offset: int):
+    """Return a position beside a historical node or an embedded flow-node dictionary."""
+    if isinstance(node, dict):
+        position = node.get("position", {})
+        x = position.get("x")
+        y = position.get("y")
+    else:
+        x = getattr(node, "position_x", None)
+        y = getattr(node, "position_y", None)
+    x = x + x_offset if x is not None else x_offset
+    y = y if y is not None else 200
 
     return {"x": x, "y": y}
 
 
 def _get_default_nodes():
-    start_id= str(uuid4())
+    start_id = str(uuid4())
     start_node = FlowNode(
         id=start_id,
         type="startNode",
@@ -172,7 +178,7 @@ def _get_default_nodes():
         },
         data=FlowNodeData(id=start_id, type=StartNode.__name__),
     )
-    end_id= str(uuid4())
+    end_id = str(uuid4())
     end_node = FlowNode(
         id=end_id,
         type="endNode",

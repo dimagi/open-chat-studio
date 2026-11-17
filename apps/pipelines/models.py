@@ -34,7 +34,7 @@ from apps.pipelines.flow import (
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
-from apps.pipelines.resource_references import split_resource_params, validate_resource_params
+from apps.pipelines.resource_references import split_resource_params
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -668,14 +668,26 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     @transaction.atomic()
     def update_from_params(self, resource_params=None, *, ordinary_params=None, team=None):
-        """Apply resource relations from an editor payload without duplicate IDs in JSON."""
+        """Apply resource relations from an editor payload without duplicate IDs in JSON.
+
+        API callers validate submitted references with the pipeline-edit reference checker before
+        reaching this persistence adapter. Other callers may use this method to normalize legacy
+        or internally constructed rows, so the adapter verifies that referenced rows exist but does
+        not impose the API's team-ownership policy a second time.
+        """
         if ordinary_params is None:
             ordinary_params, inferred_resources = split_resource_params(self.params or {}, self.resource_param_names())
             if resource_params is None:
                 resource_params = inferred_resources
         resource_params = resource_params or {}
-        if team is not None:
-            validate_resource_params(team, self.node_type, resource_params)
+        declared_params = self.node_type.declared_params
+        resource_params.update(
+            {
+                name: [] if name in {"collection_index_ids", "custom_actions"} else None
+                for name in self.resource_param_names()
+                if name not in declared_params
+            }
+        )
         self.params = ordinary_params
         self.save(update_fields=["params"])
         self._apply_resource_params(resource_params)
@@ -705,11 +717,17 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
         }
         # sorted because the related rows have no ordering of their own and the read must be stable.
-        resource_params["collection_index_ids"] = sorted(index.id for index in self.collection_indexes.all())
+        resource_params["collection_index_ids"] = (
+            sorted(index.id for index in self.collection_indexes.all())
+            if self.node_type.declares("collection_index_ids")
+            else []
+        )
         # Custom actions are relation-backed operation rows, rendered in the editor's composite-id
         # spelling for wire compatibility.
-        resource_params["custom_actions"] = sorted(
-            operation.get_model_id(with_holder=False) for operation in self.custom_action_operations.all()
+        resource_params["custom_actions"] = (
+            sorted(operation.get_model_id(with_holder=False) for operation in self.custom_action_operations.all())
+            if self.node_type.declares("custom_actions")
+            else []
         )
         return resource_params
 
@@ -727,7 +745,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             # runtime validator should receive that mock's failure, rather than the resource adapter
             # masking it while inspecting ``model_fields``.
             declared_params = frozenset()
-        params.update({name: value for name, value in resource_params.items() if name in declared_params})
+        params.update(
+            {
+                name: value
+                for name, value in resource_params.items()
+                if name in declared_params and value not in (None, [])
+            }
+        )
         return params
 
     @classmethod
@@ -784,6 +808,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 continue
             value = resource_params[param_name]
             value = None if value in (None, "") else as_int(value)
+            related_model = self._meta.get_field(field_name).related_model
+            if value is not None and not related_model._base_manager.filter(pk=value).exists():
+                value = None
             setattr(self, f"{field_name}_id", value)
             update_fields.append(f"{field_name}_id")
         if update_fields:
@@ -805,7 +832,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             for operation in resource_params["custom_actions"] or []:
                 custom_action_id, separator, operation_id = operation.partition(":")
                 if not separator:
-                    raise ValidationError({"params": {"custom_actions": f"Invalid operation: {operation!r}."}})
+                    raise ValidationError({"params": [f"Invalid operation: {operation!r}."]})
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
             set_custom_actions(self, custom_action_infos)
 

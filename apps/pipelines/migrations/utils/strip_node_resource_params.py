@@ -65,6 +65,24 @@ def strip_node_resource_params(apps, schema_editor) -> None:
         _apply_batch(models, nodes, parsed, database)
 
 
+def restore_node_resource_params(apps, schema_editor) -> None:
+    """Restore resource keys from relations for a code rollback.
+
+    This reverse path reconstructs values that still exist in the relational columns and through
+    tables. It cannot recover an explicit null, an empty list, or a relation changed after the
+    forward cutover; a database/JSON backup remains the authoritative rollback mechanism for those
+    cases.
+    """
+    models = _historical_models(apps)
+    database = schema_editor.connection.alias
+    node_ids = _node_ids(models["Node"], database)
+    for node_batch in _batches(node_ids):
+        with transaction.atomic(using=database):
+            node_model = models["Node"]
+            nodes = list(_all_nodes(node_model, database).select_for_update().filter(id__in=node_batch).order_by("id"))
+            _restore_batch(models, nodes, database)
+
+
 def _historical_models(apps) -> dict[str, Any]:
     """Return the migration-state models used by the conversion."""
     return {
@@ -462,7 +480,7 @@ def _action_contains_operation(action: dict[str, Any], operation_id: str) -> boo
 
 
 def _apply_batch(models, nodes, parsed_by_node, database) -> None:
-    """Apply one already-validated batch and remove only its verified resource keys."""
+    """Revalidate locked rows, then remove only their verified resource keys."""
     node_model = models["Node"]
     operation_model = models["CustomActionOperation"]
     index_field = node_model._meta.get_field("collection_indexes")
@@ -474,6 +492,9 @@ def _apply_batch(models, nodes, parsed_by_node, database) -> None:
             .select_related("pipeline")
             .filter(id__in=[node.id for node in nodes])
         )
+        parsed_by_node, anomalies = _validate_batch(models, locked_nodes, database)
+        if anomalies:
+            _raise_anomalies(anomalies)
         scalar_fields = set()
         for node in locked_nodes:
             parsed = parsed_by_node[node.id]
@@ -504,6 +525,47 @@ def _apply_batch(models, nodes, parsed_by_node, database) -> None:
             ).get(node.id, set()):
                 action_rows = _action_rows_for_node(models, node, parsed.custom_actions, database)
                 operation_model._base_manager.using(database).bulk_create(action_rows, ignore_conflicts=True)
+
+
+def _restore_batch(models, nodes, database) -> None:
+    """Rebuild resource JSON keys for one locked rollback batch from relation rows."""
+    if not nodes:
+        return
+    node_model = models["Node"]
+    node_ids = [node.id for node in nodes]
+    index_field = node_model._meta.get_field("collection_indexes")
+    through = index_field.remote_field.through
+    indexes_by_node = defaultdict(list)
+    for row in (
+        through._default_manager.using(database)
+        .filter(node_id__in=node_ids)
+        .order_by("node_id", "collection_id")
+        .values("node_id", "collection_id")
+    ):
+        indexes_by_node[row["node_id"]].append(row["collection_id"])
+
+    actions_by_node = defaultdict(list)
+    for row in (
+        models["CustomActionOperation"]
+        ._base_manager.using(database)
+        .filter(node_id__in=node_ids)
+        .order_by("node_id", "custom_action_id", "operation_id")
+        .values("node_id", "custom_action_id", "operation_id")
+    ):
+        actions_by_node[row["node_id"]].append(f"{row['custom_action_id']}:{row['operation_id']}")
+
+    for node in nodes:
+        params = dict(node.params or {})
+        for param_name, field_name in SCALAR_RESOURCE_PARAMS.items():
+            value = getattr(node, f"{field_name}_id", None)
+            if value is not None:
+                params[param_name] = value
+        if node.id in indexes_by_node:
+            params["collection_index_ids"] = indexes_by_node[node.id]
+        if node.id in actions_by_node:
+            params["custom_actions"] = actions_by_node[node.id]
+        node.params = params
+    node_model._base_manager.using(database).bulk_update(nodes, ["params"], batch_size=BATCH_SIZE)
 
 
 def _all_nodes(node_model, database):

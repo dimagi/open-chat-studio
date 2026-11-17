@@ -975,7 +975,7 @@ def _adversarial_bot():
 # fields run Pipeline.validate(), which fetches the provider models of every LLM-bearing node in one
 # query — the same cost the builder pays on save. ``deprecated_models`` adds one more: a single lookup
 # covering every model the graph references, whatever the node fan-out.
-EXPECTED_RENDER_QUERIES = 18
+EXPECTED_RENDER_QUERIES = 16
 
 
 @pytest.mark.django_db()
