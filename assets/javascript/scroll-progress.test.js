@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import {beforeEach, describe, expect, it, vi} from "vitest";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 import htmx from "htmx.org";
 
@@ -15,6 +15,7 @@ vi.mock("htmx.org", () => ({
 
 describe("setupScrollProgress", () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         document.body.innerHTML = `
             <div id="scroll-progress-bar" role="progressbar" aria-valuenow="0" aria-valuetext="0 percent">
                 <div id="scroll-progress-fill"></div>
@@ -27,6 +28,10 @@ describe("setupScrollProgress", () => {
         Object.defineProperty(window, "innerHeight", {configurable: true, value: 800});
         Object.defineProperty(document.documentElement, "scrollHeight", {configurable: true, value: 2000});
         document.querySelector("[data-message-index]").getBoundingClientRect = () => ({bottom: 300});
+    });
+
+    afterEach(() => {
+        window.dispatchEvent(new Event("pagehide"));
     });
 
     it("updates the bar and accessible progress value from the visible message", () => {
@@ -55,5 +60,34 @@ describe("setupScrollProgress", () => {
 
         expect(disconnect).toHaveBeenCalledOnce();
         expect(htmx.off).toHaveBeenCalledWith("htmx:afterSettle", expect.any(Function));
+    });
+
+    it("keeps progress listeners while the page enters the back-forward cache", () => {
+        /** The bfcache lifecycle must preserve subscriptions until the page is disposed. */
+        const disconnect = vi.fn();
+        vi.stubGlobal(
+            "ResizeObserver",
+            class {
+                constructor() {
+                    this.disconnect = disconnect;
+                }
+
+                observe() {}
+            },
+        );
+
+        setupScrollProgress("#table-top");
+        const pagehide = new Event("pagehide");
+        Object.defineProperty(pagehide, "persisted", {value: true});
+
+        window.dispatchEvent(pagehide);
+
+        expect(disconnect).not.toHaveBeenCalled();
+        expect(htmx.off).not.toHaveBeenCalled();
+
+        window.dispatchEvent(new Event("pagehide"));
+
+        expect(disconnect).toHaveBeenCalledOnce();
+        expect(htmx.off).toHaveBeenCalledOnce();
     });
 });

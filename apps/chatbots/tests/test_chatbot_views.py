@@ -1611,6 +1611,9 @@ def test_session_view_export_control_provides_request_feedback(client, team_with
     assert "exportState === 'loading'" in content
     assert 'aria-live="polite"' in content
     assert "Export failed. Try again." in content
+    assert "Download started." in content
+    assert "contentType.includes('text/html')" in content
+    assert "exportState = 'success'" in content
     assert "Content-Disposition" not in content
 
 

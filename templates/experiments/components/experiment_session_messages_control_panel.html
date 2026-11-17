@@ -143,7 +143,7 @@
                class="flex items-center motion-reduce:transition-none"
                role="status"
                aria-live="polite">
-            All messages loaded
+            {% translate "All messages loaded" %}
           </div>
         {% elif total_pages > 1 %}
           <div id="load-all-messages-control"
@@ -159,17 +159,17 @@
                     hx-on::before-request="this.setAttribute('aria-busy', 'true'); this.closest('[data-load-all-messages-control]')?.querySelector('[data-load-all-messages-error]').classList.add('hidden')"
                     hx-on::after-request="this.setAttribute('aria-busy', 'false'); if (!event.detail.successful) this.closest('[data-load-all-messages-control]')?.querySelector('[data-load-all-messages-error]').classList.remove('hidden')"
                     aria-describedby="load-all-messages-loading">
-              Load all messages
+              {% translate "Load all messages" %}
             </button>
             <span id="load-all-messages-loading"
                   class="htmx-indicator"
                   role="status"
                   aria-live="polite">
               <span class="loading loading-spinner loading-sm"></span>
-              <span class="ml-1">Loading all messages...</span>
+              <span class="ml-1">{% translate "Loading all messages..." %}</span>
             </span>
             <span data-load-all-messages-error class="hidden text-error" role="alert">
-              Unable to load all messages. Try again.
+              {% translate "Unable to load all messages. Try again." %}
             </span>
           </div>
         {% endif %}
@@ -183,7 +183,7 @@
                href="{% url 'chatbots:export_chatbot_session_messages' request.team.slug experiment.public_id experiment_session.external_id %}"
                target="session-export-frame"
                :aria-disabled="exportState === 'loading' ? 'true' : 'false'"
-               @click="if (exportState === 'loading') { $event.preventDefault(); return; } exportState = 'loading'; clearTimeout(resetTimer); resetTimer = null;">
+               @click="if (exportState === 'loading') { $event.preventDefault(); return; } exportState = 'loading'; clearTimeout(resetTimer); resetTimer = setTimeout(() => { if (exportState === 'loading') { exportState = 'success'; resetTimer = setTimeout(() => exportState = 'idle', 3000); } }, 1000);">
               <i class="fa-solid fa-download" x-show="exportState !== 'loading' && exportState !== 'error'"></i>
               <span class="loading loading-spinner loading-xs" x-show="exportState === 'loading'" x-cloak></span>
               <span x-show="exportState !== 'error'">{% translate "Export" %}</span>
@@ -196,7 +196,7 @@
             <span x-show="exportState === 'success'"
                   x-cloak
                   role="status"
-                  aria-live="polite">{% translate "Download request completed." %}</span>
+                  aria-live="polite">{% translate "Download started." %}</span>
             <span x-show="exportState === 'error'"
                   x-cloak
                   role="alert">{% translate "Export failed. Try again." %}</span>
@@ -204,8 +204,8 @@
                     title="{% translate 'Session export download' %}"
                     class="hidden"
                     x-ref="sessionExportFrame"
-                    @load="if (exportState === 'loading') { const contentType = $refs.sessionExportFrame.contentDocument?.contentType || ''; exportState = contentType.includes('text/html') ? 'error' : 'success'; if (exportState === 'success') resetTimer = setTimeout(() => exportState = 'idle', 3000); }"
-                    @error="if (exportState === 'loading') exportState = 'error';"></iframe>
+                    @load="if (exportState === 'loading') { const contentType = $refs.sessionExportFrame.contentDocument?.contentType || ''; if (contentType.includes('text/html')) { clearTimeout(resetTimer); exportState = 'error'; } }"
+                    @error="if (exportState === 'loading') { clearTimeout(resetTimer); exportState = 'error'; }"></iframe>
           </div>
         {% endif %}
       </div>
