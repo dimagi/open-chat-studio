@@ -79,7 +79,6 @@ describe("setupScrollProgress", () => {
         setupScrollProgress("#table-top");
         const pagehide = new Event("pagehide");
         Object.defineProperty(pagehide, "persisted", {value: true});
-
         window.dispatchEvent(pagehide);
 
         expect(disconnect).not.toHaveBeenCalled();
