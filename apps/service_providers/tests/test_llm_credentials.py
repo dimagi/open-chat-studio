@@ -17,7 +17,6 @@ _PROVIDER_VARS = [
     "GOOGLE_API_KEY",
     "GOOGLE_VERTEX_AI_CREDENTIALS_JSON",
     "GOOGLE_VERTEX_AI_LOCATION",
-    "GOOGLE_VERTEX_AI_API_TRANSPORT",
     "DEEPSEEK_API_KEY",
     "AZURE_OPENAI_API_KEY",
     "AZURE_OPENAI_ENDPOINT",
@@ -88,7 +87,6 @@ def test_google_vertex_ai_parses_credentials_json(clean_env):
     creds = get_provider_credentials_for_type(LlmProviderTypes.google_vertex_ai)
     assert creds.config["credentials_json"] == payload
     assert creds.config["location"] == "global"
-    assert creds.config["api_transport"] == "rest"
 
 
 def test_google_vertex_ai_invalid_json_raises(clean_env):

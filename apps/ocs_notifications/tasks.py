@@ -9,7 +9,9 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 
+from apps.ocs_notifications.formatting import message_html, message_text
 from apps.ocs_notifications.models import (
     NotificationChannel,
     NotificationEvent,
@@ -62,7 +64,7 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
             "user": user,
             "notification": notification_event,
             "title": notification_event.title,
-            "message": notification_event.message,
+            "message_html": mark_safe(message_html(notification_event.message, line_breaks=False)),
             "level": notification_event.event_type.get_level_display(),
             "team_name": notification_event.team.name,
             "notification_url": notification_url,
@@ -83,7 +85,7 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
         except Exception:
             logger.exception("Failed to render email template")
             # Fallback to plain text email
-            message = f"{notification_event.title}\n\n{notification_event.message}"
+            message = f"{notification_event.title}\n\n{message_text(notification_event.message)}"
             send_mail(
                 subject=subject,
                 message=message,

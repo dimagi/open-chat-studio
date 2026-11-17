@@ -13,7 +13,8 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
-from apps.api.v2.lookups import get_working_chatbot, working_chatbots
+from apps.api.v2.lookups import get_authorized_chatbot, working_chatbots
+from apps.api.v2.permissions import ApplicationAllowsChatbot
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.api.v2.write.archive import archive_chatbot
 from apps.api.v2.write.serializers import (
@@ -25,15 +26,27 @@ from apps.api.v2.write.serializers import (
 )
 from apps.experiments.models import Experiment
 from apps.experiments.services import last_activity_subquery
-from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
+from apps.oauth.permissions import TokenHasOAuthResourceScope, token_allowed_chatbots
 from apps.teams.models import Team
+
+FORBIDDEN_READ = OpenApiResponse(
+    description=(
+        "The caller is authenticated but not authorised to read this chatbot: either its role lacks "
+        "permission to view chatbots, or it is a machine (client-credentials) token whose application "
+        "is not authorised for this chatbot. Retrying will not help; the application's chatbot list "
+        "has to change."
+    )
+)
 
 
 @extend_schema_view(
     list=extend_schema(
         operation_id="chatbot_list",
         summary="List Chatbots",
-        description="List the chatbots belonging to the API key's team.",
+        description=(
+            "List the chatbots belonging to the API key's team. A machine (client-credentials) token "
+            "lists only the chatbots its application is authorised for."
+        ),
         tags=["Chatbots"],
     ),
     retrieve=extend_schema(
@@ -49,10 +62,16 @@ from apps.teams.models import Team
                 description="Chatbot ID",
             ),
         ],
+        responses={200: ChatbotSerializer, 403: FORBIDDEN_READ},
     ),
 )
 class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [
+        *BASE_PERMISSION_CLASSES,
+        DjangoModelPermissionsWithView,
+        TokenHasOAuthResourceScope,
+        ApplicationAllowsChatbot,
+    ]
     required_scopes = ["chatbots"]
     serializer_class = ChatbotSerializer
     lookup_field = "public_id"
@@ -64,9 +83,14 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return self.request.team
 
     def get_queryset(self) -> QuerySet[Experiment]:
+        chatbots = working_chatbots(self.team)
+        if self.action == "list":
+            # A collection has no one chatbot for ApplicationAllowsChatbot to refuse, so the ones a
+            # limited machine token may not reach are left out of it. Addressed directly, they are
+            # refused, as on every other route under /chatbots/{id}/.
+            chatbots = token_allowed_chatbots(self.request.auth, chatbots)
         return (
-            working_chatbots(self.team)
-            .select_related("team")
+            chatbots.select_related("team")
             .prefetch_related("versions")
             .annotate(last_activity_at=last_activity_subquery())
         )
@@ -126,7 +150,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
                 ),
             ),
         ],
-        responses=ChatbotInspectSerializer,
+        responses={200: ChatbotInspectSerializer, 403: FORBIDDEN_READ},
     )
     @action(detail=True, methods=["get"])
     def inspect(self, request, id=None):
@@ -139,6 +163,8 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             )
         except InspectVersionError as err:
             raise NotFound("Requested chatbot version was not found.") from err
+        # `target` may be a version row; the allowlist check normalises it to the family head.
+        self.check_object_permissions(request, target)
         serializer = ChatbotInspectSerializer(target, context={"team": target.team})
         return Response(serializer.data)
 
@@ -178,12 +204,9 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     def partial_update(self, request, *args, **kwargs) -> Response:
         with transaction.atomic():
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
-            # naming different fields would silently clobber one another.
-            chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application allows. Checked after
-            # resolution because the allowlist is keyed on the chatbot, and before any write, so the
-            # refusal costs nothing but the lock this block releases on the way out.
-            enforce_application_chatbot_write(request, chatbot)
+            # naming different fields would silently clobber one another. The allowlist refusal
+            # costs nothing but the lock this block releases on the way out.
+            chatbot = get_authorized_chatbot(self, self.kwargs[self.lookup_url_kwarg], lock=True)
             serializer = ChatbotWriteSerializer(
                 chatbot, data=request.data, partial=True, context=self.get_serializer_context()
             )
@@ -238,11 +261,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         # when only the first did. Under the lock the second blocks, then re-evaluates the
         # working-chatbot predicate against the committed `is_archived` and answers 404.
         with transaction.atomic():
-            chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
-            # A machine token reaches only the chatbots its application allows. Checked
-            # after resolution because the allowlist is keyed on the chatbot, and before anything
-            # is written.
-            enforce_application_chatbot_write(request, chatbot)
+            chatbot = get_authorized_chatbot(self, self.kwargs[self.lookup_url_kwarg], lock=True)
             return Response(archive_chatbot(chatbot))
 
 
