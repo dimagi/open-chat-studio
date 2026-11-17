@@ -35,6 +35,15 @@ A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Router
 The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do I want?". Three values: **Specific** (pinned by `version_number` within the family), **Latest Working**, **Latest Published**. Used by Evaluation Configs, channel entry-point tasks, the API entry point, and the web widget. Resolved at the moment of use against the family head.
 _Avoid_: "version selection type" (the legacy field name on `EvaluationConfig`).
 
+**Version Operation**:
+What a traversal of a versioned record does: **Publish** (Working Version → Chatbot Version), **Revert** (Chatbot Version → Working Version) or **Copy** (Working Version → a new Working Version). Each versioned model declares how it travels once, in a `VersionSpec` (`apps/experiments/versioning.py`); the operations are generated from that declaration.
+
+**Travel Strategy**:
+How a record that another record references travels on Publish: a **new version** of it, its **latest version reused** when nothing changed since, a **live reference** to the working record itself (ADR-0031), or a **private clone** owned by the snapshot. Copy never consults a strategy: it copies what the record owns and keeps every other reference verbatim. Revert is derived from the strategy and from whether the record owns the target.
+
+**Spec Member**:
+One declared part of a `VersionSpec`: a **reference** (a forward foreign key), an **owned set** (rows reached through a reverse accessor) or a **param reference** (an id inside a JSON params blob). Plain row fields are never declared: every concrete field that is not identity travels by being cloned.
+
 ### Runtime
 
 **Channel**:

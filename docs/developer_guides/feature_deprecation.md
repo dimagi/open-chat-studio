@@ -132,8 +132,8 @@ recoverable by reverting the PR. For versioned models (see
 
 - Remove the feature's `VersionField` entries from `_get_version_details` so
   the version-diff UI stops showing it.
-- Remove the feature's `_copy_attr_to_new_version` calls so new snapshots stop
-  copying the field.
+- Remove the feature's `Reference` member from the model's `VersionSpec`, or add the
+  field to the spec's `Meta.identity`, so new snapshots stop carrying it.
 
 **Phase 2 — schema drop**, in a later release:
 
