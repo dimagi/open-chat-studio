@@ -408,10 +408,9 @@ class TestCostPanelCaching:
         assert summary.period_start is not None
 
     def test_an_unknown_granularity_shares_the_daily_cache_entry(self, authenticated_client, team):
-        """The timeseries cache key folds in the granularity, which arrives
-        raw from the query string. An unrecognised value computes the daily
-        series anyway (reporting falls back to TruncDate), so it must reuse
-        the daily key rather than mint an unbounded row per distinct string."""
+        """The timeseries cache key folds in the granularity. An unrecognised
+        value fails the filter form, so the view serves the daily series and
+        must reuse the daily key rather than mint a row per distinct string."""
         _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
         url = reverse("dashboard:api_cost_timeseries", kwargs={"team_slug": team.slug})
 
