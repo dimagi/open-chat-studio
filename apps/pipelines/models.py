@@ -727,7 +727,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """Read the compatibility flag while excluding a concurrent cutover transition."""
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_advisory_xact_lock_shared(%s)", [NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID])
-        return NodeResourceCutoverState.objects.get(pk=1).legacy_json_compatibility_enabled
+        state, _created = NodeResourceCutoverState.objects.get_or_create(pk=1)
+        return state.legacy_json_compatibility_enabled
 
     def _mirror_resource_params_for_legacy_runtime(self, enabled: bool, invalid_params: dict | None = None) -> None:
         """Keep JSON resource ids available to old application tasks during the first rollout."""

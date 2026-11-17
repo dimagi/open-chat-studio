@@ -61,6 +61,22 @@ class TestNodeResourceFKSync:
             "llm_provider_model_id": model.id,
         }
 
+    def test_resource_updates_initialize_a_missing_cutover_state_row(self):
+        """A database created without migration data starts with legacy mirroring disabled."""
+        provider = LlmProviderFactory.create()
+        node = NodeFactory.create(type="LLMResponseWithPrompt", params={})
+        NodeResourceCutoverState.objects.filter(pk=1).delete()
+
+        node.update_from_params(
+            {"llm_provider_id": provider.id},
+            ordinary_params={"name": "assistant"},
+        )
+
+        state = NodeResourceCutoverState.objects.get(pk=1)
+        node.refresh_from_db()
+        assert not state.legacy_json_compatibility_enabled
+        assert node.params == {"name": "assistant"}
+
     def test_source_material_fk_populated(self):
         source_material = SourceMaterialFactory.create()
         node = NodeFactory.create(
