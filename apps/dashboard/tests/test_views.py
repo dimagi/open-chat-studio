@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -7,8 +7,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import Experiment, Participant
 
 from ...utils.factories.team import MembershipFactory, TeamFactory
+from ...utils.factories.traces import TraceFactory
 from ..forms import DashboardFilterForm
 from ..models import DashboardFilter
 
@@ -18,6 +20,23 @@ User = get_user_model()
 @pytest.mark.django_db()
 class TestDashboardApiViews:
     """Test dashboard API endpoints"""
+
+    def test_overview_totals_follow_the_picked_end_date(self, authenticated_client, team, experiment, participant):
+        """The picker's end date reaches the totals: a chatbot or participant created after it is not counted."""
+        end = timezone.localdate() - timedelta(days=1)
+        for existing in (experiment, participant):
+            existing.created_at = timezone.now() - timedelta(days=2)
+            existing.save()
+        Experiment.objects.create(name="Later", team=team, owner=experiment.owner)
+        Participant.objects.create(identifier="later", team=team, platform="web")
+
+        response = authenticated_client.get(
+            reverse("dashboard:api_overview", kwargs={"team_slug": team.slug}),
+            {"date_range": "custom", "start_date": (end - timedelta(days=30)).isoformat(), "end_date": end.isoformat()},
+        )
+
+        data = response.json()
+        assert (data["total_experiments"], data["total_participants"]) == (1, 1)
 
     def test_overview_stats_api(self, authenticated_client, team, experiment, participant, experiment_session, chat):
         """Test overview statistics API endpoint"""
@@ -90,6 +109,42 @@ class TestDashboardApiViews:
             ]
             for field in expected_fields:
                 assert field in item
+
+    @pytest.mark.parametrize("granularity", ["bogus", ""])
+    def test_an_unknown_or_blank_granularity_yields_the_daily_series(
+        self, authenticated_client, team, experiment, participant, experiment_session, chat, granularity
+    ):
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        url = reverse("dashboard:api_session_analytics", kwargs={"team_slug": team.slug})
+
+        daily = authenticated_client.get(url, {"granularity": "daily"}).json()
+        fallback = authenticated_client.get(url, {"granularity": granularity}).json()
+
+        assert len(daily["sessions"]) == 1
+        assert fallback == daily
+
+    def test_hourly_granularity_buckets_by_the_hour(
+        self, authenticated_client, team, experiment, participant, experiment_session, chat
+    ):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        url = reverse("dashboard:api_session_analytics", kwargs={"team_slug": team.slug})
+
+        data = authenticated_client.get(url, {"granularity": "hourly"}).json()
+
+        hour = message.created_at.replace(minute=0, second=0, microsecond=0)
+        assert data["sessions"] == [{"date": hour.isoformat(), "active_sessions": 1}]
+
+    def test_average_response_time_api(
+        self, authenticated_client, team, experiment, participant, experiment_session, chat
+    ):
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        trace = TraceFactory.create(team=team, session=experiment_session, experiment=experiment, duration=1500)
+        url = reverse("dashboard:api_average_response_time", kwargs={"team_slug": team.slug})
+
+        data = authenticated_client.get(url, {"granularity": "hourly"}).json()
+
+        hour = trace.timestamp.replace(minute=0, second=0, microsecond=0)
+        assert data == [{"date": hour.isoformat(), "avg_response_time_sec": 1.5}]
 
     def test_channel_breakdown_api(self, authenticated_client, team):
         """Test channel breakdown API endpoint"""

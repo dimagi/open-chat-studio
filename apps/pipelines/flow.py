@@ -130,6 +130,8 @@ class FlowPipelineData(pydantic.BaseModel):
     name: str
     data: FullFlow
     experiment_name: str | None = Field(default=None, min_length=1)
+    # None from a builder bundle loaded before full saves sent it; those keep last-write-wins.
+    base_revision: int | None = None
 
 
 class NodeDiff(pydantic.BaseModel):

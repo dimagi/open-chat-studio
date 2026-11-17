@@ -5,6 +5,8 @@ info:
   description: Read-only, team-scoped endpoints for the Open Chat Studio data sync/export.
     **Unversioned and intended only for OCS export** — it carries no backwards-compatibility
     guarantee and may change without notice.
+  contact:
+    email: devops+openchatstudio@dimagi.com
 paths:
   /api/export/analysis_queries/:
     get:
@@ -4563,6 +4565,10 @@ components:
           type: string
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         public_id:
           type: string
           format: uuid
@@ -4609,8 +4615,6 @@ components:
           type: boolean
         version_description:
           type: string
-        debug_mode_enabled:
-          type: boolean
         create_version_task_id:
           type: string
           maxLength: 128
@@ -7143,6 +7147,7 @@ components:
       - elevenlabs
       - intron
       - minimax
+      - gemini
       type: string
       description: |-
         * `aws` - AWS Polly
@@ -7152,6 +7157,7 @@ components:
         * `elevenlabs` - ElevenLabs
         * `intron` - Intron
         * `minimax` - MiniMax
+        * `gemini` - Google Gemini Transcription
     VoiceProviderList:
       type: object
       properties:
@@ -7198,7 +7204,13 @@ components:
     tokenAuth:
       type: http
       scheme: bearer
-tags: []
+tags:
+- name: Manifest
+  description: 'Discover the export surface before authenticating: resource call order,
+    per-model config and a schema checksum.'
+- name: Team
+  description: Export the team resolved from the API key and every resource nested
+    under it, paginated by `updated_at`.
 externalDocs:
   url: https://docs.openchatstudio.com/api/
   description: API Guides
