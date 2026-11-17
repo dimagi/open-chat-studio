@@ -145,7 +145,8 @@ def remap_event_action_params(params: dict, action_type: str, store: FKTranslati
     return result
 
 
-# Exports from before the attachment ids moved under one key still carry them under these.
+# A source server that hasn't run chat.0033 still sends attachment ids under these keys. The migration
+# only folds rows already in this database, so messages synced in after it need folding here.
 LEGACY_ATTACHMENT_KEYS = ("cited_files", "generated_files")
 
 
