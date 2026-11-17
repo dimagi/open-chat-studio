@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
 from apps.chat.models import ChatMessageMetadataKeys
-from apps.pipelines.nodes.base import PipelineNode, PipelineState
+from apps.pipelines.nodes.base import PipelineNode, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
@@ -83,10 +83,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
         node_name=node.name,
         node_id=node.node_id,
         output=ai_message,
-        output_message_metadata={
-            **ai_message_metadata,
-            **tool_callbacks.output_message_metadata,
-        },
+        output_message_metadata=merge_dict_values_as_lists(ai_message_metadata, tool_callbacks.output_message_metadata),
         intents=tool_callbacks.intents,
         participant_data=result.get("participant_data") or {},
         session_state=result.get("session_state") or {},
@@ -142,10 +139,9 @@ def _process_files(node: PipelineNode, cited_files: set[File], generated_files: 
         node.repo.attach_files_to_chat(attachment_type="file_citation", files=cited_files)
     if generated_files:
         node.repo.attach_files_to_chat(attachment_type="code_interpreter", files=generated_files)
-    return {
-        ChatMessageMetadataKeys.CITED_FILES: [file.id for file in cited_files],
-        ChatMessageMetadataKeys.GENERATED_FILES: [file.id for file in generated_files],
-    }
+    if file_ids := [file.id for file in cited_files | generated_files]:
+        return {ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS: file_ids}
+    return {}
 
 
 def _add_current_datetime_to_turn(

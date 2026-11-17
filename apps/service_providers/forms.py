@@ -181,6 +181,24 @@ class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class GeminiVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["gemini_api_key"]
+
+    gemini_api_key = forms.CharField(
+        label=_("API Key"),
+        help_text=render_help_with_link(
+            "Transcription only: Gemini has no voices here, so chatbots using this provider reply in text.",
+            "https://aistudio.google.com/app/apikey",
+            link_text="Get a Gemini API key",
+        ),
+    )
+    gemini_transcription_model = forms.CharField(
+        label=_("Transcription Model"),
+        initial="gemini-3.5-transcribe",
+        help_text=_("The Gemini model that transcribes voice messages."),
+    )
+
+
 class IntronVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["intron_api_key"]
 

@@ -13,7 +13,15 @@ from apps.api.export.views import CursorHelper
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import UnresolvedForeignKey
-from apps.teams.export.tests.sync_fakes import PAST, FakeClient, make_manifest, select_chatbots, team_row
+from apps.teams.export.manifest import build_manifest
+from apps.teams.export.tests.sync_fakes import (
+    PAST,
+    FakeClient,
+    make_manifest,
+    select_chatbots,
+    team_row,
+    team_settings_row,
+)
 from apps.teams.export.translation import ALL_CHATBOTS_KEY, page_cursor
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import Command, run_sync
@@ -159,6 +167,70 @@ def test_a_parent_the_source_never_serves_still_raises_after_one_catch_up(make_s
         run_sync(client, store, private, on_user_created=None)
 
     assert [resource for resource, _cursor in client.iter_calls] == ["participants", "participant_data", "participants"]
+
+
+def _moderation_provider_row(source_pk, public_key):
+    return {
+        "id": source_pk,
+        "name": f"Moderation {source_pk}",
+        "type": "openai",
+        "config": seal_mod.seal({"openai_api_key": "sk-x"}, public_key),
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def _team_settings_scenario(public_key, make_store, tmp_path, settings_row):
+    entries = [
+        entry
+        for entry in build_manifest()["entries"]
+        if entry["resource"] in ("users", "moderation_providers", "team_settings")
+    ]
+    rows = {
+        "teams": [team_row()],
+        "users": [],
+        "moderation_providers": [_moderation_provider_row(40, public_key)],
+        "team_settings": [settings_row],
+    }
+    return make_manifest(entries), rows, make_store(tmp_path / "team.sqlite")
+
+
+def test_a_moderation_provider_created_after_its_resource_was_read_is_caught_up(make_store, tmp_path, keypair):
+    """The team settings row is read once and its cursor then moves past it, so a provider it points
+    at must be caught up rather than nulled."""
+    public_key, private = keypair
+    manifest, rows, store = _team_settings_scenario(
+        public_key, make_store, tmp_path, team_settings_row(moderation_provider=41)
+    )
+
+    def create_on_source():
+        rows["moderation_providers"].append(_moderation_provider_row(41, public_key))
+
+    client = _BusySourceClient(manifest, rows, after_first_read={"moderation_providers": create_on_source})
+    run_sync(client, store, private, on_user_created=None)
+
+    team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    assert team.moderation_provider.name == "Moderation 41"
+    assert [resource for resource, _cursor in client.iter_calls] == [
+        "users",
+        "moderation_providers",
+        "team_settings",
+        "moderation_providers",
+    ]
+
+
+def test_a_team_setting_the_source_never_serves_is_nulled(make_store, tmp_path, keypair):
+    """A team creator who left the team is not exported, so once a catch-up can't find them the
+    field is left empty instead of stopping the run."""
+    public_key, private = keypair
+    settings_row = {**team_settings_row(moderation_provider=40), "created_by": 77}
+    manifest, rows, store = _team_settings_scenario(public_key, make_store, tmp_path, settings_row)
+
+    run_sync(FakeClient(manifest, rows), store, private, on_user_created=None)
+
+    team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    assert team.created_by is None
+    assert team.moderation_provider.name == "Moderation 40"
 
 
 def test_a_reference_to_a_later_resource_is_not_caught_up(make_store, tmp_path, keypair):
