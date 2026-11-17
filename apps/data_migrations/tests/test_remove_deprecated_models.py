@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from django.core.management import call_command
 
+from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.evaluations import EvaluatorFactory
@@ -71,8 +72,8 @@ class TestRemoveDeprecatedModelsCommand:
 
         assert not LlmProviderModel.objects.filter(id=old_model.id).exists()
         node.refresh_from_db()
-        assert node.params["llm_provider_model_id"] == replacement_model.id
         assert node.llm_provider_model_id == replacement_model.id
+        assert "llm_provider_model_id" not in node.params
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_stale_deleted_provider_in_params_not_resurrected(self, mock_notify):
@@ -90,6 +91,9 @@ class TestRemoveDeprecatedModelsCommand:
         provider.delete()
         node.refresh_from_db()
         assert node.llm_provider_id is None
+        # Existing rows may still carry duplicate JSON until migration 0038 runs.
+        Node.objects.filter(pk=node.pk).update(params={**node.params, "llm_provider_id": str(provider_id)})
+        node.refresh_from_db()
         assert str(node.params["llm_provider_id"]) == str(provider_id)
 
         deleted_models = [("openai", "gpt-4-old")]
@@ -101,6 +105,7 @@ class TestRemoveDeprecatedModelsCommand:
 
         node.refresh_from_db()
         assert node.llm_provider_id is None
+        assert "llm_provider_id" not in node.params
 
     @pytest.mark.parametrize(
         "replacement_name",

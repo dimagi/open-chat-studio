@@ -27,7 +27,7 @@ from apps.service_providers.utils import ServiceProvider
 from apps.service_providers.views import _format_context
 from apps.teams.backends import CHAT_VIEWER_GROUP
 from apps.utils.factories.evaluations import EvaluatorFactory
-from apps.utils.factories.pipelines import NodeFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
     LlmProviderFactory,
@@ -560,8 +560,9 @@ def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_
     provider = LlmProviderFactory(team=team_with_users)
     node = NodeFactory.create(
         type="LLMResponseWithPrompt",
-        params={"llm_provider_id": provider.id},
+        params={},
         llm_provider=provider,
+        pipeline=PipelineFactory.create(team=team_with_users),
     )
 
     response = authed_client.delete(

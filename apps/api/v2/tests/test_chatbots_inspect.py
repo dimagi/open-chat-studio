@@ -719,7 +719,7 @@ def _expected_pipeline_nodes(bot):
                     "name": "Session Completion",
                     "description": "Custom action description",
                     "server_url": "https://api.weather.com",
-                    "allowed_operations": ["weather_get", "pollen_get"],
+                    "allowed_operations": ["pollen_get", "weather_get"],
                     "api_schema": {"paths": ["/pollen", "/weather"]},
                     "auth_provider": {
                         "id": bot.auth_provider.id,

@@ -393,14 +393,11 @@ def test_clone_team_copies_feature_flags(source_team):
 
 
 @pytest.mark.django_db()
-def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
-    """`changed` gates the write, and writing a node the clone had no reason to touch is lossy.
-
-    `set_params` re-derives the FK columns from params, so saving a node whose params never
-    carried a resource id nulls whatever column the params do not mirror.
-    """
+def test_clone_team_remaps_relation_backed_node_resources():
+    """Cloning reads node resources from relations and keeps the target team's provider."""
     source, target = TeamFactory.create(), TeamFactory.create()
-    provider = LlmProviderFactory.create(team=None)
+    source_provider = LlmProviderFactory.create(team=source)
+    target_provider = LlmProviderFactory.create(team=target, type=source_provider.type)
     pipeline = PipelineFactory.create(team=target, data={"nodes": [], "edges": []})
     node = Node.objects.create(
         pipeline=pipeline,
@@ -408,12 +405,16 @@ def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
         flow_id="router",
         label="Router",
         params={"keywords": ["yes", "no"]},
+        llm_provider=source_provider,
     )
-    Node.objects.filter(pk=node.pk).update(llm_provider_id=provider.id)
-    node = Node.objects.get(pk=node.pk)
 
-    Command()._remap_node_params(CloneContext(source_team=source, target_team=target), node)
+    context = CloneContext(
+        source_team=source,
+        target_team=target,
+        llm_providers={source_provider.id: target_provider},
+    )
+    Command()._remap_node_params(context, node)
 
     node.refresh_from_db()
-    assert node.llm_provider_id == provider.id
+    assert node.llm_provider_id == target_provider.id
     assert node.params == {"keywords": ["yes", "no"]}

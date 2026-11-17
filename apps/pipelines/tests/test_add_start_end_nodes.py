@@ -12,6 +12,7 @@ from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import end_node, passthrough_node, start_node
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 
 @pytest.mark.django_db()
@@ -417,26 +418,26 @@ def test_pipeline_creation_without_llm(team):
 
 @pytest.mark.django_db()
 def test_pipeline_creation_with_llm(team):
-    mock_llm_provider = MagicMock(id=str(uuid4()))
-    mock_llm_model = MagicMock(id=str(uuid4()), max_token_limit=2048)
+    llm_provider = LlmProviderFactory.create(team=team)
+    llm_model = LlmProviderModelFactory.create(team=team, type=llm_provider.type, max_token_limit=2048)
 
     pipeline = Pipeline.create_default(
         team=team,
-        llm_provider_id=mock_llm_provider.id,
-        llm_provider_model=mock_llm_model,
+        llm_provider_id=llm_provider.id,
+        llm_provider_model=llm_model,
     )
 
     assert "nodes" not in pipeline.data
     assert "edges" in pipeline.data
     assert pipeline.node_set.count() == 3
     node = pipeline.node_set.get(type="LLMResponseWithPrompt")
-    assert node.llm_provider_id == mock_llm_provider.id
-    assert node.llm_provider_model_id == mock_llm_model.id
+    assert node.llm_provider_id == llm_provider.id
+    assert node.llm_provider_model_id == llm_model.id
     assert "llm_provider_id" not in node.params
     assert "llm_provider_model_id" not in node.params
     params = node.params
     assert params["llm_temperature"] == 0.7
-    assert params["user_max_token_limit"] == mock_llm_model.max_token_limit
+    assert params["user_max_token_limit"] == llm_model.max_token_limit
 
 
 @pytest.mark.django_db()
