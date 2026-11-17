@@ -30,7 +30,7 @@ class TestParamMerge:
         params = Node.objects.get(pipeline=chatbot.pipeline, flow_id=llm_node).params
         assert params["prompt"] == "Be terse."
         assert params["max_history_length"] == 10
-        assert params["llm_provider_id"] is not None
+        assert Node.objects.get(pipeline=chatbot.pipeline, flow_id=llm_node).llm_provider_id is not None
 
     def test_patch_updates_the_label(self, client, chatbot, llm_node):
         response = client.patch(node_url(chatbot, llm_node), {"label": "Classify"}, format="json")

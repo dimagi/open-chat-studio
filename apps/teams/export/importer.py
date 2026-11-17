@@ -117,8 +117,13 @@ def _node_param_models() -> dict[str, str]:
 
 
 def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
-    """Rewrite the resource ids hidden inside a node's params. References to models the sync
-    doesn't copy have no translation and are left as-is."""
+    """Rewrite legacy resource ids, then remove them from the persisted node JSON.
+
+    Export rows still carry the editor-compatible resource keys for older servers, while imported
+    Node relations are the authoritative destination for those values.
+    """
+    from apps.pipelines.models import Node  # noqa: PLC0415 - avoid importing pipeline models at module load
+
     result = dict(params)
     for key, label in _node_param_models().items():
         if key not in result or result[key] in (None, "", 0):
@@ -128,7 +133,7 @@ def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
             result[key] = [store.get_target(label, as_int(v)) or v for v in value]
         else:
             result[key] = store.get_target(label, as_int(value)) or value
-    return result
+    return Node.params_to_store(result)
 
 
 def remap_event_action_params(params: dict, action_type: str, store: FKTranslationStore) -> dict:

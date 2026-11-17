@@ -351,7 +351,7 @@ def test_node_params_and_fk_columns_are_remapped(store):
     node = Node.objects.get(pk=store.get_target("pipelines.node", 200))
     assert node.pipeline_id == pipeline_pk
     assert node.llm_provider_id == provider_pk
-    assert node.params["llm_provider_id"] == provider_pk
+    assert "llm_provider_id" not in node.params
     assert Pipeline.objects.get(pk=pipeline_pk).team_id == team_pk
 
 

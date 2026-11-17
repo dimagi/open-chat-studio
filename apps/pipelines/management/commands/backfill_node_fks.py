@@ -35,10 +35,8 @@ class Command(IdempotentCommand):
     def _load_valid_collection_index_ids(self):
         """Valid IDs for the collection_indexes M2M.
 
-        Unlike the scalar FKs, the runtime mirror sets this M2M from ``Collection.objects`` (the
-        default, archive-FILTERING manager) — see ``Node._sync_resource_fk_fields`` — so archived
-        collections are intentionally dropped here to keep the backfill in step with what a later
-        ``save()`` would write.
+        Unlike the scalar FKs, the legacy import path sets this M2M from ``Collection.objects`` (the
+        default, archive-FILTERING manager), so archived collections are intentionally dropped here.
         """
         collection_model = Node._meta.get_field("collection_indexes").related_model
         ids = set(collection_model.objects.values_list("id", flat=True))
@@ -86,13 +84,17 @@ class Command(IdempotentCommand):
     def _backfill_scalar_fks(self, nodes, fk_id_attrs, valid_fk_ids):
         """Mirror the scalar FK columns from params, bulk-updating only the nodes that changed.
 
-        IDs that don't exist in valid_fk_ids are treated as None to avoid integrity errors.
+        IDs that don't exist in valid_fk_ids are treated as None to avoid integrity errors. A
+        missing legacy key is left alone because post-cutover rows intentionally store resource
+        values only in the relation columns.
         """
         changed = []
         for node in nodes:
             params = node.params or {}
             node_changed = False
             for attr in fk_id_attrs:
+                if attr not in params:
+                    continue
                 value = self._resolve_fk_value(params, attr, valid_fk_ids[attr])
                 if getattr(node, attr) != value:
                     setattr(node, attr, value)
@@ -108,15 +110,18 @@ class Command(IdempotentCommand):
     def _backfill_collection_indexes(self, nodes, valid_collection_ids):
         """Reconcile the collection_indexes M2M through table to mirror collection_index_ids in params.
 
-        Mirrors Node._sync_resource_fk_fields: ids are coerced via as_int (malformed values dropped)
-        and intersected with the preloaded valid_collection_ids set (non-existent ones are dropped).
+        Legacy node data is coerced via as_int (malformed values dropped) and intersected with the
+        preloaded valid_collection_ids set (non-existent ones are dropped).
         """
         through = Node.collection_indexes.through
         node_ids = [node.id for node in nodes]
 
         desired_by_node = {}
         for node in nodes:
-            raw_ids = (node.params or {}).get("collection_index_ids") or []
+            params = node.params or {}
+            if "collection_index_ids" not in params:
+                continue
+            raw_ids = params["collection_index_ids"] or []
             if not isinstance(raw_ids, list | tuple | set):
                 raw_ids = [raw_ids]
             ids = {parsed for parsed in map(as_int, raw_ids) if parsed is not None}

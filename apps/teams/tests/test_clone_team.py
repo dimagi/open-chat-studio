@@ -355,21 +355,17 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
     source_llm_provider = LlmProvider.objects.filter(team=source_team).first()
     source_llm_model = LlmProviderModel.objects.filter(team=source_team).first()
 
-    # Check nodes have remapped params and FK mirror (both must point at the target team)
+    # Check nodes have remapped relation-backed resources pointing at the target team.
     for node in Node.objects.filter(pipeline=target_pipeline):
-        params = node.params
-        if params.get("llm_provider_id"):
-            # Should reference target team's provider, not source
-            assert params["llm_provider_id"] == target_llm_provider.id
-            assert params["llm_provider_id"] != source_llm_provider.id
-            # FK mirror must be remapped too, not left pointing at the source team
+        if node.llm_provider_id:
             assert node.llm_provider_id == target_llm_provider.id
+            assert node.llm_provider_id != source_llm_provider.id
 
-        if params.get("llm_provider_model_id"):
-            # Should reference target team's model, not source
-            assert params["llm_provider_model_id"] == target_llm_model.id
-            assert params["llm_provider_model_id"] != source_llm_model.id
+        if node.llm_provider_model_id:
             assert node.llm_provider_model_id == target_llm_model.id
+            assert node.llm_provider_model_id != source_llm_model.id
+
+        assert not set(node.params) & Node.resource_param_names()
 
 
 @pytest.mark.django_db()

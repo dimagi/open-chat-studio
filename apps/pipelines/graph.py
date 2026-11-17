@@ -3,6 +3,7 @@ from functools import cached_property, partial
 from typing import Any, Self
 
 import pydantic
+from django.db import models
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from pydantic_core import ValidationError
@@ -192,8 +193,14 @@ class PipelineGraph(pydantic.BaseModel):
 
     @classmethod
     def build_from_pipeline(cls, pipeline: Pipeline) -> Self:
+        """Build the runtime graph from relation-backed node resources in bounded queries."""
+        models.prefetch_related_objects(
+            [pipeline],
+            "node_set__collection_indexes",
+            "node_set__custom_action_operations",
+        )
         node_data = [
-            Node(id=node.flow_id, label=node.label, type=node.type, params=node.params, django_node=node)
+            Node(id=node.flow_id, label=node.label, type=node.type, params=node.runtime_params(), django_node=node)
             for node in pipeline.node_set.all()
         ]
         edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]

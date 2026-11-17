@@ -17,6 +17,7 @@ place it is sent.
 import pytest
 
 from apps.api.v2.discovery.node_types import get_node_types
+from apps.pipelines.models import Node
 
 from .conftest import add_bare_node, node_url, nodes_url, stored_node_params
 
@@ -72,12 +73,13 @@ def patch_in_full(client, chatbot, node_type: str, label: str, params: dict) -> 
 
 
 def assert_written(body: dict, chatbot, label: str, expected: dict) -> None:
-    """The response reports the label and params asked for, reports no node error, and the row
-    behind it holds them too."""
+    """The response reports the full editor payload while the row stores only ordinary params."""
     assert body["node"]["label"] == label
     assert body["node"]["params"] == expected
     assert body["pipeline_errors"]["node"] == {}
-    assert stored_node_params(chatbot, body["node"]["node_id"]).items() >= expected.items()
+    stored = stored_node_params(chatbot, body["node"]["node_id"])
+    assert stored.items() >= Node.params_to_store(expected).items()
+    assert not set(stored) & Node.resource_param_names()
 
 
 class FullPayload:

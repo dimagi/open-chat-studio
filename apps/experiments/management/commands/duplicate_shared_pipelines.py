@@ -76,7 +76,7 @@ class Command(BaseCommand):
                                 is_archived=node.is_archived,
                                 pipeline=new_pipeline,
                             )
-                            new_node.set_params(node.params)
+                            new_node.set_params(node.runtime_params())
                         experiment.pipeline = new_pipeline
                         experiment.save(update_fields=["pipeline"])
 

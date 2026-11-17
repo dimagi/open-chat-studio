@@ -9,6 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.custom_actions.models import CustomActionOperation
+from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
@@ -18,9 +19,14 @@ from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 
+def _write_legacy_params(node, params):
+    """Seed a resource-bearing JSON row for tests of the pre-cutover backfill command."""
+    Node.objects.filter(pk=node.pk).update(params=params)
+
+
 @pytest.mark.django_db()
 class TestNodeResourceFKSync:
-    """update_from_params() keeps FK fields in sync with the params JSON."""
+    """update_from_params() persists resource references in relations, not duplicate JSON ids."""
 
     def test_llm_provider_fk_populated(self):
         provider = LlmProviderFactory.create()
@@ -83,9 +89,7 @@ class TestNodeResourceFKSync:
         node.update_from_params()
         assert node.collection_indexes.count() == 1
 
-        node.params["collection_index_ids"] = []
-        node.save()
-        node.update_from_params()
+        node.update_from_params({"collection_index_ids": []}, ordinary_params=node.params)
         assert node.collection_indexes.count() == 0
 
     def test_fk_fields_null_when_param_absent(self):
@@ -109,10 +113,7 @@ class TestNodeResourceFKSync:
         assert set(node.collection_indexes.values_list("id", flat=True)) == {c1.id}
 
     def test_stale_scalar_fk_id_is_nulled(self):
-        """A scalar FK id in params that references a deleted resource is coerced to null,
-        not written straight to the column. Not every SET_NULL resource has a delete guard
-        (e.g. LlmProvider), so a stale id can linger in params after the resource is gone;
-        resurrecting it would trip the deferred DB FK constraint at commit."""
+        """A legacy scalar FK id for a missing resource is removed rather than written to a column."""
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
             params={"llm_provider_id": 999999},
@@ -178,17 +179,17 @@ class TestFlowNodeReadsResourceFKs:
         assert params["llm_provider_model_id"] == model.id
 
     def test_reference_to_deleted_resource_reads_as_unset(self):
-        """SET_NULL nulls the column when the resource goes, but the id lingers in params. The
-        flow node must not resurrect it — an id that no longer resolves reads as unset."""
+        """SET_NULL nulls the column when the resource goes, and the flow node remains unset."""
         provider = LlmProviderFactory.create()
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
             params={"llm_provider_id": provider.id},
             llm_provider=provider,
         )
+        node.update_from_params()
         provider.delete()
         node.refresh_from_db()
-        assert node.params["llm_provider_id"] is not None
+        assert "llm_provider_id" not in node.params
 
         assert node.to_flow_node().data.params["llm_provider_id"] is None
 
@@ -203,17 +204,17 @@ class TestFlowNodeReadsResourceFKs:
         assert node.to_flow_node().data.params["collection_index_ids"] == sorted([first.id, second.id])
 
     def test_deleted_collection_index_reads_as_empty(self):
-        """Deleting a Collection cascades the M2M through row away while the id lingers in params.
-        The params copy must not be served — the same correction the scalar FKs get."""
+        """Deleting a Collection cascades the M2M through row away and the flow reads empty."""
         index = CollectionFactory.create(is_index=True)
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
             params={"collection_index_ids": [index.id]},
         )
+        node.update_from_params()
         node.collection_indexes.set([index])
         index.delete()
         node.refresh_from_db()
-        assert node.params["collection_index_ids"] != []
+        assert "collection_index_ids" not in node.params
 
         assert node.to_flow_node().data.params["collection_index_ids"] == []
 
@@ -230,8 +231,7 @@ class TestFlowNodeReadsResourceFKs:
         )
 
     def test_deleted_custom_action_reads_as_empty(self):
-        """Deleting a CustomAction cascades the operation row away while the entry lingers in params.
-        The params copy must not be served -- the same correction the scalar FKs get."""
+        """Deleting a CustomAction cascades its operation row away and the flow reads empty."""
         action = CustomActionFactory.create()
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
@@ -242,7 +242,7 @@ class TestFlowNodeReadsResourceFKs:
 
         action.delete()
         node.refresh_from_db()
-        assert node.params["custom_actions"] != []
+        assert "custom_actions" not in node.params
 
         assert node.to_flow_node().data.params["custom_actions"] == []
 
@@ -258,7 +258,7 @@ class TestFlowNodeReadsResourceFKs:
             "custom_actions": [],
         }
 
-    def test_stored_params_are_left_alone(self):
+    def test_resource_keys_are_not_stored_in_params(self):
         provider = LlmProviderFactory.create()
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
@@ -266,10 +266,11 @@ class TestFlowNodeReadsResourceFKs:
             llm_provider=provider,
         )
 
+        node.update_from_params()
         node.to_flow_node()
 
         node.refresh_from_db()
-        assert node.params == {"llm_provider_id": str(provider.id)}
+        assert node.params == {}
 
 
 @pytest.mark.django_db()
@@ -308,6 +309,28 @@ class TestFlowDataReadsResourceFKs:
         assert params["llm_provider_id"] == provider.id
         assert params["llm_provider_model_id"] == model.id
         assert params["collection_index_ids"] == [index.id]
+
+    def test_runtime_graph_receives_relation_backed_resource_ids(self):
+        """The runtime graph gets resource ids from relations after the JSON mirror is removed."""
+        provider = LlmProviderFactory.create()
+        model = LlmProviderModelFactory.create()
+        index = CollectionFactory.create(is_index=True)
+        pipeline = self._pipeline_with_llm_nodes(
+            1,
+            {
+                "llm_provider_id": provider.id,
+                "llm_provider_model_id": model.id,
+                "collection_index_ids": [index.id],
+            },
+        )
+        node = pipeline.node_set.get(flow_id="llm0")
+        assert not set(node.params) & Node.resource_param_names()
+
+        runtime_node = next(node for node in PipelineGraph.build_from_pipeline(pipeline).nodes if node.id == "llm0")
+
+        assert runtime_node.params["llm_provider_id"] == provider.id
+        assert runtime_node.params["llm_provider_model_id"] == model.id
+        assert runtime_node.params["collection_index_ids"] == [index.id]
 
     def test_clear_node_caches_re_primes_the_prefetch(self, django_assert_num_queries):
         """The save paths write rows straight to the DB and then rebuild flow_data for the
@@ -369,15 +392,13 @@ class TestEditorEndpointServesResourceFKs:
         saved = next(node for node in response.json()["data"]["nodes"] if node["id"] == "llm-1")
         assert saved["data"]["params"]["llm_provider_id"] == provider.id
 
-        provider_id = provider.id  # delete() clears it off the instance
         provider.delete()
 
         response = authed_client.get(url)
         assert response.status_code == 200
         served = next(node for node in response.json()["pipeline"]["data"]["nodes"] if node["id"] == "llm-1")
         assert served["data"]["params"]["llm_provider_id"] is None
-        # The row still carries the stale id; only the read is corrected.
-        assert pipeline.node_set.get(flow_id="llm-1").params["llm_provider_id"] == str(provider_id)
+        assert "llm_provider_id" not in pipeline.node_set.get(flow_id="llm-1").params
 
     @pytest.mark.parametrize(
         "llm_node_count",
@@ -415,9 +436,7 @@ class TestEditorEndpointServesResourceFKs:
 
 @pytest.mark.django_db()
 class TestSetParams:
-    """set_params() is the single chokepoint for changing params: it persists the new
-    params and re-derives the resource FK mirror, so callers never have to remember to
-    call _sync_resource_fk_fields themselves."""
+    """set_params() replaces ordinary params and relation-backed resource selections together."""
 
     def test_persists_params(self):
         node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "n"})
@@ -514,7 +533,11 @@ def test_backfill_node_fks_command():
 
     nodes = [working_node, versioned_node, archived_node]
     # Simulate pre-backfill state for all of them (get_all() so the archived node is included).
-    Node.objects.get_all().filter(pk__in=[n.pk for n in nodes]).update(llm_provider_id=None, llm_provider_model_id=None)
+    Node.objects.get_all().filter(pk__in=[n.pk for n in nodes]).update(
+        params=node_params,
+        llm_provider_id=None,
+        llm_provider_model_id=None,
+    )
     for node in nodes:
         node.collection_indexes.clear()
 
@@ -531,13 +554,27 @@ def test_backfill_node_fks_command():
 
 @pytest.mark.django_db()
 def test_backfill_node_fks_command_is_idempotent():
+    """The legacy backfill command remains safe to rerun after relations are populated."""
     provider = LlmProviderFactory.create()
     node = NodeFactory.create(
         type="LLMResponseWithPrompt",
         params={"llm_provider_id": provider.id},
     )
+    _write_legacy_params(node, {"llm_provider_id": provider.id})
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     call_command("backfill_node_fks", force=True, stdout=StringIO())
+    node.refresh_from_db()
+    assert node.llm_provider_id == provider.id
+
+
+@pytest.mark.django_db()
+def test_backfill_does_not_clear_relation_only_nodes():
+    """A post-cutover row with no legacy key keeps its authoritative FK when the command reruns."""
+    provider = LlmProviderFactory.create()
+    node = NodeFactory.create(type="LLMResponseWithPrompt", params={}, llm_provider=provider)
+
+    call_command("backfill_node_fks", force=True, stdout=StringIO())
+
     node.refresh_from_db()
     assert node.llm_provider_id == provider.id
 
@@ -549,6 +586,7 @@ def test_backfill_nulls_dangling_scalar_fk():
         type="LLMResponseWithPrompt",
         params={"llm_provider_id": 999999},
     )
+    _write_legacy_params(node, {"llm_provider_id": 999999})
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
     assert node.llm_provider_id is None
@@ -561,6 +599,7 @@ def test_backfill_skips_dangling_collection_index_id():
         type="LLMResponseWithPrompt",
         params={"collection_index_ids": [999999]},
     )
+    _write_legacy_params(node, {"collection_index_ids": [999999]})
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     assert node.collection_indexes.count() == 0
 
@@ -586,6 +625,7 @@ def test_backfill_links_all_resources_when_they_exist():
         type="LLMResponseWithPrompt",
         params={**expected, "collection_index_ids": [index.id]},
     )
+    _write_legacy_params(node, {**expected, "collection_index_ids": [index.id]})
 
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
@@ -613,6 +653,7 @@ def test_backfill_keeps_scalar_fk_to_archived_resource():
             "source_material_id": source_material.id,
         },
     )
+    _write_legacy_params(node, {"collection_id": collection.id, "source_material_id": source_material.id})
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     node.refresh_from_db()
     assert node.collection_id == collection.id
@@ -628,6 +669,7 @@ def test_backfill_drops_archived_collection_index():
         type="LLMResponseWithPrompt",
         params={"collection_index_ids": [valid_index.id, archived_index.id]},
     )
+    _write_legacy_params(node, {"collection_index_ids": [valid_index.id, archived_index.id]})
     call_command("backfill_node_fks", force=True, stdout=StringIO())
     assert set(node.collection_indexes.values_list("id", flat=True)) == {valid_index.id}
 
@@ -635,11 +677,7 @@ def test_backfill_drops_archived_collection_index():
 @pytest.mark.django_db()
 class TestRequiresAttachmentTool:
     def test_reads_the_collection_column_not_the_stale_params_id(self):
-        """Deleting a collection nulls the FK column and leaves the id behind in params.
-
-        The delete guard only queries unarchived nodes, so an archived node can outlive its
-        collection. ``to_flow_node`` already serves the column, and this check has to agree with it.
-        """
+        """Deleting a collection nulls the FK column and the normalized params remain resource-free."""
         collection = CollectionFactory.create()
         collection_id = collection.id
         node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm", "collection_id": collection_id})
@@ -649,7 +687,7 @@ class TestRequiresAttachmentTool:
         collection.delete()
         node.refresh_from_db()
 
-        assert node.params["collection_id"] == collection_id, "the stale id is the point of the test"
+        assert "collection_id" not in node.params
         assert node.collection_id is None
         assert node.requires_attachment_tool() is False
 
