@@ -25,7 +25,6 @@ export function setupScrollProgress(containerSelector) {
     const percentage = Math.round(progress * 100);
     bar.style.width = `${percentage}%`;
     progressContainer.setAttribute('aria-valuenow', `${percentage}`);
-    progressContainer.setAttribute('aria-valuetext', `${percentage} percent`);
   };
 
   const update = () => {

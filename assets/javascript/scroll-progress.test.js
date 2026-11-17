@@ -17,7 +17,7 @@ describe("setupScrollProgress", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         document.body.innerHTML = `
-            <div id="scroll-progress-bar" role="progressbar" aria-valuenow="0" aria-valuetext="0 percent">
+            <div id="scroll-progress-bar" role="progressbar" aria-valuenow="0">
                 <div id="scroll-progress-fill"></div>
             </div>
             <div id="table-top" data-total-messages="10">
@@ -39,7 +39,6 @@ describe("setupScrollProgress", () => {
 
         expect(document.querySelector("#scroll-progress-fill").style.width).toBe("50%");
         expect(document.querySelector("#scroll-progress-bar")).toHaveAttribute("aria-valuenow", "50");
-        expect(document.querySelector("#scroll-progress-bar")).toHaveAttribute("aria-valuetext", "50 percent");
     });
 
     it("cleans up listeners and observers when the page is hidden", () => {
@@ -63,7 +62,6 @@ describe("setupScrollProgress", () => {
     });
 
     it("keeps progress listeners while the page enters the back-forward cache", () => {
-        /** The bfcache lifecycle must preserve subscriptions until the page is disposed. */
         const disconnect = vi.fn();
         vi.stubGlobal(
             "ResizeObserver",
