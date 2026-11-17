@@ -138,7 +138,7 @@ class Command(IdempotentCommand):
         to_create = []
         stale_row_ids = []
         for node in nodes:
-            desired = desired_by_node[node.id] & valid_collection_ids
+            desired = desired_by_node.get(node.id, set()) & valid_collection_ids
             current = existing_by_node.get(node.id, set())
             to_create.extend(through(node_id=node.id, collection_id=cid) for cid in desired - current)
             stale_row_ids.extend(row_pk[(node.id, cid)] for cid in current - desired)

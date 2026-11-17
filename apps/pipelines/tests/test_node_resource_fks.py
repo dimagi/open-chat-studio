@@ -116,8 +116,10 @@ class TestNodeResourceFKSync:
         """A legacy scalar FK id for a missing resource is removed rather than written to a column."""
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
-            params={"llm_provider_id": 999999},
+            params={},
         )
+        _write_legacy_params(node, {"llm_provider_id": 999999})
+        node.refresh_from_db()
         node.update_from_params()
         node.refresh_from_db()
         assert node.llm_provider_id is None

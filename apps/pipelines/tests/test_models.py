@@ -607,9 +607,8 @@ class TestPipelineRevert:
         assert "nodes" not in pipeline.data
         working_template = pipeline.node_set.get(type="RenderTemplate")
         version_template = version.node_set.get(type="RenderTemplate")
-        # What the version's row holds, plus the resource ids read off its columns (all unset
-        # here) — not the stale blob embedded in the version's ``data``.
-        assert working_template.params == {**version_template.params, **version_template.resource_params()}
+        # What the version's row holds, not the stale blob embedded in the version's ``data``.
+        assert working_template.params == version_template.params
 
 
 def assert_no_errors(report):

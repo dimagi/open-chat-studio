@@ -400,7 +400,7 @@ def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
     carried a resource id nulls whatever column the params do not mirror.
     """
     source, target = TeamFactory.create(), TeamFactory.create()
-    provider = LlmProviderFactory.create(team=target)
+    provider = LlmProviderFactory.create(team=None)
     pipeline = PipelineFactory.create(team=target, data={"nodes": [], "edges": []})
     node = Node.objects.create(
         pipeline=pipeline,

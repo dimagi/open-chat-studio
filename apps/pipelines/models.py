@@ -716,7 +716,18 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def runtime_params(self) -> dict:
         """Return ordinary params overlaid with relation-backed IDs for runtime validation/building."""
         params = copy.deepcopy(self.params or {})
-        params.update({name: value for name, value in self.resource_params().items() if self.node_type.declares(name)})
+        if self.pk is None:
+            return params
+
+        resource_params = self.resource_params()
+        try:
+            declared_params = self.node_type.declared_params
+        except TypeError:
+            # A test or maintenance caller may temporarily replace a node class with a mock. The
+            # runtime validator should receive that mock's failure, rather than the resource adapter
+            # masking it while inspecting ``model_fields``.
+            declared_params = frozenset()
+        params.update({name: value for name, value in resource_params.items() if name in declared_params})
         return params
 
     @classmethod
@@ -753,6 +764,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def _sync_collection_indexes(self, params: dict):
         """Apply legacy collection-index values for callers that still use this helper."""
+        if "collection_index_ids" not in params:
+            return
         raw_ids = params.get("collection_index_ids") or []
         if not isinstance(raw_ids, list | tuple | set):
             raw_ids = [raw_ids]

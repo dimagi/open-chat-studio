@@ -51,7 +51,7 @@ def validate_resource_params(team, node_type: NodeType, params: Mapping[str, Any
         if invalid:
             errors[param_name] = f"Resource reference is not available to team: {invalid!r}."
     if errors:
-        raise ValidationError({"params": errors})
+        raise ValidationError(errors)
 
 
 def _requested_values(source: OptionsSource, value: Any) -> list:

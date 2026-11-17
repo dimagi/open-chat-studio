@@ -117,13 +117,12 @@ def _node_param_models() -> dict[str, str]:
 
 
 def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
-    """Rewrite legacy resource ids, then remove them from the persisted node JSON.
+    """Rewrite resource ids while retaining the editor-compatible keys for node import.
 
-    Export rows still carry the editor-compatible resource keys for older servers, while imported
-    Node relations are the authoritative destination for those values.
+    The importer applies the returned resource values to the Node relations after the row is saved.
+    Keeping the keys here also lets the same transform handle exports from both pre-cutover and
+    relation-authoritative servers.
     """
-    from apps.pipelines.models import Node  # noqa: PLC0415 - avoid importing pipeline models at module load
-
     result = dict(params)
     for key, label in _node_param_models().items():
         if key not in result or result[key] in (None, "", 0):
@@ -133,7 +132,7 @@ def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
             result[key] = [store.get_target(label, as_int(v)) or v for v in value]
         else:
             result[key] = store.get_target(label, as_int(value)) or value
-    return Node.params_to_store(result)
+    return result
 
 
 def remap_event_action_params(params: dict, action_type: str, store: FKTranslationStore) -> dict:
@@ -411,6 +410,8 @@ class Importer:
             field_values, m2m_values, timestamps, nulled_fk = self._build_values(model_label, model, row)
             instance, created = self._create_or_update(model_label, model, source_pk, row, field_values)
 
+            self._apply_imported_node_resources(model_label, instance)
+
             for name, target_pks in m2m_values.items():
                 getattr(instance, name).set([pk for pk in target_pks if pk is not None])
 
@@ -428,6 +429,21 @@ class Importer:
         if not nulled_fk and (source_updated_at := row.get("updated_at")) is not None:
             self.store.record(model_label, source_pk, instance.pk, source_updated_at=source_updated_at)
         return instance, created
+
+    def _apply_imported_node_resources(self, model_label: str, instance: models.Model) -> None:
+        """Move translated legacy node resource keys into the authoritative relations.
+
+        Current exports may carry resource FKs and M2M rows separately while older exports embed
+        them in ``params``. Only apply the resource keys present in the imported JSON so a current
+        export does not clear relations that were already populated from its concrete fields.
+        """
+        if model_label != "pipelines.node":
+            return
+        from apps.pipelines.models import Node  # noqa: PLC0415 - avoid importing pipeline models at module load
+
+        ordinary_params, resource_params = Node.split_resource_params(instance.params or {})
+        if resource_params:
+            instance.update_from_params(resource_params, ordinary_params=ordinary_params, team=self.target_team)
 
     def _adopt_existing(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
