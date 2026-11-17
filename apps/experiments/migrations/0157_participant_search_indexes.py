@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ("experiments", "0155_experiment_unavailable_message"),
+        ("experiments", "0156_remove_experiment_debug_mode_enabled_state"),
         ("web", "0002_auto_20241129_1504"),
     ]
 
