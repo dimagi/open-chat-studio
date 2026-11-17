@@ -35,6 +35,11 @@ version section when a release is cut.
 <!-- Only migrations that are long-running or locking, irreversible, need a
      manual step or backfill, or change behavior on upgrade. Omit additive
      migrations that run automatically. Omit the section if none qualify. -->
+- `experiments.0157` drops the `debug_mode_enabled` column from `experiments_experiment` (#4375).
+  Code from before `experiments.0156` still reads that column, so upgrading past both in one
+  deploy makes the old release fail its chatbot queries until the new one is serving. Deploy a
+  release that contains `0156` first, or stop the old release before migrating. The stored values
+  are not kept; reversing the migration re-adds the column with every row `false`.
 - `chat.0033` moves the file ids chat messages store under the `cited_files` and `generated_files`
   metadata keys into `ocs_attachment_file_ids`, now the only key read (#1901). It runs one `UPDATE`
   per 10,000 message ids and reads every row of `chat_chatmessage`, so on a large table it takes a

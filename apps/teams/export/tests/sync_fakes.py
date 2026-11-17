@@ -50,6 +50,18 @@ def team_row():
     }
 
 
+def team_settings_row(moderation_provider=None, updated_at=PAST):
+    """The source team's ``team_settings`` row, with moderation on when a provider is given."""
+    return {
+        "id": 9001,
+        "updated_at": updated_at,
+        "created_by": None,
+        "moderation_provider": moderation_provider,
+        "moderation_enabled": moderation_provider is not None,
+        "auto_block_enabled": False,
+    }
+
+
 def select_chatbots(rows, *public_ids):
     """Mark the given chatbots as the ones the source team exports."""
     rows["teams"][0]["exportable_chatbots"] = [{"public_id": pid, "name": pid.upper()} for pid in public_ids]
