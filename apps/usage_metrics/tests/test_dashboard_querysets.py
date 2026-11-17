@@ -1,8 +1,7 @@
-"""Behaviour of the dashboard queryset builder after its move into
-usage_metrics. The bulk of its behaviour is pinned by the existing
-apps/dashboard test suites (which now exercise it through delegation) and by
-test_characterisation.py; this file covers what the move adds - the same-team
-constraint on tag links."""
+"""The dashboard's queryset adapter: the same-team constraint on tag links, the
+evaluation discriminator, archived-chatbot enumeration, and the two meanings of
+a platform filter. The session and message universes it hands out are
+`metrics.py`'s, pinned in test_metrics.py."""
 
 from datetime import UTC, datetime
 
@@ -14,6 +13,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
+from apps.usage_metrics.filters import UsageFilters
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -55,7 +55,7 @@ class TestTagFilterTeamScoping:
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=session.chat)
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
 
         assert [s.id for s in querysets["sessions"]] == [session.id]
         assert [e.id for e in querysets["experiments"]] == [experiment.id]
@@ -96,7 +96,7 @@ class TestTagFilterTeamScoping:
         )
         CustomTaggedItemFactory.create(team=link_team, tag=tag, target=link_target)
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
 
         assert list(querysets["sessions"]) == []
         assert list(querysets["experiments"]) == []
@@ -115,7 +115,7 @@ class TestTagFilterTeamScoping:
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
 
         assert [s.id for s in querysets["sessions"]] == [session.id]
         assert [e.id for e in querysets["experiments"]] == [experiment.id]
@@ -151,7 +151,7 @@ class TestMessageTagFilterTeamScoping:
         tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
         CustomTaggedItemFactory.create(team=link_team, tag=tag, target=message)
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
 
         assert list(querysets["messages"]) == []
 
@@ -170,7 +170,7 @@ class TestMessageTagFilterTeamScoping:
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
 
         assert {m.id for m in querysets["messages"]} == set(
             ChatMessage.objects.filter(chat=session.chat).values_list("id", flat=True)
@@ -190,7 +190,7 @@ class TestMessageTagFilterTeamScoping:
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=session.chat)
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
 
         assert {m.id for m in querysets["messages"]} == set(
             ChatMessage.objects.filter(chat=session.chat).values_list("id", flat=True)
@@ -218,7 +218,7 @@ class TestEvaluationExclusionColumn:
             platform=ChannelPlatform.EVALUATIONS, audit_action=AuditAction.IGNORE
         )
 
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END)
+        querysets = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters())
 
         assert [s.id for s in querysets["sessions"]] == [web_session.id]
 
@@ -237,21 +237,61 @@ class TestIncludeArchived:
         return team
 
     @pytest.mark.parametrize(
-        ("kwargs", "expected"),
+        ("filters", "expected"),
         [
-            pytest.param({}, 1, id="excluded-by-default"),
-            pytest.param({"include_archived": True}, 2, id="included-when-asked"),
+            pytest.param(UsageFilters(), 2, id="included-by-default"),
+            pytest.param(UsageFilters(include_archived=False), 1, id="excluded-when-asked"),
         ],
     )
-    def test_enumeration_honours_include_archived(self, kwargs, expected):
-        querysets = filtered_querysets(self._team(), start_date=_START, end_date=_END, **kwargs)
+    def test_enumeration_honours_include_archived(self, filters, expected):
+        querysets = filtered_querysets(self._team(), start=_START, end=_END, filters=filters)
 
         assert querysets["experiments"].count() == expected
 
     def test_activity_counts_archived_chatbots_either_way(self):
         team = self._team()
 
-        default = filtered_querysets(team, start_date=_START, end_date=_END)
-        inclusive = filtered_querysets(team, start_date=_START, end_date=_END, include_archived=True)
+        inclusive = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters())
+        excluding = filtered_querysets(team, start=_START, end=_END, filters=UsageFilters(include_archived=False))
 
-        assert default["sessions"].count() == inclusive["sessions"].count() == 2
+        assert inclusive["sessions"].count() == excluding["sessions"].count() == 2
+
+
+class TestPlatformFilter:
+    """A platform pick means two things: a channel on that platform for a chatbot, and the session's
+    own platform column for sessions, messages and participants. The two columns can disagree on a row."""
+
+    def test_chatbots_match_on_a_channel_and_sessions_on_their_own_column(self):
+        team = TeamFactory.create()
+        telegram_bot = ExperimentFactory.create(team=team)
+        ExperimentChannelFactory.create(team=team, experiment=telegram_bot, platform=ChannelPlatform.TELEGRAM)
+        telegram_session = _active_session(team, telegram_bot)
+        ExperimentSession.objects.filter(pk=telegram_session.pk).update(platform=ChannelPlatform.TELEGRAM)
+        web_bot = ExperimentFactory.create(team=team)
+        web_session = _active_session(team, web_bot)
+        ExperimentSession.objects.filter(pk=web_session.pk).update(platform=ChannelPlatform.WEB)
+        ExperimentChannel.objects.filter(pk=web_session.experiment_channel_id).update(
+            platform=ChannelPlatform.WEB, audit_action=AuditAction.IGNORE
+        )
+
+        querysets = filtered_querysets(
+            team, start=_START, end=_END, filters=UsageFilters(platforms=[ChannelPlatform.TELEGRAM])
+        )
+
+        assert [e.id for e in querysets["experiments"]] == [telegram_bot.id]
+        assert [s.id for s in querysets["sessions"]] == [telegram_session.id]
+        assert {m.chat_id for m in querysets["messages"]} == {telegram_session.chat_id}
+
+    def test_a_team_global_platform_keeps_every_chatbot(self):
+        """Every chatbot has the web and API platforms, so a pick of one does not narrow the list."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        ExperimentSession.objects.filter(pk=session.pk).update(platform=ChannelPlatform.WEB)
+
+        querysets = filtered_querysets(
+            team, start=_START, end=_END, filters=UsageFilters(platforms=[ChannelPlatform.WEB])
+        )
+
+        assert [e.id for e in querysets["experiments"]] == [experiment.id]
+        assert [s.id for s in querysets["sessions"]] == [session.id]

@@ -79,6 +79,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
 from apps.trace.models import Trace
+from apps.usage_metrics.filters import activity_sessions, evaluation_platform
 from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
 from apps.utils.sunset import sunset_view
@@ -223,25 +224,17 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 score=0.1,
             )
 
-        session_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .values("experiment_id")
-            .annotate(count=Count("id"))
-            .values("count")
-        )
-
+        counted_sessions = activity_sessions(ExperimentSession.objects.filter(experiment_id=OuterRef("pk")))
+        session_count_subquery = counted_sessions.values("experiment_id").annotate(count=Count("id")).values("count")
         participant_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .values("experiment_id")
+            counted_sessions.values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
         )
 
         interaction_count_subquery = (
             Trace.objects.filter(experiment=OuterRef("pk"))
-            .exclude(session__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(evaluation_platform("session__"))
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")

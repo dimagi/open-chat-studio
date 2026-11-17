@@ -117,6 +117,37 @@ def test_chatbot_experiment_table_queryset_has_no_select_distinct(team_with_user
 
 
 @pytest.mark.django_db()
+def test_chatbot_experiment_table_counts_leave_out_sessions_that_are_not_activity(team_with_users):
+    """The session and participant columns count the sessions every usage surface counts (ADR-0051):
+    not evaluation-harness sessions, not sessions still in SETUP."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = Experiment.objects.create(
+        name="Counted",
+        pipeline=Pipeline.objects.create(team=team, data={"nodes": [], "edges": []}),
+        owner=user,
+        team=team,
+    )
+    ExperimentSessionFactory.create(team=team, experiment=experiment)
+    ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+    ExperimentSessionFactory.create(team=team, experiment=experiment, platform=ChannelPlatform.EVALUATIONS)
+
+    request = RequestFactory().get(reverse("chatbots:table", args=[team.slug]))
+    request.user = user
+    request.team = team
+    request.team_membership = get_team_membership_for_request(request)
+    attach_session_middleware_to_request(request)
+    set_current_team(team)
+    view = ChatbotExperimentTableView()
+    view.request = request
+    view.kwargs = {"team_slug": team.slug}
+
+    row = view.get_queryset().get(id=experiment.id)
+
+    assert (row.session_count, row.participant_count) == (1, 1)
+
+
+@pytest.mark.django_db()
 def test_create_chatbot_view(team_with_users):
     team = team_with_users
     user = team.members.first()
