@@ -12,8 +12,15 @@ from apps.teams.utils import unset_current_team
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 from apps.utils.pytest import restore_serialized_database
-from apps.utils.tests.fixtures import (
-    isolated_spec_registry,  # noqa: F401 -- registers the shared fixtures
+from apps.utils.tests.fixtures import (  # noqa: F401 -- registers the shared fixtures
+    admin,
+    auto_block_session,
+    connect_request_headers,
+    isolated_spec_registry,
+    keypair,
+    moderated_session,
+    slack_service,
+    team_with_resources,
 )
 
 
