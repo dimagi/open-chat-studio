@@ -63,6 +63,10 @@ class TestDeclaration:
         with pytest.raises(VersionSpecError, match="already has a VersionSpec"):
             bind_widget()
 
+    def test_a_spec_names_the_model_it_binds(self):
+        with pytest.raises(VersionSpecError, match=r"Meta\.model must name the model"):
+            type("Unbound", (VersionSpec,), {"Meta": type("Meta", (), {"identity": frozenset()})})
+
     def test_for_model_finds_the_bound_spec_or_nothing(self, models):
         widget_model, part_model = models
         spec_cls = bind_widget()
@@ -82,6 +86,18 @@ class TestPublish:
         assert (first.version_number, second.version_number, working.version_number) == (1, 2, 3)
         assert_family(second, working)
         assert_snapshot(working, second, changed={"part"})
+
+    def test_the_version_number_is_taken_from_the_database_row(self, models):
+        """Another publisher may have advanced the row since this instance loaded it."""
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        widget_model, _part_model = models
+        widget_model.objects.filter(pk=working.pk).update(version_number=3)
+
+        version = working.create_new_version()
+        working.refresh_from_db()
+
+        assert (version.version_number, working.version_number) == (3, 4)
 
     def test_regenerates_identity_before_the_first_save_and_leaves_the_working_row_alone(self, models):
         bind_widget(**declared_references())
@@ -139,7 +155,7 @@ class TestPublish:
 
         assert working.create_new_version().part_id is None
 
-    def test_a_member_reading_what_no_earlier_member_provided_fails_before_any_row_is_saved(self, models):
+    def test_a_member_reading_what_no_earlier_member_provided_leaves_no_row_behind(self, models):
         bridge_calls = []
         bind_widget(
             children=OwnedSet(via=lambda *args: bridge_calls.append(args), accessors=("versions",), reads=("part",)),
@@ -297,6 +313,20 @@ class TestRevert:
 
         assert working.part_id == version.part.working_version_id
         assert working.part.name == "part"
+
+    def test_an_owned_reference_the_version_lacks_leaves_the_working_target_alone(self, models):
+        bind_part()
+        bind_widget(part=Reference(Strategy.NEW_VERSION, owned=True), live_part=Reference(Strategy.LIVE_REFERENCE))
+        working = make_widget(models, part=None)
+        version = working.create_new_version()
+        _widget_model, part_model = models
+        working.part = part_model.objects.create(name="added later")
+        working.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.part.name == "added later"
 
     def test_an_owned_reference_the_working_row_lost_cannot_be_reverted(self, models):
         bind_part()

@@ -385,7 +385,8 @@ class Member:
 
 
 class Reference(Member):
-    """A forward FK. An `owned` target belongs to this record: a copy copies it and a revert resets it in place."""
+    """A forward FK. An `owned` target belongs to this record: a copy copies it and a revert resets it in
+    place; a version that holds no owned target leaves the working target as it is."""
 
     def __init__(
         self, strategy: Strategy, *, owned: bool = False, reads: tuple[str, ...] = (), provides: str | None = None
@@ -551,9 +552,7 @@ class VersionSpec:
         version = self._clone(working)
         version.working_version_id = working.pk
         if self.numbered:
-            version.version_number = working.version_number
-            working.version_number += 1
-            working.save(update_fields=["version_number"])
+            version.version_number = self._next_number(working)
         self._regenerate(version)
         version.save()
         context: dict[str, Any] = {}
@@ -592,6 +591,16 @@ class VersionSpec:
         for member in self.members:
             member.revert(working, version)
         working.save()
+
+    def _next_number(self, working) -> int:
+        """The working row's current number, taken under a row lock so two publishers never share
+        one; the row is advanced and `working` brought in step with it."""
+        locked = self.model.objects.select_for_update().get(pk=working.pk)
+        number = locked.version_number
+        locked.version_number = number + 1
+        locked.save(update_fields=["version_number"])
+        working.version_number = locked.version_number
+        return number
 
     def _clone(self, working):
         clone = self.model.objects.get(pk=working.pk)

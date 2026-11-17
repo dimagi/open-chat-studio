@@ -890,6 +890,18 @@ class TestExperimentModel:
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
 
+    def test_the_version_operation_lock_does_not_travel(self):
+        """The lock a publish or revert holds stays on the working row; neither a version nor a copy starts locked."""
+        experiment = self._setup_original_experiment()
+        experiment.create_version_task_id = "publish-in-flight"
+        experiment.save(update_fields=["create_version_task_id"])
+
+        version = experiment.create_new_version()
+        copy = experiment.create_new_version(is_copy=True)
+
+        assert (version.create_version_task_id, copy.create_version_task_id) == ("", "")
+        assert Experiment.objects.get(id=experiment.id).create_version_task_id == "publish-in-flight"
+
     def test_create_new_version_persists_the_frozen_consent_form(self):
         experiment = self._setup_original_experiment()
 

@@ -2,6 +2,7 @@
 
 from django.apps import apps
 from django.core import checks
+from django.core.exceptions import FieldDoesNotExist
 
 from .versioning import Member, OwnedSet, Reference, Strategy, VersionsMixin, VersionSpec
 
@@ -91,7 +92,7 @@ def _check_member_names(spec_cls, member: Member, label: str, forward: dict, acc
 def check_versioned_models() -> list[checks.CheckMessage]:
     """W001: a versioned model without the family columns, unless a spec clones it privately."""
     privately_cloned = {
-        member.name and apps.get_model(spec_cls.Meta.model)._meta.get_field(member.name).related_model._meta.label_lower
+        _referenced_label(spec_cls.Meta.model, member.name)
         for spec_cls in VersionSpec.registry.values()
         for member in spec_cls.members
         if isinstance(member, Reference) and member.strategy is Strategy.PRIVATE_CLONE
@@ -112,6 +113,14 @@ def check_versioned_models() -> list[checks.CheckMessage]:
                 )
             )
     return messages
+
+
+def _referenced_label(model_label: str, field_name: str) -> str | None:
+    """The label of the model `field_name` points at; None for a declaration `check_spec` has already reported."""
+    try:
+        return apps.get_model(model_label)._meta.get_field(field_name).related_model._meta.label_lower
+    except (LookupError, ValueError, FieldDoesNotExist, AttributeError):
+        return None
 
 
 def _error(spec_cls, message: str, code: str) -> checks.Error:

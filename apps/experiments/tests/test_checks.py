@@ -3,9 +3,9 @@
 import pytest
 from django.core.checks import Tags, run_checks
 
-from apps.experiments.checks import check_spec
+from apps.experiments.checks import check_spec, check_version_specs
 from apps.experiments.models import ExperimentVersionSpec
-from apps.experiments.versioning import OwnedSet, Reference, Strategy, VersionSpec
+from apps.experiments.versioning import Member, OwnedSet, Reference, Strategy, VersionSpec
 
 EXPERIMENT = "experiments.Experiment"
 IDENTITY = ExperimentVersionSpec().identity
@@ -46,12 +46,18 @@ class TestSpecChecks:
             pytest.param("seed_message", Reference(Strategy.NEW_VERSION), id="reference-on-a-plain-field"),
             pytest.param("nothing_here", Reference(Strategy.NEW_VERSION), id="reference-on-no-field"),
             pytest.param("children", OwnedSet(via=bridge, accessors=("no_such_set",)), id="owned-set-accessor"),
+            pytest.param("nothing_here", Member(), id="plain-member-on-no-field"),
         ],
     )
     def test_E001_a_member_names_something_the_model_has(self, member_name, member):
         spec_cls = declare(**complete_members(), **{member_name: member})
 
         assert ids(spec_cls) == ["versioning.E001"]
+
+    def test_a_plain_member_may_name_a_field_or_an_accessor(self):
+        spec_cls = declare(**complete_members(), seed_message=Member(), static_triggers=Member())
+
+        assert findings(spec_cls) == []
 
     def test_E002_an_undeclared_reference_to_a_versioned_model(self):
         spec_cls = declare()
@@ -87,6 +93,23 @@ class TestSpecChecks:
 
     def test_E004_the_model_label_resolves(self):
         assert ids(declare(model="nowhere.Nothing")) == ["versioning.E004"]
+
+    @pytest.mark.parametrize(
+        "spec_kwargs",
+        [
+            pytest.param({"model": "nowhere.Nothing"}, id="unresolvable-model"),
+            pytest.param({"nothing_here": Reference(Strategy.PRIVATE_CLONE)}, id="reference-on-no-field"),
+        ],
+    )
+    def test_a_private_clone_on_a_broken_declaration_does_not_abort_the_run(self, spec_kwargs):
+        """The model check collects every finding; a declaration E001 or E004 already reported is skipped there."""
+        members = {"action": Reference(Strategy.PRIVATE_CLONE)} if "model" in spec_kwargs else {}
+        declare(**complete_members(), **members, **spec_kwargs)
+
+        reported = sorted(message.id for message in check_version_specs())
+
+        assert "versioning.W001" in reported
+        assert reported[0] in ("versioning.E001", "versioning.E004")
 
 
 def test_the_bound_experiment_spec_is_clean():

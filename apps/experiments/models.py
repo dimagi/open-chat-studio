@@ -531,7 +531,7 @@ class ExperimentVersionSpec(VersionSpec):
                 "create_version_task_id",
             }
         )
-        regenerated = {"public_id": uuid4}
+        regenerated = {"public_id": uuid4, "create_version_task_id": str}
 
     consent_form = Reference(Strategy.REUSE_UNCHANGED)
     pipeline = Reference(Strategy.NEW_VERSION, owned=True, provides="pipeline")
