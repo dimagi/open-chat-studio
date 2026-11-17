@@ -31,6 +31,7 @@ from apps.teams.export.manifest import (
     ManifestEntry,
     entry_model,
     generic_fk_fields,
+    get_manifest_entry,
 )
 from apps.teams.export.tests.sync_fakes import PAST, team_settings_row
 from apps.teams.models import Membership, Team
@@ -615,7 +616,7 @@ def test_experiment_row_from_an_older_source_with_debug_mode_enabled_imports(sto
     public_key, _ = keypair
     manifest_labels = {entry.model for entry in MANIFEST_ENTRIES}
     mock_ids = {entry.model: 1000 + i for i, entry in enumerate(MANIFEST_ENTRIES)}
-    row = _serialized_row("experiments.experiment", mock_ids, manifest_labels, public_key)
+    row = _serialized_row(get_manifest_entry("chatbots"), mock_ids, manifest_labels, public_key)
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
 
