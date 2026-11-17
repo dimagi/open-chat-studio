@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import tempfile
@@ -25,6 +26,8 @@ from apps.service_providers.intron import INTRON_BASE_URL
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL, MINIMAX_BASE_URL
 
 log = logging.getLogger("ocs.speech")
+
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 
 @dataclass
@@ -57,7 +60,8 @@ class SpeechService(pydantic.BaseModel):
     supports_transcription: ClassVar[bool] = False
 
     def synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
-        assert synthetic_voice.service == self._type
+        if synthetic_voice.service != self._type:
+            raise AudioSynthesizeException(f"{self._type} cannot speak the {synthetic_voice.service} voice")
         try:
             return self._synthesize_voice(text, synthetic_voice)
         except Exception as e:
@@ -312,6 +316,47 @@ class ElevenLabsSpeechService(SpeechService):
             model_id=self._stt_model,
         )
         return result.text
+
+
+class GeminiSpeechService(SpeechService):
+    """Transcription through the Gemini API. Gemini offers no synthetic voices here, so it cannot speak replies."""
+
+    _type: ClassVar[str] = "Gemini"
+    supports_transcription: ClassVar[bool] = True
+    _prompt: ClassVar[str] = "Transcribe the speech in this audio. Reply with the transcript only."
+    gemini_api_key: pydantic.SecretStr
+    gemini_transcription_model: str = "gemini-3.5-transcribe"
+
+    def _transcribe_audio(self, audio: IO[bytes]) -> str:
+        # Every channel hands transcription a WAV file (see MessagingService.get_message_audio).
+        parts = [
+            {"inline_data": {"mime_type": "audio/wav", "data": base64.b64encode(audio.read()).decode()}},
+            {"text": self._prompt},
+        ]
+        response = httpx.post(
+            f"{GEMINI_API_URL}/models/{self.gemini_transcription_model}:generateContent",
+            headers={"x-goog-api-key": self.gemini_api_key.get_secret_value()},
+            json={"contents": [{"parts": parts}]},
+            timeout=120,
+        )
+        response.raise_for_status()
+        return _gemini_transcript(response.json())
+
+
+def _gemini_transcript(payload: dict) -> str:
+    """Transcription models put the transcript in ``audioTranscription``, general models in plain text parts.
+
+    Called over REST: google-genai 1.x drops ``audioTranscription`` as an unknown field.
+    """
+    if block_reason := payload.get("promptFeedback", {}).get("blockReason"):
+        raise ValueError(f"Gemini blocked the request: {block_reason}")
+    candidates = payload.get("candidates") or [{}]
+    parts = candidates[0].get("content", {}).get("parts", [])
+    return "".join(
+        part.get("audioTranscription", {}).get("text", part.get("text", ""))
+        for part in parts
+        if not part.get("thought")
+    )
 
 
 class OpenAIVoiceEngineSpeechService(OpenAISpeechService):

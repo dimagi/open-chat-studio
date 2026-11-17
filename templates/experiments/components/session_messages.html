@@ -1,4 +1,4 @@
-{% load chat_tags form_tags json_tags waffle_tags %}
+{% load chat_tags form_tags i18n json_tags waffle_tags %}
 <div id="table-top"
      class="app-card p-0 overflow-hidden"
      x-data="{selectedDataset: null}"
@@ -19,15 +19,15 @@
        role="status"
        aria-live="polite">
     <span class="loading loading-spinner loading-sm"></span>
-    <span>Loading more...</span>
+    <span>{% translate "Loading more..." %}</span>
   </div>
   <div id="messages-loading-more-error"
        class="hidden flex items-center justify-center gap-2 p-4 text-error"
        role="alert">
-    <span>Unable to load more messages.</span>
+    <span>{% translate "Unable to load more messages." %}</span>
     <button id="messages-loading-more-retry"
             type="button"
-            class="btn btn-ghost btn-xs">Retry</button>
+            class="btn btn-ghost btn-xs">{% translate "Retry" %}</button>
   </div>
   <div id="update_dataset_modal"></div>
 </div>

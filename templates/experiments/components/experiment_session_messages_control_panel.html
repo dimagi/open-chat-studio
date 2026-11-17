@@ -143,7 +143,7 @@
                class="flex items-center motion-reduce:transition-none"
                role="status"
                aria-live="polite">
-            All messages loaded
+            {% translate "All messages loaded" %}
           </div>
         {% elif total_pages > 1 %}
           <div id="load-all-messages-control"
@@ -159,17 +159,17 @@
                     hx-on::before-request="this.setAttribute('aria-busy', 'true'); this.closest('[data-load-all-messages-control]')?.querySelector('[data-load-all-messages-error]').classList.add('hidden')"
                     hx-on::after-request="this.setAttribute('aria-busy', 'false'); if (!event.detail.successful) this.closest('[data-load-all-messages-control]')?.querySelector('[data-load-all-messages-error]').classList.remove('hidden')"
                     aria-describedby="load-all-messages-loading">
-              Load all messages
+              {% translate "Load all messages" %}
             </button>
             <span id="load-all-messages-loading"
                   class="htmx-indicator"
                   role="status"
                   aria-live="polite">
               <span class="loading loading-spinner loading-sm"></span>
-              <span class="ml-1">Loading all messages...</span>
+              <span class="ml-1">{% translate "Loading all messages..." %}</span>
             </span>
             <span data-load-all-messages-error class="hidden text-error" role="alert">
-              Unable to load all messages. Try again.
+              {% translate "Unable to load all messages. Try again." %}
             </span>
           </div>
         {% endif %}

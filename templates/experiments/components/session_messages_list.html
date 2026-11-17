@@ -1,4 +1,4 @@
-{% load chat_tags form_tags json_tags moderation_tags waffle_tags %}
+{% load chat_tags form_tags i18n json_tags moderation_tags waffle_tags %}
 {% url 'chatbots:chatbot_session_view' request.team.slug experiment.public_id experiment_session.external_id as session_detail_url %}
 {% for message in messages %}
   {% if message.time_gap_text %}
@@ -212,5 +212,5 @@
        x-transition.opacity
        class="flex items-center motion-reduce:transition-none"
        role="status"
-       aria-live="polite">All messages loaded</div>
+       aria-live="polite">{% translate "All messages loaded" %}</div>
 {% endif %}
