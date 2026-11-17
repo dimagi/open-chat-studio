@@ -1,0 +1,409 @@
+"""The version spec framework, traversed on the test-only versioned models."""
+
+import uuid
+
+import pytest
+from django.apps import apps
+
+from apps.experiments.versioning import Operation, OwnedSet, Reference, Strategy, VersionSpec, VersionSpecError
+from apps.utils.tests.versioning_helpers import assert_family, assert_snapshot
+
+pytestmark = [pytest.mark.django_db(), pytest.mark.usefixtures("isolated_spec_registry")]
+
+WIDGET = "utils_tests.VersionedWidget"
+PART = "utils_tests.VersionedPart"
+WIDGET_IDENTITY = frozenset(
+    {"id", "token", "created_at", "updated_at", "working_version", "version_number", "is_archived"}
+)
+PART_IDENTITY = frozenset({"id", "created_at", "updated_at", "working_version", "is_archived"})
+
+
+@pytest.fixture()
+def models():
+    return apps.get_model(WIDGET), apps.get_model(PART)
+
+
+def bind_widget(**members):
+    """Declare a widget spec with `members`, binding it for the rest of the test."""
+    meta = type("Meta", (), {"model": WIDGET, "identity": WIDGET_IDENTITY, "regenerated": {"token": uuid.uuid4}})
+    return type("WidgetSpec", (VersionSpec,), {"Meta": meta, **members})
+
+
+def bind_part():
+    meta = type("Meta", (), {"model": PART, "identity": PART_IDENTITY})
+    return type("PartSpec", (VersionSpec,), {"Meta": meta})
+
+
+def make_widget(models, **kwargs):
+    widget_model, part_model = models
+    kwargs.setdefault("part", part_model.objects.create(name="part"))
+    kwargs.setdefault("live_part", part_model.objects.create(name="live"))
+    return widget_model.objects.create(name="widget", note="first draft", **kwargs)
+
+
+def declared_references():
+    return {"part": Reference(Strategy.NEW_VERSION), "live_part": Reference(Strategy.LIVE_REFERENCE)}
+
+
+class TestDeclaration:
+    def test_row_fields_are_every_concrete_field_outside_identity_and_the_members(self):
+        spec = bind_widget(**declared_references())()
+
+        assert {field.name for field in spec.row_fields} == {"name", "note"}
+        assert spec.travelling_fields == {"name", "note", "part", "live_part"}
+
+    def test_members_keep_class_body_order(self):
+        spec_cls = bind_widget(live_part=Reference(Strategy.LIVE_REFERENCE), part=Reference(Strategy.NEW_VERSION))
+
+        assert [member.name for member in spec_cls.members] == ["live_part", "part"]
+
+    def test_a_model_has_one_spec(self):
+        bind_widget()
+
+        with pytest.raises(VersionSpecError, match="already has a VersionSpec"):
+            bind_widget()
+
+    def test_for_model_finds_the_bound_spec_or_nothing(self, models):
+        widget_model, part_model = models
+        spec_cls = bind_widget()
+
+        assert isinstance(VersionSpec.for_model(widget_model), spec_cls)
+        assert VersionSpec.for_model(part_model) is None
+
+
+class TestPublish:
+    def test_numbers_the_version_and_advances_the_working_row(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+
+        first = working.create_new_version()
+        second = working.create_new_version()
+
+        assert (first.version_number, second.version_number, working.version_number) == (1, 2, 3)
+        assert_family(second, working)
+        assert_snapshot(working, second, changed={"part"})
+
+    def test_regenerates_identity_before_the_first_save_and_leaves_the_working_row_alone(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        token = working.token
+
+        version = working.create_new_version()
+        working.refresh_from_db()
+
+        assert version.token != token
+        assert working.token == token
+
+    @pytest.mark.parametrize(
+        ("strategy", "expectation"),
+        [
+            pytest.param(Strategy.NEW_VERSION, "new-version", id="new-version"),
+            pytest.param(Strategy.REUSE_UNCHANGED, "new-version", id="reuse-unchanged-makes-the-first-version"),
+            pytest.param(Strategy.LIVE_REFERENCE, "same-row", id="live-reference"),
+            pytest.param(Strategy.PRIVATE_CLONE, "private-clone", id="private-clone"),
+        ],
+    )
+    def test_each_strategy_carries_the_reference(self, models, strategy, expectation):
+        bind_widget(part=Reference(strategy), live_part=Reference(Strategy.LIVE_REFERENCE))
+        working = make_widget(models)
+
+        version = working.create_new_version()
+
+        if expectation == "same-row":
+            assert version.part_id == working.part_id
+        elif expectation == "new-version":
+            assert version.part.working_version_id == working.part_id
+            assert version.part.name == working.part.name
+        else:
+            assert version.part_id != working.part_id
+            assert version.part.working_version_id is None
+            assert version.part.name == working.part.name
+
+    def test_reuse_unchanged_reuses_the_latest_version_until_the_target_changes(self, models):
+        bind_widget(part=Reference(Strategy.REUSE_UNCHANGED), live_part=Reference(Strategy.LIVE_REFERENCE))
+        working = make_widget(models)
+
+        first = working.create_new_version()
+        second = working.create_new_version()
+        working.part.name = "renamed"
+        working.part.save()
+        third = working.create_new_version()
+
+        assert first.part_id == second.part_id
+        assert third.part_id != second.part_id
+        assert working.part.versions.count() == 2
+
+    def test_a_null_reference_stays_null(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models, part=None)
+
+        assert working.create_new_version().part_id is None
+
+    def test_a_member_reading_what_no_earlier_member_provided_fails_before_any_row_is_saved(self, models):
+        bridge_calls = []
+        bind_widget(
+            children=OwnedSet(via=lambda *args: bridge_calls.append(args), accessors=("versions",), reads=("part",)),
+            part=Reference(Strategy.NEW_VERSION, provides="part"),
+            live_part=Reference(Strategy.LIVE_REFERENCE),
+        )
+        working = make_widget(models)
+
+        with pytest.raises(VersionSpecError, match="children reads \\['part'\\]"):
+            working.create_new_version()
+
+        working.refresh_from_db()
+        assert (working.versions.count(), working.version_number, bridge_calls) == (0, 1, [])
+
+    def test_members_run_in_order_and_hooks_after_them(self, models):
+        seen = {}
+
+        def bridge(working, other, operation):
+            seen["bridge"] = (operation, other.part_id)
+
+        class Hooked(VersionSpec):
+            class Meta:
+                model = WIDGET
+                identity = WIDGET_IDENTITY
+                regenerated = {"token": uuid.uuid4}
+
+            part = Reference(Strategy.NEW_VERSION, provides="part")
+            live_part = Reference(Strategy.LIVE_REFERENCE)
+            children = OwnedSet(via=bridge, accessors=("versions",), reads=("part",))
+
+            def on_publish(self, working, version, *, note="hooked", **options):
+                seen["hook"] = version.part_id
+                version.note = note
+
+        working = make_widget(models)
+
+        version = Hooked().publish(working, note="from the hook")
+        version.refresh_from_db()
+
+        assert seen["bridge"] == (Operation.PUBLISH, version.part_id)
+        assert seen["hook"] == version.part_id
+        assert version.note == "from the hook"
+
+    def test_a_failing_hook_rolls_the_whole_publish_back(self, models):
+        class Failing(VersionSpec):
+            class Meta:
+                model = WIDGET
+                identity = WIDGET_IDENTITY
+                regenerated = {"token": uuid.uuid4}
+
+            part = Reference(Strategy.NEW_VERSION)
+            live_part = Reference(Strategy.LIVE_REFERENCE)
+
+            def on_publish(self, working, version, **options):
+                raise RuntimeError("no")
+
+        working = make_widget(models)
+
+        with pytest.raises(RuntimeError):
+            working.create_new_version()
+
+        working.refresh_from_db()
+        assert (working.versions.count(), working.part.versions.count(), working.version_number) == (0, 0, 1)
+
+
+class TestCopy:
+    def test_a_copy_is_a_new_working_row_numbered_from_one(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models, version_number=4)
+
+        copy = working.create_new_version(is_copy=True)
+        working.refresh_from_db()
+
+        assert copy.working_version_id is None
+        assert (copy.version_number, working.version_number) == (1, 4)
+        assert copy.token != working.token
+        assert_snapshot(working, copy)
+
+    def test_a_copy_copies_owned_and_private_references_and_keeps_the_rest(self, models):
+        bind_widget(part=Reference(Strategy.NEW_VERSION, owned=True), live_part=Reference(Strategy.PRIVATE_CLONE))
+        working = make_widget(models)
+
+        copy = working.create_new_version(is_copy=True)
+
+        assert copy.part_id != working.part_id
+        assert copy.part.working_version_id is None
+        assert copy.live_part_id != working.live_part_id
+        assert copy.live_part.working_version_id is None
+
+        bind_part()
+        VersionSpec.registry.pop(WIDGET.lower())
+        bind_widget(**declared_references())
+        plain = working.create_new_version(is_copy=True)
+
+        assert (plain.part_id, plain.live_part_id) == (working.part_id, working.live_part_id)
+
+    def test_on_copy_runs_with_the_options(self, models):
+        class Named(VersionSpec):
+            class Meta:
+                model = WIDGET
+                identity = WIDGET_IDENTITY
+                regenerated = {"token": uuid.uuid4}
+
+            part = Reference(Strategy.NEW_VERSION)
+            live_part = Reference(Strategy.LIVE_REFERENCE)
+
+            def on_copy(self, working, copy, *, name="unnamed", **options):
+                copy.name = name
+
+        working = make_widget(models)
+
+        copy = Named().copy(working, name="the copy")
+        copy.refresh_from_db()
+
+        assert copy.name == "the copy"
+
+
+class TestRevert:
+    def test_row_fields_come_back_from_the_version(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        version = working.create_new_version()
+        working.name, working.note = "edited", "edited"
+        working.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert (working.name, working.note) == ("widget", "first draft")
+        assert working.version_number == 2
+
+    def test_an_unowned_reference_points_back_at_the_working_target(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        version = working.create_new_version()
+        _widget_model, part_model = models
+        working.part = part_model.objects.create(name="other")
+        working.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.part_id == version.part.working_version_id
+
+    def test_an_owned_reference_is_reverted_in_place(self, models):
+        bind_part()
+        bind_widget(part=Reference(Strategy.NEW_VERSION, owned=True), live_part=Reference(Strategy.LIVE_REFERENCE))
+        working = make_widget(models)
+        version = working.create_new_version()
+        working.part.name = "edited"
+        working.part.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.part_id == version.part.working_version_id
+        assert working.part.name == "part"
+
+    def test_an_owned_reference_the_working_row_lost_cannot_be_reverted(self, models):
+        bind_part()
+        bind_widget(part=Reference(Strategy.NEW_VERSION, owned=True), live_part=Reference(Strategy.LIVE_REFERENCE))
+        working = make_widget(models)
+        version = working.create_new_version()
+        working.part = None
+        working.save()
+
+        with pytest.raises(ValueError, match="Cannot revert part"):
+            working.revert_to_version(version)
+
+    def test_a_live_reference_is_left_alone(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        version = working.create_new_version()
+        _widget_model, part_model = models
+        other = part_model.objects.create(name="other live")
+        working.live_part = other
+        working.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.live_part_id == other.id
+
+    def test_a_private_clone_is_cloned_again_for_the_working_row(self, models):
+        bind_widget(part=Reference(Strategy.PRIVATE_CLONE), live_part=Reference(Strategy.LIVE_REFERENCE))
+        working = make_widget(models)
+        version = working.create_new_version()
+        working.part.name = "edited"
+        working.part.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.part_id not in (version.part_id, version.part.working_version_id)
+        assert working.part.working_version_id is None
+        assert working.part.name == "part"
+
+    def test_the_bridge_carries_an_owned_set_both_ways(self, models):
+        calls = []
+        bind_widget(
+            part=Reference(Strategy.NEW_VERSION, provides="part"),
+            live_part=Reference(Strategy.LIVE_REFERENCE),
+            children=OwnedSet(via=lambda *args: calls.append(args), accessors=("versions",), reads=("part",)),
+        )
+        working = make_widget(models)
+
+        version = working.create_new_version()
+        working.revert_to_version(version)
+        copy = working.create_new_version(is_copy=True)
+
+        assert [(call[0].pk, call[1].pk, call[2]) for call in calls] == [
+            (working.pk, version.pk, Operation.PUBLISH),
+            (working.pk, version.pk, Operation.REVERT),
+            (working.pk, copy.pk, Operation.COPY),
+        ]
+
+    def test_only_a_working_row_reverts_and_only_to_its_own_version(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        version = working.create_new_version()
+        other = make_widget(models)
+        other_version = other.create_new_version()
+
+        with pytest.raises(ValueError, match="Can only revert the working version of this versioned widget"):
+            version.revert_to_version(version)
+        with pytest.raises(ValueError, match="Can only revert to a version of this versioned widget"):
+            working.revert_to_version(other_version)
+
+    def test_a_model_without_a_spec_cannot_revert(self, models):
+        _widget_model, part_model = models
+        part = part_model.objects.create(name="part")
+
+        with pytest.raises(NotImplementedError, match="VersionedPart has no VersionSpec"):
+            part.revert_to_version(part.create_new_version())
+
+
+class TestKit:
+    def test_assert_snapshot_fails_when_an_expected_change_did_not_happen(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        version = working.create_new_version()
+
+        with pytest.raises(AssertionError, match="note was expected to change"):
+            assert_snapshot(working, version, changed={"note", "part"})
+
+    def test_assert_snapshot_fails_when_an_unexpected_field_differs(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        version = working.create_new_version()
+        version.note = "drifted"
+
+        with pytest.raises(AssertionError, match="note differs"):
+            assert_snapshot(working, version, changed={"part"})
+
+    def test_assert_snapshot_rejects_a_name_that_does_not_travel(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+
+        with pytest.raises(AssertionError, match="not travelling fields"):
+            assert_snapshot(working, working, changed={"token"})
+
+    def test_assert_family_fails_for_an_unrelated_row(self, models):
+        bind_widget(**declared_references())
+        working, other = make_widget(models), make_widget(models)
+
+        with pytest.raises(AssertionError):
+            assert_family(other, working)

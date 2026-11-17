@@ -6,5 +6,6 @@ class ExperimentAppConfig(AppConfig):
     label = "experiments"
 
     def ready(self):
+        from . import checks  # noqa  F401
         from . import signals  # noqa  F401
         from . import sunsets  # noqa  F401
