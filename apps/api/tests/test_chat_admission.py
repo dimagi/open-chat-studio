@@ -8,7 +8,6 @@ from django.test import RequestFactory
 from rest_framework.authentication import SessionAuthentication
 
 from apps.api.admission import (
-    ChatAdmissionError,
     ChatCapability,
     ChatCredentialKind,
     ChatEntryPoint,
@@ -18,6 +17,7 @@ from apps.api.admission import (
     resolve_chat_admission,
 )
 from apps.api.authentication import ChatOAuthAuthentication, EmbeddedWidgetAuthentication
+from apps.api.exceptions import ChatAdmissionError
 from apps.api.models import UserAPIKey
 from apps.channels.models import ChannelPlatform, CredentialMode, WidgetAuthLevel
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
@@ -102,6 +102,28 @@ def test_oauth_admission_keeps_the_channel_attribution(channel):
     assert admission.principal == application
     assert admission.team == channel.team
     assert admission.throttle_bucket == ("channel", str(channel.pk))
+
+
+@pytest.mark.django_db()
+def test_oauth_admission_rejects_a_session_from_another_team(channel):
+    """An OAuth channel cannot be combined with a session belonging to another team."""
+    application = OAuth2Application.objects.create(
+        name="machine-app",
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        team=channel.team,
+    )
+    token = OAuth2AccessToken(application=application, application_id=application.pk, team=channel.team)
+    session = SimpleNamespace(experiment_channel=channel, team=TeamFactory.create())
+    request = _request(auth=channel, authenticator=ChatOAuthAuthentication())
+    request.chat_oauth_token = token
+
+    with pytest.raises(ChatAdmissionError, match="different teams"):
+        resolve_chat_admission(
+            request,
+            entry_point=ChatEntryPoint.START_SESSION,
+            session=session,
+        )
 
 
 @pytest.mark.django_db()

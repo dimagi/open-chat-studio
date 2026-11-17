@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from apps.api.exceptions import ChatAdmissionError
 from apps.api.models import UserAPIKey
 from apps.channels.models import ChannelPlatform, ExperimentChannel, WidgetAuthLevel
 from apps.oauth.models import OAuth2AccessToken
@@ -45,10 +46,6 @@ class SessionTokenPolicy(StrEnum):
     ISSUE_AND_REQUIRE = "issue_and_require"
     DO_NOT_ISSUE = "do_not_issue"
     NOT_APPLICABLE = "not_applicable"
-
-
-class ChatAdmissionError(ValueError):
-    """Raised when validated request attributes cannot form one unambiguous admission."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,10 +174,12 @@ def _resolve_embed_key_credential(auth):
 def _resolve_marked_oauth_credential(auth, session, validated_oauth_token):
     """Resolve an OAuth credential marked by the Chat API authentication adapter."""
     if isinstance(auth, ExperimentChannel):
+        _validate_oauth_session_team(session, auth.team)
         principal = _validated_oauth_principal(validated_oauth_token)
         return ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS, auth, principal, auth.team
 
     if isinstance(auth, OAuth2AccessToken) and is_client_credentials_token(auth):
+        _validate_oauth_session_team(session, auth.team)
         return (
             ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS,
             getattr(session, "experiment_channel", None),
@@ -273,6 +272,7 @@ def chat_entry_point_for_request(request) -> ChatEntryPoint:
 
 def _resolve_unmarked_oauth_credential(auth, session):
     """Classify an OAuth token that was not marked by a dedicated Chat adapter."""
+    _validate_oauth_session_team(session, auth.team)
     if is_client_credentials_token(auth):
         return (
             ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS,
@@ -286,6 +286,12 @@ def _resolve_unmarked_oauth_credential(auth, session):
         auth.user,
         auth.team,
     )
+
+
+def _validate_oauth_session_team(session, oauth_team):
+    """Reject an OAuth request that combines a token and session from different teams."""
+    if session is not None and session.team != oauth_team:
+        raise ChatAdmissionError("OAuth credential and session belong to different teams")
 
 
 def _resolve_user_session_credential(request, user):
