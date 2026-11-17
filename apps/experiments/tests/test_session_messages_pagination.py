@@ -66,6 +66,7 @@ class TestSessionMessagesLoadOnScroll:
         assert 'hx-target="#session-messages-list"' in content
         assert 'hx-swap="beforeend"' in content
         assert 'hx-sync="this:drop"' in content
+        assert 'class="htmx-indicator flex items-center justify-center p-4"' in content
         assert 'data-session-message-page-trigger="2"' in next_page_content
 
     def test_each_page_has_only_one_next_page_trigger(self, client, experiment, session_with_messages):

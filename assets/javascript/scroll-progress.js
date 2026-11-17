@@ -25,7 +25,6 @@ export function setupScrollProgress(containerSelector) {
     const percentage = Math.round(progress * 100);
     bar.style.width = `${percentage}%`;
     progressContainer.setAttribute('aria-valuenow', `${percentage}`);
-    progressContainer.setAttribute('aria-valuetext', `${percentage} percent`);
   };
 
   const update = () => {
@@ -78,15 +77,19 @@ export function setupScrollProgress(containerSelector) {
     update();
   };
   const onHtmxSettle = () => observeContainer();
-  const onPageHide = () => {
+  const onPageHide = (event) => {
+    if (event.persisted) {
+      return;
+    }
     window.removeEventListener('scroll', onScroll);
     htmx.off('htmx:afterSettle', onHtmxSettle);
     resizeObserver?.disconnect();
+    window.removeEventListener('pagehide', onPageHide);
   };
 
   window.addEventListener('scroll', onScroll, { passive: true });
   htmx.on('htmx:afterSettle', onHtmxSettle);
-  window.addEventListener('pagehide', onPageHide, { once: true });
+  window.addEventListener('pagehide', onPageHide);
   observeContainer();
 }
 

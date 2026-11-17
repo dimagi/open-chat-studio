@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import {beforeEach, describe, expect, it, vi} from "vitest";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 import htmx from "htmx.org";
 
@@ -15,8 +15,9 @@ vi.mock("htmx.org", () => ({
 
 describe("setupScrollProgress", () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         document.body.innerHTML = `
-            <div id="scroll-progress-bar" role="progressbar" aria-valuenow="0" aria-valuetext="0 percent">
+            <div id="scroll-progress-bar" role="progressbar" aria-valuenow="0">
                 <div id="scroll-progress-fill"></div>
             </div>
             <div id="table-top" data-total-messages="10">
@@ -34,7 +35,10 @@ describe("setupScrollProgress", () => {
 
         expect(document.querySelector("#scroll-progress-fill").style.width).toBe("50%");
         expect(document.querySelector("#scroll-progress-bar")).toHaveAttribute("aria-valuenow", "50");
-        expect(document.querySelector("#scroll-progress-bar")).toHaveAttribute("aria-valuetext", "50 percent");
+    });
+
+    afterEach(() => {
+        window.dispatchEvent(new Event("pagehide"));
     });
 
     it("cleans up listeners and observers when the page is hidden", () => {
@@ -55,5 +59,32 @@ describe("setupScrollProgress", () => {
 
         expect(disconnect).toHaveBeenCalledOnce();
         expect(htmx.off).toHaveBeenCalledWith("htmx:afterSettle", expect.any(Function));
+    });
+
+    it("keeps progress listeners while the page enters the back-forward cache", () => {
+        const disconnect = vi.fn();
+        vi.stubGlobal(
+            "ResizeObserver",
+            class {
+                constructor() {
+                    this.disconnect = disconnect;
+                }
+
+                observe() {}
+            },
+        );
+
+        setupScrollProgress("#table-top");
+        const pagehide = new Event("pagehide");
+        Object.defineProperty(pagehide, "persisted", {value: true});
+        window.dispatchEvent(pagehide);
+
+        expect(disconnect).not.toHaveBeenCalled();
+        expect(htmx.off).not.toHaveBeenCalled();
+
+        window.dispatchEvent(new Event("pagehide"));
+
+        expect(disconnect).toHaveBeenCalledOnce();
+        expect(htmx.off).toHaveBeenCalledOnce();
     });
 });

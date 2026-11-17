@@ -1,4 +1,4 @@
-{% load chat_tags form_tags json_tags moderation_tags waffle_tags %}
+{% load chat_tags form_tags i18n json_tags moderation_tags waffle_tags %}
 {% url 'chatbots:chatbot_session_view' request.team.slug experiment.public_id experiment_session.external_id as session_detail_url %}
 {% for message in messages %}
   {% if message.time_gap_text %}
@@ -191,15 +191,15 @@
          hx-on::before-request="this.querySelector('[data-session-message-load-error]').classList.add('hidden')"
          hx-on::after-request="if (event.detail.successful) this.remove(); else this.querySelector('[data-session-message-load-error]').classList.remove('hidden');">
       <div id="messages-loading-more-{{ page }}"
-           class="flex items-center justify-center p-4">
+           class="htmx-indicator flex items-center justify-center p-4">
         <span class="loading loading-spinner loading-sm"></span>
-        <span class="ml-2">Loading more...</span>
+        <span class="ml-2">{% translate "Loading more..." %}</span>
       </div>
       <div data-session-message-load-error
            class="hidden flex items-center justify-center gap-2 p-4 text-error"
            role="alert">
-        <span>Unable to load more messages.</span>
-        <button type="button" class="btn btn-ghost btn-xs">Retry</button>
+        <span>{% translate "Unable to load more messages." %}</span>
+        <button type="button" class="btn btn-ghost btn-xs">{% translate "Retry" %}</button>
       </div>
     </div>
   {% endif %}
@@ -222,5 +222,5 @@
        x-transition.opacity
        class="flex items-center motion-reduce:transition-none"
        role="status"
-       aria-live="polite">All messages loaded</div>
+       aria-live="polite">{% translate "All messages loaded" %}</div>
 {% endif %}
