@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0103_merge_20261113_0813'),
+        ('service_providers', '0104_voiceprovider_gemini'),
     ]
 
     operations = [
