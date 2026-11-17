@@ -38,12 +38,12 @@ class ResourceMigrationError(RuntimeError):
     """Raised when legacy node data cannot be converted without losing a reference."""
 
 
-def strip_node_resource_params(apps, schema_editor) -> None:
-    """Validate every node before atomically removing verified resource keys from its JSON.
+def strip_node_resource_params(apps, schema_editor, *, dry_run: bool = False) -> None:
+    """Validate every node before removing verified resource keys from its JSON.
 
     The first pass is read-only and aborts the migration with an anomaly report if any reference
-    cannot be proven safe. Only after that pass succeeds are batches committed, so a bad row cannot
-    leave a partially converted batch or silently discard a resource identifier.
+    cannot be proven safe. A dry run stops after validation; otherwise each verified batch is
+    committed transactionally so a bad row cannot partially convert its batch.
     """
     models = _historical_models(apps)
     database = schema_editor.connection.alias
@@ -56,6 +56,9 @@ def strip_node_resource_params(apps, schema_editor) -> None:
         anomalies.extend(batch_anomalies)
     if anomalies:
         _raise_anomalies(anomalies)
+    if dry_run:
+        logger.info("Validated %s pipeline nodes; no resource params were changed", len(node_ids))
+        return
 
     for node_batch in _batches(node_ids):
         nodes = _load_nodes(models["Node"], node_batch, database)

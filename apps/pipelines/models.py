@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pydantic
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, models, transaction
+from django.db import DatabaseError, connection, models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -66,6 +66,22 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
 #: these related rows per node, so ``flow_data`` is an N+1 without them.
 NODE_RESOURCE_PREFETCHES = ("node_set__collection_indexes", "node_set__custom_action_operations")
+NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID = 4503001
+
+
+class NodeResourceCutoverState(models.Model):
+    """Track the one-time transition from legacy JSON mirrors to relation-only storage."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    legacy_json_compatibility_enabled = models.BooleanField(default=False)
+    cleanup_completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "pipelines_node_resource_cutover_state"
+
+    def __str__(self) -> str:
+        """Identify the singleton resource cutover state in admin and logs."""
+        return "Node resource cutover state"
 
 
 class Pipeline(BaseTeamModel, VersionsMixin):
@@ -615,6 +631,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         return self.node_type.output_handles(self.params or {}, self.flow_id, django_node=self)
 
+    @transaction.atomic()
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node. Params that reference versioned records (see
@@ -624,6 +641,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             pipeline: If provided, the new version will be assigned to this pipeline before saving,
                 avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
+        preserve_legacy_json = self._lock_resource_cutover_state()
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -647,6 +665,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         new_version.collection_indexes.set(self.collection_indexes.all())
         if self.node_type.declares("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
+        new_version._mirror_resource_params_for_legacy_runtime(preserve_legacy_json)
         return new_version
 
     def set_params(self, params):
@@ -688,7 +707,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 if name not in declared_params
             }
         )
+        preserve_legacy_json = self._lock_resource_cutover_state()
         self.params = ordinary_params
+        invalid_resource_params = {}
         for field_name in self.resource_fk_fields():
             param_name = f"{field_name}_id"
             value = resource_params.get(param_name)
@@ -696,9 +717,34 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if value not in (None, "") and not related_model._base_manager.filter(pk=as_int(value)).exists():
                 # Keep an invalid value visible to runtime validation. API callers reject it before
                 # this adapter, while internal and legacy callers need the existing error message.
-                self.params[param_name] = value
+                invalid_resource_params[param_name] = value
         self.save(update_fields=["params"])
         self._apply_resource_params(resource_params)
+        self._mirror_resource_params_for_legacy_runtime(preserve_legacy_json, invalid_resource_params)
+
+    @staticmethod
+    def _lock_resource_cutover_state() -> bool:
+        """Read the compatibility flag while excluding a concurrent cutover transition."""
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock_shared(%s)", [NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID])
+        return NodeResourceCutoverState.objects.get(pk=1).legacy_json_compatibility_enabled
+
+    def _mirror_resource_params_for_legacy_runtime(self, enabled: bool, invalid_params: dict | None = None) -> None:
+        """Keep JSON resource ids available to old application tasks during the first rollout."""
+        if not enabled:
+            return
+
+        params = self.params.copy()
+        resource_params = self.resource_params()
+        for param_name in self.node_type.declared_params & self.resource_param_names():
+            value = resource_params.get(param_name)
+            if value in (None, []):
+                params.pop(param_name, None)
+            else:
+                params[param_name] = value
+        params.update(invalid_params or {})
+        self.params = params
+        self.save(update_fields=["params"])
 
     @classmethod
     def resource_fk_fields(cls):
@@ -804,7 +850,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def runtime_params(self) -> dict:
-        """Return ordinary params overlaid with relation-backed IDs for runtime validation/building."""
+        """Overlay relation IDs, retaining legacy scalar values until validation or cutover."""
         params = copy.deepcopy(self.params or {})
         if self.pk is None:
             return params
@@ -817,6 +863,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             # runtime validator should receive that mock's failure, rather than the resource adapter
             # masking it while inspecting ``model_fields``.
             declared_params = frozenset()
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            if param_name in declared_params and resource_params.get(param_name) is None and param_name in params:
+                # Keep a dangling legacy ID visible so existing validators report it until cleanup.
+                params[param_name] = self.params[param_name]
         params.update(
             {
                 name: value

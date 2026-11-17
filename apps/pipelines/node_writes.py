@@ -100,9 +100,10 @@ def _apply_content(existing: Node, node: FlowNode, update_fields: set[str], now)
     ordinary_params, resource_params = Node.split_resource_params(content.params)
     ordinary_params = content.node_type.params_to_store(ordinary_params)
     existing_resources = existing.resource_params()
+    existing_ordinary_params = Node.params_to_store(existing.params or {})
     resources_changed = (
         existing.type != content.type
-        or existing.params != ordinary_params
+        or existing_ordinary_params != ordinary_params
         or any(existing_resources.get(name) != value for name, value in resource_params.items())
     )
     existing.type = content.type

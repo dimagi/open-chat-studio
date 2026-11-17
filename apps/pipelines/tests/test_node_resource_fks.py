@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from apps.custom_actions.models import CustomActionOperation
 from apps.pipelines.graph import PipelineGraph
-from apps.pipelines.models import Node
+from apps.pipelines.models import Node, NodeResourceCutoverState
 from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -39,6 +39,27 @@ class TestNodeResourceFKSync:
         node.refresh_from_db()
         assert node.llm_provider_id == provider.id
         assert node.llm_provider_model_id == model.id
+
+    def test_resource_ids_are_mirrored_while_legacy_runtime_is_serving(self):
+        """The first rolling deployment keeps resource ids readable by old tasks."""
+        provider = LlmProviderFactory.create()
+        model = LlmProviderModelFactory.create()
+        node = NodeFactory.create(type="LLMResponseWithPrompt", params={})
+        state = NodeResourceCutoverState.objects.get(pk=1)
+        state.legacy_json_compatibility_enabled = True
+        state.save(update_fields=["legacy_json_compatibility_enabled"])
+
+        node.update_from_params(
+            {"llm_provider_id": provider.id, "llm_provider_model_id": model.id},
+            ordinary_params={"name": "assistant"},
+        )
+        node.refresh_from_db()
+
+        assert node.params == {
+            "name": "assistant",
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": model.id,
+        }
 
     def test_source_material_fk_populated(self):
         source_material = SourceMaterialFactory.create()
