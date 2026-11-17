@@ -1,10 +1,10 @@
 """Filter vocabulary for the usage-metrics read path (#3905).
 
-`UsageFilters` is the contract the usage surfaces code against; its shape was
-agreed in the design discussed on issue #3905. The tag helper is this app's
-single definition of "this conversation carries one of these tags" - the same
-chat-or-message match the dashboard's session filter and the cost read path
-use.
+`UsageFilters` is the contract the usage surfaces code against. The predicates
+below are the one definition of what activity metrics leave out (ADR-0051):
+evaluation-harness rows and sessions still in `SETUP`. Every surface imports
+them; none spells the exclusion out again. The tag helpers are this app's
+single definition of "this conversation carries one of these tags".
 """
 
 from dataclasses import dataclass
@@ -13,7 +13,9 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 
 from apps.annotations.models import CustomTaggedItem
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.teams.models import Team
 
 
@@ -22,25 +24,19 @@ class UsageFilters:
     """The filters every usage-metrics read honours, bundled so the metric
     functions take one argument instead of five.
 
-    `experiment_ids`/`participant_ids`: `None` means "no filter"; an empty
-    list means "requested but matched nobody" and yields empty results (the
-    v2 usage API's resolved-handle semantics). `platform` is a single
-    platform slug. `tag_ids` narrows to conversations whose chat or any
-    message in it carries one of the tags; an empty list is treated as no
-    filter.
+    `experiment_ids`, `participant_ids` and `platforms`: `None` means "no
+    filter"; an empty list means "requested but matched nobody" and yields
+    empty results. `tag_ids` narrows to conversations whose chat or any message
+    in it carries one of the tags; an empty list is treated as no filter.
 
-    `include_archived` applies to experiment enumeration only: activity
-    metrics count archived-chatbot activity regardless (ADR-0051). The
-    default (`True`) matches the v2 usage API, which enumerates chatbots with
-    `Experiment.objects.get_all()`; `filtered_querysets` defaults the other
-    way, matching the dashboard's archived-excluding chatbot list. A caller
-    passing `UsageFilters` through to `filtered_querysets` must pass this
-    field explicitly rather than relying on either default.
+    `include_archived` applies to experiment enumeration only, which
+    `filtered_querysets` returns for the dashboard. Activity metrics count
+    archived-chatbot activity regardless (ADR-0051).
     """
 
     experiment_ids: list[int] | None = None
     participant_ids: list[int] | None = None
-    platform: str | None = None
+    platforms: list[str] | None = None
     tag_ids: list[int] | None = None
     include_archived: bool = True
 
@@ -53,13 +49,39 @@ CONVERSATION_MESSAGE_TYPES = (ChatMessageType.HUMAN, ChatMessageType.AI)
 # output is not activity (ADR-0051). Every surface's participant count filters
 # on this one predicate.
 HUMAN_AUTHORED = Q(message_type=ChatMessageType.HUMAN)
+AI_AUTHORED = Q(message_type=ChatMessageType.AI)
+
+
+def evaluation_platform(path: str = "") -> Q:
+    """Rows whose `platform` column, reached through the lookup prefix `path`, is the evaluation harness."""
+    return Q(**{f"{path}platform": ChannelPlatform.EVALUATIONS})
+
+
+def setup_session(path: str = "") -> Q:
+    """Sessions reached through `path` that are still in `SETUP`: created but never engaged."""
+    return Q(**{f"{path}status": SessionStatus.SETUP})
+
+
+def exclude_non_activity(queryset: QuerySet, session_path: str = "") -> QuerySet:
+    """Drop evaluation-harness sessions and sessions still in `SETUP`, reached through `session_path` (ADR-0051).
+
+    Each exclusion negates one lookup, which Django guards with `IS NOT NULL`, so a session with no
+    platform, or a message whose chat has no session, stays in the universe."""
+    return queryset.exclude(evaluation_platform(session_path)).exclude(setup_session(session_path))
+
+
+def activity_sessions(session_queryset: QuerySet[ExperimentSession]) -> QuerySet[ExperimentSession]:
+    """Narrow a session queryset to the sessions activity metrics count (ADR-0051)."""
+    return exclude_non_activity(session_queryset)
+
+
+def activity_messages(message_queryset: QuerySet[ChatMessage]) -> QuerySet[ChatMessage]:
+    """Narrow a message queryset to conversation turns outside evaluation and `SETUP` sessions (ADR-0051)."""
+    return conversation_messages(exclude_non_activity(message_queryset, "chat__experiment_session__"))
 
 
 def conversation_messages(message_queryset: QuerySet[ChatMessage]) -> QuerySet[ChatMessage]:
-    """Narrow any team-scoped, windowed message queryset to conversation turns.
-    Both surfaces route through this, so "which messages count" is defined once
-    whether the caller starts from ``messages_queryset`` (the API) or from
-    ``filtered_querysets`` (the dashboard)."""
+    """Narrow a message queryset to conversation turns, the human and AI messages."""
     return message_queryset.filter(message_type__in=CONVERSATION_MESSAGE_TYPES)
 
 

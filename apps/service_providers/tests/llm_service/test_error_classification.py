@@ -4,7 +4,6 @@ import anthropic
 import httpx
 import openai
 import pytest
-from google.api_core import exceptions as google_exceptions  # noqa: TID253
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.runnables import RunnableLambda
 
@@ -34,17 +33,20 @@ def _innermost_detail(error: BaseException) -> str:
     return getattr(error, "message", None) or str(error)
 
 
-def _wrapped_by_langchain(inner: Exception):
-    """langchain-google-genai turns every InvalidArgument into one of its own errors."""
-    from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError  # noqa: PLC0415 - TID253: heavy lib
+def _google_error(code: int, status: str, message: str) -> Exception:
+    """What langchain-google-genai raises for a Google API failure: its own type, chained from the SDK's."""
+    from google.genai import errors as google_errors  # noqa: PLC0415 - heavy lib
+    from langchain_google_genai import chat_models  # noqa: PLC0415 - TID253: heavy lib
 
+    body = {"error": {"code": code, "message": message, "status": status}}
     try:
-        raise inner
-    except type(inner) as e:
-        try:
-            raise ChatGoogleGenerativeAIError(f"Invalid argument provided to Gemini: {e}") from e
-        except ChatGoogleGenerativeAIError as wrapper:
-            return wrapper
+        if code >= 500:
+            chat_models._handle_server_error(google_errors.ServerError(code, body))
+        else:
+            chat_models._handle_client_error(google_errors.ClientError(code, body), {"model": "gemini-2.5-flash"})
+    except Exception as error:  # noqa: BLE001 - whatever the adapter raised is the fixture
+        return error
+    raise AssertionError("langchain-google-genai did not raise")
 
 
 # Each case is an error seen in production, paired with the phrase the team needs to read.
@@ -88,24 +90,24 @@ TEAM_ACTIONABLE = [
         id="anthropic_unknown_model",
     ),
     pytest.param(
-        google_exceptions.NotFound("This model models/gemini-2.5-flash is no longer available to new users."),
+        _google_error(404, "NOT_FOUND", "This model models/gemini-2.5-flash is no longer available to new users."),
         "could not find the model",
         id="google_withdrawn_model",
     ),
     pytest.param(
-        google_exceptions.Unauthenticated("API keys are not supported by this API."),
+        _google_error(401, "UNAUTHENTICATED", "API keys are not supported by this API."),
         "rejected the credentials",
         id="google_unauthenticated",
     ),
     pytest.param(
-        google_exceptions.PermissionDenied("Generative Language API has not been used in project 1234."),
+        _google_error(403, "PERMISSION_DENIED", "Generative Language API has not been used in project 1234."),
         "rejected the credentials",
         id="google_permission_denied",
     ),
     pytest.param(
-        _wrapped_by_langchain(google_exceptions.InvalidArgument("API key not valid. Please pass a valid API key.")),
+        _google_error(400, "INVALID_ARGUMENT", "API key not valid. Please pass a valid API key."),
         "rejected the credentials",
-        id="google_bad_key_wrapped_by_langchain",
+        id="google_bad_key",
     ),
     pytest.param(
         _openai_error(
@@ -133,11 +135,16 @@ LEFT_ALONE = [
     ),
     pytest.param(status_error(anthropic.OverloadedError, 529, "Overloaded"), True, id="anthropic_overloaded"),
     pytest.param(ValueError("boom"), False, id="unrelated_exception"),
-    # A malformed request is wrapped the same way a bad key is, but nobody on the team can fix it.
     pytest.param(
-        _wrapped_by_langchain(google_exceptions.InvalidArgument("Unable to submit request: empty text parameter.")),
+        _google_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded for requests per minute."),
+        True,
+        id="google_rate_limit",
+    ),
+    # A malformed request arrives as the same 400 a bad key does, but nobody on the team can fix it.
+    pytest.param(
+        _google_error(400, "INVALID_ARGUMENT", "Unable to submit request: empty text parameter."),
         False,
-        id="google_malformed_request_wrapped",
+        id="google_malformed_request",
     ),
 ]
 
@@ -149,8 +156,7 @@ def test_team_actionable_errors_are_translated(error, expected_phrase):
     assert isinstance(translated, ProviderConfigurationError)
     assert expected_phrase in str(translated)
     # The provider's own wording is preserved so the team can act without opening Sentry.
-    # It comes from whichever exception in the chain was classified, which for an error a
-    # LangChain adapter has wrapped is the cause rather than the wrapper.
+    # It comes from the innermost exception in the chain: a LangChain adapter's wrapper prefixes it.
     assert _innermost_detail(error) in str(translated)
 
 
@@ -305,7 +311,7 @@ def test_translation_wrapper_preserves_bound_kwargs():
             id="anthropic_rate_limit",
         ),
         pytest.param(
-            google_exceptions.ResourceExhausted("Quota exceeded for requests per minute."),
+            _google_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded for requests per minute."),
             ProviderErrorKind.RATE_LIMIT,
             id="google_resource_exhausted",
         ),
@@ -330,9 +336,24 @@ def test_translation_wrapper_preserves_bound_kwargs():
             id="openai_server_error",
         ),
         pytest.param(
+            _google_error(503, "UNAVAILABLE", "The model is overloaded. Please try again later."),
+            ProviderErrorKind.UNAVAILABLE,
+            id="google_server_error",
+        ),
+        pytest.param(
+            httpx.ConnectError("Name or service not known"),
+            ProviderErrorKind.UNAVAILABLE,
+            id="httpx_connection_error",
+        ),
+        pytest.param(
             status_error(anthropic.BadRequestError, 400, "messages: text content blocks must be non-empty"),
             ProviderErrorKind.INVALID_REQUEST,
             id="anthropic_malformed_request",
+        ),
+        pytest.param(
+            _google_error(400, "INVALID_ARGUMENT", "Unable to submit request: empty text parameter."),
+            ProviderErrorKind.INVALID_REQUEST,
+            id="google_malformed_request",
         ),
         pytest.param(ValueError("boom"), None, id="unrelated_exception"),
     ],

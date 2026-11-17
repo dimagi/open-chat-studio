@@ -523,7 +523,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "trace_provider",
             "trace_sample_rate",
             "participant_allowlist",
-            "debug_mode_enabled",
             "file_uploads_enabled",
         }
     )
@@ -640,7 +639,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         default="",
     )
-    debug_mode_enabled = models.BooleanField(default=False)
     create_version_task_id = models.CharField(max_length=128, blank=True)
     # Set on a working chatbot made with "Copy"; versions and other chatbots leave it empty.
     cloned_from = models.ForeignKey(
