@@ -14,7 +14,7 @@ from apps.assessments.models import Score
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.events.models import EventAction
-from apps.experiments.models import ConsentForm, ExperimentSession
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
 from apps.ocs_notifications.models import EventType, EventUser, LevelChoices
@@ -599,6 +599,22 @@ def test_tag_slug_taken_by_another_team_gets_a_fresh_slug(store):
     assert tag.name == "urgent"
     assert tag.slug
     assert tag.slug != "urgent"
+
+
+def test_experiment_row_from_an_older_source_with_debug_mode_enabled_imports(store, keypair):
+    """A source on code from before #4375 still sends ``debug_mode_enabled``. The importer reads only
+    the model's own fields, so the key is ignored and the row imports."""
+    public_key, _ = keypair
+    manifest_labels = {entry.model for entry in MANIFEST_ENTRIES}
+    mock_ids = {entry.model: 1000 + i for i, entry in enumerate(MANIFEST_ENTRIES)}
+    row = _serialized_row("experiments.experiment", mock_ids, manifest_labels, public_key)
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("experiments.experiment", [{**row, "debug_mode_enabled": True}])
+
+    target = store.get_target("experiments.experiment", row["id"])
+    assert Experiment.objects.get(pk=target).name == row["name"]
 
 
 def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):

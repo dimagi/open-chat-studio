@@ -36,7 +36,7 @@ class TestP95CostPerTrace:
         for cost in ("2.00", "3.00", "5.00"):
             make_usage(team, cost=cost, when=day, experiment=experiment, trace=TraceFactory.create(team=team))
 
-        series = p95_cost_per_trace(team, start=_START, end=_NOW)
+        series = p95_cost_per_trace(team, tz=UTC, start=_START, end=_NOW)
 
         # Per-trace totals are [1.0, 2.0, 3.0, 5.0]; nearest-rank p95 of four
         # values is the top one.
@@ -56,7 +56,7 @@ class TestP95CostPerTrace:
         make_usage(team, cost="2.00", when=newer, experiment=experiment, trace=TraceFactory.create(team=team))
         make_usage(team, cost="1.00", when=older, experiment=experiment, trace=TraceFactory.create(team=team))
 
-        series = p95_cost_per_trace(team, start=_START, end=_NOW)
+        series = p95_cost_per_trace(team, tz=UTC, start=_START, end=_NOW)
 
         assert series[0]["points"] == [
             {"date": older.date(), "p95": 1.0},
@@ -75,7 +75,7 @@ class TestP95CostPerTrace:
                 trace=TraceFactory.create(team=team),
             )
 
-        series = p95_cost_per_trace(team, start=_START, end=_NOW, top_n=2)
+        series = p95_cost_per_trace(team, tz=UTC, start=_START, end=_NOW, top_n=2)
 
         assert [line["experiment_id"] for line in series] == [experiments[1].id, experiments[2].id]
 
@@ -95,7 +95,7 @@ class TestP95CostPerTrace:
             source=UsageSource.EVALUATION,
         )
 
-        series = p95_cost_per_trace(team, start=_START, end=_NOW)
+        series = p95_cost_per_trace(team, tz=UTC, start=_START, end=_NOW)
 
         assert series == []
 
@@ -112,7 +112,7 @@ class TestP95CostPerTrace:
         )
 
         with CaptureQueriesContext(connection) as ctx:
-            p95_cost_per_trace(team, start=_START, end=_NOW)
+            p95_cost_per_trace(team, tz=UTC, start=_START, end=_NOW)
 
         assert len(ctx.captured_queries) == 2
 
@@ -131,6 +131,6 @@ class TestP95CostPerTrace:
         )
         experiment.archive()
 
-        series = p95_cost_per_trace(team, start=_START, end=_NOW)
+        series = p95_cost_per_trace(team, tz=UTC, start=_START, end=_NOW)
 
         assert series[0]["experiment_name"] == "Archived Bot"
