@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0156_remove_experiment_debug_mode_enabled_state'),
+        ('experiments', '0157_drop_experiment_debug_mode_enabled'),
     ]
 
     operations = [
