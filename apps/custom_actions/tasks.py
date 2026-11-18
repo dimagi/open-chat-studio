@@ -47,6 +47,9 @@ def check_single_custom_action_health(action_id: int):
         logger.warning(f"CustomAction {action.name} (id={action_id}) has no health endpoint configured")
         return
 
+    if action.team.is_pending_deletion:
+        return
+
     failure_reason = ""
     try:
         response = httpx.get(action.health_endpoint, timeout=HEALTH_CHECK_TIMEOUT)

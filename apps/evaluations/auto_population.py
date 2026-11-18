@@ -133,8 +133,8 @@ def auto_populate_eval_datasets():
         try:
             with transaction.atomic():
                 rule = (
-                    DatasetAutoPopulationRule.objects.select_for_update(skip_locked=True)
-                    .filter(id=rule_id, is_enabled=True)
+                    DatasetAutoPopulationRule.objects.select_for_update(skip_locked=True, of=("self",))
+                    .filter(id=rule_id, is_enabled=True, team__deletion_requested_at__isnull=True)
                     .first()
                 )
                 if rule is None:

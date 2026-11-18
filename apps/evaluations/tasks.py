@@ -482,12 +482,12 @@ def _drive_run(run_id: int) -> None:
     """
     with transaction.atomic():
         run = (
-            EvaluationRun.objects.select_for_update(skip_locked=True)
-            .filter(id=run_id, status__in=NON_TERMINAL_RUN_STATUSES)
+            EvaluationRun.objects.select_for_update(skip_locked=True, of=("self",))
+            .filter(id=run_id, status__in=NON_TERMINAL_RUN_STATUSES, team__deletion_requested_at__isnull=True)
             .first()
         )
         if run is None:
-            return  # locked by another driver, or already terminal/gone
+            return  # locked by another driver, already terminal/gone, or its team is pending deletion
         # Read before coordinating, which moves the run off PENDING. Doubles as the claim on
         # creating the run's Taskbadger task: the transition happens under this row lock, so
         # exactly one tick ever sees PENDING, and a rolled-back tick leaves the claim open.

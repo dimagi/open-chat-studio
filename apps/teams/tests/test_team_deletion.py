@@ -26,7 +26,7 @@ from apps.trace.models import Trace
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
 from apps.utils.factories.events import ScheduledTriggerFactory, StaticTriggerFactory, TimeoutTriggerFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.utils.factories.user import UserFactory
@@ -120,6 +120,10 @@ def test_hard_delete_removes_records_the_team_cascade_misses(mailoutbox, django_
     other_trace = TraceFactory.create(team=other_team)
     evaluation_message = EvaluationMessageFactory.create()
     EvaluationDatasetFactory.create(team=team, messages=[evaluation_message])
+    # A message whose dataset was already deleted is linked to the team only through its session.
+    orphaned_message = EvaluationMessageFactory.create(
+        session=ExperimentSessionFactory.create(team=team, experiment=experiment)
+    )
     other_evaluation_message = EvaluationMessageFactory.create()
     EvaluationDatasetFactory.create(team=other_team, messages=[other_evaluation_message])
     action_ids = [
@@ -138,7 +142,7 @@ def test_hard_delete_removes_records_the_team_cascade_misses(mailoutbox, django_
     assert not Team.objects.filter(id=team.id).exists()
     assert not Trace.objects.filter(id=trace.id).exists()
     assert Trace.objects.filter(id=other_trace.id).exists()
-    assert not EvaluationMessage.objects.filter(id=evaluation_message.id).exists()
+    assert not EvaluationMessage.objects.filter(id__in=[evaluation_message.id, orphaned_message.id]).exists()
     assert EvaluationMessage.objects.filter(id=other_evaluation_message.id).exists()
     assert not EventAction.objects.filter(id__in=action_ids).exists()
     assert EventAction.objects.filter(id=other_action_id).exists()

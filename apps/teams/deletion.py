@@ -85,7 +85,7 @@ def delete_team_if_due(team_id: int) -> bool:
     """
     with transaction.atomic():
         team = (
-            Team.objects.select_for_update()
+            Team.objects.select_for_update(of=("self",))
             .select_related("deletion_requested_by")
             .filter(id=team_id, deletion_requested_at__lte=deletion_cutoff())
             .first()
@@ -116,7 +116,10 @@ def hard_delete_team(team: Team) -> dict:
     with transaction.atomic(), current_team(team), audit_transaction(uuid.uuid4().hex):
         Trace.objects.filter(team=team).delete()
         EvaluationMessage.objects.filter(
-            Q(evaluationdataset__team=team) | Q(scoping_runs__team=team) | Q(evaluationresult__team=team)
+            Q(evaluationdataset__team=team)
+            | Q(scoping_runs__team=team)
+            | Q(evaluationresult__team=team)
+            | Q(session__team=team)
         ).distinct().delete()
         EventAction.objects.filter(
             Q(static_trigger__experiment__team=team)
@@ -158,10 +161,13 @@ def _collect_remote_index_cleanups(team: Team) -> list[_RemoteIndexCleanup]:
 def _run_remote_cleanups(cleanups: list[_RemoteIndexCleanup]):
     """Delete the remote vector stores and files. Runs after the team's rows are gone, so it touches no rows."""
     for cleanup in cleanups:
-        try:
-            for file_id in cleanup.remote_file_ids:
+        for file_id in cleanup.remote_file_ids:
+            try:
                 with contextlib.suppress(openai.NotFoundError):
                     cleanup.manager.client.files.delete(file_id)
+            except Exception:
+                logger.exception("Failed to delete remote file %s", file_id)
+        try:
             cleanup.manager.delete_remote_index()
         except Exception:
             logger.exception("Failed to delete remote index %s", cleanup.manager.index_id)
@@ -176,8 +182,12 @@ def _notification_emails(team: Team, notify_recipients: str, requester_email: st
 
 
 def _send_scheduled_notifications(team: Team, emails: list[str]):
-    for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
-        send_team_deletion_scheduled_notification(team, chunk)
+    """Runs after the request has committed, so a mail failure is logged rather than raised."""
+    try:
+        for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+            send_team_deletion_scheduled_notification(team, chunk)
+    except Exception:
+        logger.exception("Failed to send the deletion-scheduled email for team %s", team.id)
 
 
 def _send_deleted_notifications(team_name: str, emails: list[str]):

@@ -159,7 +159,11 @@ def sync_document_source_task(self, document_source_id: int):
     # owning task died without releasing it) and is reclaimed rather than blocking forever.
     with transaction.atomic():
         try:
-            locked = DocumentSource.objects.select_related("collection").select_for_update().get(id=document_source_id)
+            locked = (
+                DocumentSource.objects.select_related("collection")
+                .select_for_update(of=("self", "collection"))
+                .get(id=document_source_id, team__deletion_requested_at__isnull=True)
+            )
         except DocumentSource.DoesNotExist:
             return
 

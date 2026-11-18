@@ -334,7 +334,7 @@ def get_admin_emails_with_delete_permission(team):
     from apps.teams.models import Membership  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
 
     return list(
-        Membership.objects.filter(team__name=team.name, groups__permissions__codename="delete_team").values_list(
+        Membership.objects.filter(team=team, groups__permissions__codename="delete_team").values_list(
             "user__email", flat=True
         )
     )
