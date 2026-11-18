@@ -4,6 +4,7 @@ import pytest
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from field_audit.models import AuditAction
 from rest_framework import exceptions
 from rest_framework.request import Request
 
@@ -41,7 +42,9 @@ def _member(team):
 
 def _schedule(team, days_ago=0):
     request_team_deletion(team, _admin(team))
-    Team.objects.filter(id=team.id).update(deletion_requested_at=timezone.now() - timedelta(days=days_ago))
+    Team.objects.filter(id=team.id).update(
+        deletion_requested_at=timezone.now() - timedelta(days=days_ago), audit_action=AuditAction.AUDIT
+    )
     team.refresh_from_db()
     return team
 
