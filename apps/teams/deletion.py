@@ -6,6 +6,7 @@ billing period they fall in has been reported, and lets an admin cancel a mistak
 
 import contextlib
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -15,6 +16,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.audit.transaction import audit_transaction
 from apps.documents.models import Collection
 from apps.evaluations.models import EvaluationMessage
 from apps.events.models import EventAction
@@ -111,7 +113,7 @@ def hard_delete_team(team: Team) -> dict:
     and runs only through many-to-many tables) and event actions (referenced by triggers rather than
     referencing them).
     """
-    with transaction.atomic(), current_team(team):
+    with transaction.atomic(), current_team(team), audit_transaction(uuid.uuid4().hex):
         Trace.objects.filter(team=team).delete()
         EvaluationMessage.objects.filter(
             Q(evaluationdataset__team=team) | Q(scoping_runs__team=team) | Q(evaluationresult__team=team)
