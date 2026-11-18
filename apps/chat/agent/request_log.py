@@ -87,11 +87,12 @@ def _response_text(response: httpx.Response) -> str | None:
 class _Redactor:
     def __init__(self, auth_headers: dict[str, str]):
         self.auth_header_names = set(auth_headers)
-        # Also match the credential without its scheme ("Bearer", "Basic", "ApiKey"), as an API may echo it alone.
+        # Also match the credential without its scheme ("Bearer", "Basic", "ApiKey") and, for a
+        # "user:key" credential such as CommCare's, the key alone, as an API may echo either.
         secrets = set()
         for value in auth_headers.values():
-            secrets.add(value.strip())
-            secrets.add(value.partition(" ")[2].strip())
+            credential = value.partition(" ")[2].strip()
+            secrets.update({value.strip(), credential, credential.rpartition(":")[2]})
         self.secrets = sorted(filter(None, secrets), key=len, reverse=True)
 
     def headers(self, headers: httpx.Headers) -> dict[str, str]:

@@ -122,6 +122,14 @@ def test_auth_headers_are_redacted_everywhere(httpx_mock, auth_service, header, 
         assert secret not in serialized
 
 
+def test_commcare_api_key_echoed_without_the_username_is_redacted(httpx_mock):
+    httpx_mock.add_response(url=URL, text="unknown key ck-789")
+
+    [log] = _run_tool({}, auth_service=CommCareAuthService(username="user", api_key="ck-789"))
+
+    assert "ck-789" not in json.dumps(log)
+
+
 def test_sensitive_header_names_are_redacted(httpx_mock):
     operation = {"parameters": [{"name": "x-api-key", "in": "header", "required": True, "schema": {"type": "string"}}]}
     httpx_mock.add_response(url=URL, headers={"Set-Cookie": "session=s3cret", "Content-Type": "text/plain"})
