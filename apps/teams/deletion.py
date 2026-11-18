@@ -54,8 +54,7 @@ def request_team_deletion(team: Team, user: CustomUser, notify_recipients: str =
     team.save(update_fields=["deletion_requested_at", "deletion_requested_by", "deletion_notify_recipients"])
 
     emails = _notification_emails(team, notify_recipients, user.email)
-    for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
-        send_team_deletion_scheduled_notification(team, chunk)
+    transaction.on_commit(lambda: _send_scheduled_notifications(team, emails))
     return team
 
 
@@ -172,6 +171,11 @@ def _notification_emails(team: Team, notify_recipients: str, requester_email: st
     if notify_recipients == "all":
         return list(Membership.objects.filter(team=team).values_list("user__email", flat=True))
     return [requester_email] if requester_email else []
+
+
+def _send_scheduled_notifications(team: Team, emails: list[str]):
+    for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+        send_team_deletion_scheduled_notification(team, chunk)
 
 
 def _send_deleted_notifications(team_name: str, emails: list[str]):

@@ -52,11 +52,12 @@ def pending_team(db):
 
 
 @pytest.mark.django_db()
-def test_request_team_deletion_disables_team_and_emails_requester(mailoutbox):
+def test_request_team_deletion_disables_team_and_emails_requester(mailoutbox, django_capture_on_commit_callbacks):
     team = TeamWithUsersFactory.create()
     admin = _admin(team)
 
-    request_team_deletion(team, admin, "self")
+    with django_capture_on_commit_callbacks(execute=True):
+        request_team_deletion(team, admin, "self")
 
     team.refresh_from_db()
     assert team.is_pending_deletion
@@ -83,6 +84,7 @@ def test_cancel_team_deletion_restores_team(pending_team):
     [
         pytest.param(0, False, id="just-requested"),
         pytest.param(settings.TEAM_DELETION_GRACE_PERIOD.days - 1, False, id="inside-grace-period"),
+        pytest.param(settings.TEAM_DELETION_GRACE_PERIOD.days, True, id="at-grace-period-boundary"),
         pytest.param(settings.TEAM_DELETION_GRACE_PERIOD.days + 1, True, id="past-grace-period"),
     ],
 )
