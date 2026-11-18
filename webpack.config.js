@@ -22,6 +22,7 @@ const config = {
     'tokenCounter': './assets/javascript/tiktoken.js',
     'editors': './assets/javascript/editors.js',
     'scrollProgress': './assets/javascript/scroll-progress.js',
+    'sessionExport': './assets/javascript/session-export.js',
     'evaluations': './assets/javascript/apps/evaluations/dataset-mode-selector.js',
     'evaluationTrends': './assets/javascript/apps/evaluations/trend-charts.js',
     'human_annotations': './assets/javascript/apps/human_annotations/session-selector.js',

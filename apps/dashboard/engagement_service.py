@@ -4,22 +4,26 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from dateutil.relativedelta import relativedelta
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, QuerySet
-from django.db.models.functions import TruncMonth, TruncWeek
 from django.utils import timezone as django_timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
 from apps.teams.models import Team
+from apps.usage_metrics.buckets import GRANULARITY_TRUNC, Granularity, bucket_key, bucket_start, bucket_starts
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.usage_metrics.filters import HUMAN_AUTHORED
-from apps.usage_metrics.metrics import bucket_date
 
 from .models import DashboardCache
+from .services import usage_filters
 
+# The engagement charts report on calendar months and ISO weeks in UTC, whatever the viewer's zone.
 TZ = ZoneInfo("UTC")
 TRAILING_MONTHS = 6
+_MONTH = GRANULARITY_TRUNC[Granularity.MONTHLY]
+_WEEK = GRANULARITY_TRUNC[Granularity.WEEKLY]
 
 WEEK_BUCKET_KEYS = {1: "1_week", 2: "2_weeks", 3: "3_weeks"}
 
@@ -38,29 +42,18 @@ def _breakdown_label(dimension: str, value: str | None) -> str:
     return value
 
 
-def _add_months(d: date, delta: int) -> date:
-    month_index = d.month - 1 + delta
-    year = d.year + month_index // 12
-    month = month_index % 12 + 1
-    return date(year, month, 1)
-
-
-def _week_start(dt: datetime) -> date:
-    local = dt.astimezone(TZ)
-    return local.date() - timedelta(days=local.weekday())
-
-
 def trailing_window(now: datetime | None = None) -> tuple[datetime, datetime, list[date]]:
+    """`[start, now)` from the first of the month six months back, with the first of each month in it."""
     now = now or django_timezone.now()
-    now_local = now.astimezone(TZ)
-    current_month_start = date(now_local.year, now_local.month, 1)
-    months = [_add_months(current_month_start, -offset) for offset in range(TRAILING_MONTHS, -1, -1)]
-    start = datetime(months[0].year, months[0].month, months[0].day, tzinfo=TZ)
+    start = bucket_start(now.astimezone(TZ), Granularity.MONTHLY) - relativedelta(months=TRAILING_MONTHS)
+    months = [month.date() for month in bucket_starts(start, now, Granularity.MONTHLY, TZ)]
     return start, now, months
 
 
 def _human_messages(team: Team, *, start: datetime, end: datetime, filters: dict) -> QuerySet:
-    return filtered_querysets(team, start_date=start, end_date=end, **filters)["messages"].filter(HUMAN_AUTHORED)
+    return filtered_querysets(team, start=start, end=end, filters=usage_filters(filters))["messages"].filter(
+        HUMAN_AUTHORED
+    )
 
 
 def monthly_activity(team: Team, *, filters: dict, now: datetime | None = None) -> dict[date, dict[int, int]]:
@@ -70,7 +63,7 @@ def monthly_activity(team: Team, *, filters: dict, now: datetime | None = None) 
     messages = _human_messages(team, start=start, end=end, filters=filters)
     rows = (
         messages.order_by()
-        .annotate(month=TruncMonth("created_at", tzinfo=TZ), week=TruncWeek("created_at", tzinfo=TZ))
+        .annotate(month=_MONTH("created_at", tzinfo=TZ), week=_WEEK("created_at", tzinfo=TZ))
         .values("chat__experiment_session__participant_id", "month", "week")
         .distinct()
     )
@@ -78,7 +71,7 @@ def monthly_activity(team: Team, *, filters: dict, now: datetime | None = None) 
     month_set = set(months)
     result: dict[date, dict[int, int]] = {month: {} for month in months}
     for row in rows:
-        month_key = bucket_date(row["month"], TZ)
+        month_key = bucket_key(row["month"], TZ).date()
         if month_key not in month_set:
             continue
         participant_id = row["chat__experiment_session__participant_id"]
@@ -157,26 +150,22 @@ class EngagementDashboardService:
         messages = _human_messages(self.team, start=start, end=end, filters=filters)
         rows = (
             messages.order_by()
-            .annotate(week=TruncWeek("created_at", tzinfo=TZ))
+            .annotate(week=_WEEK("created_at", tzinfo=TZ))
             .values("chat__experiment_session__participant_id", "week")
             .distinct()
         )
 
-        weekly_participants: dict[date, set[int]] = {}
-        week = _week_start(start)
-        last_week = _week_start(end)
-        while week <= last_week:
-            weekly_participants[week] = set()
-            week += timedelta(days=7)
-
+        weekly_participants: dict[date, set[int]] = {
+            week.date(): set() for week in bucket_starts(start, end, Granularity.WEEKLY, TZ)
+        }
         for row in rows:
-            week_start = bucket_date(row["week"], TZ)
+            week_start = bucket_key(row["week"], TZ).date()
             if week_start in weekly_participants:
                 weekly_participants[week_start].add(row["chat__experiment_session__participant_id"])
 
         participant_ids = {pid for ids in weekly_participants.values() for pid in ids}
         created_week = {
-            p.id: _week_start(p.created_at)
+            p.id: bucket_start(p.created_at.astimezone(TZ), Granularity.WEEKLY).date()
             for p in Participant.objects.filter(team=self.team, id__in=participant_ids).only("id", "created_at")
         }
 
@@ -205,7 +194,7 @@ class EngagementDashboardService:
         messages = _human_messages(self.team, start=start, end=end, filters=filters)
 
         rows = (
-            messages.annotate(month=TruncMonth("created_at", tzinfo=TZ))
+            messages.annotate(month=_MONTH("created_at", tzinfo=TZ))
             .values("month", field)
             .annotate(participants=Count("chat__experiment_session__participant_id", distinct=True))
         )
@@ -213,7 +202,7 @@ class EngagementDashboardService:
         current: dict[str, int] = {}
         previous: dict[str, int] = {}
         for row in rows:
-            month = bucket_date(row["month"], TZ)
+            month = bucket_key(row["month"], TZ).date()
             bucket = current if month == current_month else previous if month == previous_month else None
             if bucket is None:
                 continue
@@ -244,14 +233,14 @@ class EngagementDashboardService:
             return cached
 
         start, end, months = trailing_window(now)
-        sessions = filtered_querysets(self.team, start_date=start, end_date=end, **filters)["sessions"]
+        sessions = filtered_querysets(self.team, start=start, end=end, filters=usage_filters(filters))["sessions"]
         rows = (
             sessions.filter(ended_at__isnull=False)
-            .annotate(month=TruncMonth("created_at", tzinfo=TZ))
+            .annotate(month=_MONTH("created_at", tzinfo=TZ))
             .values("month")
             .annotate(avg=Avg(ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField())))
         )
-        by_month = {bucket_date(row["month"], TZ): row["avg"] for row in rows}
+        by_month = {bucket_key(row["month"], TZ).date(): row["avg"] for row in rows}
 
         current_month = months[-1]
         data = [

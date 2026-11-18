@@ -172,8 +172,6 @@ class ChatMessageMetadataKeys(StrEnum):
     OPENAI_THREAD_CHECKPOINT = "openai_thread_checkpoint"
     # Files & attachments
     OCS_ATTACHMENT_FILE_IDS = "ocs_attachment_file_ids"
-    CITED_FILES = "cited_files"
-    GENERATED_FILES = "generated_files"
     # Tracing / observability
     TRACE_INFO = "trace_info"
     TRACE_PROVIDER = "trace_provider"  # legacy top-level; only read for migration in trace_info property
@@ -190,7 +188,7 @@ class ChatMessageMetadataKeys(StrEnum):
     @classmethod
     def attachment_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
         """Metadata keys that hold file IDs referencing attachments on a message."""
-        return frozenset({cls.OPENAI_FILE_IDS, cls.OCS_ATTACHMENT_FILE_IDS, cls.CITED_FILES, cls.GENERATED_FILES})
+        return frozenset({cls.OPENAI_FILE_IDS, cls.OCS_ATTACHMENT_FILE_IDS})
 
 
 # Provider message ids are stored in their namespaced form ("whatsapp:wamid...."), so the limit has
@@ -454,14 +452,6 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
             return None
         if rating := self.tags.filter(category=TagCategories.RESPONSE_RATING).values_list("name", flat=True).first():
             return rating
-        return None
-
-    def get_processor_bot_tag_name(self) -> str | None:
-        """Returns the tag of the bot that generated this message"""
-        if self.message_type != ChatMessageType.AI:
-            return None
-        if tag := self.tags.filter(category=TagCategories.BOT_RESPONSE).first():
-            return tag.name
         return None
 
     def get_absolute_url(self):

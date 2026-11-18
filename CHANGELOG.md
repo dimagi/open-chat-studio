@@ -35,6 +35,18 @@ version section when a release is cut.
 <!-- Only migrations that are long-running or locking, irreversible, need a
      manual step or backfill, or change behavior on upgrade. Omit additive
      migrations that run automatically. Omit the section if none qualify. -->
+- `experiments.0157` drops the `debug_mode_enabled` column from `experiments_experiment` (#4375).
+  Code from before `experiments.0156` still reads that column, so upgrading past both in one
+  deploy makes the old release fail its chatbot queries until the new one is serving. Deploy a
+  release that contains `0156` first, or stop the old release before migrating. The stored values
+  are not kept; reversing the migration re-adds the column with every row `false`.
+- `chat.0033` moves the file ids chat messages store under the `cited_files` and `generated_files`
+  metadata keys into `ocs_attachment_file_ids`, now the only key read (#1901). It runs one `UPDATE`
+  per 10,000 message ids and reads every row of `chat_chatmessage`, so on a large table it takes a
+  while; it locks only the rows it changes. Releases before this one write the old keys, so a reply
+  the previous release saves after the migration starts keeps them and its files stop showing in the
+  transcript. Stop the previous release before migrating. Reversing the migration leaves the data as
+  it is.
 
 ### Deprecations and removals
 - The legacy web chat (public `/start/` links, invitations, the server-rendered chat page and the
@@ -45,6 +57,13 @@ version section when a release is cut.
   `410 Gone`. Invitations can no longer be created or sent. A new daily Celery beat task,
   `ocs_notifications.tasks.notify_http_sunsets` (02:30), notifies teams still using the legacy
   chat; Celery beat must be running for those notices to go out.
+- The chatbot debug mode setting is removed (#4375). `debug_mode_enabled` is gone from the v2
+  chatbot inspect and PATCH responses, and a v2 create or PATCH that sends it gets `400`. The v1
+  task poll (`/api/chat/{session_id}/{task_id}/poll/`) returns the generic error message for
+  every chatbot; it no longer returns the raw error for chatbots that had debug mode on.
+- Message `metadata` in the sessions API no longer has `cited_files` or `generated_files` keys.
+  The file ids they held are under `ocs_attachment_file_ids`. The message's `attachments` field
+  still lists every attached file. (#1901)
 
 ### Configuration
 <!-- Every new, renamed, retyped or removed setting that can be configured through

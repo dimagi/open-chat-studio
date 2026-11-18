@@ -72,7 +72,11 @@ class TestCostFilters:
         make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, participant=drop.participant)
 
         series = cost_timeseries(
-            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
+            team,
+            tz=UTC,
+            start=_NOW - timedelta(days=30),
+            end=_NOW,
+            filters=CostFilters(participant_ids=[keep.participant_id]),
         )
 
         assert [point["chat"] for point in series] == [1.0]
@@ -86,7 +90,7 @@ class TestCostFilters:
         make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=api)
 
         series = cost_timeseries(
-            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(platform_names=["web"])
+            team, tz=UTC, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(platform_names=["web"])
         )
 
         assert [point["chat"] for point in series] == [1.0]
@@ -245,7 +249,7 @@ class TestCostFilters:
         make_usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
         make_usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
 
-        series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+        series = cost_timeseries(team, tz=UTC, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
 
         assert [point["chat"] for point in series] == [1.0]
         assert "evaluation" not in series[0]
@@ -350,7 +354,7 @@ class TestEvaluationSourceRule:
     def test_timeseries_splits_both_sources_when_unfiltered(self, spend):
         team, _, _ = spend
 
-        series = cost_timeseries(team, start=_START, end=_NOW)
+        series = cost_timeseries(team, tz=UTC, start=_START, end=_NOW)
 
         assert [(point["chat"], point["evaluation"]) for point in series] == [(1.0, 0.25)]
 
@@ -359,7 +363,9 @@ class TestEvaluationSourceRule:
         chart omits the series rather than showing a zero that reads as "no eval spend"."""
         team, experiment, _ = spend
 
-        series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id]))
+        series = cost_timeseries(
+            team, tz=UTC, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id])
+        )
 
         assert series == [{"date": series[0]["date"], "chat": 1.0}]
 

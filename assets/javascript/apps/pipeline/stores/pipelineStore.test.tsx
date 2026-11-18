@@ -3,6 +3,8 @@ import {Edge, Node, NodeProps, ReactFlowInstance} from "reactflow";
 import usePipelineStore, {withTemporalPaused} from "./pipelineStore";
 import useEditorStore from "./editorStore";
 import {NodeData} from "../types/nodeParams";
+import {apiClient} from "../api/api";
+import {PipelineType} from "../types/pipeline";
 
 const nodeA: Node = {id: "a", type: "pipelineNode", position: {x: 0, y: 0}, data: {type: "LLMResponse", params: {}}};
 const nodeB: Node = {id: "b", type: "pipelineNode", position: {x: 100, y: 0}, data: {type: "LLMResponse", params: {}}};
@@ -634,5 +636,85 @@ describe("pipelineStore focusNode", () => {
 
     expect(selectedIds()).toEqual(["a"]);
     expect(fitView).not.toHaveBeenCalled();
+  });
+});
+
+describe("pipelineStore savePipeline", () => {
+  const saved = {data: {nodes: [nodeA, nodeB], edges: [edgeAB]}, errors: {}, edit_revision: 4};
+  const pipeline = () => usePipelineStore.getState().currentPipeline as PipelineType;
+
+  beforeEach(() => {
+    seed();
+    seedCurrentPipeline();
+    usePipelineStore.setState({currentRevision: 3, isSaving: false, conflictDetected: false});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("sends the current revision and adopts the one the server returns", async () => {
+    const update = vi.spyOn(apiClient, "updatePipeline").mockResolvedValue(saved);
+
+    await usePipelineStore.getState().savePipeline(pipeline());
+
+    expect(update).toHaveBeenCalledWith(1, pipeline(), 3);
+    expect(usePipelineStore.getState().currentRevision).toBe(4);
+  });
+
+  test("waits for an in-flight autosave and sends the revision it produced", async () => {
+    const update = vi.spyOn(apiClient, "updatePipeline").mockResolvedValue({...saved, edit_revision: 5});
+    usePipelineStore.setState({isSaving: true});
+
+    const save = usePipelineStore.getState().savePipeline(pipeline());
+    await Promise.resolve();
+    expect(update).not.toHaveBeenCalled();
+
+    usePipelineStore.setState({currentRevision: 4, isSaving: false});
+    await save;
+
+    expect(update).toHaveBeenCalledWith(1, expect.anything(), 4);
+  });
+
+  test("keeps a node added while it waited, after a deferred autosave persisted it", async () => {
+    const nodeC: Node = {id: "c", type: "pipelineNode", position: {x: 200, y: 0}, data: {type: "LLMResponse", params: {}}};
+    let finishFirstPatch!: (value: typeof saved) => void;
+    vi.spyOn(apiClient, "patchPipeline")
+      .mockReturnValueOnce(new Promise((resolve) => (finishFirstPatch = resolve)))
+      .mockResolvedValueOnce({...saved, data: {nodes: [nodeA, nodeB, nodeC], edges: [edgeAB]}, edit_revision: 5});
+    const sent: {nodeIds: string[]; revision: number}[] = [];
+    vi.spyOn(apiClient, "updatePipeline").mockImplementation(async (_id, updated, revision) => {
+      sent.push({nodeIds: updated.data!.nodes.map((node) => node.id), revision});
+      return {...saved, edit_revision: revision + 1};
+    });
+
+    const firstPatch = usePipelineStore.getState()._patchPipeline({base_revision: 3});
+    const save = usePipelineStore.getState().savePipeline(pipeline());
+    usePipelineStore.setState({nodes: [...usePipelineStore.getState().nodes, nodeC]});
+    usePipelineStore.getState()._flushSave();
+    finishFirstPatch(saved);
+    await firstPatch;
+    await save;
+
+    expect(sent).toEqual([{nodeIds: ["a", "b", "c"], revision: 5}]);
+  });
+
+  test("refuses to save over an unresolved conflict", async () => {
+    const update = vi.spyOn(apiClient, "updatePipeline");
+    usePipelineStore.setState({conflictDetected: true});
+
+    await expect(usePipelineStore.getState().savePipeline(pipeline())).rejects.toThrow("Conflict");
+
+    expect(update).not.toHaveBeenCalled();
+    expect(usePipelineStore.getState().conflictDetected).toBe(true);
+  });
+
+  test("a stale revision rejected by the server shows the conflict", async () => {
+    vi.spyOn(apiClient, "updatePipeline").mockRejectedValue(Object.assign(new Error("Conflict"), {status: 409}));
+
+    await expect(usePipelineStore.getState().savePipeline(pipeline())).rejects.toThrow("Conflict");
+
+    expect(usePipelineStore.getState().conflictDetected).toBe(true);
+    expect(usePipelineStore.getState().isSaving).toBe(false);
   });
 });

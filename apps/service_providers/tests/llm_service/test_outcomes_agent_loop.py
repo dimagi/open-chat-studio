@@ -109,6 +109,14 @@ SHAPES = [
     ),
     pytest.param(
         _ShapeModel(
+            message=AIMessage(content="", response_metadata={"model_provider": "google_genai"}),
+            generation_info={"finish_reason": "SAFETY", "finish_message": "The response was blocked for safety."},
+        ),
+        "content_filter",
+        id="gemini_candidate_block_with_finish_message",
+    ),
+    pytest.param(
+        _ShapeModel(
             message=AIMessage(content=""),
             generation_info={},
             llm_output={"prompt_feedback": {"block_reason": 1, "safety_ratings": [{"category": 9}]}},
