@@ -5,11 +5,11 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 
 from apps.pipelines.models import Node
-from apps.pipelines.versioning import all_versioned_param_specs
+from apps.pipelines.versioning import NodeVersionSpec
 
 # collection_indexes (many=True) is handled separately as an M2M check below.
-_SCALAR_FK_FIELDS = tuple(dict.fromkeys(spec.fk_field for spec in all_versioned_param_specs() if not spec.many))
-_M2M_FK_FIELDS = tuple(dict.fromkeys(spec.fk_field for spec in all_versioned_param_specs() if spec.many))
+_SCALAR_FK_FIELDS = tuple(dict.fromkeys(m.fk_field for m in NodeVersionSpec.param_references() if not m.many))
+_M2M_FK_FIELDS = tuple(dict.fromkeys(m.fk_field for m in NodeVersionSpec.param_references() if m.many))
 _ARCHIVED_REFERENCE = reduce(
     or_, (Q(**{f"{field}__is_archived": True}) for field in _SCALAR_FK_FIELDS + _M2M_FK_FIELDS)
 )

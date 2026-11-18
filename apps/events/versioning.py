@@ -24,10 +24,10 @@ TRIGGER_ACCESSORS = ("static_triggers", "timeout_triggers", "scheduled_triggers"
 class EventActionParamSpec:
     """Declares an ``EventAction.params`` entry that references a versioned record.
 
-    Mirrors ``apps.pipelines.versioning.VersionedParamSpec`` for pipeline-node params,
-    but ``EventAction`` has no FK mirror column, so the referenced id is read straight
-    from ``params``. Publish pins the working record to a version (creating one only
-    when the record changed); revert maps a versioned record back to its working id.
+    Mirrors the node spec's ``ParamReference`` members, but ``EventAction`` has no FK
+    mirror column, so the referenced id is read straight from ``params``. Publish pins
+    the working record to a version (creating one only when the record changed); revert
+    maps a versioned record back to its working id.
     """
 
     param_name: str

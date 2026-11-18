@@ -1,186 +1,141 @@
-"""Registry of node params that reference database records.
+"""The version specs of the pipeline models.
 
-Each spec declares how a node param holding a model ID is handled when the node is
-versioned (publish), when a node version is archived, and how it is resolved for
-version-detail display. Adding a new param that references a versioned model only
-requires a new spec here; the code in ``apps.pipelines.models.Node`` is driven
-entirely by this registry.
-
-Custom actions are not included: they are linked through ``CustomActionOperation``
-records rather than an ID param, and are handled by ``CustomActionOperationMixin``.
+A pipeline's snapshot carries its edges and its nodes; a node's snapshot carries its params, with
+the records some params name pinned to versions, and the custom action operations the node owns.
 """
 
-import logging
-from dataclasses import dataclass
-from enum import StrEnum
+from typing import Any
 
-from django.apps import apps
-from django.core.exceptions import ObjectDoesNotExist
-
-versioning_logger = logging.getLogger("ocs.versioning")
-
-
-class ParamVersioning(StrEnum):
-    """How the referenced record is treated when the node is versioned."""
-
-    NEW_VERSION = "new_version"
-    """Always create a new version of the referenced record and point the param at it."""
-
-    REUSE_UNCHANGED = "reuse_unchanged"
-    """Create a new version only if the record changed since its latest version,
-    otherwise point the param at the existing latest version."""
-
-    LIVE_REFERENCE = "live_reference"
-    """The record is a live shared resource; the param keeps the working ID verbatim."""
+from apps.experiments.versioning import (
+    Archiving,
+    Member,
+    Operation,
+    OwnedSet,
+    ParamReference,
+    Strategy,
+    VersionSpec,
+)
+from apps.pipelines.flow import FlowWithoutNodes
+from apps.pipelines.helper import duplicate_pipeline_with_new_ids
 
 
-class ParamArchiving(StrEnum):
-    """How the referenced record is treated when the node version is archived."""
+class FlowIds(Member):
+    """How `Pipeline.data`, the edges, travels: a copy gets fresh node ids written onto them and provides
+    the mapping to the nodes; a revert takes the version's edges and advances the edit revision."""
 
-    ARCHIVE = "archive"
-    """Archive the referenced record."""
+    def publish(self, working, version, context: dict[str, Any]) -> None:
+        self._provide(context, {})
 
-    ARCHIVE_VERSIONS_ONLY = "archive_versions_only"
-    """Archive the referenced record only if it is a version, never a live working record."""
+    def copy(self, working, copy, context: dict[str, Any]) -> None:
+        node_types = dict(working.node_set.values_list("flow_id", "type"))
+        copy.data, mapping = duplicate_pipeline_with_new_ids(working.data, node_types)
+        self._provide(context, mapping)
 
-    KEEP = "keep"
-    """Leave the referenced record untouched."""
-
-
-@dataclass(frozen=True)
-class VersionedParamSpec:
-    param_name: str
-    model_label: str  # "app_label.ModelName"; resolved lazily to avoid circular imports
-    display_name: str
-    versioning: ParamVersioning
-    archiving: ParamArchiving
-    fk_field: str  # the Node FK/M2M column mirroring this param (see apps.pipelines.models.Node)
-    many: bool = False  # param holds a list of IDs
-
-    def __post_init__(self):
-        if self.many and self.versioning != ParamVersioning.LIVE_REFERENCE:
-            raise ValueError("Versioning of multi-ID params is not supported")
-
-    @property
-    def model_cls(self):
-        return apps.get_model(self.model_label)
-
-    def version_referenced_record(self, params: dict) -> None:
-        """Version the referenced record according to the spec's versioning strategy,
-        updating the param in ``params`` to point at the version."""
-        instance_id = params.get(self.param_name)
-        if not instance_id:
-            return
-
-        match self.versioning:
-            case ParamVersioning.LIVE_REFERENCE:
-                return
-            case ParamVersioning.NEW_VERSION:
-                instance = self.model_cls.objects.get(id=instance_id)
-                if not instance.is_a_version:
-                    params[self.param_name] = str(instance.create_new_version().id)
-            case ParamVersioning.REUSE_UNCHANGED:
-                instance = self.model_cls.objects.filter(id=instance_id).first()
-                if instance:
-                    if not instance.has_versions or instance.compare_with_latest():
-                        params[self.param_name] = str(instance.create_new_version().id)
-                    else:
-                        params[self.param_name] = str(instance.latest_version.id)
-
-    def revert_referenced_record(self, node, params: dict) -> None:
-        """Inverse of ``version_referenced_record``: rewrite ``params[param_name]`` from the
-        versioned record back to the id of its working version.
-
-        The versioned record is read from ``node``'s resource FK column (``fk_field``) — the
-        trusted, constraint-backed mirror of the param — rather than re-querying by the param id.
-        ``LIVE_REFERENCE`` params keep their id verbatim (publish never rewrote them)."""
-        if self.versioning == ParamVersioning.LIVE_REFERENCE:
-            return
-
-        instance = getattr(node, self.fk_field)
-        if instance is not None:
-            params[self.param_name] = str(instance.get_working_version_id())
-        elif params.get(self.param_name):
-            # The FK was nulled (its referenced version was deleted) but params still carries a
-            # stale id; clear it so the reverted working node doesn't resurrect a dangling reference.
-            params[self.param_name] = None
-
-    def archive_referenced_record(self, params: dict) -> None:
-        """Archive the record(s) referenced by the param according to the spec's
-        archiving strategy."""
-        if self.archiving == ParamArchiving.KEEP:
-            return
-
-        for instance_id in self._referenced_ids(params):
-            try:
-                instance = self.model_cls.objects.get(id=instance_id)
-            except ObjectDoesNotExist:
-                versioning_logger.exception(
-                    f"Failed to archive {self.param_name} with id {instance_id}, since it could not be found"
-                )
-                continue
-            if self.archiving == ParamArchiving.ARCHIVE_VERSIONS_ONLY and not instance.is_a_version:
-                continue
-            instance.archive()
-
-    def unarchive_referenced_record(self, params: dict) -> None:
-        """Restore the record(s) ``archive_referenced_record`` archived, for a node version being restored.
-
-        Only ``ARCHIVE`` records come back: archiving a collection deletes its remote index and files,
-        so a restored ``ARCHIVE_VERSIONS_ONLY`` collection row would have nothing behind it.
-        """
-        if self.archiving != ParamArchiving.ARCHIVE:
-            return
-        archived = self.model_cls.objects.get_all().filter(id__in=self._referenced_ids(params), is_archived=True)
-        for instance in archived:
-            instance.unarchive()
-
-    def _referenced_ids(self, params: dict) -> list:
-        value = params.get(self.param_name)
-        return (value if self.many else [value]) if value else []
-
-    def resolve_for_display(self, value):
-        """Resolve the raw param value to model instance(s) for version-detail display."""
-        if not value:
-            return value
-        if self.many:
-            return list(self.model_cls.objects.filter(id__in=value))
-        return self.model_cls.objects.filter(id=value).first()
+    def revert(self, working, version) -> None:
+        working.data = FlowWithoutNodes(**(version.data or {"edges": []})).model_dump()
+        working.edit_revision += 1
 
 
-NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
-    "LLMResponseWithPrompt": (
-        VersionedParamSpec(
-            param_name="source_material_id",
-            model_label="experiments.SourceMaterial",
-            display_name="source_material",
-            versioning=ParamVersioning.REUSE_UNCHANGED,
-            archiving=ParamArchiving.ARCHIVE,
-            fk_field="source_material",
-        ),
-        # ADR-0031: collections (media + index) are live shared resources. Only frozen
-        # per-bot versions (legacy data) are ever archived; never the live working collection.
-        VersionedParamSpec(
-            param_name="collection_id",
-            model_label="documents.Collection",
-            display_name="media",
-            versioning=ParamVersioning.LIVE_REFERENCE,
-            archiving=ParamArchiving.ARCHIVE_VERSIONS_ONLY,
-            fk_field="collection",
-        ),
-        VersionedParamSpec(
-            param_name="collection_index_ids",
-            model_label="documents.Collection",
-            display_name="Collection Indexes",
-            versioning=ParamVersioning.LIVE_REFERENCE,
-            archiving=ParamArchiving.ARCHIVE_VERSIONS_ONLY,
-            fk_field="collection_indexes",
-            many=True,
-        ),
-    ),
-}
+def carry_nodes(working, other, operation: Operation, context: dict[str, Any]) -> None:
+    """Bridge for `Pipeline.node_set`: publish and copy traverse each node's spec under the new pipeline,
+    a copy with the fresh flow id `FlowIds` provided; revert rebuilds the working nodes from the
+    version's, with the records their params name mapped back to working ids."""
+    if operation is Operation.REVERT:
+        node_data = {}
+        for version_node in other.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
+            flow_node = version_node.to_flow_node()
+            for member in NodeVersionSpec.param_references():
+                member.map_back(version_node, flow_node.data.params)
+            node_data[version_node.flow_id] = flow_node
+        working.update_nodes_from_data(node_data)
+        return
+    spec = NodeVersionSpec()
+    for node in working.node_set.all():
+        if operation is Operation.PUBLISH:
+            spec.publish(node, pipeline=other)
+        else:
+            spec.copy(node, pipeline=other, new_flow_id=context["flow_ids"].get(node.flow_id))
 
 
-def all_versioned_param_specs() -> list[VersionedParamSpec]:
-    """Every spec across all node types, flattened."""
-    return [spec for specs in NODE_PARAM_SPECS.values() for spec in specs]
+def carry_custom_action_operations(working, other, operation: Operation, context: dict[str, Any]) -> None:
+    """Bridge for `Node.custom_action_operations` until `CustomActionOperation` has a spec: each row the
+    working node owns is cloned under the new node."""
+    if operation is Operation.REVERT or not working.node_type.declares("custom_actions"):
+        return
+    working._copy_custom_action_operations_to_new_version(new_node=other, is_copy=operation is Operation.COPY)
+
+
+class PipelineVersionSpec(VersionSpec):
+    """How a pipeline travels: its edges through `FlowIds`, its nodes under the pipeline being made."""
+
+    class Meta:
+        model = "pipelines.Pipeline"
+        identity = frozenset(
+            {
+                "id",
+                "team",
+                "created_at",
+                "updated_at",
+                "working_version",
+                "version_number",
+                "is_archived",
+                "edit_revision",
+            }
+        )
+
+    data = FlowIds(provides="flow_ids")
+    node_set = OwnedSet(via=carry_nodes, reads=("flow_ids",))
+
+    def on_revert(self, working, version) -> None:
+        working.clear_node_caches()
+
+
+class NodeVersionSpec(VersionSpec):
+    """How a node travels: its params as they are, but for the records they name, under the pipeline
+    being made; `Node.archive` and `Node.unarchive` read the same param references."""
+
+    class Meta:
+        model = "pipelines.Node"
+        identity = frozenset(
+            {"id", "created_at", "updated_at", "working_version", "is_archived", "archived_with_pipeline", "pipeline"}
+        )
+
+    source_material = ParamReference(
+        "source_material_id",
+        "experiments.SourceMaterial",
+        Strategy.REUSE_UNCHANGED,
+        archiving=Archiving.ARCHIVE,
+        display_name="source_material",
+    )
+    # ADR-0031: collections, media and index alike, are live shared resources. Only a frozen per-bot
+    # version (legacy data) is ever archived, never the live working collection.
+    collection = ParamReference(
+        "collection_id",
+        "documents.Collection",
+        Strategy.LIVE_REFERENCE,
+        archiving=Archiving.ARCHIVE_VERSIONS_ONLY,
+        display_name="media",
+    )
+    collection_indexes = ParamReference(
+        "collection_index_ids",
+        "documents.Collection",
+        Strategy.LIVE_REFERENCE,
+        archiving=Archiving.ARCHIVE_VERSIONS_ONLY,
+        display_name="Collection Indexes",
+        many=True,
+    )
+    custom_action_operations = OwnedSet(via=carry_custom_action_operations)
+
+    def on_clone(self, working, clone, *, pipeline=None, new_flow_id: str | None = None, **options) -> None:
+        if pipeline is not None:
+            clone.pipeline = pipeline
+        if new_flow_id:
+            if not clone.node_type.is_server_managed and clone.name == clone.flow_id:
+                clone.params["name"] = new_flow_id
+            clone.flow_id = new_flow_id
+
+    def on_publish(self, working, version, **options) -> None:
+        version._sync_resource_fk_fields()
+
+    def on_copy(self, working, copy, **options) -> None:
+        copy._sync_resource_fk_fields()
