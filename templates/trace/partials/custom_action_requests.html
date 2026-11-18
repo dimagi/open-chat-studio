@@ -20,7 +20,7 @@
             <span class="font-mono truncate" title="{{ log.url }}">{{ log.url }}</span>
             <span class="ml-auto pl-2 text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ log.duration_ms }} ms</span>
           </div>
-          <div class="text-xs text-base-content/60 mt-1">{{ log.custom_action|default:"Custom action" }} · {{ log.tool }}</div>
+          <div class="text-xs text-base-content/60 mt-1">{{ log.custom_action.name|default:"Custom action" }} · {{ log.operation }}</div>
         </summary>
         <div class="collapse-content space-y-4 text-sm">
           {% if log.error %}

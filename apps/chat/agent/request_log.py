@@ -23,6 +23,7 @@ class RequestAttempt:
     """One HTTP request a custom action tool sent, and what came back."""
 
     tool_name: str
+    custom_action_id: int | None
     custom_action_name: str | None
     request: httpx.Request
     # The request's headers before the auth provider added its own while sending it.
@@ -61,6 +62,7 @@ def build_request_log(attempt: RequestAttempt) -> dict[str, Any]:
     return {
         "tool": attempt.tool_name,
         "custom_action": attempt.custom_action_name,
+        "custom_action_id": attempt.custom_action_id,
         "method": request.method,
         "url": redactor.scrub(str(request.url)),
         "request_headers": redactor.headers(request.headers),

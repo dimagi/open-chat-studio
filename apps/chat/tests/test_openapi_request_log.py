@@ -20,7 +20,8 @@ from apps.service_providers.auth_service import (
 from apps.service_providers.tracing import TracingService
 from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT
 from apps.service_providers.tracing.ocs_tracer import OCSTracer
-from apps.trace.models import Trace
+from apps.trace.models import CustomActionRequest
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.openapi import OpenAPISpec
 
@@ -46,10 +47,13 @@ def _no_notifications():
         yield
 
 
-def _build_tool(operation: dict, auth_service: AuthService = anonymous_auth_service, method: str = "get"):
+def _build_tool(
+    operation: dict, auth_service: AuthService = anonymous_auth_service, method: str = "get", custom_action=None
+):
     spec = OpenAPISpec.from_spec_dict(make_openapi_schema(operation, method=method))
     function_def = openapi_spec_op_to_function_def(spec, next(iter(spec.paths)), method)
-    return function_def.build_tool(auth_service, custom_action=SimpleNamespace(name="Weather API"))
+    custom_action = custom_action or SimpleNamespace(id=42, name="Weather API")
+    return function_def.build_tool(auth_service, custom_action=custom_action)
 
 
 def _run_tool(operation: dict, args: dict | None = None, **kwargs) -> list[dict]:
@@ -70,6 +74,7 @@ def test_request_and_response_are_logged(httpx_mock):
 
     assert log["tool"] == "test_post"
     assert log["custom_action"] == "Weather API"
+    assert log["custom_action_id"] == 42
     assert log["method"] == "POST"
     assert log["url"] == URL
     assert log["request_headers"]["content-type"] == "application/json"
@@ -191,8 +196,9 @@ def test_call_outside_a_tool_run_is_not_logged(httpx_mock):
 def test_request_log_is_saved_on_the_trace(httpx_mock, experiment):
     httpx_mock.add_response(url=URL, text="ok")
     session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
+    custom_action = CustomActionFactory.create(team=experiment.team)
     tracing_service = TracingService([OCSTracer(experiment, experiment.team_id)], experiment.id, experiment.team_id)
-    tool = _build_tool({})
+    tool = _build_tool({}, custom_action=custom_action)
 
     with tracing_service.trace("chat", session):
         tool.invoke(
@@ -200,6 +206,6 @@ def test_request_log_is_saved_on_the_trace(httpx_mock, experiment):
             config=tracing_service.get_langchain_config(),
         )
 
-    trace = Trace.objects.get(session=session)
-    [log] = trace.custom_action_requests
-    assert (log["method"], log["url"], log["status_code"], log["response_body"]) == ("GET", URL, 200, "ok")
+    request = CustomActionRequest.objects.get(trace__session=session)
+    assert request.custom_action == custom_action
+    assert (request.method, request.url, request.status_code, request.response_body) == ("GET", URL, 200, "ok")

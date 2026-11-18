@@ -17,7 +17,7 @@ from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.llm_service.error_classification import translate_provider_error
 from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT, OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
-from apps.trace.models import Trace, TraceStatus
+from apps.trace.models import CustomActionRequest, Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
 
@@ -129,9 +129,12 @@ class OCSTracer(Tracer):
                 self.trace_record.status = TraceStatus.SUCCESS
 
             self._update_trace_metrics()
-            self.trace_record.custom_action_requests = self.custom_action_requests
             self.trace_record.save()
             self._record_costs()
+            CustomActionRequest.objects.bulk_create(
+                CustomActionRequest.from_request_log(request_log, self.trace_record)
+                for request_log in self.custom_action_requests
+            )
 
             session_id = self.session.id if self.session else None
             logger.debug(

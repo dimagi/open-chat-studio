@@ -10,9 +10,10 @@ from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
 from apps.generics.actions import CHIP_BUTTON_STYLE
 from apps.trace.models import TraceStatus
 from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.factories.traces import TraceFactory
+from apps.utils.factories.traces import CustomActionRequestFactory, TraceFactory
 
 
 def _make_trace(team, **kwargs):
@@ -230,45 +231,46 @@ def test_trace_detail_view_shows_confidence_badge_for_estimated_rows(client, tea
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("requests", "shown"),
+    ("has_custom_action", "label"),
     [
-        pytest.param([], False, id="no-requests"),
-        pytest.param(None, False, id="null-from-older-release"),
-        pytest.param(
-            [
-                {
-                    "tool": "get_weather",
-                    "custom_action": "Weather API",
-                    "method": "GET",
-                    "url": "https://api.example.com/weather?city=Nairobi",
-                    "request_headers": {"authorization": "[REDACTED]"},
-                    "request_body": None,
-                    "status_code": 503,
-                    "response_headers": {"content-type": "text/plain"},
-                    "response_body": "upstream unavailable",
-                    "duration_ms": 412,
-                    "error": "HTTPStatusError: Server error '503 Service Unavailable'",
-                }
-            ],
-            True,
-            id="one-request",
-        ),
+        pytest.param(True, "Weather API", id="custom-action"),
+        pytest.param(False, "Custom action", id="custom-action-deleted"),
     ],
 )
-def test_trace_detail_view_shows_custom_action_requests(client, team_with_users, requests, shown):
+def test_trace_detail_view_shows_custom_action_requests(client, team_with_users, has_custom_action, label):
     team = team_with_users
-    trace = _make_trace(team, custom_action_requests=requests)
+    trace = _make_trace(team)
+    url = "https://api.example.com/weather?city=Nairobi"
+    CustomActionRequestFactory.create(
+        trace=trace,
+        custom_action=CustomActionFactory.create(team=team, name="Weather API") if has_custom_action else None,
+        url=url,
+        request_headers={"authorization": "[REDACTED]"},
+        status_code=503,
+        response_body="upstream unavailable",
+        duration_ms=412,
+        error="HTTPStatusError: Server error '503 Service Unavailable'",
+    )
 
     client.force_login(team.members.first())
     response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert ('data-testid="custom-action-requests"' in content) is shown
-    if shown:
-        for text in ["Weather API", "https://api.example.com/weather?city=Nairobi", "503", "412 ms", "[REDACTED]"]:
-            assert text in content
-        assert "upstream unavailable" in content
+    assert 'data-testid="custom-action-requests"' in content
+    for text in [label, url, "503", "412 ms", "[REDACTED]", "upstream unavailable"]:
+        assert text in content
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_hides_custom_action_requests_when_there_are_none(client, team_with_users):
+    team = team_with_users
+    trace = _make_trace(team)
+
+    client.force_login(team.members.first())
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert 'data-testid="custom-action-requests"' not in response.content.decode()
 
 
 @pytest.mark.django_db()

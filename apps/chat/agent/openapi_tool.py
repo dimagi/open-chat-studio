@@ -130,6 +130,7 @@ class OpenAPIOperationExecutor:
         request = http_client.build_request(method.upper(), url, **kwargs)
         attempt = RequestAttempt(
             tool_name=self.function_def.name,
+            custom_action_id=self.custom_action.id if self.custom_action else None,
             custom_action_name=self.custom_action.name if self.custom_action else None,
             request=request,
             unauthenticated_headers=dict(request.headers),

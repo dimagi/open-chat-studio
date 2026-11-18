@@ -7,8 +7,9 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 
+from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
-from apps.utils.fields import SanitizedJSONField
+from apps.utils.fields import SanitizedJSONField, sanitize_json_data
 
 
 class TraceStatus(models.TextChoices):
@@ -54,9 +55,6 @@ class Trace(models.Model):
     error = models.TextField(blank=True, help_text="Error message if the trace failed")
     n_turns = models.IntegerField(null=True, blank=True, help_text="Number of LLM calls during pipeline execution")
     n_toolcalls = models.IntegerField(null=True, blank=True, help_text="Number of tool invocations across all turns")
-    custom_action_requests = SanitizedJSONField(
-        default=list, null=True, blank=True, help_text="HTTP requests made by custom actions, with credentials redacted"
-    )
 
     class Meta:
         indexes = [
@@ -85,6 +83,52 @@ class Trace(models.Model):
 
     def duration_seconds(self) -> float:
         return round(self.duration / 1000, 2)
+
+
+class CustomActionRequest(BaseTeamModel):
+    """One HTTP request a custom action tool sent during a trace, with credentials already redacted."""
+
+    trace = models.ForeignKey(Trace, on_delete=models.CASCADE, related_name="custom_action_requests")
+    custom_action = models.ForeignKey(
+        "custom_actions.CustomAction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="logged_requests",
+    )
+    operation = models.CharField(max_length=255)
+    method = models.CharField(max_length=16)
+    url = models.TextField()
+    request_headers = SanitizedJSONField(default=dict, blank=True)
+    request_body = models.TextField(blank=True)
+    status_code = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Empty when no response came back")
+    response_headers = SanitizedJSONField(default=dict, blank=True)
+    response_body = models.TextField(blank=True)
+    duration_ms = models.PositiveIntegerField()
+    error = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["custom_action", "-created_at"], name="ca_request_action_created_idx")]
+
+    @classmethod
+    def from_request_log(cls, request_log: dict, trace: Trace) -> CustomActionRequest:
+        """Build an unsaved row from the record ``apps.chat.agent.request_log`` dispatches."""
+        log = sanitize_json_data(request_log)
+        return cls(
+            team_id=trace.team_id,
+            trace=trace,
+            custom_action_id=log["custom_action_id"],
+            operation=log["tool"],
+            method=log["method"],
+            url=log["url"],
+            request_headers=log["request_headers"],
+            request_body=log["request_body"] or "",
+            status_code=log["status_code"],
+            response_headers=log["response_headers"],
+            response_body=log["response_body"] or "",
+            duration_ms=log["duration_ms"],
+            error=log["error"],
+        )
 
 
 def participant_data_from_trace(trace: Trace) -> dict:

@@ -83,6 +83,7 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("chat.chatattachment", "chat_attachments", "pk"),
     ManifestEntry("chat.chatmessage", "chat_messages", "updated_at_id"),
     ManifestEntry("trace.trace", "traces", "pk"),
+    ManifestEntry("trace.customactionrequest", "custom_action_requests", "pk"),
     ManifestEntry("pipelines.pipelinechathistory", "pipeline_chat_histories", "updated_at_id"),
     ManifestEntry("pipelines.pipelinechatmessages", "pipeline_chat_messages", "pk"),
     ManifestEntry("events.scheduledmessage", "scheduled_messages", "updated_at_id"),

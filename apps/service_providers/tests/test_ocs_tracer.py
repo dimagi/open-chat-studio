@@ -9,7 +9,8 @@ from apps.chat.exceptions import ProviderConfigurationError
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
-from apps.trace.models import Trace
+from apps.trace.models import CustomActionRequest, Trace
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
@@ -64,18 +65,40 @@ class TestOCSTracer:
         assert trace.trace_metadata == metadata
 
     def test_custom_action_requests_persisted(self, experiment):
-        """Custom action request events are saved on the trace; other custom events are not."""
+        """Each custom action request event becomes a row on the trace; other custom events are ignored."""
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create()
+        custom_action = CustomActionFactory.create(team=experiment.team)
+        request_log = {
+            "tool": "weather_get",
+            "custom_action": custom_action.name,
+            "custom_action_id": custom_action.id,
+            "method": "GET",
+            "url": "https://a.example",
+            "request_headers": {"authorization": "[REDACTED]"},
+            "request_body": None,
+            "status_code": None,
+            "response_headers": {},
+            "response_body": None,
+            "duration_ms": 12,
+            "error": "ConnectError: refused\x00",
+        }
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         with tracer.trace(trace_context=trace_context, session=session):
             handler = tracer.get_langchain_callback()
-            handler.on_custom_event(CUSTOM_ACTION_REQUEST_EVENT, {"url": "https://a.example"}, run_id=uuid4())
+            handler.on_custom_event(CUSTOM_ACTION_REQUEST_EVENT, request_log, run_id=uuid4())
             handler.on_custom_event("something_else", {"url": "https://b.example"}, run_id=uuid4())
 
         trace = Trace.objects.get(trace_id=trace_context.id)
-        assert trace.custom_action_requests == [{"url": "https://a.example"}]
+        [request] = CustomActionRequest.objects.filter(trace=trace)
+        assert (request.team_id, request.custom_action_id, request.operation, request.url) == (
+            experiment.team_id,
+            custom_action.id,
+            "weather_get",
+            "https://a.example",
+        )
+        assert (request.status_code, request.request_body, request.error) == (None, "", "ConnectError: refused")
         assert tracer.custom_action_requests == []
 
     def test_trace_error_recording(self, experiment):
