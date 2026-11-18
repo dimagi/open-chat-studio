@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission
@@ -110,6 +111,26 @@ class Team(BaseModel):
         db_default=False,
         help_text="When set, participants who reach the strike limit are blocked automatically.",
     )
+    deletion_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When set, the team is disabled and will be permanently deleted after the grace period.",
+    )
+    deletion_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="User who requested the team's deletion.",
+    )
+    deletion_notify_recipients = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        db_default="",
+        help_text="Who to email when the team is permanently deleted: self, admins or all.",
+    )
 
     def save(self, *args, **kwargs):
         from .helpers import get_next_unique_team_slug  # noqa: PLC0415 - circular: teams.helpers imports teams.models
@@ -131,6 +152,16 @@ class Team(BaseModel):
     @property
     def dashboard_url(self) -> str:
         return reverse("web_team:home", args=[self.slug])
+
+    @property
+    def is_pending_deletion(self) -> bool:
+        return self.deletion_requested_at is not None
+
+    @property
+    def deletion_due_at(self) -> datetime | None:
+        if self.deletion_requested_at is None:
+            return None
+        return self.deletion_requested_at + settings.TEAM_DELETION_GRACE_PERIOD
 
     @property
     def files_export_in_progress(self) -> bool:

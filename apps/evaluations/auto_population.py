@@ -124,7 +124,7 @@ def auto_populate_eval_datasets():
     double-process the same rule. A failure on one rule never blocks others.
     """
     rule_ids = list(
-        DatasetAutoPopulationRule.objects.filter(is_enabled=True)
+        DatasetAutoPopulationRule.objects.filter(is_enabled=True, team__deletion_requested_at__isnull=True)
         .order_by(F("last_run_at").asc(nulls_first=True))
         .values_list("id", flat=True)
     )

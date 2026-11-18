@@ -10,6 +10,8 @@ TEAM_FIELDS = [
     "moderation_enabled",
     "moderation_provider",
     "auto_block_enabled",
+    "deletion_requested_at",
+    "deletion_requested_by",
 ]
 MEMBERSHIP_FIELDS = ["team", "user"]
 FLAG_FIELDS = [

@@ -1,5 +1,6 @@
 from django.http import HttpRequest
 from django.utils.translation import gettext as _
+from rest_framework import exceptions
 
 from apps.users.models import CustomUser
 from apps.utils.slug import get_next_unique_slug
@@ -26,7 +27,7 @@ def get_next_unique_team_slug(team_name: str) -> str:
 def get_team_for_request(request, view_kwargs):
     team_slug = view_kwargs.get("team_slug", None)
     if team_slug:
-        return Team.objects.filter(slug=team_slug).first()
+        return Team.objects.filter(slug=team_slug, deletion_requested_at__isnull=True).first()
 
     if not request.user.is_authenticated:
         return None
@@ -37,7 +38,7 @@ def get_team_for_request(request, view_kwargs):
 def get_default_team_from_request(request: HttpRequest) -> Team:
     if "team" in request.session:
         try:
-            return request.user.teams.get(id=request.session["team"])
+            return active_teams_for_user(request.user).get(id=request.session["team"])
         except Team.DoesNotExist:
             # user wasn't member of team from session, or it didn't exist.
             # fall back to default behavior
@@ -46,10 +47,12 @@ def get_default_team_from_request(request: HttpRequest) -> Team:
 
 
 def get_default_team_for_user(user: CustomUser):
-    if user.teams.exists():
-        return user.teams.first()
-    else:
-        return None
+    return active_teams_for_user(user).first()
+
+
+def active_teams_for_user(user: CustomUser):
+    """The user's teams, leaving out teams that are scheduled for deletion."""
+    return user.teams.filter(deletion_requested_at__isnull=True)
 
 
 def create_default_team_for_user(user: CustomUser, team_name: str | None = None):
@@ -79,6 +82,12 @@ def set_request_attrs(request, **attrs) -> None:
     target = getattr(request, "_request", request)
     for name, value in attrs.items():
         setattr(target, name, value)
+
+
+def reject_team_pending_deletion(team: Team | None):
+    """Fail API authentication for a team that is scheduled for deletion."""
+    if team is not None and team.is_pending_deletion:
+        raise exceptions.AuthenticationFailed(_("This team is scheduled for deletion."))
 
 
 def get_team_membership_for_request(request: HttpRequest):

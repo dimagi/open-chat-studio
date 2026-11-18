@@ -21,6 +21,7 @@ def check_all_custom_actions_health():
         CustomAction.objects.exclude(healthcheck_path__isnull=True)
         .exclude(healthcheck_path="")
         .filter(CustomAction.in_use_filter())
+        .filter(team__deletion_requested_at__isnull=True)
     )
 
     for action in custom_actions:

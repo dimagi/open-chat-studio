@@ -224,6 +224,7 @@ def sync_all_document_sources_task():
             auto_sync_enabled=True,
             collection__is_index=True,  # Only sync indexed collections
             collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
+            team__deletion_requested_at__isnull=True,
         )
         # Skip only sources with a *fresh* sync lock (the DB mirror of
         # DocumentSource.is_sync_in_progress). A stale lock — held past SYNC_LOCK_TIMEOUT or

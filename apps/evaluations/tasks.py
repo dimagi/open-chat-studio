@@ -570,7 +570,9 @@ def coordinate_evaluation_runs() -> None:
     Stateless between ticks — any work lost to a deploy is recomputed and repaired
     on the next tick. Overlapping ticks partition runs via select_for_update(skip_locked).
     """
-    run_ids = EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES).order_by("created_at")
+    run_ids = EvaluationRun.objects.filter(
+        status__in=NON_TERMINAL_RUN_STATUSES, team__deletion_requested_at__isnull=True
+    ).order_by("created_at")
     for run_id in run_ids.values_list("id", flat=True).iterator(chunk_size=RUN_CHUNK_SIZE):
         delay_in_new_trace(drive_evaluation_run, run_id)
 

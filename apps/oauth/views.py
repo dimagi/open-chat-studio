@@ -14,7 +14,7 @@ from oauth2_provider.views.base import AuthorizationView as BaseAuthorizationVie
 from oauthlib.oauth2 import AccessDeniedError
 
 from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
-from apps.teams.helpers import get_default_team_from_request
+from apps.teams.helpers import active_teams_for_user, get_default_team_from_request
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Team
 from apps.teams.utils import set_current_team
@@ -58,7 +58,7 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         """Return the team requested via URL parameter, or None if not found or the user is not a member."""
         if team_slug := self.request.GET.get("team"):
             try:
-                return self.request.user.teams.get(slug=team_slug)
+                return active_teams_for_user(self.request.user).get(slug=team_slug)
             except Team.DoesNotExist:
                 return None
         return None

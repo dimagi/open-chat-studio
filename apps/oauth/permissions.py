@@ -16,7 +16,12 @@ from rest_framework import exceptions
 
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.oauth.models import OAuth2Application
-from apps.teams.helpers import SyntheticTeamMembership, get_team_membership_for_request, set_request_attrs
+from apps.teams.helpers import (
+    SyntheticTeamMembership,
+    get_team_membership_for_request,
+    reject_team_pending_deletion,
+    set_request_attrs,
+)
 from apps.teams.utils import set_current_team
 
 from .models import OAuth2AccessToken
@@ -37,6 +42,7 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
             return None
 
         user, access_token = response
+        reject_team_pending_deletion(access_token.team)
         set_request_attrs(request, team=access_token.team)
 
         application = access_token.application

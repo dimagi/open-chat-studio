@@ -18,7 +18,7 @@ from apps.api.session_tokens import parse_session_token, session_token_expired
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.oauth.permissions import is_client_credentials_request
-from apps.teams.helpers import get_team_membership_for_request, set_request_attrs
+from apps.teams.helpers import get_team_membership_for_request, reject_team_pending_deletion, set_request_attrs
 from apps.teams.utils import set_current_team
 from apps.utils.rate_limit import check as check_rate_limit
 from apps.utils.rate_limit import client_ip
@@ -59,6 +59,7 @@ class BaseKeyAuthentication(BaseAuthentication):
         if not token.user.is_active:
             _count_failed_credential_attempt(request)
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
+        reject_team_pending_deletion(token.team)
         user = token.user
         request.user = user
         set_request_attrs(request, team=token.team)

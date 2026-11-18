@@ -354,6 +354,21 @@ def send_team_deleted_notification(team_name, admin_emails):
     )
 
 
+def send_team_deletion_scheduled_notification(team, recipient_emails):
+    email_context = {
+        "team_name": team.name,
+        "deletion_due_at": team.deletion_due_at,
+    }
+    send_mail(
+        subject=_("Team '{}' is scheduled for deletion").format(team.name),
+        message=render_to_string("teams/email/team_deletion_scheduled_notification.txt", context=email_context),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=recipient_emails,
+        fail_silently=False,
+        html_message=render_to_string("teams/email/team_deletion_scheduled_notification.html", context=email_context),
+    )
+
+
 def chunk_list(lst, chunk_size):
     for i in range(0, len(lst), chunk_size):
         yield lst[i : i + chunk_size]

@@ -10,6 +10,7 @@ from apps.channels.utils import extract_domain_from_headers, get_experiment_sess
 from apps.experiments.models import Experiment
 from apps.oauth.models import OAuth2AccessToken
 from apps.oauth.permissions import validated_machine_token
+from apps.teams.helpers import reject_team_pending_deletion
 from apps.teams.utils import set_current_team
 from apps.web.meta import canonical_hostname
 
@@ -180,6 +181,7 @@ class ChatOAuthAuthenticationBase(authentication.BaseAuthentication):
     def _admit(request, experiment, channel: ExperimentChannel) -> OAuth2AccessToken:
         """Validate the machine token and origin, and set the request team."""
         token = validated_machine_token(request, experiment)
+        reject_team_pending_deletion(token.team)
         check_oauth_channel_origin(request, channel)
         request.team = token.team
         set_current_team(token.team)
