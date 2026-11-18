@@ -171,6 +171,32 @@ def test_transport_error_is_logged(httpx_mock):
     assert log["error"] == "ConnectTimeout: timed out"
 
 
+class _BodyReadTimeout(httpx.SyncByteStream):
+    def __iter__(self):
+        raise httpx.ReadTimeout("timed out")
+
+
+def test_body_read_failure_is_logged_without_a_body(httpx_mock):
+    httpx_mock.add_callback(lambda request: httpx.Response(200, stream=_BodyReadTimeout()), url=URL)
+
+    [log] = _run_tool({})
+
+    assert log["status_code"] == 200
+    assert log["response_body"] is None
+    assert log["error"] == "ReadTimeout: timed out"
+
+
+def test_a_failure_building_the_log_does_not_fail_the_call(httpx_mock):
+    httpx_mock.add_response(url=URL, text="ok")
+    capture = RequestLogCapture()
+
+    with patch("apps.chat.agent.request_log.build_request_log", side_effect=ValueError("bad header")):
+        result = _build_tool({}).run({}, tool_call_id="123", callbacks=[capture])
+
+    assert result.content == "ok"
+    assert capture.logs == []
+
+
 def test_attachment_body_is_not_logged(httpx_mock):
     httpx_mock.add_response(
         url=URL, content=b"\x00\x01binary", headers={"Content-Disposition": "attachment; filename=report.pdf"}
