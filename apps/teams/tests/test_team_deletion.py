@@ -142,17 +142,27 @@ def test_hard_delete_removes_records_the_team_cascade_misses(mailoutbox, django_
     assert "has been deleted" in mailoutbox[0].subject
 
 
+@pytest.mark.parametrize(
+    ("recipients", "scheduled"),
+    [
+        pytest.param("self", True, id="valid-recipients"),
+        pytest.param("everyone", False, id="invalid-recipients"),
+    ],
+)
 @pytest.mark.django_db()
-def test_delete_view_schedules_deletion(client):
+def test_delete_view_schedules_deletion(client, recipients, scheduled):
     team = TeamWithUsersFactory.create()
     client.force_login(_admin(team))
 
-    response = client.post(reverse("single_team:delete_team", args=[team.slug]))
+    response = client.post(
+        reverse("single_team:delete_team", args=[team.slug]), {"notification_recipients": recipients}
+    )
 
     assert response.status_code == 302
-    assert response.url == reverse("teams:pending_deletion", args=[team.slug])
+    expected_url = "teams:pending_deletion" if scheduled else "single_team:manage_team"
+    assert response.url == reverse(expected_url, args=[team.slug])
     team.refresh_from_db()
-    assert team.is_pending_deletion
+    assert team.is_pending_deletion is scheduled
 
 
 def test_team_pages_redirect_to_pending_page(client, pending_team):

@@ -42,7 +42,7 @@ class TeamDeletionError(Exception):
 def request_team_deletion(team: Team, user: CustomUser, notify_recipients: str = "self") -> Team:
     """Disable the team and schedule it for permanent deletion after the grace period."""
     if notify_recipients not in NOTIFY_RECIPIENTS:
-        notify_recipients = "self"
+        raise TeamDeletionError(f"Unknown notification recipients: {notify_recipients}")
     if team.is_pending_deletion:
         raise TeamDeletionError("This team is already scheduled for deletion.")
 

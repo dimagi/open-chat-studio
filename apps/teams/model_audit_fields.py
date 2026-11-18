@@ -12,6 +12,7 @@ TEAM_FIELDS = [
     "auto_block_enabled",
     "deletion_requested_at",
     "deletion_requested_by",
+    "deletion_notify_recipients",
 ]
 MEMBERSHIP_FIELDS = ["team", "user"]
 FLAG_FIELDS = [

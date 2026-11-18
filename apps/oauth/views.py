@@ -65,7 +65,7 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
 
     def get(self, request, *args, **kwargs):
         team = self.application_team
-        if team and not request.user.teams.filter(id=team.id).exists():
+        if team and not active_teams_for_user(request.user).filter(id=team.id).exists():
             return self._refuse_non_member(request, team)
         if not team and self.requested_team:
             # The paths that skip the authorization form (`skip_authorization`, `approval_prompt=auto`)

@@ -14,6 +14,7 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.deletion import TeamDeletionError, cancel_team_deletion, request_team_deletion
 from apps.teams.forms import (
     InvitationForm,
+    NotifyRecipientsForm,
     TeamChangeForm,
     TeamMfaForm,
     TeamMigrationForm,
@@ -54,9 +55,12 @@ def create_team(request):
 @require_POST
 @permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
-    notify_recipients = request.POST.get("notification_recipients", "self")
+    form = NotifyRecipientsForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, _("Choose who to notify about the deletion."))
+        return HttpResponseRedirect(reverse("single_team:manage_team", args=[team_slug]))
     try:
-        team = request_team_deletion(request.team, request.user, notify_recipients)
+        team = request_team_deletion(request.team, request.user, form.cleaned_data["notification_recipients"])
     except TeamDeletionError as e:
         messages.error(request, str(e))
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[team_slug]))
@@ -71,7 +75,10 @@ def delete_team(request, team_slug):
 
 
 def _pending_team_access(request, slug) -> tuple[Team, bool]:
-    """The pending team and whether the user may cancel its deletion; 404 for anyone outside the team."""
+    """The pending team and whether the user may cancel its deletion.
+
+    Superusers always have access and may cancel. Anyone else who isn't a member of the team gets a 404.
+    """
     team = get_object_or_404(Team, slug=slug, deletion_requested_at__isnull=False)
     if request.user.is_superuser:
         return team, True
