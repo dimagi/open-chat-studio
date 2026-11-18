@@ -70,6 +70,11 @@ version section when a release is cut.
      the process environment, whether or not it is required and whatever its
      default. Also a changed default that alters behavior. State the default and
      whether it is required. -->
+- `TEAM_DELETION_GRACE_PERIOD_DAYS` (optional, default `30`): how long a team stays disabled
+  after an admin deletes it before its data is permanently removed. Deleting a team no longer
+  removes its data straight away: the team is disabled at once, and a new daily Celery beat task,
+  `teams.tasks.delete_teams_past_grace_period` (03:15), deletes teams whose grace period has passed.
+  Celery beat must be running for deletions to complete.
 
 ### Deployment
 <!-- Changes to the shape of a deployment: process types, Celery queues,
