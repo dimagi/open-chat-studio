@@ -11,7 +11,7 @@
           <div class="flex items-center gap-2 min-w-0">
             {% if log.status_code is None %}
               <c-ui.badge variant="error" size="sm">Failed</c-ui.badge>
-            {% elif log.status_code >= 400 %}
+            {% elif log.status_code >= 400 or log.error %}
               <c-ui.badge variant="error" size="sm">{{ log.status_code }}</c-ui.badge>
             {% else %}
               <c-ui.badge variant="success" size="sm">{{ log.status_code }}</c-ui.badge>

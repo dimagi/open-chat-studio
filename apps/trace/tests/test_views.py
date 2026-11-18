@@ -263,6 +263,29 @@ def test_trace_detail_view_shows_custom_action_requests(client, team_with_users,
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("status_code", "error", "badge"),
+    [
+        pytest.param(200, "", "badge-success", id="ok"),
+        pytest.param(200, "ReadTimeout: timed out", "badge-error", id="body-read-failed"),
+        pytest.param(503, "", "badge-error", id="server-error"),
+    ],
+)
+def test_custom_action_request_badge_shows_failures(client, team_with_users, status_code, error, badge):
+    team = team_with_users
+    trace = _make_trace(team)
+    CustomActionRequestFactory.create(trace=trace, status_code=status_code, error=error)
+
+    client.force_login(team.members.first())
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    content = response.content.decode()
+    section = content[content.index('data-testid="custom-action-requests"') :]
+    summary = section[: section.index("</summary>")]
+    assert badge in summary
+
+
+@pytest.mark.django_db()
 def test_trace_detail_view_hides_custom_action_requests_when_there_are_none(client, team_with_users):
     team = team_with_users
     trace = _make_trace(team)
@@ -270,6 +293,7 @@ def test_trace_detail_view_hides_custom_action_requests_when_there_are_none(clie
     client.force_login(team.members.first())
     response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
 
+    assert response.status_code == 200
     assert 'data-testid="custom-action-requests"' not in response.content.decode()
 
 
