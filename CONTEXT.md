@@ -36,7 +36,7 @@ The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do 
 _Avoid_: "version selection type" (the legacy field name on `EvaluationConfig`).
 
 **Version Operation**:
-What a traversal of a versioned record does: **Publish** (Working Version → Chatbot Version), **Revert** (Chatbot Version → Working Version) or **Copy** (Working Version → a new Working Version). A versioned model declares how it travels once, in a `VersionSpec` (`apps/experiments/versioning.py`), and the operations are generated from that declaration. `Experiment` is on a spec; `Pipeline`, `Node` and the smaller versioned models keep their own overrides until each is moved.
+What a traversal of a versioned record does: **Publish** (Working Version → Chatbot Version), **Revert** (Chatbot Version → Working Version) or **Copy** (Working Version → a new Working Version). A versioned model declares how it travels once, in a `VersionSpec` (`apps/experiments/versioning.py`), and the operations are generated from that declaration. `Experiment`, `Pipeline` and `Node` are on specs; the smaller versioned models keep their own overrides until each is moved.
 
 **Travel Strategy**:
 How a record that another record references travels on Publish: a **new version** of it, its **latest version reused** when nothing changed since, a **live reference** to the working record itself (ADR-0031), or a **private clone** owned by the snapshot. Copy copies what the record owns, a private clone included, and keeps every other reference verbatim. Revert is derived from the strategy and from whether the record owns the target.

@@ -77,7 +77,9 @@ operations are generated from it. To version a model:
     - A `Reference` member declares how a foreign key to another versioned model travels on publish
       (its `Strategy`), whether the target is `owned` (so a copy copies it and a revert resets it in
       place), and what it `provides` to members declared after it. An `OwnedSet` member carries rows
-      reached through reverse accessors. Members run in class-body order; a member that `reads` a
+      reached through reverse accessors. A `ParamReference` member is an id inside a JSON field
+      (`Node.params["source_material_id"]`), with the FK column that mirrors it and an `Archiving`
+      policy for when a version holding it is archived. Members run in class-body order; a member that `reads` a
       key no earlier member `provides` raises `VersionSpecError`, and the surrounding transaction
       rolls back the clone and the advanced version number.
     - `on_publish(working, version, **options)` and `on_copy(working, copy, **options)` are the only
