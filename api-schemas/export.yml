@@ -6509,6 +6509,21 @@ components:
           type: boolean
           description: When set, every member of this team must enrol in two-factor
             authentication.
+        deletion_requested_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When set, the team is disabled and will be permanently deleted
+            after the grace period.
+        deletion_notify_recipients:
+          type: string
+          description: 'Who to email when the team is permanently deleted: self, admins
+            or all.'
+          maxLength: 16
+        deletion_requested_by:
+          type: integer
+          nullable: true
+          description: User who requested the team's deletion.
       required:
       - created_at
       - exportable_chatbots
