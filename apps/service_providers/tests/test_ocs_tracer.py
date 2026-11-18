@@ -4,14 +4,34 @@ from uuid import uuid4
 import httpx
 import openai
 import pytest
+from django.db import transaction
 
 from apps.chat.exceptions import ProviderConfigurationError
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
 from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT
 from apps.service_providers.tracing.ocs_tracer import OCSCallbackHandler, OCSTracer
-from apps.trace.models import CustomActionRequest, Trace
+from apps.trace.models import CustomActionRequest, Trace, TraceStatus
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+
+
+def _request_log(**overrides) -> dict:
+    """A record shaped like the one ``apps.chat.agent.request_log`` dispatches."""
+    return {
+        "tool": "weather_get",
+        "custom_action": None,
+        "custom_action_id": None,
+        "method": "GET",
+        "url": "https://a.example",
+        "request_headers": {"authorization": "[REDACTED]"},
+        "request_body": None,
+        "status_code": None,
+        "response_headers": {},
+        "response_body": None,
+        "duration_ms": 12,
+        "error": "",
+        **overrides,
+    }
 
 
 @pytest.mark.django_db()
@@ -69,20 +89,11 @@ class TestOCSTracer:
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create()
         custom_action = CustomActionFactory.create(team=experiment.team)
-        request_log = {
-            "tool": "weather_get",
-            "custom_action": custom_action.name,
-            "custom_action_id": custom_action.id,
-            "method": "GET",
-            "url": "https://a.example",
-            "request_headers": {"authorization": "[REDACTED]"},
-            "request_body": None,
-            "status_code": None,
-            "response_headers": {},
-            "response_body": None,
-            "duration_ms": 12,
-            "error": "ConnectError: refused\x00",
-        }
+        request_log = _request_log(
+            custom_action=custom_action.name,
+            custom_action_id=custom_action.id,
+            error="ConnectError: refused\x00",
+        )
 
         trace_context = TraceContext(id=uuid4(), name="test_trace")
         with tracer.trace(trace_context=trace_context, session=session):
@@ -100,6 +111,33 @@ class TestOCSTracer:
         )
         assert (request.status_code, request.request_body, request.error) == (None, "", "ConnectError: refused")
         assert tracer.custom_action_requests == []
+
+    def test_custom_action_requests_saved_when_cost_recording_fails(self, experiment):
+        tracer = OCSTracer(experiment, experiment.team_id)
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+
+        with patch.object(tracer, "_record_costs", side_effect=RuntimeError("pricing lookup failed")):
+            with tracer.trace(trace_context=trace_context, session=ExperimentSessionFactory.create()):
+                tracer.get_langchain_callback().on_custom_event(
+                    CUSTOM_ACTION_REQUEST_EVENT, _request_log(), run_id=uuid4()
+                )
+
+        assert CustomActionRequest.objects.filter(trace__trace_id=trace_context.id).count() == 1
+
+    def test_rejected_request_insert_leaves_the_enclosing_transaction_usable(self, experiment):
+        """Callers such as ad hoc bot messages finalize the trace inside ``transaction.atomic()``."""
+        tracer = OCSTracer(experiment, experiment.team_id)
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+
+        with transaction.atomic():
+            with tracer.trace(trace_context=trace_context, session=ExperimentSessionFactory.create()):
+                tracer.get_langchain_callback().on_custom_event(
+                    CUSTOM_ACTION_REQUEST_EVENT, _request_log(method="X" * 17), run_id=uuid4()
+                )
+            trace = Trace.objects.get(trace_id=trace_context.id)
+
+        assert trace.status == TraceStatus.SUCCESS
+        assert not CustomActionRequest.objects.filter(trace=trace).exists()
 
     def test_trace_error_recording(self, experiment):
         """Test that errors during trace execution are captured in the trace record"""

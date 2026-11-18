@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
+from django.db import transaction
 from langchain_core.callbacks.base import BaseCallbackHandler
 
 from apps.channels.models import ChannelPlatform
@@ -130,11 +131,8 @@ class OCSTracer(Tracer):
 
             self._update_trace_metrics()
             self.trace_record.save()
+            self._save_custom_action_requests()
             self._record_costs()
-            CustomActionRequest.objects.bulk_create(
-                CustomActionRequest.from_request_log(request_log, self.trace_record)
-                for request_log in self.custom_action_requests
-            )
 
             session_id = self.session.id if self.session else None
             logger.debug(
@@ -150,6 +148,20 @@ class OCSTracer(Tracer):
                 self.session.id if self.session else None,
                 self.trace_record.output_message_id,
             )
+
+    def _save_custom_action_requests(self) -> None:
+        """Save the run's custom action requests. Callers such as ad hoc bot messages finalize the trace
+        inside ``transaction.atomic()``, so a rejected insert is confined to a savepoint."""
+        if not self.custom_action_requests:
+            return
+        try:
+            with transaction.atomic():
+                CustomActionRequest.objects.bulk_create(
+                    CustomActionRequest.from_request_log(request_log, self.trace_record)
+                    for request_log in self.custom_action_requests
+                )
+        except Exception:
+            logger.exception("Error saving custom action requests | trace_id=%s", self.trace_record.id)
 
     def _update_trace_metrics(self) -> None:
         """Update trace record with collected metrics."""
