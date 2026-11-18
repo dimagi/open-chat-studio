@@ -4,10 +4,12 @@ The grace period keeps the team's records available to the cross-team reporting 
 billing period they fall in has been reported, and lets an admin cancel a mistaken request.
 """
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 
+import openai
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
@@ -16,7 +18,7 @@ from django.utils import timezone
 from apps.documents.models import Collection
 from apps.evaluations.models import EvaluationMessage
 from apps.events.models import EventAction
-from apps.files.models import File
+from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 from apps.teams.models import Membership, Team
 from apps.teams.utils import current_team
 from apps.trace.models import Trace
@@ -126,8 +128,8 @@ def hard_delete_team(team: Team) -> dict:
 
 @dataclass
 class _RemoteIndexCleanup:
-    manager: object
-    files: list[File]
+    manager: OpenAIRemoteIndexManager
+    remote_file_ids: list[str]
 
 
 def _collect_remote_index_cleanups(team: Team) -> list[_RemoteIndexCleanup]:
@@ -145,19 +147,23 @@ def _collect_remote_index_cleanups(team: Team) -> list[_RemoteIndexCleanup]:
         except Exception:
             logger.exception("Unable to build remote index client for collection %s", collection.id)
             continue
-        files = list(collection.files.exclude(external_id=""))
-        cleanups.append(_RemoteIndexCleanup(manager=manager, files=files))
+        if not isinstance(manager, OpenAIRemoteIndexManager):
+            continue
+        remote_file_ids = list(collection.files.exclude(external_id="").values_list("external_id", flat=True))
+        cleanups.append(_RemoteIndexCleanup(manager=manager, remote_file_ids=remote_file_ids))
     return cleanups
 
 
 def _run_remote_cleanups(cleanups: list[_RemoteIndexCleanup]):
+    """Delete the remote vector stores and files. Runs after the team's rows are gone, so it touches no rows."""
     for cleanup in cleanups:
         try:
-            if cleanup.files:
-                cleanup.manager.delete_files(cleanup.files)
+            for file_id in cleanup.remote_file_ids:
+                with contextlib.suppress(openai.NotFoundError):
+                    cleanup.manager.client.files.delete(file_id)
             cleanup.manager.delete_remote_index()
         except Exception:
-            logger.exception("Failed to delete remote index %s", getattr(cleanup.manager, "index_id", None))
+            logger.exception("Failed to delete remote index %s", cleanup.manager.index_id)
 
 
 def _notification_emails(team: Team, notify_recipients: str, requester_email: str | None) -> list[str]:
