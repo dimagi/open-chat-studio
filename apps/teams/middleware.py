@@ -1,4 +1,4 @@
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import SimpleLazyObject
@@ -23,30 +23,27 @@ def _get_team_membership(request):
     return request._cached_team_membership
 
 
-def _pending_deletion_response(request, team_slug):
-    """Send members of a team that is scheduled for deletion to the page that explains it.
-
-    Anyone else gets the same 404 as for a team that does not exist.
-    """
-    team = Team.objects.filter(slug=team_slug, deletion_requested_at__isnull=False).first()
-    if team is None:
-        return None
-    user = request.user
+def _can_see_pending_deletion_page(user, team) -> bool:
     if not user.is_authenticated:
-        raise Http404
-    if not user.is_superuser and not Membership.objects.filter(team=team, user=user).exists():
-        raise Http404
-    url = reverse("teams:pending_deletion", args=[team_slug])
-    if getattr(request, "htmx", False):
-        return HttpResponse(headers={"HX-Redirect": url})
-    return HttpResponseRedirect(url)
+        return False
+    return user.is_superuser or Membership.objects.filter(team=team, user=user).exists()
 
 
 class TeamsMiddleware(MiddlewareMixin):
     def process_view(self, request, view_func, view_args, view_kwargs):
         if team_slug := view_kwargs.get("team_slug"):
-            if response := _pending_deletion_response(request, team_slug):
-                return response
+            team = Team.objects.filter(slug=team_slug).first()
+            if team is not None and team.is_pending_deletion:
+                if _can_see_pending_deletion_page(request.user, team):
+                    url = reverse("teams:pending_deletion", args=[team.slug])
+                    if getattr(request, "htmx", False):
+                        return HttpResponse(headers={"HX-Redirect": url})
+                    return HttpResponseRedirect(url)
+                # Everyone else sees the team exactly as if it did not exist.
+                team = None
+            if team is not None:
+                request.session["team"] = team.id
+            request._cached_team = team
 
         request.team = SimpleLazyObject(lambda: _get_team(request, view_kwargs))
         request.team_membership = SimpleLazyObject(lambda: _get_team_membership(request))

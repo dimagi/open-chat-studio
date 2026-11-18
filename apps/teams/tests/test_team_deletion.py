@@ -181,9 +181,12 @@ def test_team_pages_redirect_to_pending_page(client, pending_team):
     assert response.url == reverse("teams:pending_deletion", args=[pending_team.slug])
 
 
-def test_team_pages_are_not_found_for_anonymous_users(client, pending_team):
+def test_anonymous_users_see_a_pending_team_as_a_missing_team(client, pending_team):
+    """An anonymous user gets the same response as for a slug that does not exist."""
+    missing_team_response = client.get(reverse("web_team:home", args=["no-such-team"]))
     response = client.get(pending_team.dashboard_url)
-    assert response.status_code == 404
+    assert response.status_code == missing_team_response.status_code
+    assert response.status_code != 200
 
 
 def test_team_pages_are_not_found_for_non_members(client, pending_team):

@@ -153,7 +153,7 @@ def _collect_remote_index_cleanups(team: Team) -> list[_RemoteIndexCleanup]:
             continue
         if not isinstance(manager, OpenAIRemoteIndexManager):
             continue
-        remote_file_ids = list(collection.files.exclude(external_id="").values_list("external_id", flat=True))
+        remote_file_ids = list(collection.files.get_all().exclude(external_id="").values_list("external_id", flat=True))
         cleanups.append(_RemoteIndexCleanup(manager=manager, remote_file_ids=remote_file_ids))
     return cleanups
 
@@ -191,5 +191,9 @@ def _send_scheduled_notifications(team: Team, emails: list[str]):
 
 
 def _send_deleted_notifications(team_name: str, emails: list[str]):
-    for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
-        send_team_deleted_notification(team_name, chunk)
+    """Runs after the team is gone, so a mail failure is logged rather than raised."""
+    try:
+        for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+            send_team_deleted_notification(team_name, chunk)
+    except Exception:
+        logger.exception("Failed to send the team-deleted email for team %s", team_name)
