@@ -25,7 +25,7 @@ class CustomActionRequestFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CustomActionRequest
 
-    trace = factory.SubFactory(TraceFactory)
+    trace = factory.SubFactory(TraceFactory, team=factory.SubFactory("apps.utils.factories.team.TeamFactory"))
     team = factory.SelfAttribute("trace.team")
     operation = "weather_get"
     method = "GET"
