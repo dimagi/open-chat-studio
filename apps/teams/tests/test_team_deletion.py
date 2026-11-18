@@ -179,6 +179,13 @@ def test_team_pages_are_not_found_for_anonymous_users(client, pending_team):
     assert response.status_code == 404
 
 
+def test_team_pages_are_not_found_for_non_members(client, pending_team):
+    """A non-member must not learn that the team exists or is pending deletion."""
+    client.force_login(UserFactory.create())
+    response = client.get(pending_team.dashboard_url)
+    assert response.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("who", "status", "can_cancel"),
     [
