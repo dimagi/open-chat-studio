@@ -7,7 +7,6 @@ from apps.teams.backends import SUPER_ADMIN_GROUP
 from apps.teams.deletion import hard_delete_team
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Membership, Team
-from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
@@ -80,8 +79,7 @@ def test_delete_team():
         # Create team within the enable_audit context so creation events are captured
         team_with_users = TeamWithUsersFactory.create()
 
-        with current_team(team_with_users):
-            hard_delete_team(team_with_users)
+        hard_delete_team(team_with_users)
         assert not Team.objects.filter(slug=team_with_users.slug).exists()
 
         audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.id).order_by("event_date")
