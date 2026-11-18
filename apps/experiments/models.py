@@ -499,7 +499,7 @@ class AgentTools(models.TextChoices):
         return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
 
 
-def _sync_trigger_sets(working: Experiment, other: Experiment, operation: Operation) -> None:
+def _sync_trigger_sets(working: Experiment, other: Experiment, operation: Operation, context: dict) -> None:
     """Carry the three trigger sets until the trigger models have specs of their own.
 
     Publish and copy flow from the working chatbot to the new row; revert flows from the version

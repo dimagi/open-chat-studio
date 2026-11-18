@@ -5,7 +5,16 @@ import uuid
 import pytest
 from django.apps import apps
 
-from apps.experiments.versioning import Operation, OwnedSet, Reference, Strategy, VersionSpec, VersionSpecError
+from apps.experiments.versioning import (
+    Archiving,
+    Operation,
+    OwnedSet,
+    ParamReference,
+    Reference,
+    Strategy,
+    VersionSpec,
+    VersionSpecError,
+)
 from apps.utils.tests.versioning_helpers import assert_family, assert_snapshot
 
 pytestmark = [pytest.mark.django_db(), pytest.mark.usefixtures("isolated_spec_registry")]
@@ -49,8 +58,8 @@ class TestDeclaration:
     def test_row_fields_are_every_concrete_field_outside_identity_and_the_members(self):
         spec = bind_widget(**declared_references())()
 
-        assert {field.name for field in spec.row_fields} == {"name", "note"}
-        assert spec.travelling_fields == {"name", "note", "part", "live_part"}
+        assert {field.name for field in spec.row_fields} == {"name", "note", "params"}
+        assert spec.travelling_fields == {"name", "note", "params", "part", "live_part"}
 
     def test_members_keep_class_body_order(self):
         spec_cls = bind_widget(live_part=Reference(Strategy.LIVE_REFERENCE), part=Reference(Strategy.NEW_VERSION))
@@ -173,8 +182,8 @@ class TestPublish:
     def test_members_run_in_order_and_hooks_after_them(self, models):
         seen = {}
 
-        def bridge(working, other, operation):
-            seen["bridge"] = (operation, other.part_id)
+        def bridge(working, other, operation, context):
+            seen["bridge"] = (operation, other.part_id, context["part"].pk)
 
         class Hooked(VersionSpec):
             class Meta:
@@ -195,7 +204,7 @@ class TestPublish:
         version = Hooked().publish(working, note="from the hook")
         version.refresh_from_db()
 
-        assert seen["bridge"] == (Operation.PUBLISH, version.part_id)
+        assert seen["bridge"] == (Operation.PUBLISH, version.part_id, version.part_id)
         assert seen["hook"] == version.part_id
         assert version.note == "from the hook"
 
@@ -253,21 +262,13 @@ class TestCopy:
         assert (plain.part_id, plain.live_part_id) == (working.part_id, working.live_part_id)
 
     def test_on_copy_runs_with_the_options(self, models):
-        class Named(VersionSpec):
-            class Meta:
-                model = WIDGET
-                identity = WIDGET_IDENTITY
-                regenerated = {"token": uuid.uuid4}
+        def on_copy(self, working, copy, *, name="unnamed", **options):
+            copy.name = name
 
-            part = Reference(Strategy.NEW_VERSION)
-            live_part = Reference(Strategy.LIVE_REFERENCE)
-
-            def on_copy(self, working, copy, *, name="unnamed", **options):
-                copy.name = name
-
+        spec_cls = bind_widget(**declared_references(), on_copy=on_copy)
         working = make_widget(models)
 
-        copy = Named().copy(working, name="the copy")
+        copy = spec_cls().copy(working, name="the copy")
         copy.refresh_from_db()
 
         assert copy.name == "the copy"
@@ -437,3 +438,201 @@ class TestKit:
 
         with pytest.raises(AssertionError):
             assert_family(other, working)
+
+
+def part_reference(strategy=Strategy.REUSE_UNCHANGED, **kwargs):
+    """A `params["part_id"]` reference mirrored by the `part` column."""
+    return ParamReference("part_id", PART, strategy, **kwargs)
+
+
+def make_param_widget(models, strategy=Strategy.REUSE_UNCHANGED, **kwargs):
+    bind_widget(part=part_reference(strategy, **kwargs), live_part=Reference(Strategy.LIVE_REFERENCE))
+    _widget_model, part_model = models
+    part = part_model.objects.create(name="part")
+    return make_widget(models, part=part, params={"part_id": str(part.id)})
+
+
+class TestParamReference:
+    @pytest.mark.parametrize(
+        ("strategy", "expectation"),
+        [
+            pytest.param(Strategy.NEW_VERSION, "new-version", id="new-version"),
+            pytest.param(Strategy.REUSE_UNCHANGED, "new-version", id="reuse-unchanged-makes-the-first-version"),
+            pytest.param(Strategy.LIVE_REFERENCE, "same-row", id="live-reference"),
+            pytest.param(Strategy.PRIVATE_CLONE, "private-clone", id="private-clone"),
+        ],
+    )
+    def test_publish_pins_the_id_in_params_per_strategy(self, models, strategy, expectation):
+        working = make_param_widget(models, strategy)
+        _widget_model, part_model = models
+
+        version = working.create_new_version()
+        pinned = part_model.objects.get(id=version.params["part_id"])
+
+        if expectation == "same-row":
+            assert pinned == working.part
+        elif expectation == "new-version":
+            assert pinned.working_version_id == working.part_id
+        else:
+            assert pinned.working_version_id is None
+            assert pinned.id != working.part_id
+        assert working.params["part_id"] == str(working.part_id)
+
+    def test_reuse_unchanged_pins_the_latest_version_until_the_record_changes(self, models):
+        working = make_param_widget(models)
+
+        first, second = working.create_new_version(), working.create_new_version()
+        working.part.name = "renamed"
+        working.part.save()
+        third = working.create_new_version()
+
+        assert first.params["part_id"] == second.params["part_id"] != third.params["part_id"]
+
+    def test_an_id_that_names_no_record_or_already_a_version_is_left_alone(self, models):
+        working = make_param_widget(models)
+        part_version = working.part.create_new_version()
+        working.params = {"part_id": str(part_version.id)}
+        working.save()
+
+        assert working.create_new_version().params["part_id"] == str(part_version.id)
+
+        working.params = {"part_id": "999999"}
+        working.save()
+
+        assert working.create_new_version().params["part_id"] == "999999"
+
+    def test_copy_keeps_params_verbatim(self, models):
+        working = make_param_widget(models)
+
+        assert working.create_new_version(is_copy=True).params == working.params
+
+    def test_map_back_reads_the_mirror_column_and_clears_a_dangling_id(self, models):
+        working = make_param_widget(models)
+        version = working.create_new_version()
+        version.part = version.part.__class__.objects.get(id=version.params["part_id"])
+        version.save()
+        member = part_reference()
+        member.name = "part"
+
+        params = dict(version.params)
+        member.map_back(version, params)
+        assert params["part_id"] == str(working.part_id)
+
+        version.part = None
+        params = dict(version.params)
+        member.map_back(version, params)
+        assert params["part_id"] is None
+
+    def test_revert_maps_the_working_params_back(self, models):
+        working = make_param_widget(models)
+        version = working.create_new_version()
+        version.part_id = int(version.params["part_id"])
+        version.save()
+        _widget_model, part_model = models
+        other = part_model.objects.create(name="other")
+        working.params = {"part_id": str(other.id)}
+        working.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.params["part_id"] == str(working.part_id)
+
+    @pytest.mark.parametrize(
+        ("archiving", "archived"),
+        [
+            pytest.param(Archiving.ARCHIVE, True, id="archive"),
+            pytest.param(Archiving.ARCHIVE_VERSIONS_ONLY, False, id="versions-only-spares-a-working-record"),
+            pytest.param(Archiving.KEEP, False, id="keep"),
+        ],
+    )
+    def test_archive_referenced_follows_the_policy(self, models, archiving, archived):
+        working = make_param_widget(models, Strategy.LIVE_REFERENCE, archiving=archiving)
+        member = part_reference(Strategy.LIVE_REFERENCE, archiving=archiving)
+        member.name = "part"
+
+        member.archive_referenced(working.params)
+        working.part.refresh_from_db()
+
+        assert working.part.is_archived is archived
+
+    def test_versions_only_archives_a_version_and_only_archive_restores(self, models):
+        working = make_param_widget(models, Strategy.LIVE_REFERENCE)
+        part_version = working.part.create_new_version()
+        versions_only = part_reference(Strategy.LIVE_REFERENCE, archiving=Archiving.ARCHIVE_VERSIONS_ONLY)
+        versions_only.name = "part"
+        params = {"part_id": str(part_version.id)}
+
+        versions_only.archive_referenced(params)
+        part_version.refresh_from_db()
+        assert part_version.is_archived
+
+        versions_only.unarchive_referenced(params)
+        part_version.refresh_from_db()
+        assert part_version.is_archived
+
+        archive = part_reference(Strategy.LIVE_REFERENCE, archiving=Archiving.ARCHIVE)
+        archive.name = "part"
+        archive.unarchive_referenced(params)
+        part_version.refresh_from_db()
+        assert not part_version.is_archived
+
+    def test_a_many_param_is_a_live_reference(self):
+        with pytest.raises(VersionSpecError, match="multi-ID"):
+            ParamReference("part_ids", PART, Strategy.NEW_VERSION, many=True)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "codes"),
+        [
+            pytest.param({}, [], id="clean"),
+            pytest.param({"json_field": "nothing"}, ["E001"], id="json-field-missing"),
+            pytest.param({"fk_field": "note"}, ["E001"], id="mirror-not-a-relation"),
+            pytest.param({"model_label": "nowhere.Nothing"}, ["E004"], id="model-unresolvable"),
+            pytest.param({"model_label": "utils_tests.Collection"}, ["E001"], id="model-not-versioned"),
+        ],
+    )
+    def test_check_names_what_the_model_has(self, models, kwargs, codes):
+        widget_model, _part_model = models
+        model_label = kwargs.pop("model_label", PART)
+        member = ParamReference("part_id", model_label, Strategy.LIVE_REFERENCE, **kwargs)
+        member.name = "part"
+
+        assert [code for code, _message in member.check(widget_model)] == codes
+
+
+class TestHooks:
+    def test_on_clone_runs_before_the_first_save(self, models):
+        def on_clone(self, working, clone, *, note="prepared", **options):
+            clone.note = note
+
+        spec_cls = bind_widget(**declared_references(), on_clone=on_clone)
+        working = make_widget(models)
+
+        version = spec_cls().publish(working, note="set before the insert")
+        copy = spec_cls().copy(working)
+
+        assert (version.note, copy.note) == ("set before the insert", "prepared")
+
+    def test_on_revert_runs_after_the_working_row_is_saved(self, models):
+        seen = {}
+
+        class Observed(VersionSpec):
+            class Meta:
+                model = WIDGET
+                identity = WIDGET_IDENTITY
+                regenerated = {"token": uuid.uuid4}
+
+            part = Reference(Strategy.NEW_VERSION)
+            live_part = Reference(Strategy.LIVE_REFERENCE)
+
+            def on_revert(self, working, version):
+                seen["saved_name"] = type(working).objects.get(pk=working.pk).name
+
+        working = make_widget(models)
+        version = working.create_new_version()
+        working.name = "edited"
+        working.save()
+
+        Observed().revert(working, version)
+
+        assert seen["saved_name"] == "widget"

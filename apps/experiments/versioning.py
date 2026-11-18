@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ from django.db.models import (
 )
 
 from apps.utils.models import VersioningMixin
+
+versioning_logger = logging.getLogger("ocs.versioning")
 
 
 def differs(original: Any, new: Any, exclude_model_fields: list[str] | None = None, early_abort=False) -> bool:
@@ -346,8 +349,37 @@ class Strategy(StrEnum):
     """A clone with no family link, owned by the row that references it."""
 
 
+class Archiving(StrEnum):
+    """What happens to a referenced record when a version that references it is archived."""
+
+    ARCHIVE = "archive"
+    """Archive the referenced record."""
+
+    ARCHIVE_VERSIONS_ONLY = "archive_versions_only"
+    """Archive the referenced record only when it is a version, never a live working record."""
+
+    KEEP = "keep"
+    """Leave the referenced record alone."""
+
+
 class VersionSpecError(Exception):
     """A spec is declared, or traversed, in a way that cannot produce a correct snapshot."""
+
+
+def reuse_or_version(target):
+    """The target's latest version when nothing travelling changed since it, otherwise a new version of it."""
+    latest = target.latest_version
+    if latest and not differs(target, latest, exclude_model_fields=latest.get_fields_to_exclude()):
+        return latest
+    return target.create_new_version()
+
+
+def model_names(model) -> tuple[dict[str, Field], set[str]]:
+    """The forward fields of `model` by name, and the names of its reverse accessors."""
+    fields = model._meta.get_fields()
+    forward = {field.name: field for field in fields if not (field.is_relation and field.auto_created)}
+    accessors = {field.get_accessor_name() for field in fields if field.is_relation and field.auto_created} - {None}
+    return forward, accessors
 
 
 class Member:
@@ -373,6 +405,13 @@ class Member:
 
     def revert(self, working, version) -> None:
         raise NotImplementedError
+
+    def check(self, model) -> list[tuple[str, str]]:
+        """`(check id, message)` for each way this member fails to name something `model` has."""
+        forward, accessors = model_names(model)
+        if self.name not in forward and self.name not in accessors:
+            return [("E001", f"{self.name} is not a field or related accessor of {model._meta.label}")]
+        return []
 
     def _require(self, context: dict[str, Any]) -> None:
         missing = [key for key in self.reads if key not in context]
@@ -407,14 +446,17 @@ class Reference(Member):
             case Strategy.NEW_VERSION:
                 return target.create_new_version()
             case Strategy.REUSE_UNCHANGED:
-                latest = target.latest_version
-                if latest and not differs(target, latest, exclude_model_fields=latest.get_fields_to_exclude()):
-                    return latest
-                return target.create_new_version()
+                return reuse_or_version(target)
             case Strategy.LIVE_REFERENCE:
                 return target
             case Strategy.PRIVATE_CLONE:
                 return target.create_new_version(is_copy=True)
+
+    def check(self, model) -> list[tuple[str, str]]:
+        field = model_names(model)[0].get(self.name)
+        if field is None or not (field.many_to_one or field.one_to_one):
+            return [("E001", f"{self.name} is a Reference but not a foreign key of {model._meta.label}")]
+        return []
 
     def copy(self, working, copy, context: dict[str, Any]) -> None:
         self._require(context)
@@ -445,13 +487,14 @@ class Reference(Member):
 class OwnedSet(Member):
     """Rows reached through reverse accessors that belong to this record.
 
-    `via` is a bridge `(working, other, operation)` that carries the set until the rows' own model
-    has a spec; `accessors` names the reverse relations it covers, the member's own name by default."""
+    `via` is a bridge `(working, other, operation, context)` that carries the set until the rows' own
+    model has a spec; `accessors` names the reverse relations it covers, the member's own name by
+    default."""
 
     def __init__(
         self,
         *,
-        via: Callable[[Any, Any, Operation], Any],
+        via: Callable[[Any, Any, Operation, dict[str, Any]], Any],
         accessors: tuple[str, ...] | None = None,
         reads: tuple[str, ...] = (),
         provides: str | None = None,
@@ -466,14 +509,160 @@ class OwnedSet(Member):
 
     def publish(self, working, version, context: dict[str, Any]) -> None:
         self._require(context)
-        self._provide(context, self.via(working, version, Operation.PUBLISH))
+        self._provide(context, self.via(working, version, Operation.PUBLISH, context))
 
     def copy(self, working, copy, context: dict[str, Any]) -> None:
         self._require(context)
-        self._provide(context, self.via(working, copy, Operation.COPY))
+        self._provide(context, self.via(working, copy, Operation.COPY, context))
 
     def revert(self, working, version) -> None:
-        self.via(working, version, Operation.REVERT)
+        self.via(working, version, Operation.REVERT, {})
+
+    def check(self, model) -> list[tuple[str, str]]:
+        accessors = model_names(model)[1]
+        return [
+            ("E001", f"{self.name} covers {accessor!r}, which is not a related accessor of {model._meta.label}")
+            for accessor in self.accessors
+            if accessor not in accessors
+        ]
+
+
+class ParamReference(Member):
+    """An id, or a list of ids under `many`, stored under `key` in the JSON field `json_field`; the record
+    it names travels by `strategy`.
+
+    `fk_field` (the member's own name by default) is the FK or M2M column that mirrors the id, which a
+    revert reads the versioned record from. `archiving` says what happens to the referenced record when
+    a version holding the reference is archived; `display_name` labels the value in version details."""
+
+    def __init__(
+        self,
+        key: str,
+        model_label: str,
+        strategy: Strategy,
+        *,
+        json_field: str = "params",
+        fk_field: str | None = None,
+        many: bool = False,
+        archiving: Archiving = Archiving.KEEP,
+        display_name: str | None = None,
+        reads: tuple[str, ...] = (),
+        provides: str | None = None,
+    ):
+        super().__init__(reads=reads, provides=provides)
+        self.key = key
+        self.model_label = model_label
+        self.strategy = Strategy(strategy)
+        self.json_field = json_field
+        self._fk_field = fk_field
+        self.many = many
+        self.archiving = Archiving(archiving)
+        self._display_name = display_name
+        if many and self.strategy is not Strategy.LIVE_REFERENCE:
+            raise VersionSpecError("Versioning multi-ID params is not supported; a many param is a live reference")
+
+    @property
+    def fk_field(self) -> str:
+        return self._fk_field or self.name
+
+    @property
+    def display_name(self) -> str:
+        return self._display_name or self.name
+
+    @property
+    def model(self):
+        return apps.get_model(self.model_label)
+
+    def publish(self, working, version, context: dict[str, Any]) -> None:
+        self._require(context)
+        params = getattr(version, self.json_field)
+        self.pin(params)
+        self._provide(context, params.get(self.key))
+
+    def copy(self, working, copy, context: dict[str, Any]) -> None:
+        self._require(context)
+        self._provide(context, getattr(copy, self.json_field).get(self.key))
+
+    def revert(self, working, version) -> None:
+        self.map_back(version, getattr(working, self.json_field))
+
+    def pin(self, params: dict) -> None:
+        """Rewrite `params[key]` from the working record to the record a version holds, per `strategy`."""
+        if self.strategy is Strategy.LIVE_REFERENCE or not params.get(self.key):
+            return
+        instance = self.model.objects.filter(id=params[self.key]).first()
+        if instance is None or instance.is_a_version:
+            return
+        travelled = reuse_or_version(instance) if self.strategy is Strategy.REUSE_UNCHANGED else self._travel(instance)
+        params[self.key] = str(travelled.id)
+
+    def _travel(self, instance):
+        if self.strategy is Strategy.PRIVATE_CLONE:
+            return instance.create_new_version(is_copy=True)
+        return instance.create_new_version()
+
+    def map_back(self, row, params: dict) -> None:
+        """Rewrite `params[key]` from the versioned record `row`'s `fk_field` holds back to its working id;
+        a reference whose record is gone is cleared."""
+        if self.strategy is Strategy.LIVE_REFERENCE:
+            return
+        instance = getattr(row, self.fk_field)
+        if instance is not None:
+            params[self.key] = str(instance.get_working_version_id())
+        elif params.get(self.key):
+            params[self.key] = None
+
+    def archive_referenced(self, params: dict) -> None:
+        """Archive the record(s) `params[key]` names, per `archiving`."""
+        if self.archiving is Archiving.KEEP:
+            return
+        for instance_id in self.referenced_ids(params):
+            instance = self.model.objects.filter(id=instance_id).first()
+            if instance is None:
+                versioning_logger.error("Cannot archive %s %s: not found", self.key, instance_id)
+                continue
+            if self.archiving is Archiving.ARCHIVE_VERSIONS_ONLY and not instance.is_a_version:
+                continue
+            instance.archive()
+
+    def unarchive_referenced(self, params: dict) -> None:
+        """Restore the records `archive_referenced` archived. Only `ARCHIVE` records come back: archiving a
+        collection deletes its remote index and files, so a restored versions-only row would have nothing
+        behind it."""
+        if self.archiving is not Archiving.ARCHIVE:
+            return
+        for instance in self.model.objects.get_all().filter(id__in=self.referenced_ids(params), is_archived=True):
+            instance.unarchive()
+
+    def referenced_ids(self, params: dict) -> list:
+        value = params.get(self.key)
+        return (list(value) if self.many else [value]) if value else []
+
+    def resolve_for_display(self, value):
+        """The model instance(s) `value` names, for version-detail display."""
+        if not value:
+            return value
+        if self.many:
+            return list(self.model.objects.filter(id__in=value))
+        return self.model.objects.filter(id=value).first()
+
+    def check(self, model) -> list[tuple[str, str]]:
+        forward = model_names(model)[0]
+        label = model._meta.label
+        findings = []
+        if self.json_field not in forward:
+            findings.append(("E001", f"{self.name} reads {self.json_field!r}, which is not a field of {label}"))
+        mirror = forward.get(self.fk_field)
+        if mirror is None or not (mirror.many_to_one or mirror.many_to_many):
+            findings.append(("E001", f"{self.name} mirrors {self.fk_field!r}, which is not a relation of {label}"))
+        try:
+            target = self.model
+        except (LookupError, ValueError):
+            findings.append(("E004", f"{self.name} names {self.model_label!r}, which does not resolve to a model"))
+        else:
+            if not issubclass(target, VersionsMixin):
+                findings.append(("E001", f"{self.name} names {self.model_label}, which is not a versioned model"))
+        return findings
 
 
 class VersionSpec:
@@ -540,11 +729,21 @@ class VersionSpec:
     def numbered(self) -> bool:
         return _has_field(self.model, "version_number")
 
+    @classmethod
+    def param_references(cls) -> tuple["ParamReference", ...]:
+        return tuple(member for member in cls.members if isinstance(member, ParamReference))
+
+    def on_clone(self, working, clone, **options) -> None:
+        """Model-specific work on the clone before its first save: its parent, a renamed key."""
+
     def on_publish(self, working, version, **options) -> None:
         """Model-specific work after the members, before the version's final save."""
 
     def on_copy(self, working, copy, **options) -> None:
         """Model-specific work after the members, before the copy's final save."""
+
+    def on_revert(self, working, version) -> None:
+        """Model-specific work after the working row and its members are written."""
 
     @transaction.atomic()
     def publish(self, working, **options):
@@ -554,6 +753,7 @@ class VersionSpec:
         if self.numbered:
             version.version_number = self._next_number(working)
         self._regenerate(version)
+        self.on_clone(working, version, **options)
         version.save()
         context: dict[str, Any] = {}
         for member in self.members:
@@ -570,6 +770,7 @@ class VersionSpec:
         if self.numbered:
             copy.version_number = 1
         self._regenerate(copy)
+        self.on_clone(working, copy, **options)
         copy.save()
         context: dict[str, Any] = {}
         for member in self.members:
@@ -591,6 +792,7 @@ class VersionSpec:
         for member in self.members:
             member.revert(working, version)
         working.save()
+        self.on_revert(working, version)
 
     def _next_number(self, working) -> int:
         """The working row's current number, taken under a row lock so two publishers never share

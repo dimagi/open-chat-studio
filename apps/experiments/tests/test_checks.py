@@ -16,7 +16,7 @@ def declare(*, model=EXPERIMENT, identity=IDENTITY, regenerated=None, **members)
     return type("ThrowawaySpec", (VersionSpec,), {"Meta": meta, **members})
 
 
-def bridge(working, other, operation):
+def bridge(working, other, operation, context):
     return None
 
 

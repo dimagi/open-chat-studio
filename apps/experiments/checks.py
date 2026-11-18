@@ -4,7 +4,7 @@ from django.apps import apps
 from django.core import checks
 from django.core.exceptions import FieldDoesNotExist
 
-from .versioning import Member, OwnedSet, Reference, Strategy, VersionsMixin, VersionSpec
+from .versioning import Reference, Strategy, VersionsMixin, VersionSpec
 
 FAMILY_COLUMNS = ("working_version", "is_archived")
 
@@ -26,9 +26,7 @@ def check_spec(spec_cls: type[VersionSpec]) -> list[checks.CheckMessage]:
     except (LookupError, ValueError):
         return [_error(spec_cls, f"Meta.model {label!r} does not resolve to a model", "E004")]
 
-    fields = model._meta.get_fields()
-    forward = {field.name: field for field in fields if not (field.is_relation and field.auto_created)}
-    accessors = {field.get_accessor_name() for field in fields if field.is_relation and field.auto_created} - {None}
+    forward = {field.name for field in model._meta.get_fields() if not (field.is_relation and field.auto_created)}
     messages: list[checks.CheckMessage] = []
 
     identity = frozenset(getattr(spec_cls.Meta, "identity", ()))
@@ -36,11 +34,11 @@ def check_spec(spec_cls: type[VersionSpec]) -> list[checks.CheckMessage]:
     for attribute, names in (("identity", identity), ("regenerated", regenerated.keys())):
         messages.extend(
             _error(spec_cls, f"Meta.{attribute} names {name!r}, which is not a field of {label}", "E004")
-            for name in sorted(names - forward.keys())
+            for name in sorted(names - forward)
         )
 
     for member in spec_cls.members:
-        messages.extend(_check_member_names(spec_cls, member, label, forward, accessors))
+        messages.extend(_error(spec_cls, message, code) for code, message in member.check(model))
 
     declared = {member.name for member in spec_cls.members}
     for field in model._meta.concrete_fields:
@@ -68,25 +66,6 @@ def check_spec(spec_cls: type[VersionSpec]) -> list[checks.CheckMessage]:
         if member.provides:
             provided.add(member.provides)
     return messages
-
-
-def _check_member_names(spec_cls, member: Member, label: str, forward: dict, accessors: set[str]) -> list:
-    if isinstance(member, Reference):
-        field = forward.get(member.name)
-        if field is None or not (field.many_to_one or field.one_to_one):
-            return [
-                _error(spec_cls, f"{member.name} is declared a Reference but is not a foreign key of {label}", "E001")
-            ]
-        return []
-    if isinstance(member, OwnedSet):
-        return [
-            _error(spec_cls, f"{member.name} covers {accessor!r}, which is not a related accessor of {label}", "E001")
-            for accessor in member.accessors
-            if accessor not in accessors
-        ]
-    if member.name not in forward and member.name not in accessors:
-        return [_error(spec_cls, f"{member.name} is not a field or related accessor of {label}", "E001")]
-    return []
 
 
 def check_versioned_models() -> list[checks.CheckMessage]:
