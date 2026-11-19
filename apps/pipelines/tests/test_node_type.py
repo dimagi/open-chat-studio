@@ -240,6 +240,10 @@ class TestVersionedParamSpecs:
     def test_a_type_with_none_lists_none(self):
         assert NodeType("RenderTemplate").versioned_param_specs == ()
 
+    @pytest.mark.usefixtures("isolated_spec_registry")
+    def test_a_type_lists_none_while_the_node_model_has_no_spec(self):
+        assert NodeType("LLMResponseWithPrompt").versioned_param_specs == ()
+
 
 class TestInputHandles:
     def test_start_accepts_no_input(self):

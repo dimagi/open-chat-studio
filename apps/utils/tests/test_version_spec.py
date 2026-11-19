@@ -1,5 +1,6 @@
 """The version spec framework, traversed on the test-only versioned models."""
 
+import logging
 import uuid
 
 import pytest
@@ -555,6 +556,19 @@ class TestParamReference:
         working.part.refresh_from_db()
 
         assert working.part.is_archived is archived
+
+    def test_a_missing_record_is_logged_and_the_rest_still_archive(self, models, caplog):
+        _widget_model, part_model = models
+        part = part_model.objects.create(name="part")
+        member = part_reference(Strategy.LIVE_REFERENCE, many=True, archiving=Archiving.ARCHIVE)
+        member.name = "part"
+
+        with caplog.at_level(logging.ERROR, logger="ocs.versioning"):
+            member.archive_referenced({"part_id": ["0", str(part.id)]})
+        part.refresh_from_db()
+
+        assert "Cannot archive part_id 0: not found" in caplog.text
+        assert part.is_archived
 
     def test_versions_only_archives_a_version_and_only_archive_restores(self, models):
         working = make_param_widget(models, Strategy.LIVE_REFERENCE)
