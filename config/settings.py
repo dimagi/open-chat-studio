@@ -482,6 +482,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "apps.api.permissions.IsAuthenticatedOrMachineToken",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
+        "apps.api.permissions.TeamNotPendingDeletion",
         "apps.oauth.permissions.TokenHasOAuthScope",
     ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],

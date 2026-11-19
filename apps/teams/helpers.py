@@ -1,6 +1,5 @@
 from django.http import HttpRequest
 from django.utils.translation import gettext as _
-from rest_framework import exceptions
 
 from apps.users.models import CustomUser
 from apps.utils.slug import get_next_unique_slug
@@ -82,12 +81,6 @@ def set_request_attrs(request, **attrs) -> None:
     target = getattr(request, "_request", request)
     for name, value in attrs.items():
         setattr(target, name, value)
-
-
-def reject_team_pending_deletion(team: Team | None):
-    """Fail API authentication for a team that is scheduled for deletion."""
-    if team is not None and team.is_pending_deletion:
-        raise exceptions.AuthenticationFailed(_("This team is scheduled for deletion."))
 
 
 def get_team_membership_for_request(request: HttpRequest):

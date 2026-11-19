@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
@@ -18,7 +19,7 @@ from apps.api.session_tokens import parse_session_token, session_token_expired
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.oauth.permissions import is_client_credentials_request
-from apps.teams.helpers import get_team_membership_for_request, reject_team_pending_deletion, set_request_attrs
+from apps.teams.helpers import get_team_membership_for_request, set_request_attrs
 from apps.teams.utils import set_current_team
 from apps.utils.rate_limit import check as check_rate_limit
 from apps.utils.rate_limit import client_ip
@@ -59,7 +60,6 @@ class BaseKeyAuthentication(BaseAuthentication):
         if not token.user.is_active:
             _count_failed_credential_attempt(request)
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
-        reject_team_pending_deletion(token.team)
         user = token.user
         request.user = user
         set_request_attrs(request, team=token.team)
@@ -187,6 +187,19 @@ class IsAuthenticatedOrMachineToken(IsAuthenticated):
         return super().has_permission(request, view)
 
 
+class TeamNotPendingDeletion(BasePermission):
+    """Refuses requests for a team that is scheduled for deletion.
+
+    The export API leaves this out so a team can still be migrated off the server while it waits.
+    """
+
+    message = gettext_lazy("This team is scheduled for deletion.")
+
+    def has_permission(self, request, view):
+        team = getattr(request, "team", None)
+        return not (team and team.is_pending_deletion)
+
+
 class ReadOnlyAPIKeyPermission(BasePermission):
     """
     Allows only safe methods (GET, HEAD, OPTIONS) for read-only API keys.
@@ -254,7 +267,7 @@ class RequiresTeamPermission(BasePermission):
 # read-only API-key gate (ADR-0021), so views that need extra permission classes must build on this
 # list rather than start from an empty one. The OAuth scope class is deliberately excluded: each view
 # pairs its own (TokenHasOAuthScope or TokenHasOAuthResourceScope) with its ``required_scopes``.
-BASE_PERMISSION_CLASSES = [IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission]
+BASE_PERMISSION_CLASSES = [IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission, TeamNotPendingDeletion]
 
 
 class ConfigurableKeyParser(KeyParser):

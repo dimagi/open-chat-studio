@@ -62,7 +62,7 @@ def _page_state(channel: ExperimentChannel) -> tuple[PageState, Experiment | Non
     except NoPublishedVersion:
         published = None
     if channel.is_disabled:
-        return PageState("disabled", channel.disabled_message or "This chatbot is temporarily unavailable."), published
+        return PageState("disabled", channel.disabled_reply or "This chatbot is temporarily unavailable."), published
     if published is None:
         return PageState("no_published_version", "This chatbot is not published yet."), None
     return PageState("live", None), published

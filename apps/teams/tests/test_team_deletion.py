@@ -5,11 +5,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from field_audit.models import AuditAction
-from rest_framework import exceptions
-from rest_framework.request import Request
 
-from apps.api.models import UserAPIKey
-from apps.api.permissions import ApiKeyAuthentication
 from apps.evaluations.models import EvaluationMessage
 from apps.events.models import EventAction, StaticTrigger
 from apps.teams.deletion import (
@@ -30,6 +26,7 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.utils.factories.user import UserFactory
+from apps.utils.tests.clients import ApiTestClient
 
 
 def _admin(team):
@@ -243,17 +240,29 @@ def test_pending_team_is_not_a_default_team(pending_team):
     assert get_default_team_for_user(_member(pending_team)) is None
 
 
-def test_api_key_for_pending_team_is_rejected(rf, pending_team):
-    _, key = UserAPIKey.objects.create_key(name="k", user=_admin(pending_team), team=pending_team)
-    request = Request(rf.get("/api/v2/chatbots/", HTTP_X_API_KEY=key))
+@pytest.mark.parametrize(
+    ("url_name", "status_code"),
+    [
+        pytest.param("api:experiment-list", 403, id="api-refused"),
+        pytest.param("api:export:team", 200, id="export-allowed"),
+    ],
+)
+def test_api_for_pending_team(pending_team, url_name, status_code):
+    """The API refuses a pending team, except the export API, so the team can still be migrated out."""
+    client = ApiTestClient(_admin(pending_team), pending_team)
+    assert client.get(reverse(url_name)).status_code == status_code
 
-    with pytest.raises(exceptions.AuthenticationFailed):
-        ApiKeyAuthentication().authenticate(request)
 
-
-def test_channels_of_pending_team_are_disabled(pending_team):
-    channel = ExperimentChannelFactory.create(team=pending_team)
+def test_channels_of_pending_team_are_disabled_and_silent(pending_team):
+    channel = ExperimentChannelFactory.create(team=pending_team, disabled_message="Back soon")
     assert channel.is_disabled
+    assert channel.disabled_reply == ""
+
+
+@pytest.mark.django_db()
+def test_disabled_channel_of_active_team_keeps_its_reply(team):
+    channel = ExperimentChannelFactory.create(team=team, enabled=False, disabled_message="Back soon")
+    assert channel.disabled_reply == "Back soon"
 
 
 def test_pending_team_chatbots_are_frozen(pending_team):

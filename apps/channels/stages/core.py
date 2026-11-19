@@ -421,9 +421,9 @@ class ChannelDisabledStage(ProcessingStage):
     """Blocks inbound messages on a channel an admin has switched off.
 
     Runs as late as it can while still preventing every effect that matters: no session
-    is created, no bot is invoked, and the inbound message is never recorded. When a
-    static ``disabled_message`` is configured it goes back to the user through the
-    terminal stages; otherwise the pipeline halts silently.
+    is created, no bot is invoked, and the inbound message is never recorded. When the
+    channel has a ``disabled_reply`` it goes back to the user through the terminal stages;
+    otherwise the pipeline halts silently. A team pending deletion always halts silently.
 
     This stage only sees traffic that reaches a pipeline. Sessions opened *before* any pipeline
     runs are refused by ``start_experiment_session``; the routes that would otherwise create
@@ -456,8 +456,8 @@ class ChannelDisabledStage(ProcessingStage):
         channel = ctx.experiment_channel
         logger.info("Ignoring message for disabled channel %s (%s)", channel.id, channel.platform)
 
-        if channel.disabled_message:
-            raise EarlyExitResponse(channel.disabled_message)
+        if reply := channel.disabled_reply:
+            raise EarlyExitResponse(reply)
         raise EarlyAbort()
 
 

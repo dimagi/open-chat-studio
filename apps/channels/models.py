@@ -363,6 +363,13 @@ class ExperimentChannel(BaseTeamModel):
         return not self.enabled or self.team.is_pending_deletion
 
     @property
+    def disabled_reply(self) -> str:
+        """The static text a disabled channel answers with; blank (silence) while its team is pending deletion."""
+        if self.team.is_pending_deletion:
+            return ""
+        return self.disabled_message
+
+    @property
     def widget_update_status(self) -> widget_versions.WidgetUpdateStatus | None:
         """The update badge for an embedded widget, or None for every other platform.
 

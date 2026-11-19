@@ -22,7 +22,7 @@ class ChannelDisabledException(ExperimentChannelException):
 
     def __init__(self, channel):
         self.channel = channel
-        self.disabled_message = channel.disabled_message
+        self.disabled_message = channel.disabled_reply
         super().__init__(f"Channel {channel.id} ({channel.platform}) is disabled")
 
 
