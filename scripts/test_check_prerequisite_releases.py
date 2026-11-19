@@ -58,6 +58,7 @@ def test_parse_prerequisites(description, expected):
         pytest.param("- PR 12", id="no-hash"),
         pytest.param("- #12, #34", id="two-prs-on-one-line"),
         pytest.param("- #12 and #34", id="two-prs-in-prose"),
+        pytest.param("- #12.34", id="malformed-number"),
     ],
 )
 def test_parse_rejects_lines_it_cannot_read(line):

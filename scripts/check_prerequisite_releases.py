@@ -28,7 +28,7 @@ SECTION_HEADING = re.compile(r"^#{1,6}\s*Prerequisite PRs\s*:?\s*$", re.IGNORECA
 # A heading or a horizontal rule ends the section; this repo's PR bodies end with `---` and a footer.
 SECTION_END = re.compile(r"^(?:#{1,6}\s|---+$)")
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-PREREQUISITE_LINE = re.compile(r"^(?:[-*+]\s*)?#(\d+)\b")
+PREREQUISITE_LINE = re.compile(r"^(?:[-*+]\s*)?#(\d+)(?=\s|$)")
 PR_NUMBER = re.compile(r"#\d+")
 NONE_LINE = re.compile(r"^(?:[-*+]\s*)?none\.?$", re.IGNORECASE)
 
