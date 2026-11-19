@@ -472,6 +472,7 @@ class AgentTools(models.TextChoices):
     APPEND_TO_SESSION_STATE = "append-to-session-state", gettext("Append to Session State")
     INCREMENT_SESSION_STATE_COUNTER = "increment-session-state-counter", gettext("Increment Session State Counter")
     CALCULATOR = "calculator", gettext("Calculator")
+    ATTACH_CARD = "attach-card", gettext("Attach Card (CommCare Connect)")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:

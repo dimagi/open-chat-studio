@@ -9,6 +9,9 @@ from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfi
 from apps.channels.channel_base import ChannelBase
 from apps.channels.clients.connect_client import (
     ATTACHMENT_ENCRYPTION_OVERHEAD_BYTES,
+    CARD_ENTRY_NAME,
+    CARD_FILE_EXTENSIONS,
+    CARD_HTML_FORMAT,
     MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGE_ATTACHMENT_BYTES,
     CommCareConnectClient,
@@ -63,12 +66,30 @@ def attachment_mime_type(content_type: str | None) -> str:
     return mime_type or "application/octet-stream"
 
 
+def split_card_files(
+    attachments: list[OutgoingAttachment],
+) -> tuple[list[OutgoingAttachment], list[OutgoingAttachment]]:
+    """Split a reply's attachments into the files of its card and the rest.
+
+    A reply has a card when an attachment is named CARD_ENTRY_NAME. Every attachment the app can
+    serve to the card's page then belongs to the card.
+    """
+    if not any(attachment.name == CARD_ENTRY_NAME for attachment in attachments):
+        return [], attachments
+    card_files, other_files = [], []
+    for attachment in attachments:
+        extension = attachment.name.rsplit(".", 1)[-1].lower() if "." in attachment.name else ""
+        (card_files if extension in CARD_FILE_EXTENSIONS else other_files).append(attachment)
+    return card_files, other_files
+
+
 class CommCareConnectSender(ChannelSender):
     """Delivers messages to CommCare Connect users through PersonalID.
 
     Buffers the text and files of a reply and sends them as one encrypted message in flush().
     A file PersonalID cannot take in this message is sent as a download link in its text
-    instead.
+    instead. A reply with a card (see split_card_files) is sent as the card, with the text as its
+    caption, followed by a second message with any files the card cannot use.
 
     Reads ``ctx.participant_data``, which ParticipantResolverStage sets.
     """
@@ -145,12 +166,28 @@ class CommCareConnectSender(ChannelSender):
 
     def _send_buffered(self) -> None:
         channel_id, encryption_key = self._channel_id_and_encryption_key()
-        CommCareConnectClient().create_message(
+        client = CommCareConnectClient()
+        card_files, other_files = split_card_files(self._attachments)
+        if not card_files:
+            client.create_message(
+                channel_id=channel_id,
+                encryption_key=encryption_key,
+                text=self._text,
+                attachments=self._attachments,
+            )
+            return
+
+        client.create_message(
             channel_id=channel_id,
             encryption_key=encryption_key,
             text=self._text,
-            attachments=self._attachments,
+            attachments=card_files,
+            message_format=CARD_HTML_FORMAT,
         )
+        if other_files:
+            client.create_message(
+                channel_id=channel_id, encryption_key=encryption_key, text="", attachments=other_files
+            )
 
     def _channel_id_and_encryption_key(self) -> tuple[str, bytes]:
         if self._ctx is None:

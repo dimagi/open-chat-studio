@@ -18,6 +18,8 @@ from tenacity import wait_none
 
 from apps.channels.clients.connect_client import (
     ATTACHMENT_ENCRYPTION_OVERHEAD_BYTES,
+    CARD_HTML_FORMAT,
+    CARD_LEGACY_APP_MESSAGE,
     LEGACY_APP_MESSAGE,
     MAX_ATTACHMENT_BYTES,
     CommCareConnectClient,
@@ -218,6 +220,33 @@ class TestCreateMessage:
         message = _sent_message(httpx_mock.get_request())
         assert "content" not in message
         assert _decrypt_text(encryption_key, message["content_legacy_msg"]) == LEGACY_APP_MESSAGE
+
+    def test_card_message(self, httpx_mock):
+        httpx_mock.add_response(method="POST", url=_CREATE_MESSAGE_URL, status_code=200)
+        encryption_key = os.urandom(32)
+        card = OutgoingAttachment(name="index.html", content_type="text/html", content=b"<p>Card</p>")
+
+        CommCareConnectClient().create_message(
+            str(uuid4()), encryption_key, "Your chart", [card], message_format=CARD_HTML_FORMAT
+        )
+
+        request = httpx_mock.get_request()
+        assert request.headers["X-Messaging-Version"] == "2"
+        message = _sent_message(request)
+        assert message["format"] == "card-html"
+        assert _decrypt_text(encryption_key, message["content"]) == "Your chart"
+        legacy_text = _decrypt_text(encryption_key, message["content_legacy_msg"])
+        assert legacy_text == f"Your chart\n\n{CARD_LEGACY_APP_MESSAGE}"
+        assert [attachment["name"] for attachment in message["attachments"]] == ["index.html"]
+
+    def test_message_without_a_format_has_no_format_or_version(self, httpx_mock):
+        httpx_mock.add_response(method="POST", url=_CREATE_MESSAGE_URL, status_code=200)
+
+        CommCareConnectClient().create_message(str(uuid4()), os.urandom(32), "Hello", [_SITE_MAP])
+
+        request = httpx_mock.get_request()
+        assert "X-Messaging-Version" not in request.headers
+        assert "format" not in _sent_message(request)
 
     @time_machine.travel(datetime(2026, 10, 6, 12, 0, tzinfo=UTC), tick=False)
     def test_attachments_expire_after_ninety_days(self, httpx_mock):

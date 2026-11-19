@@ -29,6 +29,7 @@ from apps.channels.connect_channel import (
     CommCareConnectChannel,
     CommCareConnectSender,
     attachment_mime_type,
+    split_card_files,
     unique_attachment_name,
 )
 from apps.channels.models import ChannelPlatform
@@ -151,6 +152,32 @@ def test_attachment_mime_type(content_type, expected):
     assert attachment_mime_type(content_type) == expected
 
 
+def _attachment(name):
+    return OutgoingAttachment(name=name, content_type="application/octet-stream", content=b"x")
+
+
+@pytest.mark.parametrize(
+    ("names", "card", "others"),
+    [
+        pytest.param(["a.pdf", "b.png"], [], ["a.pdf", "b.png"], id="no-card"),
+        pytest.param(["index.html"], ["index.html"], [], id="card-only"),
+        pytest.param(
+            ["chart.PNG", "index.html", "report.pdf", "data.json"],
+            ["chart.PNG", "index.html", "data.json"],
+            ["report.pdf"],
+            id="files-the-card-cannot-use-are-separate",
+        ),
+        pytest.param(["Index.html", "a.png"], [], ["Index.html", "a.png"], id="entry-name-is-case-sensitive"),
+        pytest.param(["index.html", "notes"], ["index.html"], ["notes"], id="no-extension"),
+    ],
+)
+def test_split_card_files(names, card, others):
+    card_files, other_files = split_card_files([_attachment(name) for name in names])
+
+    assert [attachment.name for attachment in card_files] == card
+    assert [attachment.name for attachment in other_files] == others
+
+
 # ---------------------------------------------------------------------------
 # CommCareConnectSender
 # ---------------------------------------------------------------------------
@@ -174,6 +201,37 @@ class TestCommCareConnectSender:
                 OutgoingAttachment(name="b.png", content_type="image/png", content=b"bbb"),
             ],
         )
+
+    def test_card_is_sent_with_the_text_as_its_caption(self, client_class):
+        sender = _bound_sender()
+
+        sender.send_text("Your growth chart", recipient="participant")
+        sender.send_file(_file("index.html", b"<p>card</p>", content_type="text/html"), "participant", session_id=1)
+        sender.flush()
+
+        client_class.return_value.create_message.assert_called_once_with(
+            channel_id=_CHANNEL_ID,
+            encryption_key=_ENCRYPTION_KEY,
+            text="Your growth chart",
+            attachments=[OutgoingAttachment(name="index.html", content_type="text/html", content=b"<p>card</p>")],
+            message_format="card-html",
+        )
+
+    def test_files_the_card_cannot_use_follow_in_a_second_message(self, client_class):
+        sender = _bound_sender()
+
+        sender.send_text("Your growth chart", recipient="participant")
+        sender.send_file(_file("index.html", b"<p>card</p>", content_type="text/html"), "participant", session_id=1)
+        sender.send_file(_file("report.pdf", b"pdf"), "participant", session_id=1)
+        sender.flush()
+
+        card_call, files_call = client_class.return_value.create_message.call_args_list
+        assert card_call.kwargs["message_format"] == "card-html"
+        assert card_call.kwargs["text"] == "Your growth chart"
+        assert [attachment.name for attachment in card_call.kwargs["attachments"]] == ["index.html"]
+        assert "message_format" not in files_call.kwargs
+        assert files_call.kwargs["text"] == ""
+        assert [attachment.name for attachment in files_call.kwargs["attachments"]] == ["report.pdf"]
 
     def test_text_only_message(self, client_class):
         sender = _bound_sender()

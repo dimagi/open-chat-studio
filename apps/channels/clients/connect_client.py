@@ -37,6 +37,22 @@ LEGACY_APP_MESSAGE = (
 )
 ATTACHMENT_EXPIRY = timedelta(days=90)
 
+# A card is a message whose attachments form a small web page that the app shows inline, with
+# CARD_ENTRY_NAME as its entry point. The app serves a card's files only with these extensions.
+CARD_HTML_FORMAT = "card-html"
+CARD_ENTRY_NAME = "index.html"
+CARD_FILE_EXTENSIONS = frozenset(
+    {
+        "html", "css", "js", "mjs", "json", "txt", "svg", "png", "jpg", "jpeg", "gif", "webp",
+        "mp3", "m4a", "ogg", "wav", "mp4", "webm", "woff", "woff2", "ttf",
+    }
+)  # fmt: skip
+CARD_LEGACY_APP_MESSAGE = (
+    "This message contains a card that your version of the app cannot show. Please update your Android app."
+)
+# The create_message version that knows the `format` field
+_CARD_MESSAGING_VERSION = "2"
+
 _CLIENT_TIMEOUT = 10
 # PersonalID writes the attachments to storage before it replies
 _ATTACHMENT_UPLOAD_TIMEOUT = httpx.Timeout(_CLIENT_TIMEOUT, read=60)
@@ -148,20 +164,28 @@ class CommCareConnectClient:
         encryption_key: bytes,
         text: str,
         attachments: Sequence[OutgoingAttachment] = (),
+        message_format: str | None = None,
     ) -> None:
         """Send a message, with or without attachments, through PersonalID's create_message.
 
-        A message with attachments also carries its text followed by LEGACY_APP_MESSAGE for apps
-        that cannot show them, and expires after ATTACHMENT_EXPIRY.
+        A message with attachments also carries its text followed by LEGACY_APP_MESSAGE (or
+        CARD_LEGACY_APP_MESSAGE for a card) for apps that cannot show them, and expires after
+        ATTACHMENT_EXPIRY. ``message_format`` is the `format` field, such as CARD_HTML_FORMAT.
         """
         message: dict = {"channel": channel_id, "message_id": str(uuid4())}
+        headers = {}
+        if message_format:
+            message["format"] = message_format
+            # Makes PersonalID refuse the message rather than deliver it without its format
+            headers["X-Messaging-Version"] = _CARD_MESSAGING_VERSION
         if text:
             message["content"] = self._encrypted_content(encryption_key, text)
 
         # Encrypted once, outside the retried request, so a retry sends the same bytes
         attachment_parts = []
         if attachments:
-            legacy_text = f"{text}\n\n{LEGACY_APP_MESSAGE}" if text else LEGACY_APP_MESSAGE
+            legacy_message = CARD_LEGACY_APP_MESSAGE if message_format == CARD_HTML_FORMAT else LEGACY_APP_MESSAGE
+            legacy_text = f"{text}\n\n{legacy_message}" if text else legacy_message
             message["content_legacy_msg"] = self._encrypted_content(encryption_key, legacy_text)
             message["expires_at"] = (timezone.now() + ATTACHMENT_EXPIRY).isoformat()
             message["attachments"] = []
@@ -176,7 +200,7 @@ class CommCareConnectClient:
                 attachment_parts.append((part_name, (part_name, encrypted, "application/octet-stream")))
 
         timeout = _ATTACHMENT_UPLOAD_TIMEOUT if attachments else self.client.timeout
-        self._post_create_message(message, attachment_parts, timeout)
+        self._post_create_message(message, attachment_parts, timeout, headers)
 
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
@@ -185,11 +209,13 @@ class CommCareConnectClient:
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
-    def _post_create_message(self, message: dict, attachment_parts: list, timeout: httpx.Timeout) -> None:
+    def _post_create_message(
+        self, message: dict, attachment_parts: list, timeout: httpx.Timeout, headers: dict[str, str]
+    ) -> None:
         url = f"{self._base_url}/messaging/create_message/"
         # No filename, so PersonalID's multipart parser reads it as a form field rather than a file
         message_part = ("message", (None, json.dumps(message).encode(), "application/json"))
-        response = self.client.post(url, files=[message_part, *attachment_parts], timeout=timeout)
+        response = self.client.post(url, files=[message_part, *attachment_parts], timeout=timeout, headers=headers)
         if response.status_code == 400 and self._is_message_already_exists(response):
             logger.info("Message %s already delivered to Connect; treating as success", message["message_id"])
             return
