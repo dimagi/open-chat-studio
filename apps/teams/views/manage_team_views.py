@@ -95,7 +95,8 @@ def _pending_team_access(request, slug) -> tuple[Team, bool]:
 @login_required
 def team_pending_deletion(request, slug):
     """Shown in place of every page of a team that is scheduled for deletion."""
-    if request.user.is_superuser and not Membership.objects.filter(team__slug=slug, user=request.user).exists():
+    team = get_object_or_404(Team, slug=slug, deletion_requested_at__isnull=False)
+    if request.user.is_superuser and not Membership.objects.filter(team=team, user=request.user).exists():
         if not Elevation(request).has(Grant.team(slug)):
             elevate_url = reverse("web:elevate_team", args=[slug])
             return HttpResponseRedirect(f"{elevate_url}?{urlencode({'next': request.get_full_path()})}")

@@ -24,9 +24,14 @@ def get_next_unique_team_slug(team_name: str) -> str:
 
 
 def get_team_for_request(request, view_kwargs):
+    """The team named by the URL's ``team_slug``, or else the user's default team.
+
+    A team named in the URL is returned even when it is pending deletion; ``TeamsMiddleware`` decides
+    who may still reach it. A default team is never one that is pending deletion.
+    """
     team_slug = view_kwargs.get("team_slug", None)
     if team_slug:
-        return Team.objects.filter(slug=team_slug, deletion_requested_at__isnull=True).first()
+        return Team.objects.filter(slug=team_slug).first()
 
     if not request.user.is_authenticated:
         return None
