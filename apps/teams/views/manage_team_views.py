@@ -23,12 +23,11 @@ from apps.teams.forms import (
 )
 from apps.teams.helpers import get_pending_team_access
 from apps.teams.invitations import send_invitation
-from apps.teams.models import Invitation, Membership, Team
+from apps.teams.models import Invitation, Team
 from apps.teams.tasks import start_team_files_export
 from apps.teams.utils import current_team
 from apps.teams.views.members_views import ROLE_CHOICES
 from apps.teams.views.team_settings import public_key_context, render_team_settings
-from apps.web.elevation import Elevation, Grant
 
 
 @login_required
@@ -96,11 +95,12 @@ def _pending_team_access(request, slug) -> tuple[Team, bool]:
 def team_pending_deletion(request, slug):
     """Shown in place of every page of a team that is scheduled for deletion."""
     team = get_object_or_404(Team, slug=slug, deletion_requested_at__isnull=False)
-    if request.user.is_superuser and not Membership.objects.filter(team=team, user=request.user).exists():
-        if not Elevation(request).has(Grant.team(slug)):
-            elevate_url = reverse("web:elevate_team", args=[slug])
-            return HttpResponseRedirect(f"{elevate_url}?{urlencode({'next': request.get_full_path()})}")
-    team, can_cancel = _pending_team_access(request, slug)
+    can_view, can_cancel = get_pending_team_access(request, team)
+    if not can_view:
+        if not request.user.is_superuser:
+            raise Http404
+        elevate_url = reverse("web:elevate_team", args=[slug])
+        return HttpResponseRedirect(f"{elevate_url}?{urlencode({'next': request.get_full_path()})}")
     return render(
         request,
         "teams/pending_deletion.html",
