@@ -5,6 +5,7 @@ from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.formats import date_format
+from django.utils.http import urlencode
 from django.utils.timezone import localtime
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
@@ -20,12 +21,14 @@ from apps.teams.forms import (
     TeamMigrationForm,
     TeamPublicKeyForm,
 )
+from apps.teams.helpers import get_pending_team_access
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation, Membership, Team
 from apps.teams.tasks import start_team_files_export
 from apps.teams.utils import current_team
 from apps.teams.views.members_views import ROLE_CHOICES
 from apps.teams.views.team_settings import public_key_context, render_team_settings
+from apps.web.elevation import Elevation, Grant
 
 
 @login_required
@@ -75,22 +78,21 @@ def delete_team(request, team_slug):
 
 
 def _pending_team_access(request, slug) -> tuple[Team, bool]:
-    """The pending team and whether the user may cancel its deletion.
-
-    Superusers always have access and may cancel. Anyone else who isn't a member of the team gets a 404.
-    """
+    """The pending team and whether the user may cancel its deletion; 404 for anyone who may not see it."""
     team = get_object_or_404(Team, slug=slug, deletion_requested_at__isnull=False)
-    if request.user.is_superuser:
-        return team, True
-    membership = Membership.objects.filter(team=team, user=request.user).first()
-    if not membership:
+    can_view, can_cancel = get_pending_team_access(request, team)
+    if not can_view:
         raise Http404
-    return team, membership.has_perm("teams.delete_team")
+    return team, can_cancel
 
 
 @login_required
 def team_pending_deletion(request, slug):
     """Shown in place of every page of a team that is scheduled for deletion."""
+    if request.user.is_superuser and not Membership.objects.filter(team__slug=slug, user=request.user).exists():
+        if not Elevation(request).has(Grant.team(slug)):
+            elevate_url = reverse("web:elevate_team", args=[slug])
+            return HttpResponseRedirect(f"{elevate_url}?{urlencode({'next': request.get_full_path()})}")
     team, can_cancel = _pending_team_access(request, slug)
     return render(
         request,

@@ -27,6 +27,8 @@ from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
+from apps.utils.tests.elevation import elevate_session
+from apps.web.elevation import Grant
 
 
 def _admin(team):
@@ -199,7 +201,8 @@ def test_team_pages_are_not_found_for_non_members(client, pending_team):
         pytest.param("admin", 200, True, id="admin"),
         pytest.param("member", 200, False, id="member"),
         pytest.param("outsider", 404, None, id="outsider"),
-        pytest.param("superuser", 200, True, id="superuser"),
+        pytest.param("superuser", 302, None, id="superuser-sent-to-elevate"),
+        pytest.param("elevated-superuser", 200, True, id="elevated-superuser"),
     ],
 )
 def test_pending_deletion_page(client, pending_team, who, status, can_cancel):
@@ -208,14 +211,29 @@ def test_pending_deletion_page(client, pending_team, who, status, can_cancel):
         "member": lambda: _member(pending_team),
         "outsider": lambda: UserFactory.create(),
         "superuser": lambda: UserFactory.create(is_superuser=True),
+        "elevated-superuser": lambda: UserFactory.create(is_superuser=True),
     }[who]()
     client.force_login(user)
+    if who == "elevated-superuser":
+        elevate_session(client, Grant.team(pending_team.slug))
 
     response = client.get(reverse("teams:pending_deletion", args=[pending_team.slug]))
 
     assert response.status_code == status
+    if who == "superuser":
+        assert response.url.startswith(reverse("web:elevate_team", args=[pending_team.slug]))
     if can_cancel is not None:
         assert response.context["can_cancel"] is can_cancel
+
+
+def test_unelevated_superuser_cannot_cancel_deletion(client, pending_team):
+    client.force_login(UserFactory.create(is_superuser=True))
+
+    response = client.post(reverse("teams:cancel_deletion", args=[pending_team.slug]))
+
+    assert response.status_code == 404
+    pending_team.refresh_from_db()
+    assert pending_team.is_pending_deletion
 
 
 @pytest.mark.parametrize(

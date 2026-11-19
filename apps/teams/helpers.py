@@ -83,6 +83,22 @@ def set_request_attrs(request, **attrs) -> None:
         setattr(target, name, value)
 
 
+def get_pending_team_access(request: HttpRequest, team: Team) -> tuple[bool, bool]:
+    """Whether the user may see a team that is pending deletion, and whether they may cancel it.
+
+    Members see it, and those with ``teams.delete_team`` may cancel. A superuser needs the team's
+    elevation grant, as for any other access to a team they are not a member of.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return False, False
+    if membership := Membership.objects.filter(team=team, user=user).first():
+        return True, membership.has_perm("teams.delete_team")
+    if user.is_superuser and Elevation(request).has(Grant.team(team.slug)):
+        return True, True
+    return False, False
+
+
 def get_team_membership_for_request(request: HttpRequest):
     if request.user.is_authenticated and request.team:
         membership = Membership.objects.filter(team=request.team, user=request.user).first()

@@ -1,10 +1,12 @@
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import SimpleLazyObject
+from django_htmx.http import HttpResponseClientRedirect
 
-from apps.teams.helpers import get_team_for_request, get_team_membership_for_request
-from apps.teams.models import Membership, Team
+from apps.teams.decorators import TeamAccessDenied
+from apps.teams.helpers import get_pending_team_access, get_team_for_request, get_team_membership_for_request
+from apps.teams.models import Team
 from apps.teams.utils import set_current_team
 
 
@@ -23,22 +25,20 @@ def _get_team_membership(request):
     return request._cached_team_membership
 
 
-def _can_see_pending_deletion_page(user, team) -> bool:
-    if not user.is_authenticated:
-        return False
-    return user.is_superuser or Membership.objects.filter(team=team, user=user).exists()
-
-
 class TeamsMiddleware(MiddlewareMixin):
     def process_view(self, request, view_func, view_args, view_kwargs):
         if team_slug := view_kwargs.get("team_slug"):
             team = Team.objects.filter(slug=team_slug).first()
             if team is not None and team.is_pending_deletion:
-                if _can_see_pending_deletion_page(request.user, team):
+                can_view, _ = get_pending_team_access(request, team)
+                if can_view:
                     url = reverse("teams:pending_deletion", args=[team.slug])
                     if getattr(request, "htmx", False):
-                        return HttpResponse(headers={"HX-Redirect": url})
+                        return HttpResponseClientRedirect(url)
                     return HttpResponseRedirect(url)
+                if request.user.is_superuser:
+                    # The 404 page offers an unelevated superuser the team's elevation grant.
+                    raise TeamAccessDenied
                 # Everyone else sees the team exactly as if it did not exist.
                 team = None
             if team is not None:

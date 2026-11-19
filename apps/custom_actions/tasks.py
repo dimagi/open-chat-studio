@@ -38,7 +38,7 @@ def check_single_custom_action_health(action_id: int):
         action_id: The ID of the CustomAction to check
     """
     try:
-        action = CustomAction.objects.get(id=action_id)
+        action = CustomAction.objects.select_related("team").get(id=action_id)
     except CustomAction.DoesNotExist:
         logger.error(f"CustomAction with id {action_id} not found")
         return
