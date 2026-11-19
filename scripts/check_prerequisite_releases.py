@@ -28,6 +28,7 @@ SECTION_HEADING = re.compile(r"^#{1,6}\s*Prerequisite PRs\s*:?\s*$", re.IGNORECA
 # A heading or a horizontal rule ends the section; this repo's PR bodies end with `---` and a footer.
 SECTION_END = re.compile(r"^(?:#{1,6}\s|---+$)")
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+FENCED_CODE = re.compile(r"^\s*(```|~~~).*?^\s*\1", re.DOTALL | re.MULTILINE)
 PREREQUISITE_LINE = re.compile(r"^(?:[-*+]\s*)?#(\d+)(?=\s|$)")
 PR_NUMBER = re.compile(r"#\d+")
 NONE_LINE = re.compile(r"^(?:[-*+]\s*)?none\.?$", re.IGNORECASE)
@@ -46,7 +47,7 @@ class Prerequisite:
 
 def parse_prerequisites(body: str | None) -> list[int]:
     """PR numbers listed in the "Prerequisite PRs" section, in order and without duplicates."""
-    lines = HTML_COMMENT.sub("", body or "").splitlines()
+    lines = FENCED_CODE.sub("", HTML_COMMENT.sub("", body or "")).splitlines()
     start = next((i + 1 for i, line in enumerate(lines) if SECTION_HEADING.match(line.strip())), None)
     if start is None:
         return []

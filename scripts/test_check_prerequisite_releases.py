@@ -46,6 +46,11 @@ def body(section: str) -> str:
         pytest.param("### Prerequisite PRs:\n- #7", [7], id="heading-with-colon"),
         pytest.param("### Prerequisite PRs\r\n- #7\r\n- #8\r\n", [7, 8], id="crlf"),
         pytest.param("### Prerequisite PRs\n- #7\n\n---\nGenerated with a tool", [7], id="ends-at-rule"),
+        pytest.param(
+            "Example:\n```\n### Prerequisite PRs\nNone\n```\n\n### Prerequisite PRs\n- #7\n",
+            [7],
+            id="ignores-heading-in-code-block",
+        ),
     ],
 )
 def test_parse_prerequisites(description, expected):
