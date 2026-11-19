@@ -68,6 +68,7 @@ jobs:
           python-version: '3.13'
 
       - name: Check prerequisites
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
