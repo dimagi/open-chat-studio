@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import cached_property
 from typing import TYPE_CHECKING
 
 from apps.channels.callbacks import ChannelCallbacks
@@ -10,6 +9,9 @@ from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfi
 from apps.channels.channel_base import ChannelBase
 from apps.channels.clients.connect_client import (
     ATTACHMENT_ENCRYPTION_OVERHEAD_BYTES,
+    CARD_ENTRY_NAME,
+    CARD_FILE_EXTENSIONS,
+    CARD_HTML_FORMAT,
     MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGE_ATTACHMENT_BYTES,
     CommCareConnectClient,
@@ -19,8 +21,6 @@ from apps.channels.clients.connect_client import (
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.sender import ChannelSender
 from apps.chat.exceptions import ChannelException
-from apps.teams.flags import Flags
-from apps.teams.utils import flag_is_active_for_team
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -66,19 +66,35 @@ def attachment_mime_type(content_type: str | None) -> str:
     return mime_type or "application/octet-stream"
 
 
+def split_card_files(
+    attachments: list[OutgoingAttachment],
+) -> tuple[list[OutgoingAttachment], list[OutgoingAttachment]]:
+    """Split a reply's attachments into the files of its card and the rest.
+
+    A reply has a card when an attachment is named CARD_ENTRY_NAME. Every attachment the app can
+    serve to the card's page then belongs to the card.
+    """
+    if not any(attachment.name == CARD_ENTRY_NAME for attachment in attachments):
+        return [], attachments
+    card_files, other_files = [], []
+    for attachment in attachments:
+        extension = attachment.name.rsplit(".", 1)[-1].lower() if "." in attachment.name else ""
+        (card_files if extension in CARD_FILE_EXTENSIONS else other_files).append(attachment)
+    return card_files, other_files
+
+
 class CommCareConnectSender(ChannelSender):
     """Delivers messages to CommCare Connect users through PersonalID.
 
     Buffers the text and files of a reply and sends them as one encrypted message in flush().
     A file PersonalID cannot take in this message is sent as a download link in its text
-    instead. With ``send_fcm_fallback`` the reply goes through the legacy send_fcm endpoint,
-    which carries text only.
+    instead. A reply with a card (see split_card_files) is sent as the card, with the text as its
+    caption, followed by a second message with any files the card cannot use.
 
     Reads ``ctx.participant_data``, which ParticipantResolverStage sets.
     """
 
-    def __init__(self, send_fcm_fallback: bool = False) -> None:
-        self.send_fcm_fallback = send_fcm_fallback
+    def __init__(self) -> None:
         self._ctx: MessageProcessingContext | None = None
         self._recipient = ""
         self._text = ""
@@ -130,8 +146,6 @@ class CommCareConnectSender(ChannelSender):
 
     def _reason_to_link_unread_file(self) -> str | None:
         """Why the next file cannot be attached whatever its size, so it need not be read."""
-        if self.send_fcm_fallback:
-            return "the create_message flag is off"
         if len(self._attachments) >= MAX_ATTACHMENTS_PER_MESSAGE:
             return f"the message already has {MAX_ATTACHMENTS_PER_MESSAGE} attachments"
         return None
@@ -153,14 +167,26 @@ class CommCareConnectSender(ChannelSender):
     def _send_buffered(self) -> None:
         channel_id, encryption_key = self._channel_id_and_encryption_key()
         client = CommCareConnectClient()
-        if self.send_fcm_fallback:
-            client.send_message_to_user(channel_id=channel_id, message=self._text, encryption_key=encryption_key)
-        else:
+        card_files, other_files = split_card_files(self._attachments)
+        if not card_files:
             client.create_message(
                 channel_id=channel_id,
                 encryption_key=encryption_key,
                 text=self._text,
                 attachments=self._attachments,
+            )
+            return
+
+        client.create_message(
+            channel_id=channel_id,
+            encryption_key=encryption_key,
+            text=self._text,
+            attachments=card_files,
+            message_format=CARD_HTML_FORMAT,
+        )
+        if other_files:
+            client.create_message(
+                channel_id=channel_id, encryption_key=encryption_key, text="", attachments=other_files
             )
 
     def _channel_id_and_encryption_key(self) -> tuple[str, bytes]:
@@ -200,21 +226,16 @@ class CommCareConnectChannel(ChannelBase):
 
     supported_message_types = (MESSAGE_TYPES.TEXT,)
 
-    @cached_property
-    def _send_fcm_fallback(self) -> bool:
-        """Read once, so the capabilities and the sender of one message always agree."""
-        return not flag_is_active_for_team(self.experiment.team, Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug)
-
     def _get_callbacks(self) -> ChannelCallbacks:
         return ChannelCallbacks()
 
     def _get_sender(self) -> ChannelSender:
-        return CommCareConnectSender(send_fcm_fallback=self._send_fcm_fallback)
+        return CommCareConnectSender()
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
             supports_voice_replies=self.voice_replies_supported,
-            supports_files=not self._send_fcm_fallback,
+            supports_files=True,
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,
             can_send_file=self._can_send_file,

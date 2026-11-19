@@ -1646,6 +1646,18 @@
       ]
     }
   },
+  "openai/gpt-6.2-astra-law": {
+    "first_seen": "2026-11-18",
+    "verdict": "rejected",
+    "reason": "Legal-domain variant absent from OpenAI's model catalogue, which lists only gpt-6.2-astra and gpt-6.2-sol.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "openai/gpt-audio": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",

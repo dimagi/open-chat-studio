@@ -482,6 +482,7 @@ class AgentTools(models.TextChoices):
     APPEND_TO_SESSION_STATE = "append-to-session-state", gettext("Append to Session State")
     INCREMENT_SESSION_STATE_COUNTER = "increment-session-state-counter", gettext("Increment Session State Counter")
     CALCULATOR = "calculator", gettext("Calculator")
+    ATTACH_CARD = "attach-card", gettext("Attach Card (CommCare Connect)")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
@@ -1107,6 +1108,10 @@ class Participant(BaseTeamModel):
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
+            models.Index(fields=["remote_id"], name="participant_remote_id_idx"),
+            # Trigram indexes on UPPER(identifier) and UPPER(name), which serve the participant
+            # filter's `icontains`, are created in migration 0158 with raw SQL: Django renders an
+            # OpClass over an expression as invalid SQL unless django.contrib.postgres is installed.
         ]
 
     @classmethod
