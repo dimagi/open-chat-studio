@@ -115,18 +115,20 @@ def hard_delete_team(team: Team) -> dict:
     """
     with transaction.atomic(), current_team(team), audit_transaction(uuid.uuid4().hex):
         Trace.objects.filter(team=team).delete()
-        EvaluationMessage.objects.filter(
+        evaluation_messages = EvaluationMessage.objects.filter(
             Q(evaluationdataset__team=team)
             | Q(scoping_runs__team=team)
             | Q(evaluationresult__team=team)
             | Q(session__team=team)
-        ).distinct().delete()
-        EventAction.objects.filter(
+        )
+        EvaluationMessage.objects.filter(pk__in=evaluation_messages.values("pk")).delete()
+        event_actions = EventAction.objects.filter(
             Q(static_trigger__experiment__team=team)
             | Q(timeout_trigger__experiment__team=team)
             | Q(scheduled_trigger__experiment__team=team)
             | Q(scheduled_messages__team=team)
-        ).distinct().delete()
+        )
+        EventAction.objects.filter(pk__in=event_actions.values("pk")).delete()
         return delete_object_with_auditing_of_related_objects(team)
 
 
@@ -183,17 +185,17 @@ def _notification_emails(team: Team, notify_recipients: str, requester_email: st
 
 def _send_scheduled_notifications(team: Team, emails: list[str]):
     """Runs after the request has committed, so a mail failure is logged rather than raised."""
-    try:
-        for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+    for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+        try:
             send_team_deletion_scheduled_notification(team, chunk)
-    except Exception:
-        logger.exception("Failed to send the deletion-scheduled email for team %s", team.id)
+        except Exception:
+            logger.exception("Failed to send the deletion-scheduled email for team %s", team.id)
 
 
 def _send_deleted_notifications(team_name: str, emails: list[str]):
     """Runs after the team is gone, so a mail failure is logged rather than raised."""
-    try:
-        for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+    for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
+        try:
             send_team_deleted_notification(team_name, chunk)
-    except Exception:
-        logger.exception("Failed to send the team-deleted email for team %s", team_name)
+        except Exception:
+            logger.exception("Failed to send the team-deleted email for team %s", team_name)
