@@ -1025,6 +1025,12 @@ _CARD_HTML = """<!doctype html>
         pytest.param("  ", "empty", id="empty"),
         pytest.param('<script src="https://cdn.example.com/lib.js"></script>', "https://cdn.example.com", id="url"),
         pytest.param('<img src="//cdn.example.com/a.png">', "starting with //", id="protocol-relative-url"),
+        pytest.param(
+            "<style>body { background: url( '//cdn.example.com/a.png'); }</style>",
+            "starting with //",
+            id="protocol-relative-css-url",
+        ),
+        pytest.param('<style>@import "//cdn.example.com/a.css";</style>', "starting with //", id="css-import"),
         pytest.param("<style>main { min-height: 100vh; }</style>", "vh units", id="vh"),
         pytest.param("<style>.bar { height: 50dvh; }</style>", "vh units", id="dvh"),
         pytest.param("<style>.bar { position:fixed; }</style>", "position: fixed", id="fixed-position"),

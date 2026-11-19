@@ -612,7 +612,9 @@ text up to twice its normal size.
 # Namespace URIs, such as the SVG namespace scripts pass to createElementNS, are not loaded
 _NAMESPACE_URL_PREFIX = "http://www.w3.org/"
 _ABSOLUTE_URL = re.compile(r"https?://[^\s\"'<>()`]+", re.IGNORECASE)
-_PROTOCOL_RELATIVE_URL = re.compile(r"""\b(?:src|href|poster|action)\s*=\s*["']?\s*//""", re.IGNORECASE)
+_PROTOCOL_RELATIVE_URL = re.compile(
+    r"""\b(?:src|href|poster|action)\s*=\s*["']?\s*//|url\(\s*["']?\s*//|@import\s+["']\s*//""", re.IGNORECASE
+)
 _VIEWPORT_UNIT = re.compile(r"\d\s*(?:[sld]?vh)\b", re.IGNORECASE)
 _FIXED_POSITION = re.compile(r"position\s*:\s*fixed", re.IGNORECASE)
 
