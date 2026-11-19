@@ -2418,5 +2418,41 @@
         "unit_price": "0.0025"
       }
     ]
+  },
+  {
+    "provider_type": "google",
+    "model_name": "gemini-4-neon",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00015"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-4-neon",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00015"
+      }
+    ]
   }
 ]
