@@ -12,7 +12,4 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration(), notify_deprecated_models and remove_deprecated_models moved to
-        # 0107_auto_model_sync_20261119 so they run only once per deploy
-        load_pricing_data(),
     ]
