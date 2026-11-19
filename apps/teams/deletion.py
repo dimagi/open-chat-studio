@@ -64,10 +64,17 @@ def request_team_deletion(team: Team, user: CustomUser, notify_recipients: str =
 
 def cancel_team_deletion(team: Team) -> Team:
     """Restore a team that is scheduled for deletion."""
-    team.deletion_requested_at = None
-    team.deletion_requested_by = None
-    team.deletion_notify_recipients = ""
-    team.save(update_fields=["deletion_requested_at", "deletion_requested_by", "deletion_notify_recipients"])
+    with transaction.atomic():
+        locked = Team.objects.select_for_update().only("deletion_requested_at").filter(pk=team.pk).first()
+        if locked is None:
+            raise TeamDeletionError("This team has already been deleted.")
+        if locked.deletion_requested_at is None:
+            raise TeamDeletionError("This team is not scheduled for deletion.")
+
+        team.deletion_requested_at = None
+        team.deletion_requested_by = None
+        team.deletion_notify_recipients = ""
+        team.save(update_fields=["deletion_requested_at", "deletion_requested_by", "deletion_notify_recipients"])
     return team
 
 

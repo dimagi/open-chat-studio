@@ -74,6 +74,12 @@ def test_request_team_deletion_twice_is_refused(pending_team):
         request_team_deletion(pending_team, _admin(pending_team))
 
 
+@pytest.mark.django_db()
+def test_cancel_refuses_a_team_that_is_not_pending():
+    with pytest.raises(TeamDeletionError):
+        cancel_team_deletion(TeamWithUsersFactory.create())
+
+
 def test_cancel_team_deletion_restores_team(pending_team):
     cancel_team_deletion(pending_team)
     pending_team.refresh_from_db()

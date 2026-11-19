@@ -107,8 +107,12 @@ def cancel_team_deletion_view(request, slug):
     team, can_cancel = _pending_team_access(request, slug)
     if not can_cancel:
         raise Http404
-    with current_team(team):
-        cancel_team_deletion(team)
+    try:
+        with current_team(team):
+            cancel_team_deletion(team)
+    except TeamDeletionError as e:
+        messages.error(request, str(e))
+        return HttpResponseRedirect(reverse("prelogin:home"))
     messages.success(request, _('The "{team}" team has been restored.').format(team=team.name))
     return HttpResponseRedirect(team.dashboard_url)
 
