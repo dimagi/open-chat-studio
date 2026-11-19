@@ -548,8 +548,9 @@ class ExperimentVersionSpec(VersionSpec):
                 is_default_version=False, audit_action=AuditAction.AUDIT
             )
 
-    def on_copy(self, working, copy, *, name: str | None = None, **options):
+    def on_copy(self, working, copy, *, name: str | None = None, version_description: str = "", **options):
         copy.name = name if name is not None else f"{copy.name}_copy"
+        copy.version_description = version_description
         if copy.pipeline:
             copy.pipeline.name = copy.name
             copy.pipeline.save(update_fields=["name"])
@@ -931,7 +932,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             raise ValueError("Cannot make a copy of an experiment the default version")
         spec = ExperimentVersionSpec()
         if is_copy:
-            return spec.copy(self, name=name)
+            return spec.copy(self, name=name, version_description=version_description or "")
         return spec.publish(self, version_description=version_description or "", make_default=make_default)
 
     def get_fields_to_exclude(self):

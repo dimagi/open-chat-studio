@@ -179,7 +179,7 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - An **Evaluation Run** generates outputs against one **Chatbot Version**, resolved from its **Evaluation Config** at run time and pinned on the Run. Same machinery as Channel routing — Working vs Published is decided per-Config.
 - A **Pipeline** references **Custom Action Operations** to make outbound HTTP calls.
 - **Static Triggers** and **Timeout Triggers** attach to a **Chatbot Version**, not to its **Pipeline** — so reasoning about "what a published bot does" must include both the Pipeline graph and the Chatbot's Triggers.
-- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
+- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Custom Action Operations**). **Collections** (media and index alike, ADR-0031), **Service Providers** and **LLM Provider Models** are live references — shared rows a Published Version reads as they are now — so a Collection can change without a new Chatbot Version, and a Published Version reflects a provider's *current* configuration, not a frozen copy.
 
 ## Example dialogue
 

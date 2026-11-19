@@ -1,6 +1,7 @@
 """The versioning system checks: one test per rule, and the whole project's output."""
 
 import pytest
+from django.apps import apps
 from django.core.checks import Tags, run_checks
 
 from apps.experiments.checks import check_spec, check_version_specs
@@ -71,6 +72,15 @@ class TestSpecChecks:
     def test_E002_leaves_identity_references_alone(self):
         """The `working_version` self-reference is identity, not content."""
         assert "versioning.E002" not in ids(declare(**complete_members()))
+
+    def test_E002_counts_a_one_to_one_field(self):
+        """A trigger's `action` is a one-to-one to a versioned model; cloned undeclared it would copy the id."""
+        trigger = apps.get_model("events", "StaticTrigger")
+        identity = frozenset(field.name for field in trigger._meta.concrete_fields) - {"action"}
+
+        spec_cls = declare(model="events.StaticTrigger", identity=identity)
+
+        assert [code for code, _ in findings(spec_cls)] == ["versioning.E002"]
 
     def test_E003_a_member_reads_before_anyone_provides(self):
         spec_cls = declare(

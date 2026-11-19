@@ -1349,3 +1349,13 @@ class TestParticipantStr:
         participant = Participant(name="")
         participant.identifier = f"anon:{participant.public_id}"
         assert str(participant) == f"Anonymous [{str(participant.public_id)[:6]}]"
+
+
+@pytest.mark.django_db()
+def test_a_copy_takes_the_description_it_is_given():
+    experiment = ExperimentFactory.create()
+
+    described = experiment.create_new_version(is_copy=True, version_description="Reviewed copy")
+    plain = experiment.create_new_version(is_copy=True)
+
+    assert (described.version_description, plain.version_description) == ("Reviewed copy", "")

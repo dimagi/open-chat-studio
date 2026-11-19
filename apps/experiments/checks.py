@@ -43,7 +43,8 @@ def check_spec(spec_cls: type[VersionSpec]) -> list[checks.CheckMessage]:
     declared = {member.name for member in spec_cls.members}
     for field in model._meta.concrete_fields:
         target = field.related_model
-        if not (field.many_to_one and isinstance(target, type) and issubclass(target, VersionsMixin)):
+        versioned = isinstance(target, type) and issubclass(target, VersionsMixin)
+        if not ((field.many_to_one or field.one_to_one) and versioned):
             continue
         if field.name in identity or field.name in declared:
             continue

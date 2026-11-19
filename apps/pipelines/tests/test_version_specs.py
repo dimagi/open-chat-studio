@@ -3,7 +3,7 @@
 import pytest
 
 from apps.experiments.checks import check_spec
-from apps.experiments.versioning import Strategy, VersionsMixin
+from apps.experiments.versioning import ParamReference, Strategy, VersionsMixin
 from apps.pipelines.node_type import node_types_declaring
 from apps.pipelines.versioning import NodeVersionSpec, PipelineVersionSpec
 from apps.utils.factories.documents import CollectionFactory
@@ -72,3 +72,19 @@ def test_in_use_guard_param_key_matches_the_spec(member):
     NodeFactory.create(pipeline=PipelineFactory.create(team=instance.team), params={member.key: value})
 
     assert instance.get_related_nodes_queryset().exists()
+
+
+@pytest.mark.django_db()
+def test_a_param_a_node_type_does_not_declare_travels_verbatim():
+    """A removed or changed type can leave a versioned id in params; it is neither pinned nor archived."""
+    source_material = SourceMaterialFactory.create()
+    node = NodeFactory.create(type="RenderTemplate", params={"source_material_id": str(source_material.id)})
+    llm_node = NodeFactory.create(type="LLMResponseWithPrompt", pipeline=node.pipeline)
+
+    version = NodeVersionSpec().publish(node, pipeline=node.pipeline)
+
+    assert version.params["source_material_id"] == str(source_material.id)
+    assert not source_material.versions.exists()
+    spec = NodeVersionSpec()
+    assert [m.key for m in spec.members_for(node) if isinstance(m, ParamReference)] == []
+    assert "source_material_id" in {m.key for m in spec.members_for(llm_node) if isinstance(m, ParamReference)}

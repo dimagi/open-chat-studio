@@ -744,12 +744,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return self.collection_id is not None
 
     def _archive_related_params(self):
-        """Archive the records this node's params name, as the node's spec declares."""
-        for member in NodeVersionSpec.param_references():
+        """Archive the records this node's params name, as the spec declares for the params its type declares."""
+        for member in self.node_type.versioned_param_specs:
             member.archive_referenced(self.params)
 
     def _unarchive_related_params(self):
-        for member in NodeVersionSpec.param_references():
+        for member in self.node_type.versioned_param_specs:
             member.unarchive_referenced(self.params)
 
 

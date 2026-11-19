@@ -44,7 +44,7 @@ def carry_nodes(working, other, operation: Operation, context: dict[str, Any]) -
         node_data = {}
         for version_node in other.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
             flow_node = version_node.to_flow_node()
-            for member in NodeVersionSpec.param_references():
+            for member in version_node.node_type.versioned_param_specs:
                 member.map_back(version_node, flow_node.data.params)
             node_data[version_node.flow_id] = flow_node
         working.update_nodes_from_data(node_data)
@@ -125,6 +125,12 @@ class NodeVersionSpec(VersionSpec):
         many=True,
     )
     custom_action_operations = OwnedSet(via=carry_custom_action_operations)
+
+    def members_for(self, row) -> tuple[Member, ...]:
+        """A node's param references are only the ones its type declares: an id a removed or changed type
+        left in `params` travels verbatim, as it did before the spec."""
+        declared = row.node_type.versioned_param_specs
+        return tuple(m for m in self.members if not isinstance(m, ParamReference) or m in declared)
 
     def on_clone(self, working, clone, *, pipeline=None, new_flow_id: str | None = None, **options) -> None:
         if pipeline is not None:

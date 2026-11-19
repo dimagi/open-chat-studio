@@ -134,9 +134,10 @@ recoverable by reverting the PR. For versioned models (see
   the version-diff UI stops showing it.
 - Add the field to the spec's `Meta.identity` and map it to an empty-value factory in
   `Meta.regenerated`, so new snapshots stop carrying the stored value (cloning copies
-  every column; only `regenerated` replaces one). A retired `Reference` to a versioned
-  model needs the same two entries, or the `versioning.E002` check reports the foreign
-  key as undeclared.
+  every column; only `regenerated` replaces one). For a retired `Reference` to a versioned
+  model, remove the member as well: left in place it would write the versioned target back
+  after `regenerated` cleared it. Listing the foreign key in `Meta.identity` is what
+  satisfies the `versioning.E002` check; `regenerated` is what empties the column.
 
 **Phase 2 — schema drop**, in a later release:
 

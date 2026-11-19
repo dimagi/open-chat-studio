@@ -456,6 +456,14 @@ class Reference(Member):
         field = model_names(model)[0].get(self.name)
         if field is None or not (field.many_to_one or field.one_to_one):
             return [("E001", f"{self.name} is a Reference but not a foreign key of {model._meta.label}")]
+        if field.one_to_one:
+            return [
+                (
+                    "E001",
+                    f"{self.name} is a one-to-one field, which a Reference cannot travel yet: the clone is inserted "
+                    "holding the working target before the members run",
+                )
+            ]
         return []
 
     def copy(self, working, copy, context: dict[str, Any]) -> None:
@@ -470,6 +478,10 @@ class Reference(Member):
         if self.strategy is Strategy.LIVE_REFERENCE:
             return
         target = getattr(version, self.name)
+        if self.strategy is Strategy.PRIVATE_CLONE:
+            # A private target has no family to revert within, owned or not: the working row gets its own clone.
+            setattr(working, self.name, None if target is None else target.create_new_version(is_copy=True))
+            return
         if self.owned:
             if target is None:
                 return
@@ -477,9 +489,6 @@ class Reference(Member):
             if current is None:
                 raise ValueError(f"Cannot revert {self.name}: the working record has none")
             current.revert_to_version(target)
-            return
-        if self.strategy is Strategy.PRIVATE_CLONE:
-            setattr(working, self.name, None if target is None else target.create_new_version(is_copy=True))
             return
         setattr(working, self.name, None if target is None else target.get_working_version())
 
@@ -602,15 +611,18 @@ class ParamReference(Member):
         return instance.create_new_version()
 
     def map_back(self, row, params: dict) -> None:
-        """Rewrite `params[key]` from the versioned record `row`'s `fk_field` holds back to its working id;
-        a reference whose record is gone is cleared."""
+        """Rewrite `params[key]` from the versioned record `row`'s `fk_field` holds back to its working id, or
+        for a private clone to a fresh clone the working row owns; a reference whose record is gone is cleared."""
         if self.strategy is Strategy.LIVE_REFERENCE:
             return
         instance = getattr(row, self.fk_field)
-        if instance is not None:
-            params[self.key] = str(instance.get_working_version_id())
-        elif params.get(self.key):
-            params[self.key] = None
+        if instance is None:
+            if params.get(self.key):
+                params[self.key] = None
+            return
+        if self.strategy is Strategy.PRIVATE_CLONE:
+            instance = instance.create_new_version(is_copy=True)
+        params[self.key] = str(instance.get_working_version_id())
 
     def archive_referenced(self, params: dict) -> None:
         """Archive the record(s) `params[key]` names, per `archiving`."""
@@ -655,6 +667,12 @@ class ParamReference(Member):
         mirror = forward.get(self.fk_field)
         if mirror is None or not (mirror.many_to_one or mirror.many_to_many):
             findings.append(("E001", f"{self.name} mirrors {self.fk_field!r}, which is not a relation of {label}"))
+            mirror = None
+        elif mirror.many_to_many is not self.many:
+            held = "a list of ids" if self.many else "one id"
+            findings.append(
+                ("E001", f"{self.name} holds {held} but mirrors {self.fk_field!r}, whose cardinality differs")
+            )
         try:
             target = self.model
         except (LookupError, ValueError):
@@ -662,6 +680,14 @@ class ParamReference(Member):
         else:
             if not issubclass(target, VersionsMixin):
                 findings.append(("E001", f"{self.name} names {self.model_label}, which is not a versioned model"))
+            elif mirror is not None and mirror.related_model is not target:
+                findings.append(
+                    (
+                        "E001",
+                        f"{self.name} mirrors {self.fk_field!r}, which points at {mirror.related_model._meta.label}, "
+                        f"not {self.model_label}",
+                    )
+                )
         return findings
 
 
@@ -733,6 +759,11 @@ class VersionSpec:
     def param_references(cls) -> tuple["ParamReference", ...]:
         return tuple(member for member in cls.members if isinstance(member, ParamReference))
 
+    def members_for(self, row) -> tuple[Member, ...]:
+        """The members that travel for `row`: all of them, unless the spec narrows them per row (a node's
+        params are only the ones its type declares)."""
+        return self.members
+
     def on_clone(self, working, clone, **options) -> None:
         """Model-specific work on the clone before its first save: its parent, a renamed key."""
 
@@ -751,12 +782,12 @@ class VersionSpec:
         version = self._clone(working)
         version.working_version_id = working.pk
         if self.numbered:
-            version.version_number = self._next_number(working)
+            version.version_number = self._next_number(working, version.version_number)
         self._regenerate(version)
         self.on_clone(working, version, **options)
         version.save()
         context: dict[str, Any] = {}
-        for member in self.members:
+        for member in self.members_for(working):
             member.publish(working, version, context)
         self.on_publish(working, version, **options)
         version.save()
@@ -773,7 +804,7 @@ class VersionSpec:
         self.on_clone(working, copy, **options)
         copy.save()
         context: dict[str, Any] = {}
-        for member in self.members:
+        for member in self.members_for(working):
             member.copy(working, copy, context)
         self.on_copy(working, copy, **options)
         copy.save()
@@ -785,27 +816,31 @@ class VersionSpec:
         name = self.model._meta.verbose_name
         if not working.is_working_version:
             raise ValueError(f"Can only revert the working version of this {name}")
-        if version.get_working_version_id() != working.pk:
+        if version.working_version_id != working.pk:
             raise ValueError(f"Can only revert to a version of this {name}")
+        # The save below writes every column, so the row is read fresh under a lock first: a stale
+        # instance would put back a counter another publisher has advanced. Taking the lock here also
+        # puts it before the locks the members take on the rows they own, the order a builder save uses.
+        working.refresh_from_db(from_queryset=self.model.objects.select_for_update())
         for field in self.row_fields:
             setattr(working, field.attname, getattr(version, field.attname))
-        for member in self.members:
+        for member in self.members_for(working):
             member.revert(working, version)
         working.save()
         self.on_revert(working, version)
 
-    def _next_number(self, working) -> int:
-        """The working row's current number, taken under a row lock so two publishers never share
-        one; the row is advanced and `working` brought in step with it."""
-        locked = self.model.objects.select_for_update().get(pk=working.pk)
-        number = locked.version_number
-        locked.version_number = number + 1
-        locked.save(update_fields=["version_number"])
-        working.version_number = locked.version_number
-        return number
+    def _next_number(self, working, current: int) -> int:
+        """Advance the working row past `current`, the number `_clone` read under its lock, so two
+        publishers never share one; `working` is brought in step with the row."""
+        working.version_number = current + 1
+        working.save(update_fields=["version_number"])
+        return current
 
     def _clone(self, working):
-        clone = self.model.objects.get(pk=working.pk)
+        """A detached copy of the working row, read under a row lock held for the rest of the transaction:
+        the members then traverse rows consistent with the one they snapshot (a builder save takes the
+        same lock first), and a numbered row is advanced from the number read here."""
+        clone = self.model.objects.select_for_update().get(pk=working.pk)
         clone.pk = None
         clone.id = None
         clone._state.adding = True

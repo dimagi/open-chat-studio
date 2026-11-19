@@ -71,7 +71,10 @@ operations are generated from it. To version a model:
 
     - `Meta.identity` names the fields that never travel: the row's own identity, the family
       columns and lifecycle state. Every other concrete field is a row field and travels by being
-      cloned, so a new field is versioned content unless you add it to `identity`.
+      cloned, so a new field is versioned content unless you add it to `identity`. Cloning still
+      copies an identity column onto the snapshot (`team` above stays the working row's); `identity`
+      keeps the generic revert from writing it, and only `regenerated`, the framework (the family
+      columns, the version number) or a hook replaces the cloned value.
     - `Meta.regenerated` gives an identity field a fresh value on the clone before its first save,
       which is how a `unique=True` column such as `public_id` survives cloning.
     - A `Reference` member declares how a foreign key to another versioned model travels on publish
@@ -82,9 +85,15 @@ operations are generated from it. To version a model:
       policy for when a version holding it is archived. Members run in class-body order; a member that `reads` a
       key no earlier member `provides` raises `VersionSpecError`, and the surrounding transaction
       rolls back the clone and the advanced version number.
-    - `on_publish(working, version, **options)` and `on_copy(working, copy, **options)` are the only
-      place model-specific imperative code remains. They run after the members and before the
-      snapshot's final save, with the options the caller passed to `create_new_version`.
+    - Four hooks are the only place model-specific imperative code remains. `on_clone(working, clone,
+      **options)` runs on the clone before its first save (a parent to set, a key to rename);
+      `on_publish(working, version, **options)` and `on_copy(working, copy, **options)` run after the
+      members and before the snapshot's final save; `on_revert(working, version)` runs after the
+      working row and its members are written. `**options` are what the spec's `publish` or `copy`
+      was called with: the mixin's `create_new_version()` passes none, so a model that takes options
+      keeps a wrapper that forwards them (`Experiment.create_new_version(version_description=...,
+      make_default=..., name=...)`). A spec may also narrow `members_for(row)`, as `Node`'s does to
+      the params the row's type declares.
 
 4. Run `manage.py check`. The `versioning.*` system checks (`apps/experiments/checks.py`) reject a
    member that names nothing on the model, a foreign key to a versioned model that no member

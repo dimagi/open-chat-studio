@@ -5,6 +5,9 @@ import uuid
 
 import pytest
 from django.apps import apps
+from django.db import connection
+from django.db.models.signals import post_save
+from django.test.utils import CaptureQueriesContext
 
 from apps.experiments.versioning import (
     Archiving,
@@ -84,6 +87,16 @@ class TestDeclaration:
         assert isinstance(VersionSpec.for_model(widget_model), spec_cls)
         assert VersionSpec.for_model(part_model) is None
 
+    def test_a_reference_on_a_one_to_one_field_is_rejected(self):
+        """The clone is inserted holding the working target, which a one-to-one constraint refuses."""
+        member = Reference(Strategy.PRIVATE_CLONE)
+        member.name = "action"
+
+        findings = member.check(apps.get_model("events", "StaticTrigger"))
+
+        assert [code for code, _message in findings] == ["E001"]
+        assert "one-to-one" in findings[0][1]
+
 
 class TestPublish:
     def test_numbers_the_version_and_advances_the_working_row(self, models):
@@ -108,6 +121,16 @@ class TestPublish:
         working.refresh_from_db()
 
         assert (version.version_number, working.version_number) == (3, 4)
+
+    def test_the_working_row_is_locked_before_it_is_cloned(self, models):
+        """The lock holds the row still for the members, and the version number comes from that read."""
+        bind_widget(**declared_references())
+        working = make_widget(models)
+
+        with CaptureQueriesContext(connection) as queries:
+            working.create_new_version()
+
+        assert "FOR UPDATE" in statements(queries)[0]
 
     def test_regenerates_identity_before_the_first_save_and_leaves_the_working_row_alone(self, models):
         bind_widget(**declared_references())
@@ -388,6 +411,42 @@ class TestRevert:
             (working.pk, copy.pk, Operation.COPY),
         ]
 
+    def test_a_private_clone_is_cloned_again_on_revert_even_when_owned(self, models):
+        """A private target has no family to revert within."""
+        bind_widget(**{**declared_references(), "part": Reference(Strategy.PRIVATE_CLONE, owned=True)})
+        working = make_widget(models)
+        original = working.part_id
+        version = working.create_new_version()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+
+        assert working.part_id not in {original, version.part_id}
+        assert working.part.working_version_id is None
+
+    def test_the_working_row_itself_is_not_a_revert_target(self, models):
+        bind_widget(**declared_references())
+        working = make_widget(models)
+
+        with pytest.raises(ValueError, match="Can only revert to a version of this versioned widget"):
+            working.revert_to_version(working)
+
+    def test_revert_keeps_the_counter_another_publisher_advanced(self, models):
+        """The save writes every column, so the row is re-read under a lock rather than written from a stale
+        instance; the lock comes before anything a member touches."""
+        bind_widget(**declared_references())
+        working = make_widget(models)
+        widget_model, _part_model = models
+        version = working.create_new_version()
+        stale = widget_model.objects.get(pk=working.pk)
+        working.create_new_version()
+
+        with CaptureQueriesContext(connection) as queries:
+            stale.revert_to_version(version)
+
+        assert "FOR UPDATE" in statements(queries)[0]
+        assert (stale.version_number, widget_model.objects.get(pk=working.pk).version_number) == (3, 3)
+
     def test_only_a_working_row_reverts_and_only_to_its_own_version(self, models):
         bind_widget(**declared_references())
         working = make_widget(models)
@@ -439,6 +498,11 @@ class TestKit:
 
         with pytest.raises(AssertionError):
             assert_family(other, working)
+
+
+def statements(queries: CaptureQueriesContext) -> list[str]:
+    """The SQL a block ran, without the savepoints the test transaction adds."""
+    return [query["sql"] for query in queries.captured_queries if "SAVEPOINT" not in query["sql"]]
 
 
 def part_reference(strategy=Strategy.REUSE_UNCHANGED, **kwargs):
@@ -539,6 +603,21 @@ class TestParamReference:
 
         assert working.params["part_id"] == str(working.part_id)
 
+    def test_revert_gives_the_working_row_its_own_private_clone(self, models):
+        working = make_param_widget(models, Strategy.PRIVATE_CLONE)
+        original = working.part_id
+        version = working.create_new_version()
+        version.part_id = int(version.params["part_id"])
+        version.save()
+
+        working.revert_to_version(version)
+        working.refresh_from_db()
+        _widget_model, part_model = models
+        reverted = part_model.objects.get(id=working.params["part_id"])
+
+        assert reverted.id not in {original, version.part_id}
+        assert reverted.working_version_id is None
+
     @pytest.mark.parametrize(
         ("archiving", "archived"),
         [
@@ -603,6 +682,8 @@ class TestParamReference:
             pytest.param({"fk_field": "note"}, ["E001"], id="mirror-not-a-relation"),
             pytest.param({"model_label": "nowhere.Nothing"}, ["E004"], id="model-unresolvable"),
             pytest.param({"model_label": "utils_tests.Collection"}, ["E001"], id="model-not-versioned"),
+            pytest.param({"many": True}, ["E001"], id="many-param-on-a-foreign-key"),
+            pytest.param({"model_label": WIDGET}, ["E001"], id="mirror-points-at-another-model"),
         ],
     )
     def test_check_names_what_the_model_has(self, models, kwargs, codes):
@@ -613,6 +694,28 @@ class TestParamReference:
 
         assert [code for code, _message in member.check(widget_model)] == codes
 
+    def test_check_rejects_one_id_mirrored_by_a_many_to_many(self):
+        member = ParamReference(
+            "collection_id", "documents.Collection", Strategy.LIVE_REFERENCE, fk_field="collection_indexes"
+        )
+        member.name = "collection"
+
+        assert [code for code, _message in member.check(apps.get_model("pipelines", "Node"))] == ["E001"]
+
+
+class TestMembersFor:
+    def test_a_spec_may_narrow_the_members_per_row(self, models):
+        def members_for(self, row):
+            return tuple(member for member in self.members if member.name != "part")
+
+        bind_widget(**declared_references(), members_for=members_for)
+        working = make_widget(models)
+
+        version = working.create_new_version()
+
+        assert version.part_id == working.part_id
+        assert working.part.versions.count() == 0
+
 
 class TestHooks:
     def test_on_clone_runs_before_the_first_save(self, models):
@@ -620,12 +723,22 @@ class TestHooks:
             clone.note = note
 
         spec_cls = bind_widget(**declared_references(), on_clone=on_clone)
+        widget_model, _part_model = models
         working = make_widget(models)
+        inserted = []
 
-        version = spec_cls().publish(working, note="set before the insert")
-        copy = spec_cls().copy(working)
+        def record_insert(sender, instance, created, **kwargs):
+            if created:
+                inserted.append(instance.note)
 
-        assert (version.note, copy.note) == ("set before the insert", "prepared")
+        post_save.connect(record_insert, sender=widget_model)
+        try:
+            spec_cls().publish(working, note="set before the insert")
+            spec_cls().copy(working)
+        finally:
+            post_save.disconnect(record_insert, sender=widget_model)
+
+        assert inserted == ["set before the insert", "prepared"]
 
     def test_on_revert_runs_after_the_working_row_is_saved(self, models):
         seen = {}
