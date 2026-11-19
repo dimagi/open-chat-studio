@@ -103,7 +103,9 @@ def repo(tmp_path, monkeypatch):
     ],
 )
 def test_release_tags_containing(repo, commit, expected):
-    assert release_tags_containing(repo[commit]) == expected
+    tags = release_tags_containing(repo[commit])
+    assert tags is not None
+    assert sorted(tags) == expected
 
 
 def test_release_tags_containing_an_unknown_commit(repo):
