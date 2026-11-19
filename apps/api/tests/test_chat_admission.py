@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory
+from django.urls.resolvers import ResolverMatch
 from rest_framework.authentication import SessionAuthentication
 
 from apps.api.admission import (
@@ -278,6 +279,6 @@ def test_get_chat_admission_refreshes_for_a_session_context(channel):
 def test_chat_entry_point_matches_the_chat_api_route(path, url_name, expected):
     """Chat routes map to the same operation families used by the admission resolver."""
     request = RequestFactory().get(path)
-    request.resolver_match = SimpleNamespace(url_name=url_name)
+    request.resolver_match = ResolverMatch(lambda: None, (), {}, url_name=url_name)
 
     assert chat_entry_point_for_request(request) == expected

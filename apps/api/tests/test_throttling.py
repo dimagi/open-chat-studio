@@ -2,7 +2,6 @@
 
 import json
 from datetime import timedelta
-from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -11,6 +10,7 @@ from django.core.cache import cache as default_cache
 from django.core.cache import caches
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
+from django.urls.resolvers import ResolverMatch
 from django.utils import timezone
 from rest_framework.throttling import SimpleRateThrottle
 from waffle import get_waffle_flag_model
@@ -211,6 +211,7 @@ def test_chat_api_throttle_keys_on_the_channel_before_a_session_exists(experimen
     )
     throttle = ChatAPIRateThrottle()
     request = RequestFactory().post("/api/chat/start/")
+    request.resolver_match = ResolverMatch(lambda: None, (), {}, url_name="start-session")
     request.auth = channel
     request.successful_authenticator = EmbeddedWidgetAuthentication()
 
@@ -229,7 +230,7 @@ def test_chat_api_throttle_falls_back_to_ip_when_admission_fails():
     """An admission failure on a first-pass throttle check remains a normal IP bucket."""
     throttle = ChatAPIRateThrottle()
     request = RequestFactory().post("/api/chat/session/token/", REMOTE_ADDR="203.0.113.9")
-    request.resolver_match = SimpleNamespace(url_name="renew-session-token")
+    request.resolver_match = ResolverMatch(lambda: None, (), {}, url_name="renew-session-token")
     with mock.patch(
         "apps.api.throttling.get_chat_admission",
         side_effect=ChatAdmissionError("incomplete admission"),
@@ -281,6 +282,7 @@ def test_chat_api_throttle_keys_a_public_start_on_the_visitor_ip(experiment):
         experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": "tok"}
     )
     request = RequestFactory().post("/api/chat/start/", REMOTE_ADDR="203.0.113.9")
+    request.resolver_match = ResolverMatch(lambda: None, (), {}, url_name="start-session")
     request.auth = channel
     request.successful_authenticator = EmbeddedWidgetAuthentication()
     view = _view_stub()
@@ -294,6 +296,7 @@ def test_chat_api_throttle_still_keys_an_embed_start_on_the_channel(experiment):
         experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET, extra_data={"widget_token": "tok"}
     )
     request = RequestFactory().post("/api/chat/start/", REMOTE_ADDR="203.0.113.9")
+    request.resolver_match = ResolverMatch(lambda: None, (), {}, url_name="start-session")
     request.auth = channel
     request.successful_authenticator = EmbeddedWidgetAuthentication()
     view = _view_stub()

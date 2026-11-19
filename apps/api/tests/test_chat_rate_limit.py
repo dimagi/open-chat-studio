@@ -103,6 +103,7 @@ def test_host_renewals_do_not_share_the_visitor_bucket():
         auth=OAuth2AccessToken(application=application, application_id=application.pk, team=team),
         team=None,
         path="/api/chat/session/token/",
+        resolver_match=SimpleNamespace(url_name="renew-session-token"),
     )
     view = SimpleNamespace(kwargs={"session_id": "abc"})
 
