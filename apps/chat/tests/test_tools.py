@@ -1,6 +1,9 @@
 import inspect
 import json
 import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from inspect import signature
 from typing import Annotated, ClassVar, get_args, get_origin
@@ -22,6 +25,7 @@ from apps.chat.agent.tools import (
     CITATION_PROMPT,
     SEARCH_TOOL_HEADER,
     TOOL_CLASS_MAP,
+    AttachCardTool,
     DeleteReminderTool,
     SearchIndexTool,
     SearchToolConfig,
@@ -30,6 +34,7 @@ from apps.chat.agent.tools import (
     _format_row_block,
     _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
+    card_html_problems,
     create_schedule_message,
     get_custom_action_tools,
     get_mcp_tool_instances,
@@ -1008,6 +1013,109 @@ class TestAttachMediaTool(BaseTestAgentTool):
         assert f"* {failing_file.id}: Error fetching file." in response
         chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
         assert list(chat_attachment.files.values_list("id", flat=True)) == [ok_file.id]
+
+
+_CARD_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><style>body { margin: 0; }</style></head>
+<body><svg viewBox="0 0 10 10"></svg>
+<script>document.createElementNS("http://www.w3.org/2000/svg", "circle"); // a comment</script>
+</body></html>"""
+
+
+@pytest.mark.parametrize(
+    ("html", "problem"),
+    [
+        pytest.param("  ", "empty", id="empty"),
+        pytest.param('<script src="https://cdn.example.com/lib.js"></script>', "https://cdn.example.com", id="url"),
+        pytest.param('<img src="//cdn.example.com/a.png">', "starting with //", id="protocol-relative-url"),
+        pytest.param(
+            "<style>body { background: url( '//cdn.example.com/a.png'); }</style>",
+            "starting with //",
+            id="protocol-relative-css-url",
+        ),
+        pytest.param('<style>@import "//cdn.example.com/a.css";</style>', "starting with //", id="css-import"),
+        pytest.param('<img srcset="chart.png 1x, //cdn.example.com/chart.png 2x">', "starting with //", id="srcset"),
+        pytest.param(
+            '<img src="http://www.w3.org/Icons/w3c_home">', "http://www.w3.org/Icons/w3c_home", id="w3c-resource"
+        ),
+        pytest.param("<style>main { min-height: 100vh; }</style>", "vh units", id="vh"),
+        pytest.param("<style>.bar { height: 50dvh; }</style>", "vh units", id="dvh"),
+        pytest.param("<style>.bar { position:fixed; }</style>", "position: fixed", id="fixed-position"),
+        pytest.param("x" * 2_621_413, "too large", id="too-large"),
+    ],
+)
+def test_card_html_problems(html, problem):
+    problems = card_html_problems(html)
+
+    assert len(problems) == 1
+    assert problem in problems[0]
+
+
+def test_card_html_without_problems():
+    assert card_html_problems(_CARD_HTML) == []
+
+
+class TestAttachCardTool(BaseTestAgentTool):
+    tool_cls = AttachCardTool
+
+    def _tool(self, session):
+        return AttachCardTool(experiment_session=session, tool_callbacks=ToolCallbacks())
+
+    def test_attaches_the_html_as_the_card_file(self, session):
+        tool = self._tool(session)
+
+        response = tool.action(html=_CARD_HTML)
+
+        assert response.startswith("The card is attached")
+        [file_id] = tool.tool_callbacks.output_message_metadata["ocs_attachment_file_ids"]
+        file = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments").files.get()
+        assert file.id == file_id
+        assert file.name == "index.html"
+        assert file.content_type == "text/html"
+        assert file.team_id == session.team_id
+        assert file.read_bytes() == _CARD_HTML.encode()
+
+    def test_only_one_card_per_reply(self, session):
+        tool = self._tool(session)
+        tool.action(html=_CARD_HTML)
+
+        response = tool.action(html=_CARD_HTML)
+
+        assert "already attached" in response
+        assert len(tool.tool_callbacks.output_message_metadata["ocs_attachment_file_ids"]) == 1
+
+    def test_parallel_calls_attach_one_card(self):
+        """ToolNode runs the tool calls of one model response in parallel threads."""
+        tool = AttachCardTool(experiment_session=ExperimentSessionFactory.build(), tool_callbacks=ToolCallbacks())
+        first_call_started = threading.Event()
+
+        def slow_create(**kwargs):
+            first_call_started.set()
+            time.sleep(0.05)
+            return mock.Mock(id=1)
+
+        with (
+            mock.patch("apps.chat.agent.tools.File.create", side_effect=slow_create),
+            mock.patch("apps.chat.models.Chat.attach_files"),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            first = executor.submit(tool.action, html=_CARD_HTML)
+            first_call_started.wait(timeout=1)
+            second = executor.submit(tool.action, html=_CARD_HTML)
+            responses = [first.result(), second.result()]
+
+        assert responses[0].startswith("The card is attached")
+        assert "already attached" in responses[1]
+        assert tool.tool_callbacks.output_message_metadata["ocs_attachment_file_ids"] == [1]
+
+    def test_html_with_problems_is_not_attached(self):
+        tool = AttachCardTool(experiment_session=ExperimentSessionFactory.build(), tool_callbacks=ToolCallbacks())
+
+        response = tool.action(html='<img src="https://example.com/a.png">')
+
+        assert response.startswith("The card was not attached")
+        assert "https://example.com/a.png" in response
+        assert tool.tool_callbacks.output_message_metadata == {}
 
 
 @pytest.mark.django_db()

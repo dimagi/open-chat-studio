@@ -2,10 +2,12 @@ import functools
 import json
 import logging
 import re
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import cached_property
+from io import BytesIO
 from typing import Any, ClassVar, Union
 from xml.sax.saxutils import escape
 
@@ -15,7 +17,9 @@ from django.db import transaction, utils
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
+from pydantic import PrivateAttr
 
+from apps.channels.clients.connect_client import CARD_ENTRY_NAME, fits_attachment_limit
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
@@ -26,7 +30,7 @@ from apps.documents.retrieval import search_collection
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
-from apps.files.models import File, FileChunkEmbedding
+from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import Intents
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
@@ -583,6 +587,111 @@ class AttachMediaTool(CustomBaseTool):
         return f"{resp}\nDo not use markdown links to reference the files."
 
 
+CARD_TOOL_DESCRIPTION = """Attach a card to your reply: a small interactive web page that the CommCare app \
+shows inline in the chat. Use it for content that is clearer as a visual than as text, such as a chart \
+the user taps for values, a visual summary, a short explainer with expandable sections, or a \
+tap-through checklist. Your reply text is shown under the card as its caption, so it must make sense \
+on its own. Attach at most one card per reply.
+
+The card must be ONE self-contained HTML document:
+- Start with <!doctype html> and <meta charset="utf-8">. Put all CSS, JavaScript, SVG and data inline; \
+use data: URLs for images. Nothing can be loaded from the network: no CDNs, web fonts, image URLs or fetch.
+- Lay out fluidly for widths from 280 to 480 CSS pixels (flex, grid, percentages, max-width). For \
+drawings use an <svg> with a viewBox, width: 100% and height: auto.
+- The card's height is measured from its content: set body { margin: 0 }, and never use height: 100% \
+on html or body, vh units, position: fixed, or absolutely positioned main content.
+- The page background is transparent over a blue chat bubble: give the card its own background (a white \
+panel with rounded corners works) and text colours, and declare color-scheme: light.
+- Only taps work: buttons, <details>, checkboxes, click handlers on SVG elements. Touch targets at \
+least 44px. No text input, links, hover, keyboard, alert/confirm/prompt, localStorage or <select>.
+- Keep scripts small and finite: no unbounded loops, long computations or endless animations. A card \
+that hangs breaks every card on the user's screen.
+- Put what matters in the first 400 pixels. Text follows the phone's font size, so leave room for \
+text up to twice its normal size.
+- Use semantic HTML; give a chart role="img" and an aria-label stating its key fact."""
+
+# Namespace URIs, such as the SVG namespace scripts pass to createElementNS, are not loaded
+_NAMESPACE_URLS = frozenset(
+    {
+        "http://www.w3.org/2000/svg",
+        "http://www.w3.org/1999/xlink",
+        "http://www.w3.org/1999/xhtml",
+        "http://www.w3.org/1998/Math/MathML",
+        "http://www.w3.org/2000/xmlns/",
+        "http://www.w3.org/XML/1998/namespace",
+    }
+)
+_ABSOLUTE_URL = re.compile(r"https?://[^\s\"'<>()`]+", re.IGNORECASE)
+_PROTOCOL_RELATIVE_URL = re.compile(
+    r"""\b(?:src|href|poster|action)\s*=\s*["']?\s*//"""
+    r"""|\bsrcset\s*=\s*["'](?:[^"']*[\s,])?//"""
+    r"""|url\(\s*["']?\s*//|@import\s+["']\s*//""",
+    re.IGNORECASE,
+)
+_VIEWPORT_UNIT = re.compile(r"\d\s*(?:[sld]?vh)\b", re.IGNORECASE)
+_FIXED_POSITION = re.compile(r"position\s*:\s*fixed", re.IGNORECASE)
+
+
+def card_html_problems(html: str) -> list[str]:
+    """What stops this HTML from working as a card, as messages for the LLM."""
+    if not html.strip():
+        return ["The HTML is empty."]
+    problems = []
+    if not fits_attachment_limit(len(html.encode("utf-8"))):
+        problems.append("The HTML is too large; a card must be under 2.5 MB.")
+    urls = sorted({url for url in _ABSOLUTE_URL.findall(html) if url not in _NAMESPACE_URLS})
+    if urls:
+        problems.append(f"The card cannot load anything from the network. Remove these URLs: {', '.join(urls)}")
+    if _PROTOCOL_RELATIVE_URL.search(html):
+        problems.append("The card cannot load anything from the network. Remove the URLs starting with //.")
+    if _VIEWPORT_UNIT.search(html):
+        problems.append("Do not use vh units; the card's height must come from its content.")
+    if _FIXED_POSITION.search(html):
+        problems.append("Do not use position: fixed; the card's height must come from its content.")
+    return problems
+
+
+class AttachCardTool(CustomBaseTool):
+    """Save HTML the LLM wrote as the card file attached to the reply.
+
+    The CommCare Connect channel sends a reply with an attachment named CARD_ENTRY_NAME as a card.
+    Other channels send the file as an ordinary attachment.
+    """
+
+    requires_callbacks: ClassVar[bool] = True
+    name: str = AgentTools.ATTACH_CARD
+    description: str = CARD_TOOL_DESCRIPTION
+    requires_session: bool = True
+    args_schema: type[schemas.AttachCardSchema] = schemas.AttachCardSchema
+    _card_attached: bool = PrivateAttr(default=False)
+    # ToolNode runs the tool calls of one model response in parallel threads
+    _attach_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+
+    def action(self, html: str) -> str:
+        with self._attach_lock:
+            return self._attach(html)
+
+    def _attach(self, html: str) -> str:
+        if self._card_attached:
+            return "A card is already attached to this reply. Only one card can be sent per reply."
+        if problems := card_html_problems(html):
+            return "The card was not attached. Fix these problems and try again:\n" + "\n".join(
+                f"- {problem}" for problem in problems
+            )
+
+        file = File.create(
+            filename=CARD_ENTRY_NAME,
+            file_obj=BytesIO(html.encode("utf-8")),
+            team_id=self.experiment_session.team_id,
+            purpose=FilePurpose.MESSAGE_MEDIA,
+            content_type="text/html",
+        )
+        self.experiment_session.chat.attach_files(attachment_type="ocs_attachments", files=[file])
+        self.tool_callbacks.attach_file(file.id)
+        self._card_attached = True
+        return "The card is attached. Write your reply as a short caption for it."
+
+
 class SearchIndexTool(CustomBaseTool):
     name: str = AgentTools.SEARCH_INDEX
     description: str = (
@@ -842,6 +951,7 @@ TOOL_CLASS_MAP = {
     AgentTools.APPEND_TO_SESSION_STATE: AppendToSessionStateTool,
     AgentTools.INCREMENT_SESSION_STATE_COUNTER: IncrementSessionStateCounterTool,
     AgentTools.CALCULATOR: CalculatorTool,
+    AgentTools.ATTACH_CARD: AttachCardTool,
 }
 
 
