@@ -47,16 +47,18 @@ def request_team_deletion(team: Team, user: CustomUser, notify_recipients: str =
     """Disable the team and schedule it for permanent deletion after the grace period."""
     if notify_recipients not in NOTIFY_RECIPIENTS:
         raise TeamDeletionError(f"Unknown notification recipients: {notify_recipients}")
-    if team.is_pending_deletion:
-        raise TeamDeletionError("This team is already scheduled for deletion.")
+    with transaction.atomic():
+        locked = Team.objects.select_for_update().only("deletion_requested_at").get(pk=team.pk)
+        if locked.deletion_requested_at is not None:
+            raise TeamDeletionError("This team is already scheduled for deletion.")
 
-    team.deletion_requested_at = timezone.now()
-    team.deletion_requested_by = user
-    team.deletion_notify_recipients = notify_recipients
-    team.save(update_fields=["deletion_requested_at", "deletion_requested_by", "deletion_notify_recipients"])
+        team.deletion_requested_at = timezone.now()
+        team.deletion_requested_by = user
+        team.deletion_notify_recipients = notify_recipients
+        team.save(update_fields=["deletion_requested_at", "deletion_requested_by", "deletion_notify_recipients"])
 
-    emails = _notification_emails(team, notify_recipients, user.email)
-    transaction.on_commit(lambda: _send_scheduled_notifications(team, emails))
+        emails = _notification_emails(team, notify_recipients, user.email)
+        transaction.on_commit(lambda: _send_scheduled_notifications(team, emails))
     return team
 
 
