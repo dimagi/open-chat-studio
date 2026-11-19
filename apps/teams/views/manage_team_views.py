@@ -68,10 +68,16 @@ def delete_team(request, team_slug):
         messages.error(request, str(e))
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[team_slug]))
 
+    notified = {"self": _("you"), "admins": _("the team admins"), "all": _("all team members")}
     messages.success(
         request,
-        _('The "{team}" team has been disabled and will be permanently deleted on {date}.').format(
-            team=team.name, date=date_format(localtime(team.deletion_due_at), "DATETIME_FORMAT")
+        _(
+            'The "{team}" team has been disabled and will be permanently deleted on {date}. '
+            "An email will be sent to {notified} now and again when the deletion is complete."
+        ).format(
+            team=team.name,
+            date=date_format(localtime(team.deletion_due_at), "DATETIME_FORMAT"),
+            notified=notified[team.deletion_notify_recipients],
         ),
     )
     return HttpResponseRedirect(reverse("teams:pending_deletion", args=[team.slug]))
