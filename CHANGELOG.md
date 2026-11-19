@@ -47,6 +47,13 @@ version section when a release is cut.
   the previous release saves after the migration starts keeps them and its files stop showing in the
   transcript. Stop the previous release before migrating. Reversing the migration leaves the data as
   it is.
+- `experiments.0158` builds three indexes on `experiments_participant` with
+  `CREATE INDEX CONCURRENTLY` (#3796): trigram indexes on `UPPER(identifier)` and `UPPER(name)`,
+  and a b-tree on `remote_id`. Writes continue during the build, which can take several minutes
+  on a large participant table. The migration is only recorded once all three finish, so if
+  a build fails, drop every index it got to, valid or not, before rerunning it:
+  `DROP INDEX CONCURRENTLY IF EXISTS` on `participant_identifier_upper_trgm_idx`,
+  `participant_name_upper_trgm_idx` and `participant_remote_id_idx`.
 
 ### Deprecations and removals
 - The legacy web chat (public `/start/` links, invitations, the server-rendered chat page and the
