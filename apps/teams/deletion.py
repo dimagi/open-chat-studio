@@ -96,6 +96,8 @@ def delete_team_if_due(team_id: int) -> bool:
         team_name = team.name
         requester_email = team.deletion_requested_by.email if team.deletion_requested_by else None
         emails = _notification_emails(team, team.deletion_notify_recipients, requester_email)
+        if not emails:
+            logger.warning("No one to notify about the deletion of team %s", team.id)
         remote_cleanups = _collect_remote_index_cleanups(team)
 
         hard_delete_team(team)
