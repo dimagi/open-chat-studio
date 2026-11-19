@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import cached_property
 from typing import TYPE_CHECKING
 
 from apps.channels.callbacks import ChannelCallbacks
@@ -19,8 +18,6 @@ from apps.channels.clients.connect_client import (
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.sender import ChannelSender
 from apps.chat.exceptions import ChannelException
-from apps.teams.flags import Flags
-from apps.teams.utils import flag_is_active_for_team
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -71,14 +68,12 @@ class CommCareConnectSender(ChannelSender):
 
     Buffers the text and files of a reply and sends them as one encrypted message in flush().
     A file PersonalID cannot take in this message is sent as a download link in its text
-    instead. With ``send_fcm_fallback`` the reply goes through the legacy send_fcm endpoint,
-    which carries text only.
+    instead.
 
     Reads ``ctx.participant_data``, which ParticipantResolverStage sets.
     """
 
-    def __init__(self, send_fcm_fallback: bool = False) -> None:
-        self.send_fcm_fallback = send_fcm_fallback
+    def __init__(self) -> None:
         self._ctx: MessageProcessingContext | None = None
         self._recipient = ""
         self._text = ""
@@ -130,8 +125,6 @@ class CommCareConnectSender(ChannelSender):
 
     def _reason_to_link_unread_file(self) -> str | None:
         """Why the next file cannot be attached whatever its size, so it need not be read."""
-        if self.send_fcm_fallback:
-            return "the create_message flag is off"
         if len(self._attachments) >= MAX_ATTACHMENTS_PER_MESSAGE:
             return f"the message already has {MAX_ATTACHMENTS_PER_MESSAGE} attachments"
         return None
@@ -152,16 +145,12 @@ class CommCareConnectSender(ChannelSender):
 
     def _send_buffered(self) -> None:
         channel_id, encryption_key = self._channel_id_and_encryption_key()
-        client = CommCareConnectClient()
-        if self.send_fcm_fallback:
-            client.send_message_to_user(channel_id=channel_id, message=self._text, encryption_key=encryption_key)
-        else:
-            client.create_message(
-                channel_id=channel_id,
-                encryption_key=encryption_key,
-                text=self._text,
-                attachments=self._attachments,
-            )
+        CommCareConnectClient().create_message(
+            channel_id=channel_id,
+            encryption_key=encryption_key,
+            text=self._text,
+            attachments=self._attachments,
+        )
 
     def _channel_id_and_encryption_key(self) -> tuple[str, bytes]:
         if self._ctx is None:
@@ -200,21 +189,16 @@ class CommCareConnectChannel(ChannelBase):
 
     supported_message_types = (MESSAGE_TYPES.TEXT,)
 
-    @cached_property
-    def _send_fcm_fallback(self) -> bool:
-        """Read once, so the capabilities and the sender of one message always agree."""
-        return not flag_is_active_for_team(self.experiment.team, Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug)
-
     def _get_callbacks(self) -> ChannelCallbacks:
         return ChannelCallbacks()
 
     def _get_sender(self) -> ChannelSender:
-        return CommCareConnectSender(send_fcm_fallback=self._send_fcm_fallback)
+        return CommCareConnectSender()
 
     def _get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
             supports_voice_replies=self.voice_replies_supported,
-            supports_files=not self._send_fcm_fallback,
+            supports_files=True,
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,
             can_send_file=self._can_send_file,

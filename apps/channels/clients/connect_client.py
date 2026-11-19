@@ -142,35 +142,6 @@ class CommCareConnectClient:
 
         return decrypted_messages
 
-    def send_message_to_user(self, channel_id: str, message: str, encryption_key: bytes):
-        ciphertext, tag, nonce = self._encrypt_message(encryption_key=encryption_key, message=message)
-
-        payload = {
-            "channel": channel_id,
-            "content": {
-                "ciphertext": ciphertext,
-                "tag": tag,
-                "nonce": nonce,
-            },
-            "message_id": str(uuid4()),
-        }
-        self._send_fcm(payload)
-
-    @retry(
-        wait=wait_exponential(multiplier=1, min=1, max=5),
-        reraise=True,
-        retry=retry_if_exception_type((httpx.NetworkError, httpx.TimeoutException)),
-        stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger, logging.INFO),
-    )
-    def _send_fcm(self, payload: dict) -> None:
-        url = f"{self._base_url}/messaging/send_fcm/"
-        response = self.client.post(url, json=payload)
-        if response.status_code == 400 and self._is_message_already_exists(response):
-            logger.info("Message %s already delivered to Connect; treating as success", payload.get("message_id"))
-            return
-        _raise_for_status(response)
-
     def create_message(
         self,
         channel_id: str,

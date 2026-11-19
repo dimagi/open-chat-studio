@@ -16,7 +16,6 @@ from uuid import uuid4
 import httpx
 import pytest
 from django.test import override_settings
-from waffle.testutils import override_flag
 
 from apps.channels.clients.connect_client import (
     MAX_ATTACHMENT_BYTES,
@@ -41,7 +40,6 @@ from apps.channels.tests.file_helpers import make_mock_file
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData
-from apps.teams.flags import Flags
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ParticipantFactory
 
@@ -93,8 +91,8 @@ def _mock_participant_data(system_metadata=None):
     return participant_data
 
 
-def _bound_sender(participant_data=None, send_fcm_fallback=False):
-    sender = CommCareConnectSender(send_fcm_fallback=send_fcm_fallback)
+def _bound_sender(participant_data=None):
+    sender = CommCareConnectSender()
     participant_data = _mock_participant_data() if participant_data is None else participant_data
     sender.bind(Mock(spec=MessageProcessingContext, participant_data=participant_data))
     return sender
@@ -108,12 +106,6 @@ def _file(name, content=b"filedata", content_type="application/pdf"):
 def client_class():
     with patch("apps.channels.connect_channel.CommCareConnectClient") as client_class:
         yield client_class
-
-
-@pytest.fixture()
-def create_message_flag():
-    with override_flag(Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug, active=True):
-        yield
 
 
 # ---------------------------------------------------------------------------
@@ -374,56 +366,12 @@ class TestCommCareConnectSenderLimits:
         assert [attachment.name for attachment in call["attachments"]] == ["a.pdf"]
 
 
-class TestCommCareConnectSenderFallback:
-    def test_sends_text_through_send_fcm_with_files_as_links(self, client_class):
-        sender = _bound_sender(send_fcm_fallback=True)
-        file = _file("a.pdf")
-
-        sender.send_text("Hi", recipient="participant")
-        sender.send_file(file, "participant", session_id=1)
-        sender.flush()
-
-        client_class.return_value.send_message_to_user.assert_called_once_with(
-            channel_id=_CHANNEL_ID, message="Hi\n\na.pdf\nhttp://example.com/a.pdf", encryption_key=_ENCRYPTION_KEY
-        )
-        client_class.return_value.create_message.assert_not_called()
-        file.read_bytes.assert_not_called()
-
-
 # ---------------------------------------------------------------------------
 # CommCareConnectChannel
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db()
-class TestCommCareConnectChannelCreateMessageFlag:
-    def _channel(self, experiment):
-        experiment_channel = ExperimentChannelFactory.create(
-            team=experiment.team, experiment=experiment, platform=ChannelPlatform.COMMCARE_CONNECT
-        )
-        return CommCareConnectChannel(experiment, experiment_channel)
-
-    @pytest.mark.parametrize("create_message", [pytest.param(False, id="flag-off"), pytest.param(True, id="flag-on")])
-    def test_capabilities_follow_the_flag(self, experiment, create_message):
-        with override_flag(Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug, active=create_message):
-            capabilities = self._channel(experiment)._get_capabilities()
-
-        assert capabilities.supports_files is create_message
-
-    def test_flag_is_read_once_for_the_sender_and_capabilities(self, experiment):
-        channel = self._channel(experiment)
-
-        with patch("apps.channels.connect_channel.flag_is_active_for_team", return_value=False) as flag_check:
-            capabilities = channel._get_capabilities()
-            sender = channel._get_sender()
-
-        flag_check.assert_called_once_with(experiment.team, Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug)
-        assert capabilities.supports_files is False
-        assert sender.send_fcm_fallback is True
-
-
-@pytest.mark.django_db()
-@pytest.mark.usefixtures("create_message_flag")
 class TestCommCareConnectChannelAdHocFiles:
     """Ad hoc sends (reminders, trigger-bot) run the formatting and sending stages too."""
 
@@ -448,16 +396,6 @@ class TestCommCareConnectChannelAdHocFiles:
             attachments=[OutgoingAttachment(name="document.pdf", content_type="application/pdf", content=b"filedata")],
         )
 
-    def test_flag_off_sends_file_as_link_through_send_fcm(self, experiment, client_class):
-        channel, _channel_id, _encryption_key = self._channel_with_session(experiment)
-
-        with override_flag(Flags.COMMCARE_CONNECT_CREATE_MESSAGE.slug, active=False):
-            channel.send_message_to_user("Here's your file", files=[_file("document.pdf")])
-
-        client_class.return_value.create_message.assert_not_called()
-        message = client_class.return_value.send_message_to_user.call_args.kwargs["message"]
-        assert "document.pdf\nhttp://example.com/document.pdf" in message
-
     def test_file_over_the_attachment_limit_becomes_a_link_before_sending(self, experiment, client_class):
         channel, _channel_id, _encryption_key = self._channel_with_session(experiment)
         file = make_mock_file("big.bin", "application/octet-stream", _LARGEST_ATTACHMENT + 1)
@@ -476,7 +414,6 @@ class TestCommCareConnectChannelAdHocFiles:
 
 
 @pytest.mark.django_db()
-@pytest.mark.usefixtures("create_message_flag")
 class TestCommCareConnectChannelIntegration:
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="test-secret", COMMCARE_CONNECT_SERVER_ID="test-id")
     def test_bot_generates_and_sends_encrypted_message(self, experiment):
