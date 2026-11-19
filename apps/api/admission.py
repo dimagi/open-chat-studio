@@ -138,11 +138,11 @@ def _session_cache_key(session) -> tuple[str, object] | None:
 
 
 def chat_entry_point_for_request(request) -> ChatEntryPoint:
-    """Map the stable Chat API URL suffix to the admission operation family."""
-    path = getattr(request, "path", "").rstrip("/")
-    if path.endswith("/start"):
+    """Map the resolved Chat API URL name to the admission operation family."""
+    url_name = getattr(getattr(request, "resolver_match", None), "url_name", None)
+    if url_name == "start-session":
         return ChatEntryPoint.START_SESSION
-    if path.endswith("/token"):
+    if url_name == "renew-session-token":
         return ChatEntryPoint.RENEW_SESSION_TOKEN
     return ChatEntryPoint.CONTINUE_SESSION
 
@@ -170,13 +170,15 @@ def _issues_session_token(entry_point: ChatEntryPoint, channel: ExperimentChanne
 
 
 def _session_token_policy(channel: ExperimentChannel | None) -> SessionTokenPolicy:
-    """Translate the durable Channel auth level into the session-token policy."""
+    """Translate the widget Channel auth level into the session-token policy."""
     if channel is None:
         return SessionTokenPolicy.NOT_APPLICABLE
+    level = channel.widget_auth_level
+    if level is None:
+        return SessionTokenPolicy.NOT_APPLICABLE
     return {
-        None: SessionTokenPolicy.ISSUE_AND_REQUIRE,
         WidgetAuthLevel.SESSION_TOKEN: SessionTokenPolicy.ISSUE_AND_REQUIRE,
-    }.get(channel.required_auth_level, SessionTokenPolicy.DO_NOT_ISSUE)
+    }.get(level, SessionTokenPolicy.DO_NOT_ISSUE)
 
 
 def _throttle_bucket(request, entry_point, channel, auth, session) -> tuple[str, str]:

@@ -573,13 +573,7 @@ def _resolve_start_session_admission(request, experiment):
         admission.channel if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS else None
     )
     embed_key_channel = _resolve_embed_key_channel(request, experiment, admission)
-    if embed_key_channel is not None and admission.credential_kind != ChatCredentialKind.EMBED_KEY:
-        admission = get_chat_admission(
-            request,
-            entry_point=ChatEntryPoint.START_SESSION,
-            validated_embed_key_channel=embed_key_channel,
-        )
-    return admission, embed_key_channel, oauth_channel
+    return embed_key_channel, oauth_channel
 
 
 def _resolve_start_session_version(request, experiment, experiment_version, experiment_channel):
@@ -752,7 +746,7 @@ def chat_start_session(request):
         Experiment.objects.select_related("team"), public_id=experiment_id, working_version_id__isnull=True
     )
 
-    _, embed_key_channel, oauth_channel = _resolve_start_session_admission(request, experiment)
+    embed_key_channel, oauth_channel = _resolve_start_session_admission(request, experiment)
 
     start_context = _prepare_start_session_context(
         request,

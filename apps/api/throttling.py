@@ -7,6 +7,7 @@ resolves the request identity and translates the result into DRF semantics.
 from rest_framework.throttling import BaseThrottle
 
 from apps.api.admission import ChatEntryPoint, chat_entry_point_for_request, get_chat_admission
+from apps.api.exceptions import ChatAdmissionError
 from apps.api.models import UserAPIKey
 from apps.oauth.models import OAuth2AccessToken
 from apps.utils.rate_limit import check, client_ip, is_exempt
@@ -70,5 +71,8 @@ class ChatAPIRateThrottle(APIRateThrottle):
             if session_id is not None:
                 return "session", str(session_id)
 
-        admission = get_chat_admission(request, entry_point=entry_point)
+        try:
+            admission = get_chat_admission(request, entry_point=entry_point)
+        except ChatAdmissionError:
+            return "ip", client_ip(request)
         return admission.throttle_bucket

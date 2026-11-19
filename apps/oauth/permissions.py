@@ -195,7 +195,7 @@ def validated_machine_token(request, experiment) -> OAuth2AccessToken:
     None as "no credential was offered" would let a revoked token fall through to the embed-key
     authenticator and from there to the still-open keyless path.
     """
-    result = OAuth2AccessTokenAuthentication().authenticate(request, check_team_membership=False)
+    result = OAuth2Authentication().authenticate(request)
     if result is None:
         # Signature, expiry or revocation -- never "no token", which the caller ruled out.
         raise ChatApiAccessDenied()

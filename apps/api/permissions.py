@@ -13,17 +13,13 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
-from apps.api.admission import (
-    ChatCredentialKind,
-    ChatEntryPoint,
-    chat_entry_point_for_request,
-    get_chat_admission,
-)
+from apps.api.admission import ChatCredentialKind, ChatEntryPoint, chat_entry_point_for_request, get_chat_admission
 from apps.api.authentication import channel_origin_allowed, embed_key_authorizes_channel
 from apps.api.exceptions import ChatAdmissionError
 from apps.api.session_tokens import parse_session_token, session_token_expired
 from apps.channels.models import WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
+from apps.oauth.permissions import is_client_credentials_request
 from apps.teams.helpers import get_team_membership_for_request, set_request_attrs
 from apps.teams.utils import set_current_team
 from apps.utils.rate_limit import check as check_rate_limit
@@ -35,12 +31,14 @@ logger = logging.getLogger("ocs.api")
 
 
 def _is_client_credentials_admission(request) -> bool:
-    """Return whether the central admission result identifies a machine OAuth credential."""
-    try:
-        admission = get_chat_admission(request, entry_point=chat_entry_point_for_request(request))
-    except ChatAdmissionError:
-        return False
-    return admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS
+    """Return whether the request carries a machine OAuth credential.
+
+    Generic API permissions inspect the authenticated OAuth token directly. Chat admission is
+    scoped to Chat API routes; running it here would classify an ExperimentChannel placed in
+    ``request.auth`` by ChatOAuthAuthentication as a machine token and would run Chat API policy
+    on unrelated API requests.
+    """
+    return is_client_credentials_request(request)
 
 
 def _count_failed_credential_attempt(request):

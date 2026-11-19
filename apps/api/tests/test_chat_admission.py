@@ -83,6 +83,17 @@ def test_embed_key_admission_uses_the_authenticated_channel(channel):
 
 
 @pytest.mark.django_db()
+def test_non_widget_channel_has_no_widget_session_token_policy(channel):
+    """Non-widget channels do not inherit the widget-only session-token requirement."""
+    channel.platform = ChannelPlatform.TELEGRAM
+    request = _request(auth=channel, authenticator=EmbeddedWidgetAuthentication())
+
+    admission = resolve_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+
+    assert admission.session_token_policy == SessionTokenPolicy.NOT_APPLICABLE
+
+
+@pytest.mark.django_db()
 def test_oauth_admission_keeps_the_channel_attribution(channel):
     """OAuth session start remains attributed to its validated Chat API Channel."""
     application = OAuth2Application.objects.create(
@@ -257,15 +268,16 @@ def test_get_chat_admission_refreshes_for_a_session_context(channel):
 
 
 @pytest.mark.parametrize(
-    ("path", "expected"),
+    ("path", "url_name", "expected"),
     [
-        pytest.param("/api/chat/start/", ChatEntryPoint.START_SESSION, id="start"),
-        pytest.param("/api/chat/session/token/", ChatEntryPoint.RENEW_SESSION_TOKEN, id="renew"),
-        pytest.param("/api/chat/session/poll/", ChatEntryPoint.CONTINUE_SESSION, id="continue"),
+        pytest.param("/api/chat/start/", "start-session", ChatEntryPoint.START_SESSION, id="start"),
+        pytest.param("/api/chat/session/token/", "renew-session-token", ChatEntryPoint.RENEW_SESSION_TOKEN, id="renew"),
+        pytest.param("/api/chat/session/poll/", "poll-response", ChatEntryPoint.CONTINUE_SESSION, id="continue"),
     ],
 )
-def test_chat_entry_point_matches_the_chat_api_route(path, expected):
+def test_chat_entry_point_matches_the_chat_api_route(path, url_name, expected):
     """Chat routes map to the same operation families used by the admission resolver."""
     request = RequestFactory().get(path)
+    request.resolver_match = SimpleNamespace(url_name=url_name)
 
     assert chat_entry_point_for_request(request) == expected

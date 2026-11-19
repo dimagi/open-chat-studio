@@ -2,6 +2,7 @@
 
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -15,6 +16,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from waffle import get_waffle_flag_model
 
 from apps.api.authentication import EmbeddedWidgetAuthentication
+from apps.api.exceptions import ChatAdmissionError
 from apps.api.models import UserAPIKey
 from apps.api.throttling import APIRateThrottle, ChatAPIRateThrottle
 from apps.channels.models import ChannelPlatform, CredentialMode, WidgetAuthLevel
@@ -221,6 +223,18 @@ def test_chat_api_throttle_falls_back_to_ip():
     request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.9")
 
     assert throttle.identity(request, _view_stub()) == ("ip", "203.0.113.9")
+
+
+def test_chat_api_throttle_falls_back_to_ip_when_admission_fails():
+    """An admission failure on a first-pass throttle check remains a normal IP bucket."""
+    throttle = ChatAPIRateThrottle()
+    request = RequestFactory().post("/api/chat/session/token/", REMOTE_ADDR="203.0.113.9")
+    request.resolver_match = SimpleNamespace(url_name="renew-session-token")
+    with mock.patch(
+        "apps.api.throttling.get_chat_admission",
+        side_effect=ChatAdmissionError("incomplete admission"),
+    ):
+        assert throttle.identity(request, _view_stub()) == ("ip", "203.0.113.9")
 
 
 @pytest.mark.django_db()
