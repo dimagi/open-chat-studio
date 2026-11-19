@@ -28,8 +28,10 @@ on:
   push:
     tags: ['v*']
 
+# Keyed on the head commit too, so a re-run of an older commit's check cannot cancel
+# the check on the PR's current commit.
 concurrency:
-  group: pr-prerequisites-${{ github.event.pull_request.number || github.ref }}
+  group: pr-prerequisites-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha }}
   cancel-in-progress: true
 
 permissions:
