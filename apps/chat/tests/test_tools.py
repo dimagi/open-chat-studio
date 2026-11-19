@@ -1,6 +1,9 @@
 import inspect
 import json
 import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from inspect import signature
 from typing import Annotated, ClassVar, get_args, get_origin
@@ -1031,6 +1034,10 @@ _CARD_HTML = """<!doctype html>
             id="protocol-relative-css-url",
         ),
         pytest.param('<style>@import "//cdn.example.com/a.css";</style>', "starting with //", id="css-import"),
+        pytest.param('<img srcset="chart.png 1x, //cdn.example.com/chart.png 2x">', "starting with //", id="srcset"),
+        pytest.param(
+            '<img src="http://www.w3.org/Icons/w3c_home">', "http://www.w3.org/Icons/w3c_home", id="w3c-resource"
+        ),
         pytest.param("<style>main { min-height: 100vh; }</style>", "vh units", id="vh"),
         pytest.param("<style>.bar { height: 50dvh; }</style>", "vh units", id="dvh"),
         pytest.param("<style>.bar { position:fixed; }</style>", "position: fixed", id="fixed-position"),
@@ -1076,6 +1083,30 @@ class TestAttachCardTool(BaseTestAgentTool):
 
         assert "already attached" in response
         assert len(tool.tool_callbacks.output_message_metadata["ocs_attachment_file_ids"]) == 1
+
+    def test_parallel_calls_attach_one_card(self):
+        """ToolNode runs the tool calls of one model response in parallel threads."""
+        tool = AttachCardTool(experiment_session=ExperimentSessionFactory.build(), tool_callbacks=ToolCallbacks())
+        first_call_started = threading.Event()
+
+        def slow_create(**kwargs):
+            first_call_started.set()
+            time.sleep(0.05)
+            return mock.Mock(id=1)
+
+        with (
+            mock.patch("apps.chat.agent.tools.File.create", side_effect=slow_create),
+            mock.patch("apps.chat.models.Chat.attach_files"),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            first = executor.submit(tool.action, html=_CARD_HTML)
+            first_call_started.wait(timeout=1)
+            second = executor.submit(tool.action, html=_CARD_HTML)
+            responses = [first.result(), second.result()]
+
+        assert responses[0].startswith("The card is attached")
+        assert "already attached" in responses[1]
+        assert tool.tool_callbacks.output_message_metadata["ocs_attachment_file_ids"] == [1]
 
     def test_html_with_problems_is_not_attached(self):
         tool = AttachCardTool(experiment_session=ExperimentSessionFactory.build(), tool_callbacks=ToolCallbacks())

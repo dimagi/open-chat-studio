@@ -2,6 +2,7 @@ import functools
 import json
 import logging
 import re
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -610,10 +611,22 @@ text up to twice its normal size.
 - Use semantic HTML; give a chart role="img" and an aria-label stating its key fact."""
 
 # Namespace URIs, such as the SVG namespace scripts pass to createElementNS, are not loaded
-_NAMESPACE_URL_PREFIX = "http://www.w3.org/"
+_NAMESPACE_URLS = frozenset(
+    {
+        "http://www.w3.org/2000/svg",
+        "http://www.w3.org/1999/xlink",
+        "http://www.w3.org/1999/xhtml",
+        "http://www.w3.org/1998/Math/MathML",
+        "http://www.w3.org/2000/xmlns/",
+        "http://www.w3.org/XML/1998/namespace",
+    }
+)
 _ABSOLUTE_URL = re.compile(r"https?://[^\s\"'<>()`]+", re.IGNORECASE)
 _PROTOCOL_RELATIVE_URL = re.compile(
-    r"""\b(?:src|href|poster|action)\s*=\s*["']?\s*//|url\(\s*["']?\s*//|@import\s+["']\s*//""", re.IGNORECASE
+    r"""\b(?:src|href|poster|action)\s*=\s*["']?\s*//"""
+    r"""|\bsrcset\s*=\s*["'](?:[^"']*[\s,])?//"""
+    r"""|url\(\s*["']?\s*//|@import\s+["']\s*//""",
+    re.IGNORECASE,
 )
 _VIEWPORT_UNIT = re.compile(r"\d\s*(?:[sld]?vh)\b", re.IGNORECASE)
 _FIXED_POSITION = re.compile(r"position\s*:\s*fixed", re.IGNORECASE)
@@ -626,7 +639,7 @@ def card_html_problems(html: str) -> list[str]:
     problems = []
     if not fits_attachment_limit(len(html.encode("utf-8"))):
         problems.append("The HTML is too large; a card must be under 2.5 MB.")
-    urls = sorted({url for url in _ABSOLUTE_URL.findall(html) if not url.startswith(_NAMESPACE_URL_PREFIX)})
+    urls = sorted({url for url in _ABSOLUTE_URL.findall(html) if url not in _NAMESPACE_URLS})
     if urls:
         problems.append(f"The card cannot load anything from the network. Remove these URLs: {', '.join(urls)}")
     if _PROTOCOL_RELATIVE_URL.search(html):
@@ -651,8 +664,14 @@ class AttachCardTool(CustomBaseTool):
     requires_session: bool = True
     args_schema: type[schemas.AttachCardSchema] = schemas.AttachCardSchema
     _card_attached: bool = PrivateAttr(default=False)
+    # ToolNode runs the tool calls of one model response in parallel threads
+    _attach_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
 
     def action(self, html: str) -> str:
+        with self._attach_lock:
+            return self._attach(html)
+
+    def _attach(self, html: str) -> str:
         if self._card_attached:
             return "A card is already attached to this reply. Only one card can be sent per reply."
         if problems := card_html_problems(html):
