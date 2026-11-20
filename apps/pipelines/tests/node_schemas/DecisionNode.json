@@ -124,7 +124,7 @@
             "type": "string"
           },
           "options": {
-            "description": "Choice only. The options to choose between, 1 to 255.",
+            "description": "Choice only. The options to choose between. The model's provider sets how many it takes.",
             "items": {
               "properties": {
                 "name": {
@@ -149,7 +149,7 @@
             "type": "array"
           },
           "levels": {
-            "description": "Score only. The rubric, one description per level from lowest (0) to highest, 1 to 10 levels.",
+            "description": "Score only. The rubric, one description per level from lowest (0) to highest. The model's provider sets how many levels it takes.",
             "items": {
               "type": "string"
             },

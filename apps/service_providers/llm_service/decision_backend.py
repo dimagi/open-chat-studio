@@ -105,6 +105,16 @@ class DecisionResponse:
         return answer if isinstance(answer, answer_type) else None
 
 
+@dataclass(frozen=True)
+class DecisionLimits:
+    """What one request to a backend may carry. `max_questions` is None where the provider sets no limit."""
+
+    max_options: int
+    min_levels: int
+    max_levels: int
+    max_questions: int | None = None
+
+
 class DecisionBackend(ABC):
     """Asks a provider's decision model several named questions in one request."""
 
@@ -112,6 +122,7 @@ class DecisionBackend(ABC):
     provider_type: ClassVar[str]
     # The name the run's trace shows for the call.
     name: ClassVar[str]
+    limits: ClassVar[DecisionLimits]
 
     @abstractmethod
     def ask(self, model: str, input: Any, questions: Mapping[str, Question]) -> DecisionResponse:

@@ -9,6 +9,7 @@ from pydantic_core import PydanticCustomError
 
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceQuestion,
+    DecisionLimits,
     DecisionResponse,
     Question,
     ScoreQuestion,
@@ -19,8 +20,6 @@ logger = logging.getLogger("ocs.pipelines.nodes")
 
 # Keys the pipeline itself keeps in the temporary state.
 RESERVED_KEYS = frozenset({"user_input", "outputs", "attachments"})
-MAX_OPTIONS = 255
-MAX_LEVELS = 10
 
 # The params each decision type reads. The rest must be left empty.
 TYPE_PARAMS = {
@@ -64,12 +63,15 @@ class Decision(BaseModel):
     )
     options: list[ChoiceOption] = Field(
         default_factory=list,
-        description="Choice only. The options to choose between, 1 to 255.",
+        description="Choice only. The options to choose between. The model's provider sets how many it takes.",
         json_schema_extra={"items": ChoiceOption.model_json_schema()},
     )
     levels: list[str] = Field(
         default_factory=list,
-        description="Score only. The rubric, one description per level from lowest (0) to highest, 1 to 10 levels.",
+        description=(
+            "Score only. The rubric, one description per level from lowest (0) to highest. The model's provider "
+            "sets how many levels it takes."
+        ),
     )
     true_description: str = Field(default="", description="Noul only. What a true statement means. Optional.")
     false_description: str = Field(default="", description="Noul only. What a false statement means. Optional.")
@@ -129,13 +131,11 @@ class Decision(BaseModel):
 
 
 def decision_error(decision: Decision, message: str, **context: str) -> PydanticCustomError:
-    return PydanticCustomError("invalid_decision", message, {"key": decision.key, **context})
+    return PydanticCustomError("invalid_decision", message, {"key": decision.key, "field": "decisions", **context})
 
 
 def _check_options(decision: Decision) -> None:
     names = [_normalized(option.name) for option in decision.options]
-    if not 1 <= len(names) <= MAX_OPTIONS:
-        raise decision_error(decision, "Decision {key} needs 1 to 255 options")
     if not all(names):
         raise decision_error(decision, "Every option of decision {key} needs a name")
     if len(set(names)) != len(names):
@@ -143,8 +143,6 @@ def _check_options(decision: Decision) -> None:
 
 
 def _check_levels(decision: Decision) -> None:
-    if not 1 <= len(decision.levels) <= MAX_LEVELS:
-        raise decision_error(decision, "Decision {key} needs 1 to 10 levels")
     if not all(level.strip() for level in decision.levels):
         raise decision_error(decision, "Decision {key} must describe every level")
 
@@ -153,6 +151,36 @@ TYPE_CHECKS: dict[str, Callable[[Decision], None]] = {
     "choice": _check_options,
     "score": _check_levels,
     "noul": lambda decision: None,
+}
+
+
+def check_decision_limits(decisions: list[Decision], limits: DecisionLimits) -> None:
+    """Raise when the decisions ask more of one request than the backend's `limits` allow."""
+    if limits.max_questions is not None and len(decisions) > limits.max_questions:
+        raise PydanticCustomError(
+            "invalid_decisions",
+            "This model answers at most {max} decisions in one call",
+            {"max": limits.max_questions, "field": "decisions"},
+        )
+    for decision in decisions:
+        LIMIT_CHECKS[decision.type](decision, limits)
+
+
+def _check_option_count(decision: Decision, limits: DecisionLimits) -> None:
+    if not 1 <= len(decision.options) <= limits.max_options:
+        raise decision_error(decision, "Decision {key} needs 1 to {max} options", max=str(limits.max_options))
+
+
+def _check_level_count(decision: Decision, limits: DecisionLimits) -> None:
+    if not limits.min_levels <= len(decision.levels) <= limits.max_levels:
+        bounds = {"min": str(limits.min_levels), "max": str(limits.max_levels)}
+        raise decision_error(decision, "Decision {key} needs {min} to {max} levels", **bounds)
+
+
+LIMIT_CHECKS: dict[str, Callable[[Decision, DecisionLimits], None]] = {
+    "choice": _check_option_count,
+    "score": _check_level_count,
+    "noul": lambda decision, limits: None,
 }
 
 

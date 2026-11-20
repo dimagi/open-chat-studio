@@ -22,6 +22,7 @@ from apps.service_providers.llm_service.decision_backend import (
     DecisionAuthenticationError,
     DecisionBackend,
     DecisionError,
+    DecisionLimits,
     DecisionResponse,
     DecisionUsage,
     ScoreAnswer,
@@ -38,6 +39,10 @@ JEV_TIMEOUT_SECONDS = 10.0
 RETRY_STATUSES = frozenset({429, 529})
 RETRY_DELAY_SECONDS = 1.0
 MAX_RETRY_DELAY_SECONDS = 5.0
+
+# A choice question takes 1 to 255 options and a score question 1 to 10 levels. Jev sets no limit on
+# the number of questions in one request.
+JEV_LIMITS = DecisionLimits(max_options=255, min_levels=1, max_levels=10)
 
 # Jev rejects deeper nesting in `state`, and numbers it cannot represent exactly.
 MAX_NESTING = 64
@@ -260,6 +265,7 @@ class JevBackend(DecisionBackend):
 
     provider_type = "jev"
     name = "Jev"
+    limits = JEV_LIMITS
 
     def __init__(self, client: JevClient):
         self.client = client
