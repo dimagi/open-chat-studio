@@ -10,6 +10,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from apps.chat.exceptions import ProviderConfigurationError
 from apps.cost_tracking.models import Confidence, ServiceKind
+from apps.pipelines.models import PipelineChatMessages
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.decision_calls import HISTORY_LIMIT
@@ -138,6 +139,9 @@ def _route(router: RouterNode, session, participant_data=None, config=None):
     return router._process_conditional(NodeContext(state))
 
 
+_as_langchain_messages = PipelineChatMessages.as_langchain_messages
+
+
 def _sent(httpx_mock) -> dict:
     return json.loads(httpx_mock.get_request().content)
 
@@ -208,6 +212,19 @@ class TestRequest:
 
         history = _sent(httpx_mock)["state"]["history"]
         assert [entry["content"] for entry in history] == expected
+
+    def test_only_the_history_sent_is_read(self, httpx_mock, jev_ids, session):
+        httpx_mock.add_response(url=URL, json=_answer())
+        router = _router(jev_ids, session, history_mode="max_history_length", max_history_length=3)
+        for turn in range(HISTORY_LIMIT):
+            router.save_history(f"question {turn}", "SUPPORT")
+
+        with mock.patch.object(
+            PipelineChatMessages, "as_langchain_messages", autospec=True, side_effect=_as_langchain_messages
+        ) as read:
+            _route(router, session)
+
+        assert read.call_count == 2
 
     def test_no_history_is_sent_when_history_is_off(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, json=_answer())
