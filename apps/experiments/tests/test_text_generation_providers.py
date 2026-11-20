@@ -1,10 +1,14 @@
 """Translation and the prompt builder generate text, so they never offer a provider that only classifies."""
 
+from unittest import mock
+
 import pytest
 from django.contrib.messages import get_messages
 from django.urls import reverse
 
 from apps.chat.models import ChatMessageType
+from apps.service_providers.llm_service.default_models import MODELS_BY_KEY, Model
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.tests.session_helpers import session_url
@@ -54,6 +58,55 @@ def test_translating_with_jev_is_refused(client, experiment, session, providers)
     )
 
     assert [str(m) for m in get_messages(response.wsgi_request)] == ["Selected provider or model not found."]
+
+
+def _decision_model(name: str):
+    """Marks the OpenAI model `name` as decision-only, as a decision model of a chat provider would be."""
+    return mock.patch.dict(MODELS_BY_KEY, {("openai", name): Model(name, 1000, chat=False, decisions=True)})
+
+
+@pytest.mark.django_db()
+def test_translating_with_a_decision_model_of_a_chat_provider_is_refused(client, experiment, session, providers):
+    openai, _jev, _jev_model = providers
+    decision_model = LlmProviderModelFactory.create(team=experiment.team, type="openai", name="gpt-decide")
+    client.force_login(experiment.owner)
+
+    url = session_url(name="experiments:translate_messages", experiment=experiment, session=session)
+    data = {"llm_provider": openai.id, "llm_provider_model": decision_model.id, "language": "spa"}
+    translator = "apps.experiments.views.experiment.translate_messages_with_llm"
+    with _decision_model("gpt-decide"), mock.patch(translator) as translate:
+        response = client.post(url, data)
+
+    translate.assert_not_called()
+    assert [str(m) for m in get_messages(response.wsgi_request)] == ["Selected provider or model not found."]
+
+
+@pytest.mark.django_db()
+def test_the_translation_form_leaves_out_a_decision_model_of_a_chat_provider(client, experiment, session, providers):
+    decision_model = LlmProviderModelFactory.create(team=experiment.team, type="openai", name="gpt-decide")
+    client.force_login(experiment.owner)
+
+    url = session_url(name="experiments:experiment_session_messages_view", experiment=experiment, session=session)
+    with _decision_model("gpt-decide"):
+        response = client.get(url)
+
+    offered = {value for value, _label in response.context["translate_form_all"].fields["llm_provider_model"].choices}
+    assert offered
+    assert decision_model.id not in offered
+
+
+@pytest.mark.django_db()
+def test_the_prompt_builders_default_model_is_a_chat_model(client, team_with_users, providers):
+    openai, _jev, _jev_model = providers
+    first = LlmProviderModel.objects.for_team(team_with_users).filter(type=openai.type).first()
+    client.force_login(team_with_users.members.first())
+
+    with _decision_model(first.name):
+        response = client.get(reverse("experiments:experiments_prompt_builder", args=[team_with_users.slug]))
+
+    default_id = response.context["default_llm_provider_model_id"]
+    assert default_id is not None
+    assert default_id != first.id
 
 
 @pytest.mark.django_db()
