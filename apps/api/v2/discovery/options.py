@@ -7,7 +7,7 @@ param name maps onto a key here.
 
 from typing import Any
 
-from apps.pipelines.nodes.base import OptionsSource
+from apps.pipelines.nodes.base import ModelUse, OptionsSource
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
 from apps.teams.models import Team
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
@@ -23,15 +23,16 @@ PROMPT_VAR_OPTION_SOURCES = (
 )
 
 
-def options_for_team(team: Team) -> dict:
+def options_for_team(team: Team, model_use: ModelUse = ModelUse.chat) -> dict:
     """Every option list the team can draw on, with the UI builder's own affordances stripped and
-    the models the team cannot call left out. Scoping to a node type happens after this.
+    the models the team cannot call left out. Scoping to a node type happens after this, and
+    `default_llm_provider` is a pair for a node of `model_use`.
 
     A dozen queries and a few hundred milliseconds, mostly parsing custom actions' OpenAPI schemas,
     so a caller needing it twice should hold the result rather than ask again.
     """
     options = _clean_options(get_node_parameter_values(team=team, usable_models_only=True))
-    options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True)
+    options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True, model_use=model_use)
     return _describe_prompt_vars(options)
 
 

@@ -18,7 +18,7 @@ from apps.custom_actions.models import CustomAction
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
 from apps.pipelines.nodes import nodes as pipeline_nodes
-from apps.pipelines.nodes.base import NodeSchema, OptionsSource
+from apps.pipelines.nodes.base import ModelUse, NodeSchema, OptionsSource
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.teams.models import Team
 from apps.utils.fields import as_int
@@ -259,18 +259,19 @@ def _option(
     return data | ({"deprecated": True} if deprecated else {})
 
 
-def get_node_default_values(team: Team, usable_models_only: bool = False) -> dict:
+def get_node_default_values(team: Team, usable_models_only: bool = False, model_use: ModelUse = ModelUse.chat) -> dict:
     """A provider and model pairing to start from, matched on type so that no node rejects it.
 
     `usable_models_only` carries the same meaning as in `get_node_parameter_values` -- the pair has to
-    be drawn from the same list the caller offers.
+    be drawn from the same list the caller offers. `model_use` is that of the node the pair is for: a
+    node that takes only decision models starts from one, and every other node from a chat model.
     """
     llm_providers, llm_provider_models = _team_llm_options(team, usable_models_only)
     llm_provider_model = None
     provider_id = None
     if len(llm_providers) > 0:
         for provider in llm_providers:
-            llm_provider_model = llm_provider_models.filter(type=provider["type"]).chat().first()
+            llm_provider_model = _first_model_for(llm_provider_models.filter(type=provider["type"]), model_use)
             if llm_provider_model:
                 provider_id = provider["id"]
                 break
@@ -279,6 +280,12 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
         "llm_provider_id": provider_id,
         "llm_provider_model_id": llm_provider_model.id if llm_provider_model else None,
     }
+
+
+def _first_model_for(models: QuerySet, model_use: ModelUse) -> LlmProviderModel | None:
+    if model_use != ModelUse.decisions:
+        return models.chat().first()
+    return next((model for model in models.order_by("pk") if model.supports_decisions), None)
 
 
 # Node types whose class has been removed, mapped to the message shown on the stored node.
