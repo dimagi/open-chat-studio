@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.conf import settings
 
+from apps.experiments.versioning import VersionSpec
 from apps.service_providers.messaging_service import SlackService
 from apps.teams.export import seal as seal_mod
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -85,3 +86,13 @@ def auto_block_session(moderated_session):
     team.auto_block_enabled = True
     team.save()
     return moderated_session
+
+
+@pytest.fixture()
+def isolated_spec_registry():
+    """A test's own `VersionSpec` registry: empty on entry, the real one restored on exit."""
+    saved = dict(VersionSpec.registry)
+    VersionSpec.registry.clear()
+    yield VersionSpec.registry
+    VersionSpec.registry.clear()
+    VersionSpec.registry.update(saved)

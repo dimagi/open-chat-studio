@@ -52,6 +52,7 @@ from apps.utils.factories.service_provider_factories import (
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
 from apps.utils.tests.langchain import build_fake_llm_service
+from apps.utils.tests.versioning_helpers import assert_family, assert_snapshot
 
 
 @pytest.fixture()
@@ -715,7 +716,8 @@ class TestSourceMaterialVersioning:
         new_version = original.create_new_version()
         original.refresh_from_db()
         assert original.working_version is None
-        _compare_models(original, new_version, expected_changed_fields=["id", "working_version_id"])
+        assert_family(new_version, original)
+        assert_snapshot(original, new_version)
 
 
 @pytest.mark.django_db()
@@ -873,25 +875,11 @@ class TestExperimentModel:
         assert new_version.is_default_version is True
         assert new_version.working_version == original_experiment
         assert new_version.version_description == "tis a new version"
-        _compare_models(
-            original=original_experiment,
-            new=new_version,
-            expected_changed_fields=[
-                "id",
-                "public_id",
-                "working_version",
-                "version_number",
-                "is_default_version",
-                "consent_form",
-                "version_description",
-                "pipeline",
-            ],
-        )
+        assert_family(new_version, original_experiment)
+        assert_snapshot(original_experiment, new_version, changed={"consent_form", "pipeline"})
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
-        self._assert_attribute_duplicated(
-            "consent_form", original_experiment, new_version, changed_fields_extra=["is_default"]
-        )
+        self._assert_attribute_duplicated("consent_form", original_experiment, new_version)
         assert original_experiment.consent_form.is_default is True
         assert new_version.consent_form.is_default is False
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
@@ -901,6 +889,18 @@ class TestExperimentModel:
         assert original_experiment.version_number == 3
         assert another_new_version.version_number == 2
         assert another_new_version.is_default_version is False
+
+    def test_the_version_operation_lock_does_not_travel(self):
+        """The lock a publish or revert holds stays on the working row; neither a version nor a copy starts locked."""
+        experiment = self._setup_original_experiment()
+        experiment.create_version_task_id = "publish-in-flight"
+        experiment.save(update_fields=["create_version_task_id"])
+
+        version = experiment.create_new_version()
+        copy = experiment.create_new_version(is_copy=True)
+
+        assert (version.create_version_task_id, copy.create_version_task_id) == ("", "")
+        assert Experiment.objects.get(id=experiment.id).create_version_task_id == "publish-in-flight"
 
     def test_create_new_version_persists_the_frozen_consent_form(self):
         experiment = self._setup_original_experiment()
@@ -961,40 +961,6 @@ class TestExperimentModel:
         for node in original_experiment.pipeline.node_set.all():
             assert new_version.pipeline.node_set.filter(working_version_id=node.id).exists()
 
-    def test_copy_attr_to_new_version(self):
-        """
-        Copying an attribute to the a version should only create a new version of the attribute (or related model) when
-        the attribute 1. is not versioned or 2. the instance differs from the latest version of itself. If there's no
-        difference between the working and latest version of the attribute, the latest version should be linked to the
-        new experiment version.
-        """
-        original_experiment = self._setup_original_experiment()
-        # Choose consent_form as the attribute / related model
-        original_related_instance = original_experiment.consent_form
-
-        # The original related object has no versions, so we expect a new version to be created
-        experiment_version1 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("consent_form", experiment_version1)
-        assert original_related_instance.versions.count() == 1
-        assert experiment_version1.consent_form != original_related_instance
-        assert experiment_version1.consent_form.working_version == original_related_instance
-
-        # No change between the original and versioned instances, so we don't want yet another version to be made
-        experiment_version2 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("consent_form", experiment_version2)
-        assert original_related_instance.versions.count() == 1
-        # The new instance version should be the same as the previous one
-        assert experiment_version2.consent_form == experiment_version1.consent_form
-
-        # Changing the working instance causes a new version to be made
-        original_experiment.consent_form.consent_text = "Updated consent text"
-        original_experiment.consent_form.save()
-        experiment_version3 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("consent_form", experiment_version3)
-        assert original_related_instance.versions.count() == 2
-        assert experiment_version3.consent_form != experiment_version2.consent_form
-        assert experiment_version3.consent_form.working_version == original_experiment.consent_form
-
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         if trigger_type == "static":
             original_triggers = original_experiment.static_triggers.all()
@@ -1008,25 +974,19 @@ class TestExperimentModel:
         assert len(copied_triggers) == len(original_triggers)
 
         for copied_trigger in copied_triggers:
-            assert copied_trigger.working_version is not None
-            assert copied_trigger.working_version in original_triggers
-            _compare_models(
-                original=copied_trigger.working_version,
-                new=copied_trigger,
-                expected_changed_fields=["id", "action", "working_version", "experiment"],
-            )
+            working_trigger = copied_trigger.working_version
+            assert working_trigger is not None
+            assert working_trigger in original_triggers
+            # Timeout triggers leave the two out of version comparison; static triggers do not.
+            rewired = {"action", "experiment"} - set(working_trigger.get_fields_to_exclude())
+            assert_snapshot(working_trigger, copied_trigger, changed=rewired)
+            assert copied_trigger.experiment_id == new_version.id
+            assert copied_trigger.action_id != working_trigger.action_id
 
-    def _assert_attribute_duplicated(
-        self, attr_name, original_experiment, new_version, changed_fields_extra: list | None = None
-    ):
-        default_fields_that_differ = ["id", "working_version"]
-        if changed_fields_extra:
-            default_fields_that_differ.extend(changed_fields_extra)
-        _compare_models(
-            original=getattr(original_experiment, attr_name),
-            new=getattr(new_version, attr_name),
-            expected_changed_fields=default_fields_that_differ,
-        )
+    def _assert_attribute_duplicated(self, attr_name, original_experiment, new_version):
+        working, version = getattr(original_experiment, attr_name), getattr(new_version, attr_name)
+        assert_family(version, working)
+        assert_snapshot(working, version)
 
     def test_get_version(self, experiment):
         """Test that we are able to find a specific experiment version using any experiment in the version family"""
@@ -1316,15 +1276,6 @@ class TestExperimentTrends:
         assert sum(errors) == 1
 
 
-def _compare_models(original, new, expected_changed_fields: list) -> None:
-    field_difference = original.compare_with_model(new, original.get_fields_to_exclude()).difference(
-        set(expected_changed_fields)
-    )
-    assert field_difference == set(), (
-        f"These fields differ between the experiment versions, but should not: {field_difference}"
-    )
-
-
 @pytest.mark.django_db()
 def test_experimentsession_team_lastactivity_index_exists():
     """Smoke check that the composite index backing the session list ordering is present."""
@@ -1398,3 +1349,13 @@ class TestParticipantStr:
         participant = Participant(name="")
         participant.identifier = f"anon:{participant.public_id}"
         assert str(participant) == f"Anonymous [{str(participant.public_id)[:6]}]"
+
+
+@pytest.mark.django_db()
+def test_a_copy_takes_the_description_it_is_given():
+    experiment = ExperimentFactory.create()
+
+    described = experiment.create_new_version(is_copy=True, version_description="Reviewed copy")
+    plain = experiment.create_new_version(is_copy=True)
+
+    assert (described.version_description, plain.version_description) == ("Reviewed copy", "")

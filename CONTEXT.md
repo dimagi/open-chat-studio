@@ -35,6 +35,15 @@ A single node in a Pipeline's DAG. Each Node has a type (Start, End, LLM, Router
 The rule a caller uses to ask "given a Chatbot family, which Chatbot Version do I want?". Three values: **Specific** (pinned by `version_number` within the family), **Latest Working**, **Latest Published**. Used by Evaluation Configs, channel entry-point tasks, the API entry point, and the web widget. Resolved at the moment of use against the family head.
 _Avoid_: "version selection type" (the legacy field name on `EvaluationConfig`).
 
+**Version Operation**:
+What a traversal of a versioned record does: **Publish** (Working Version → Chatbot Version), **Revert** (Chatbot Version → Working Version) or **Copy** (Working Version → a new Working Version). A versioned model declares how it travels once, in a `VersionSpec` (`apps/experiments/versioning.py`), and the operations are generated from that declaration. `Experiment`, `Pipeline` and `Node` are on specs; the smaller versioned models keep their own overrides until each is moved.
+
+**Travel Strategy**:
+How a record that another record references travels on Publish: a **new version** of it, its **latest version reused** when nothing changed since, a **live reference** to the working record itself (ADR-0031), or a **private clone** owned by the snapshot. Copy copies what the record owns, a private clone included, and keeps every other reference verbatim. Revert is derived from the strategy and from whether the record owns the target.
+
+**Spec Member**:
+One declared part of a `VersionSpec`: a **reference** (a forward foreign key), an **owned set** (rows reached through a reverse accessor) or a **param reference** (an id inside a JSON params blob). Plain row fields are never declared: every concrete field that is not identity travels by being cloned.
+
 ### Runtime
 
 **Channel**:
@@ -170,7 +179,7 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - An **Evaluation Run** generates outputs against one **Chatbot Version**, resolved from its **Evaluation Config** at run time and pinned on the Run. Same machinery as Channel routing — Working vs Published is decided per-Config.
 - A **Pipeline** references **Custom Action Operations** to make outbound HTTP calls.
 - **Static Triggers** and **Timeout Triggers** attach to a **Chatbot Version**, not to its **Pipeline** — so reasoning about "what a published bot does" must include both the Pipeline graph and the Chatbot's Triggers.
-- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Collections**, **Custom Action Operations**). **Service Providers** and **LLM Provider Models** are **not** versioned — they are shared, live rows — so a Published Version reflects their *current* configuration, not a frozen copy.
+- **Snapshotted vs live on publish.** Creating a **Chatbot Version** snapshots the Pipeline, its Nodes, the Triggers, and the *versioned* resources they reference (**Source Material**, **Custom Action Operations**). **Collections** (media and index alike, ADR-0031), **Service Providers** and **LLM Provider Models** are live references — shared rows a Published Version reads as they are now — so a Collection can change without a new Chatbot Version, and a Published Version reflects a provider's *current* configuration, not a frozen copy.
 
 ## Example dialogue
 

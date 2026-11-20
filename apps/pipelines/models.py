@@ -30,9 +30,10 @@ from apps.pipelines.flow import (
     FlowNodeData,
     FlowWithoutNodes,
 )
-from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
+from apps.pipelines.helper import create_pipeline_with_nodes
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
+from apps.pipelines.versioning import NodeVersionSpec
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -331,56 +332,6 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return {edge.wiring for edge in FlowWithoutNodes(**(self.data or {"edges": []})).edges}
 
     @transaction.atomic()
-    def create_new_version(self, is_copy: bool = False):  # ty: ignore[invalid-method-override]
-        version_number = 1 if is_copy else self.version_number
-        if not is_copy:
-            self.version_number = self.version_number + 1
-            self.save(update_fields=["version_number"])
-        pipeline_version = super().create_new_version(save=False, is_copy=is_copy)
-        pipeline_version.version_number = version_number
-        id_mapping = {}
-        if is_copy:
-            node_types = dict(self.node_set.values_list("flow_id", "type"))
-            data, id_mapping = duplicate_pipeline_with_new_ids(self.data, node_types)
-            pipeline_version.data = data
-        pipeline_version.save()
-        for node in self.node_set.all():
-            node.create_new_version(
-                is_copy=is_copy, new_flow_id=id_mapping.get(node.flow_id), pipeline=pipeline_version
-            )
-
-        return pipeline_version
-
-    @transaction.atomic()
-    def revert_to_version(self, version: "Pipeline") -> None:
-        """Reset this working pipeline to the state of ``version``.
-
-        Takes the version's node rows one at a time and remaps params that reference
-        versioned records back to their working id — the inverse of the rewriting done
-        during publish, see ``apps.pipelines.versioning`` — then persists the version's
-        edges and rebuilds every working node from that content via
-        ``update_nodes_from_data``. The versioned record for each param is read from the
-        version node's resource FK column.
-
-        The version's stored ``data`` supplies the edges only.
-        """
-        node_data: dict[str, FlowNode | None] = {}
-        # to_flow_node reads each node's resource relations — prefetch rather than query per row.
-        for version_node in version.node_set.prefetch_related("collection_indexes", "custom_action_operations"):
-            flow_node = version_node.to_flow_node()
-            for spec in version_node.node_type.versioned_param_specs:
-                spec.revert_referenced_record(version_node, flow_node.data.params)
-            node_data[version_node.flow_id] = flow_node
-
-        self.data = FlowWithoutNodes(**(version.data or {"edges": []})).model_dump()
-        self.edit_revision += 1
-        self.save(update_fields=["data", "edit_revision"])
-        self.update_nodes_from_data(node_data)
-        # The rows were written straight to the DB, so hand back an instance that reads as the
-        # reverted pipeline rather than the one it replaced. Same reason the save paths do it.
-        self.clear_node_caches()
-
-    @transaction.atomic()
     def archive(self) -> bool:
         """
         Archive this record only when it is not still being referenced by other records. If this record is the working
@@ -612,35 +563,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         return self.node_type.output_handles(self.params or {}, self.flow_id, django_node=self)
 
-    def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
-        """
-        Create a new version of the node. Params that reference versioned records (see
-        `apps.pipelines.versioning`) are versioned along with the node and updated to point at the new version.
-
-        Args:
-            pipeline: If provided, the new version will be assigned to this pipeline before saving,
-                avoiding a transient state where the node temporarily belongs to the original pipeline.
-        """
-        new_version = super().create_new_version(save=False, is_copy=is_copy)
-        if is_copy and new_flow_id:
-            old_flow_id = new_version.flow_id
-            new_version.flow_id = new_flow_id
-            if not new_version.node_type.is_server_managed and new_version.name == old_flow_id:
-                new_version.params["name"] = new_flow_id
-
-        if not is_copy:
-            for spec in self.node_type.versioned_param_specs:
-                spec.version_referenced_record(new_version.params)
-
-        if pipeline is not None:
-            new_version.pipeline = pipeline
-        new_version.save()
-        if self.node_type.declares("custom_actions"):
-            self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
-        new_version._sync_resource_fk_fields()
-
-        return new_version
-
     def set_params(self, params):
         """Assign params, persist them, and re-derive the resource FK mirror.
 
@@ -780,7 +702,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def _get_version_details(self) -> VersionDetails:
         node_name = self.display_name
 
-        specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
+        specs_by_param = {member.key: member for member in NodeVersionSpec.param_references()}
         param_versions = []
         for name, value in self.params.items():
             display_formatter = None
@@ -822,15 +744,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         return self.collection_id is not None
 
     def _archive_related_params(self):
-        """
-        Archive related params that were also versioned along with this node
-        """
-        for spec in self.node_type.versioned_param_specs:
-            spec.archive_referenced_record(self.params)
+        """Archive the records this node's params name, as the spec declares for the params its type declares."""
+        for member in self.node_type.versioned_param_specs:
+            member.archive_referenced(self.params)
 
     def _unarchive_related_params(self):
-        for spec in self.node_type.versioned_param_specs:
-            spec.unarchive_referenced_record(self.params)
+        for member in self.node_type.versioned_param_specs:
+            member.unarchive_referenced(self.params)
 
 
 class PipelineEventInputs(models.TextChoices):
