@@ -3,7 +3,7 @@ import json
 from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
@@ -57,7 +57,9 @@ class SyncView(APIView):
     def reachable_sessions(self):
         sessions = ExperimentSession.objects.filter(team=self.request.team)
         if not token_reaches_all_data(self.request.auth):
-            sessions = sessions.filter(experiment_id__in=self.request.auth.application.allowed_chatbots.values("id"))
+            # The allowlist holds working versions, and a session may be bound to one of their versions.
+            allowed = self.request.auth.application.allowed_chatbots.values("id")
+            sessions = sessions.filter(Q(experiment_id__in=allowed) | Q(experiment__working_version_id__in=allowed))
         return sessions
 
 
