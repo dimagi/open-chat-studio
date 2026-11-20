@@ -140,3 +140,17 @@ def test_renaming_a_tag_moves_the_rows_it_tags(session, message):
 
     assert _moved(ChatMessage, message)
     assert _moved(ExperimentSession, session)
+
+
+@pytest.mark.django_db()
+def test_deleting_a_tag_moves_the_rows_it_tagged(session, message):
+    tag = TagFactory.create(team=session.team, name="billing")
+    message.add_tag(tag, team=session.team)
+    session.chat.add_tag(tag, team=session.team)
+    _age(ChatMessage, message)
+    _age(ExperimentSession, session)
+
+    tag.delete()
+
+    assert _moved(ChatMessage, message)
+    assert _moved(ExperimentSession, session)
