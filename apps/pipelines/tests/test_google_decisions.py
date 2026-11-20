@@ -13,7 +13,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import DecisionNode, RouterNode
 from apps.pipelines.repository import ORMRepository
-from apps.pipelines.tests.utils import decision_routing_runnable
+from apps.pipelines.tests.utils import build_decision_node, decision_routing_runnable
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
@@ -77,15 +77,7 @@ def _route(router: RouterNode, session, config=None):
 
 
 def _node(ids, session=None, decisions=None) -> DecisionNode:
-    node = DecisionNode(
-        node_id="decide",
-        django_node=None,
-        name="decide",
-        decisions=decisions if decisions is not None else [INTENT, FRUSTRATION, REFUND],
-        **ids,
-    )
-    node._repo = ORMRepository(session=session)
-    return node
+    return build_decision_node(ids, decisions if decisions is not None else [INTENT, FRUSTRATION, REFUND], session)
 
 
 def _run(node: DecisionNode, session, config=None) -> PipelineState:

@@ -11,6 +11,7 @@ from apps.pipelines.models import Pipeline
 from apps.pipelines.node_type import NodeType
 from apps.pipelines.nodes import nodes
 from apps.pipelines.nodes.nodes import ToolConfigModel
+from apps.pipelines.repository import ORMRepository
 from apps.utils.factories.pipelines import PipelineFactory
 
 # ``Node.type`` is graph data, so it can name any module-level attribute of
@@ -255,6 +256,15 @@ def decision_node(provider_ids: dict, decisions: list[dict], name: str | None = 
         "decide",
         {"type": nodes.DecisionNode.__name__, "params": {**provider_ids, "decisions": decisions}},
     )
+
+
+def build_decision_node(provider_ids: dict, decisions: list[dict], session=None, **params) -> nodes.DecisionNode:
+    """A Decision Node to call directly, reading and writing through `session`."""
+    node = nodes.DecisionNode(
+        node_id="decide", django_node=None, name="decide", decisions=decisions, **provider_ids, **params
+    )
+    node._repo = ORMRepository(session=session)
+    return node
 
 
 def decision_routing_runnable(provider_ids: dict, decisions: list[dict], route_key: str, keywords: list[str]):

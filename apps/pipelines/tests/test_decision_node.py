@@ -14,7 +14,7 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import DecisionNode
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
-from apps.pipelines.tests.utils import decision_routing_runnable
+from apps.pipelines.tests.utils import build_decision_node, decision_routing_runnable
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceAnswer,
     DecisionBackend,
@@ -57,16 +57,8 @@ def _answers(intent=("billing", 0.9), frustration=(1.7, 0.55), refund=0.98):
 
 
 def _node(jev_ids, session=None, decisions=None, **params) -> DecisionNode:
-    node = DecisionNode(
-        node_id="decide",
-        django_node=None,
-        name="decide",
-        decisions=decisions if decisions is not None else [INTENT, FRUSTRATION, REFUND],
-        **jev_ids,
-        **params,
-    )
-    node._repo = ORMRepository(session=session)
-    return node
+    decisions = decisions if decisions is not None else [INTENT, FRUSTRATION, REFUND]
+    return build_decision_node(jev_ids, decisions, session, **params)
 
 
 def _run(node: DecisionNode, session, config=None) -> PipelineState:
