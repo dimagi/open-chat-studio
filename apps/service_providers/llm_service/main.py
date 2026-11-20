@@ -512,7 +512,13 @@ class GoogleLlmService(LlmService):
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
 
-        return ChatGoogleGenerativeAI(model=llm_model, google_api_key=self.google_api_key.get_secret_value(), **kwargs)
+        # google-genai defaults the Gemini Developer API to v1, which does not serve preview models.
+        return ChatGoogleGenerativeAI(
+            model=llm_model,
+            google_api_key=self.google_api_key.get_secret_value(),
+            api_version="v1beta",
+            **kwargs,
+        )
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []

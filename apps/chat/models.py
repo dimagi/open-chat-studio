@@ -172,9 +172,6 @@ class ChatMessageMetadataKeys(StrEnum):
     OPENAI_THREAD_CHECKPOINT = "openai_thread_checkpoint"
     # Files & attachments
     OCS_ATTACHMENT_FILE_IDS = "ocs_attachment_file_ids"
-    # No longer written. Read until the fold_message_attachment_ids backfill has run everywhere.
-    CITED_FILES = "cited_files"
-    GENERATED_FILES = "generated_files"
     # Tracing / observability
     TRACE_INFO = "trace_info"
     TRACE_PROVIDER = "trace_provider"  # legacy top-level; only read for migration in trace_info property
@@ -191,7 +188,7 @@ class ChatMessageMetadataKeys(StrEnum):
     @classmethod
     def attachment_keys(cls) -> frozenset["ChatMessageMetadataKeys"]:
         """Metadata keys that hold file IDs referencing attachments on a message."""
-        return frozenset({cls.OPENAI_FILE_IDS, cls.OCS_ATTACHMENT_FILE_IDS, cls.CITED_FILES, cls.GENERATED_FILES})
+        return frozenset({cls.OPENAI_FILE_IDS, cls.OCS_ATTACHMENT_FILE_IDS})
 
 
 # Provider message ids are stored in their namespaced form ("whatsapp:wamid...."), so the limit has

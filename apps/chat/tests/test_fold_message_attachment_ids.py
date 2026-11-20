@@ -1,15 +1,19 @@
 import threading
 import time
+from importlib import import_module
+from unittest.mock import Mock
 
 import pytest
-from django.core.management import call_command
+from django.apps import apps as global_apps
 from django.db import connection, transaction
 
-from apps.chat.management.commands import fold_message_attachment_ids
+from apps.chat.migrations.utils import fold_message_attachment_ids as fold
 from apps.chat.models import ChatMessage
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory
 
 ATTACHMENTS = "ocs_attachment_file_ids"
+
+migration_0033 = import_module("apps.chat.migrations.0033_fold_message_attachment_ids")
 
 
 def _message(chat, metadata):
@@ -42,18 +46,18 @@ def _metadata(message):
 def test_folds_legacy_keys_into_the_attachment_key(before, after):
     message = _message(ChatFactory.create(), before)
 
-    call_command("fold_message_attachment_ids")
+    fold.fold_message_attachment_ids(ChatMessage, connection)
 
     assert _metadata(message) == (before if after is None else after)
 
 
 @pytest.mark.django_db()
 def test_every_batch_is_folded(monkeypatch):
-    monkeypatch.setattr(fold_message_attachment_ids, "BATCH_SIZE", 2)
+    monkeypatch.setattr(fold, "BATCH_SIZE", 2)
     chat = ChatFactory.create()
     messages = [_message(chat, {"cited_files": [i]}) for i in range(5)]
 
-    call_command("fold_message_attachment_ids")
+    fold.fold_message_attachment_ids(ChatMessage, connection)
 
     assert [_metadata(message) for message in messages] == [{ATTACHMENTS: [i]} for i in range(5)]
 
@@ -63,7 +67,7 @@ def test_does_not_touch_updated_at():
     message = _message(ChatFactory.create(), {"generated_files": [1]})
     updated_at = ChatMessage.objects.get(id=message.id).updated_at
 
-    call_command("fold_message_attachment_ids")
+    fold.fold_message_attachment_ids(ChatMessage, connection)
 
     assert ChatMessage.objects.get(id=message.id).updated_at == updated_at
 
@@ -87,7 +91,7 @@ def test_a_concurrent_edit_is_not_undone():
 
     def backfill():
         try:
-            call_command("fold_message_attachment_ids")
+            fold.fold_message_attachment_ids(ChatMessage, connection)
         finally:
             connection.close()
 
@@ -114,9 +118,9 @@ def _wait_for_a_blocked_query():
 
 
 @pytest.mark.django_db()
-def test_dry_run_changes_nothing():
+def test_the_migration_folds_messages():
     message = _message(ChatFactory.create(), {"cited_files": [1]})
 
-    call_command("fold_message_attachment_ids", dry_run=True)
+    migration_0033.fold_message_attachment_ids(global_apps, Mock(connection=connection))
 
-    assert _metadata(message) == {"cited_files": [1]}
+    assert _metadata(message) == {ATTACHMENTS: [1]}

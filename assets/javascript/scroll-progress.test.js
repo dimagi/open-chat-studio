@@ -30,15 +30,15 @@ describe("setupScrollProgress", () => {
         document.querySelector("[data-message-index]").getBoundingClientRect = () => ({bottom: 300});
     });
 
+    afterEach(() => {
+        window.dispatchEvent(new Event("pagehide"));
+    });
+
     it("updates the bar and accessible progress value from the visible message", () => {
         setupScrollProgress("#table-top");
 
         expect(document.querySelector("#scroll-progress-fill").style.width).toBe("50%");
         expect(document.querySelector("#scroll-progress-bar")).toHaveAttribute("aria-valuenow", "50");
-    });
-
-    afterEach(() => {
-        window.dispatchEvent(new Event("pagehide"));
     });
 
     it("cleans up listeners and observers when the page is hidden", () => {

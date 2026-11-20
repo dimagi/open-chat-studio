@@ -16,6 +16,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_de
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.events.versioning import get_event_action_param_specs
 from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import set_current_team
@@ -141,6 +142,24 @@ def remap_event_action_params(params: dict, action_type: str, store: FKTranslati
         if value in (None, "", 0):
             continue
         result[spec.param_name] = store.get_target(spec.model_label.lower(), as_int(value)) or value
+    return result
+
+
+# A source server that hasn't run chat.0033 still sends attachment ids under these keys. The migration
+# only folds rows already in this database, so messages synced in after it need folding here.
+LEGACY_ATTACHMENT_KEYS = ("cited_files", "generated_files")
+
+
+def remap_message_attachment_ids(metadata: dict, store: FKTranslationStore) -> dict:
+    """Rewrite the file ids a chat message lists under ``ocs_attachment_file_ids``, folding in any
+    under the legacy keys. Files the sync doesn't copy have no translation and are left as-is,
+    matching ``remap_node_params``."""
+    key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
+    result = {name: value for name, value in metadata.items() if name not in LEGACY_ATTACHMENT_KEYS}
+    file_ids = [*metadata.get(key, []), *(i for name in LEGACY_ATTACHMENT_KEYS for i in metadata.get(name, []))]
+    if file_ids:
+        remapped = (store.get_target("files.file", as_int(file_id)) or file_id for file_id in file_ids)
+        result[key] = list(dict.fromkeys(remapped))
     return result
 
 
@@ -680,6 +699,8 @@ class Importer:
             field_values["params"] = remap_event_action_params(
                 field_values["params"], field_values.get("action_type", ""), self.store
             )
+        elif model_label == "chat.chatmessage" and field_values.get("metadata"):
+            field_values["metadata"] = remap_message_attachment_ids(field_values["metadata"], self.store)
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
         """Translate each m2m field's source pks to target pks, skipping name-linked fields. A member

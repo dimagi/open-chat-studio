@@ -32,7 +32,8 @@ from apps.api.views.files import FileContentView
 from apps.api.views.participants import ParticipantView
 from apps.api.views.sessions import ExperimentSessionViewSet
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
-from apps.oauth.permissions import OAuth2AccessTokenAuthentication, TokenHasOAuthScope
+from apps.oauth.permissions import OAuth2AccessTokenAuthentication, TokenHasOAuthScope, is_client_credentials_request
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 # Every view that accepts API-key authentication, whether it takes the project defaults or sets its
@@ -88,6 +89,15 @@ def _request(*, has_perms: bool):
     return request
 
 
+@pytest.mark.django_db()
+def test_generic_permissions_do_not_treat_a_chat_channel_as_a_machine_token():
+    """A ChatOAuthAuthentication channel is not an OAuth client credential on generic API views."""
+    channel = ExperimentChannelFactory.create()
+    request = Mock(auth=channel)
+
+    assert is_client_credentials_request(request) is False
+
+
 class TestRequiresTeamPermission:
     """The gate every façade write sits behind: a human credential is held to the team
     permissions its membership grants, a machine token to its OAuth scope."""
@@ -129,6 +139,7 @@ class TestRequiresTeamPermission:
         """A machine token authenticates as AnonymousUser, so there is no membership-derived
         permission to check; authorization rests on the OAuth scope and the token's pinned team."""
         request = Mock(user=AnonymousUser(), auth=machine_token)
+        request.chat_session = None
 
         assert _NeedsChange().has_permission(request, view=None) is True
 
