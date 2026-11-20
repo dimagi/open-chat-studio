@@ -194,6 +194,9 @@ of up to 1000.
   a copy kept by syncing with that filter goes stale. Consumers that need a tag-scoped copy sync
   without the filter and filter locally; `?tags=` suits one-off pulls. The other filters select on
   values that do not change.
+- **A write that commits after the settle window can be missed.** The window covers transactions
+  that commit within 60 seconds of stamping `updated_at`. A write transaction open longer than that
+  can land behind a cursor a consumer already holds, and the row is not sent until it changes again.
 
 ## Endpoints
 
