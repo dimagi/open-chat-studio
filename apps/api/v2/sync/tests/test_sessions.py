@@ -203,6 +203,22 @@ def test_machine_token_reads_only_the_chatbots_it_reaches(team, all_data):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize("allowed", [pytest.param(True, id="allowed-chatbot"), pytest.param(False, id="other-chatbot")])
+def test_machine_token_reads_sessions_on_a_version_of_an_allowed_chatbot(team, allowed):
+    chatbot = ExperimentFactory.create(team=team)
+    session = _session(team, experiment=chatbot.create_new_version(make_default=True))
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[chatbot if allowed else ExperimentFactory.create(team=team)],
+    )
+
+    assert _ids(client.get(URL)) == ([str(session.external_id)] if allowed else [])
+
+
+@pytest.mark.django_db()
 def test_invalid_cursor_is_a_400(client):
     assert client.get(URL, {"cursor": "not-a-cursor"}).status_code == 400
 

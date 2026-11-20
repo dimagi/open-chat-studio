@@ -78,6 +78,25 @@ def test_machine_token_reads_only_the_chatbots_it_reaches(team, listed, status):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("allowed", "status"),
+    [pytest.param(True, 200, id="allowed-chatbot"), pytest.param(False, 404, id="other-chatbot")],
+)
+def test_machine_token_reads_a_session_on_a_version_of_an_allowed_chatbot(team, allowed, status):
+    chatbot = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, experiment=chatbot.create_new_version(make_default=True))
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[chatbot if allowed else ExperimentFactory.create(team=team)],
+    )
+
+    assert client.get(_url(session)).status_code == status
+
+
+@pytest.mark.django_db()
 def test_queries_do_not_grow_with_the_messages(team, client):
     tag = TagFactory.create(team=team)
 
