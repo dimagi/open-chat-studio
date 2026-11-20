@@ -43,6 +43,10 @@ RETRY_STATUSES = frozenset({429, 503})
 # Google answers an invalid API key with a 400, not a 401, and names this reason in the error's details.
 INVALID_KEY_REASON = "API_KEY_INVALID"
 
+# Google rejects control characters and any space but an ASCII one inside an option name, or a space at either end.
+_OPTION_CHARACTER = r"[^\s\x00-\x1f\x7f-\x9f]"
+OPTION_NAME_PATTERN = rf"{_OPTION_CHARACTER}(?:(?:{_OPTION_CHARACTER}| )*{_OPTION_CHARACTER})?"
+
 GOOGLE_DECISION_LIMITS = DecisionLimits(
     max_options=255,
     min_levels=2,
@@ -51,6 +55,7 @@ GOOGLE_DECISION_LIMITS = DecisionLimits(
     min_options=2,
     key_pattern=r"[A-Za-z0-9_-]{1,64}",
     max_option_length=128,
+    option_pattern=OPTION_NAME_PATTERN,
     requires_instructions=True,
 )
 

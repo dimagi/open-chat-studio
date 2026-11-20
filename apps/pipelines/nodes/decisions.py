@@ -203,6 +203,12 @@ def check_option_limits(names: Sequence[str], limits: DecisionLimits, subject: s
     if longest is not None and any(len(name) > longest for name in names):
         message = "{subject} needs {noun} of at most {max} characters"
         raise PydanticCustomError("invalid_decision", message, context | {"max": longest})
+    if rejected := next((name for name in names if not limits.accepts_option(name)), None):
+        message = (
+            "{subject} has a name this model does not accept, {name}: {noun} cannot hold control characters, "
+            "spaces other than plain ones, or a space at either end"
+        )
+        raise PydanticCustomError("invalid_decision", message, context | {"name": repr(rejected)})
 
 
 def decision_limits(llm_provider_id: int, require_backend: bool = False) -> DecisionLimits | None:

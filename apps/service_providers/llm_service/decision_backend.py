@@ -118,10 +118,15 @@ class DecisionLimits:
     # A regular expression every question key must match in full.
     key_pattern: str | None = None
     max_option_length: int | None = None
+    # A regular expression every option name must match in full.
+    option_pattern: str | None = None
     requires_instructions: bool = False
 
     def accepts_key(self, key: str) -> bool:
         return self.key_pattern is None or re.fullmatch(self.key_pattern, key) is not None
+
+    def accepts_option(self, name: str) -> bool:
+        return self.option_pattern is None or re.fullmatch(self.option_pattern, name) is not None
 
 
 class DecisionBackend(ABC):
