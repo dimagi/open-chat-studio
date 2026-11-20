@@ -298,7 +298,7 @@ def _disabled_web_channel_response(request) -> TemplateResponse | None:
     web_channel = ExperimentChannel.objects.filter(team=request.team, platform=ChannelPlatform.WEB).first()
     if not (web_channel and web_channel.is_disabled):
         return None
-    return _channel_disabled_page(request, web_channel.disabled_message)
+    return _channel_disabled_page(request, web_channel.disabled_reply)
 
 
 def _resolve_consent_identifier(consent, form, user, team) -> tuple[str, bool]:

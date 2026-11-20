@@ -2,7 +2,12 @@ from django.db import transaction
 from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework.views import APIView
 
-from apps.api.permissions import CanTriggerBotMessage, IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission
+from apps.api.permissions import (
+    CanTriggerBotMessage,
+    IsAuthenticatedOrMachineToken,
+    ReadOnlyAPIKeyPermission,
+    TeamNotPendingDeletion,
+)
 from apps.api.serializers import OAUTH_FORBIDDEN_OR_PARTICIPANT_BLOCKED_RESPONSE, TriggerBotMessageRequest
 from apps.api.v2.serializers import TriggerBotMessageResponse
 from apps.api.views.channels import handle_trigger_bot_message
@@ -15,6 +20,7 @@ class TriggerBotMessageView(APIView):
     permission_classes = [
         IsAuthenticatedOrMachineToken,
         ReadOnlyAPIKeyPermission,
+        TeamNotPendingDeletion,
         CanTriggerBotMessage,
         TokenHasOAuthScope,
     ]

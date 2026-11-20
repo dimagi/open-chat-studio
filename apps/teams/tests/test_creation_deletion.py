@@ -1,10 +1,10 @@
 import pytest
-from django.test import override_settings
 from django.urls import reverse
 from field_audit import enable_audit
 from field_audit.models import AuditEvent
 
 from apps.teams.backends import SUPER_ADMIN_GROUP
+from apps.teams.deletion import hard_delete_team
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
@@ -74,15 +74,12 @@ def test_group_owner_assignment_on_team_creation(client):
 
 
 @pytest.mark.django_db()
-@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-def test_delete_team(client):
+def test_delete_team():
     with enable_audit():
         # Create team within the enable_audit context so creation events are captured
         team_with_users = TeamWithUsersFactory.create()
 
-        client.force_login(team_with_users.members.first())
-        response = client.post(reverse("single_team:delete_team", args=[team_with_users.slug]))
-        assert response.status_code == 302
+        hard_delete_team(team_with_users)
         assert not Team.objects.filter(slug=team_with_users.slug).exists()
 
         audit_events = AuditEvent.objects.by_model(Team).filter(object_pk=team_with_users.id).order_by("event_date")

@@ -5,6 +5,7 @@ import pytest
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
+from django.urls import resolve, reverse
 from django.utils import timezone
 from rest_framework.request import Request, clone_request
 
@@ -15,6 +16,7 @@ from apps.api.permissions import (
     ApiKeyAuthentication,
     ReadOnlyAPIKeyPermission,
     RequiresTeamPermission,
+    TeamNotPendingDeletion,
 )
 from apps.api.v2.discovery.views import (
     ChatbotOptionsView,
@@ -75,6 +77,18 @@ def test_api_key_views_keep_the_read_only_gate(view):
     """Overriding ``permission_classes`` replaces the project defaults, which is how the read-only
     API-key gate (ADR-0021) gets dropped. Every API-key view must still carry it."""
     assert ReadOnlyAPIKeyPermission in view.permission_classes
+
+
+@pytest.mark.parametrize("view", API_KEY_VIEWS, ids=lambda view: view.__name__)
+def test_api_key_views_refuse_teams_pending_deletion(view):
+    """A view that sets its own ``permission_classes`` must still refuse a team scheduled for deletion."""
+    assert TeamNotPendingDeletion in view.permission_classes
+
+
+def test_export_views_serve_teams_pending_deletion():
+    """The export API is how a pending team is migrated off the server, so it must not refuse one."""
+    export_view = resolve(reverse("api:export:team")).func.view_class
+    assert TeamNotPendingDeletion not in export_view.permission_classes
 
 
 class _NeedsChange(RequiresTeamPermission):
