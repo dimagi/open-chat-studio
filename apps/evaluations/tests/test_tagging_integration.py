@@ -217,10 +217,15 @@ class TestApplyRulesToResult:
         assert AppliedTag.objects.filter(rule=rule, evaluation_result=result).count() == 1
 
     @pytest.mark.parametrize("mode", ["message", "session"])
-    def test_tagging_moves_the_tagged_row_updated_at(self, team, message_evaluator, session_evaluator, mode):
+    @pytest.mark.parametrize(
+        "already_tagged", [pytest.param(False, id="new_tag"), pytest.param(True, id="tag_already_present")]
+    )
+    def test_tagging_moves_the_tagged_row_updated_at_only_when_a_tag_is_added(
+        self, team, message_evaluator, session_evaluator, mode, already_tagged
+    ):
         """The v2 sync API pages by updated_at, and these tags are bulk-created without save signals."""
         evaluator = message_evaluator if mode == "message" else session_evaluator
-        EvaluatorTagRuleFactory.create(
+        rule = EvaluatorTagRuleFactory.create(
             team=team,
             evaluator=evaluator,
             field_name="sentiment",
@@ -230,17 +235,21 @@ class TestApplyRulesToResult:
         past = timezone.now() - timedelta(days=1)
         if mode == "message":
             message = EvaluationMessageFactory.create(create_chat_messages=True)
-            model, pk = ChatMessage, message.expected_output_chat_message.pk
+            target = message.expected_output_chat_message
+            model, pk = ChatMessage, target.pk
         else:
             session = ExperimentSessionFactory.create(team=team)
             message = EvaluationMessageFactory.create(session=session)
+            target = session.chat
             model, pk = ExperimentSession, session.pk
+        if already_tagged:
+            target.add_tag(rule.tag, team=team)
         model.objects.filter(pk=pk).update(updated_at=past)
         result = self._build_result(team, evaluator, message, {"result": {"sentiment": "negative"}})
 
         apply_rules_to_result(result, evaluator, message)
 
-        assert model.objects.get(pk=pk).updated_at > past
+        assert (model.objects.get(pk=pk).updated_at > past) is not already_tagged
 
     def test_concurrent_evaluators_both_land(self, team):
         evaluator_a = EvaluatorFactory.create(team=team, evaluation_mode=EvaluationMode.MESSAGE)
