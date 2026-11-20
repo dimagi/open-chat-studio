@@ -6,7 +6,7 @@ status: active
 
 > Design doc for `GET /api/v2/sessions/`, `GET /api/v2/sessions/{id}/` and `GET /api/v2/messages/`:
 > read endpoints for consumers (data warehouse, BI tool, CRM) that sync session and message data
-> incrementally instead of re-reading everything on each pull. From #3904.
+> incrementally instead of re-reading everything on each pull.
 
 ## TL;DR
 
@@ -50,7 +50,7 @@ resurfaces.
 | D4: writes to returned fields move `updated_at` | partial saves and tags |
 | D5: one scope, `sessions:read`; message reads also need message permission | already declared |
 | D6: filters applied directly in `get_queryset()` | not through `ExperimentSessionFilter` |
-| D7: `/messages/` takes `participant` | answers the open question on the issue |
+| D7: `/messages/` takes `participant` | one participant's messages without listing their sessions |
 | D8: sessions and participants keep their existing IDs | extends [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) |
 | D9: `metadata` on messages | matches v1 |
 | D10: attachments and tags batch-loaded per page | no per-row queries |
@@ -66,8 +66,8 @@ is refused with a 400, since rows of the new selection may lie before it.
 
 **Context.** DRF's `CursorPagination` positions on the first ordering field plus an offset, so many
 rows sharing an `updated_at` page by offset, and its last page has `next: null`. A sync consumer that
-has caught up then holds no pointer to resume from. The issue's `next_since` timestamp is not a safe
-substitute: resuming from a bare timestamp either repeats or drops rows that share it.
+has caught up then holds no pointer to resume from. A `next_since` timestamp in its place is not a
+safe substitute: resuming from a bare timestamp either repeats or drops rows that share it.
 
 **Consequences.** A consumer stores one opaque cursor and passes it on every pull, forever. `has_more`
 tells it whether to keep paging now or wait for the next cycle. No `count` field: counting a whole
@@ -114,8 +114,8 @@ never receive.
 
 **Alternatives considered.** The mixin on `BaseModel`, for every model: rejected for this work, it
 changes write behaviour across the whole codebase. Fixing each call site: rejected, the next partial
-save would miss it again. Leave tags out of the
-response: rejected, tags are in the issue's field list and a common sync filter.
+save would miss it again. Leave tags out of the response: rejected, consumers need each row's tags,
+and tags are a common sync filter.
 
 ### D5: One scope, `sessions:read`
 
@@ -144,8 +144,8 @@ to an internal widget's format for less code saved than it costs.
 
 **Decision.** `participant` (`public_id`) filters messages as it does sessions.
 
-**Context.** The issue asks how to read one participant's messages without first finding their
-sessions.
+**Context.** Without it, a consumer that keeps one participant's messages has to list that
+participant's sessions first, then page the messages of each session.
 
 **Alternatives considered.** A separate `participant_identifier` string lookup: rejected, `participant`
 covers the case with one parameter.
@@ -167,7 +167,8 @@ authenticated and team-scoped.
 **Decision.** `metadata` is a message field, minus the keys v1 strips as internal
 (`ChatMessageMetadataKeys.internal_keys()`).
 
-**Context.** v1's `MessageSerializer` exposes it; `compression_marker` lives there (#4012).
+**Context.** v1's `MessageSerializer` exposes it. It carries `compression_marker`, which marks a
+message where a pipeline compressed the chat history.
 
 ### D10: Attachments and tags batch-loaded per page
 
