@@ -231,7 +231,8 @@ def _read_score(decision: Decision, response: DecisionResponse) -> Answer:
     score = response.score(decision.key)
     if score is None:
         return None, None
-    return score.score, score.confidence
+    on_the_rubric = 0 <= score.score <= len(decision.levels) - 1
+    return (score.score if on_the_rubric else None), score.confidence
 
 
 def _read_noul(decision: Decision, response: DecisionResponse) -> Answer:
