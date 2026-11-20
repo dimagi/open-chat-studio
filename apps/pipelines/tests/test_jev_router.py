@@ -5,6 +5,7 @@ import time
 from unittest import mock
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.chat.exceptions import ProviderConfigurationError
@@ -23,6 +24,7 @@ from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceAnswer,
     DecisionBackend,
+    DecisionError,
     DecisionResponse,
     DecisionUsage,
 )
@@ -45,6 +47,35 @@ class _FakeBackend(DecisionBackend):
 
     def request_text(self, input, questions):
         return "fake request"
+
+
+class _RecordingBackend(_FakeBackend):
+    """Logs its request into `events`, which a `_Recorder` shares, so a test can see where the request falls."""
+
+    def __init__(self, events: list[str], error: DecisionError | None = None):
+        super().__init__(ChoiceAnswer("SUPPORT", 0.9, {}))
+        self.events = events
+        self.error = error
+
+    def ask(self, model, input, questions):
+        self.events.append("ask")
+        if self.error:
+            raise self.error
+        return super().ask(model, input, questions)
+
+
+class _Recorder(BaseCallbackHandler):
+    def __init__(self, events: list[str]):
+        self.events = events
+
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        self.events.append("start")
+
+    def on_llm_end(self, response, **kwargs):
+        self.events.append("end")
+
+    def on_llm_error(self, error, **kwargs):
+        self.events.append(f"error: {error}")
 
 
 def _answer(choice="billing", confidence=0.9):
@@ -280,6 +311,24 @@ class TestUsage:
 
         events = {(e.provider_type, e.model_name, e.service_kind): e.quantity for e in collector.iter_cost_events()}
         assert events == {("fake-decisions", "jev-latest", ServiceKind.LLM_INPUT): 30}
+
+    @pytest.mark.parametrize(
+        ("error", "expected_route", "expected_events"),
+        [
+            pytest.param(None, ("SUPPORT", False), ["start", "ask", "end"], id="answered"),
+            pytest.param(DecisionError("boom"), ("BILLING", True), ["start", "ask", "error: boom"], id="failed"),
+        ],
+    )
+    def test_the_call_is_reported_from_before_the_request(
+        self, jev_ids, session, error, expected_route, expected_events
+    ):
+        events = []
+        router = _router(jev_ids, session)
+
+        with mock.patch.object(RouterNode, "get_decision_backend", return_value=_RecordingBackend(events, error)):
+            assert _route(router, session, config={"callbacks": [_Recorder(events)]}) == expected_route
+
+        assert events == expected_events
 
     def test_a_failed_call_records_nothing(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, status_code=500, json={"detail": "boom"})
