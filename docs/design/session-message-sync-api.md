@@ -61,8 +61,8 @@ resurfaces.
 `updated_at > t OR (updated_at = t AND id > i)`. The response always carries `cursor` (the last
 row's keyset, or the request's cursor when the page is empty) and `has_more`. The cursor helper and
 keyset filter move out of `apps/api/export/views.py` into a shared module used by both APIs. A cursor
-is bound to the filters and the caller's reach that produced it; sent with a different selection it
-is refused with a 400, since rows of the new selection may lie before it.
+is bound to the team, the filters and the caller's reach that produced it; sent with a different
+selection it is refused with a 400, since rows of the new selection may lie before it.
 
 **Context.** DRF's `CursorPagination` positions on the first ordering field plus an offset, so many
 rows sharing an `updated_at` page by offset, and its last page has `next: null`. A sync consumer that
