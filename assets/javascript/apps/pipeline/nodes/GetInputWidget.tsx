@@ -160,6 +160,7 @@ export type InputWidgetParams = {
 const nodeTypeToInputParamsMap: Record<string, string[]> = {
   "RouterNode": ["llm_model", "history_type", "prompt_mode", "custom_context", "prompt"],
   "StaticRouterNode": ["data_source", "route_key"],
+  "DecisionNode": ["decisions"],
   "ExtractParticipantData": ["llm_model", "history_type", "data_schema"],
   "ExtractStructuredData": ["llm_model", "history_type", "data_schema"],
   "LLMResponseWithPrompt": ["llm_model", "history_type", "prompt"],

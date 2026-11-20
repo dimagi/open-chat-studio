@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from django_cryptography.fields import encrypt
 from elevenlabs.client import ElevenLabs as ElevenLabsClient
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditingManager, AuditingQuerySet
 from pydantic import ValidationError
 
 from apps.channels.models import ChannelPlatform
@@ -53,7 +53,15 @@ class VoiceProviderObjectManager(AuditingManager):
     pass
 
 
-class LlmProviderObjectManagerObjectManager(AuditingManager):
+class LlmProviderQuerySet(AuditingQuerySet):
+    def text_generating(self) -> "LlmProviderQuerySet":
+        """The providers that can write text, leaving out those whose models only make decisions."""
+        from apps.service_providers.llm_service.default_models import DECISION_ONLY_TYPES  # noqa: PLC0415 - circular
+
+        return self.exclude(type__in=DECISION_ONLY_TYPES)
+
+
+class LlmProviderObjectManagerObjectManager(AuditingManager.from_queryset(LlmProviderQuerySet)):
     pass
 
 
@@ -93,6 +101,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
+    jev = "jev", _("TypeSafe Jev")
 
     def __str__(self):
         return str(self.value)
@@ -115,11 +124,12 @@ class LlmProviderTypes(LlmProviderType, Enum):
     def supports_connection_test(self) -> bool:
         """Whether this type has a chat endpoint a credential check could reach.
 
-        Voyage AI is embeddings-only, so there is no request to send, nothing the user could
-        do to make it testable, and no verification state worth keeping for it. Lives on the
-        type rather than the row because the create page has a type and no row yet.
+        Voyage AI is embeddings-only and Jev only classifies, so neither has a chat request
+        to send, nothing the user could do to make it testable, and no verification state
+        worth keeping for it. Lives on the type rather than the row because the create page
+        has a type and no row yet.
         """
-        return self != LlmProviderTypes.voyage
+        return self not in (LlmProviderTypes.voyage, LlmProviderTypes.jev)
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -149,6 +159,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.GoogleVertexAIConfigForm
             case LlmProviderTypes.voyage:
                 return forms.VoyageAIConfigForm
+            case LlmProviderTypes.jev:
+                return forms.JevConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_llm_service(self, config: dict) -> "llm_service.LlmService":
@@ -190,6 +202,8 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.GoogleVertexAILlmService(**config)
             case LlmProviderTypes.voyage:
                 return llm_service.VoyageAILlmService(**config)
+            case LlmProviderTypes.jev:
+                return llm_service.JevLlmService(**config)
         return None
 
 
@@ -405,7 +419,15 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         self.extra_data = extra_data
 
 
-class LlmProviderModelManager(models.Manager):
+class LlmProviderModelQuerySet(models.QuerySet):
+    def chat(self) -> "LlmProviderModelQuerySet":
+        """The models that write text, leaving out those that only make decisions."""
+        from apps.service_providers.llm_service.default_models import chat_models_q  # noqa: PLC0415 - circular
+
+        return self.filter(chat_models_q())
+
+
+class LlmProviderModelManager(models.Manager.from_queryset(LlmProviderModelQuerySet)):
     def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
         try:
             return self.for_team(team).get(name=name, type=type, max_token_limit=max_token_limit), False
@@ -448,6 +470,19 @@ class LlmProviderModel(BaseTeamModel):
     @property
     def display_name(self):
         return f"{self.name} (Deprecated)" if self.deprecated else self.name
+
+    @property
+    def supports_chat(self) -> bool:
+        return self._uses()[0]
+
+    @property
+    def supports_decisions(self) -> bool:
+        return self._uses()[1]
+
+    def _uses(self) -> tuple[bool, bool]:
+        from apps.service_providers.llm_service.default_models import model_uses  # noqa: PLC0415 - circular
+
+        return model_uses(self.type, self.name)
 
     objects = LlmProviderModelManager()
 
