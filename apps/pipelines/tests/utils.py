@@ -257,6 +257,27 @@ def decision_node(provider_ids: dict, decisions: list[dict], name: str | None = 
     )
 
 
+def decision_routing_runnable(provider_ids: dict, decisions: list[dict], route_key: str, keywords: list[str]):
+    """A Decision Node, then a Static Router on `route_key` in the temporary state.
+
+    Each route renders "<Keyword>: <input>". The first keyword is the default route.
+    """
+    start = start_node()
+    decide = decision_node(provider_ids, decisions)
+    router = state_key_router_node(route_key, keywords, data_source=nodes.StaticRouterNode.DataSource.temp_state)
+    routes = [render_template_node(f"{keyword.capitalize()}: {{{{ input }}}}") for keyword in keywords]
+    end = end_node()
+    edges = [
+        {"id": "start -> decide", "source": start["id"], "target": decide["id"]},
+        {"id": "decide -> router", "source": decide["id"], "target": router["id"]},
+    ]
+    for index, route in enumerate(routes):
+        to_route = {"id": f"router -> {index}", "source": router["id"], "target": route["id"]}
+        edges.append({**to_route, "sourceHandle": f"output_{index}"})
+        edges.append({"id": f"{index} -> end", "source": route["id"], "target": end["id"]})
+    return create_runnable(PipelineFactory.create(), [start, decide, router, *routes, end], edges)
+
+
 def extract_participant_data_node(
     provider_id: str, provider_model_id: str, data_schema: str, key_name: str, name: str | None = None
 ):

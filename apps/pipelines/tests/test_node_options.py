@@ -143,10 +143,17 @@ def test_get_node_default_values_skips_a_decision_only_provider():
     assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
 
 
-def test_a_decision_only_model_is_marked_for_the_builder(team):
+@pytest.mark.parametrize(
+    ("provider_type", "model_name"),
+    [
+        pytest.param("jev", "jev-latest", id="decision-only-type"),
+        pytest.param("google", "gemini-decision-1", id="decision-model-of-a-chat-type"),
+    ],
+)
+def test_a_decision_only_model_is_marked_for_the_builder(team, provider_type, model_name):
     """The builder offers a model marked `chat: false` and `decisions: true` only to the nodes that can call it."""
     chat_model = LlmProviderModelFactory.create(team=team, type="openai")
-    decision_model = LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
+    decision_model = LlmProviderModelFactory.create(team=team, type=provider_type, name=model_name)
 
     values = get_node_parameter_values(team=team, synthetic_voices=[])
     options = {option["value"]: option for option in values["llm_provider_model_id"]}

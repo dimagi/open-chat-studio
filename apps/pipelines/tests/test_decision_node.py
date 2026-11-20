@@ -12,16 +12,9 @@ from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.pipelines.exceptions import NodeUserConfigRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
-from apps.pipelines.nodes.nodes import DecisionNode, StaticRouterNode
+from apps.pipelines.nodes.nodes import DecisionNode
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
-from apps.pipelines.tests.utils import (
-    create_runnable,
-    decision_node,
-    end_node,
-    render_template_node,
-    start_node,
-    state_key_router_node,
-)
+from apps.pipelines.tests.utils import decision_routing_runnable
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceAnswer,
     DecisionBackend,
@@ -34,7 +27,6 @@ from apps.service_providers.llm_service.decision_backend import (
 from apps.service_providers.llm_service.default_models import MODELS_BY_KEY, Model
 from apps.service_providers.llm_service.jev import JevBackend
 from apps.service_providers.tracing.metrics import MetricsCollector
-from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 URL = "https://api.typesafe.ai/v1/systemone"
@@ -104,6 +96,11 @@ class TestValidation:
             pytest.param([REFUND, {**FRUSTRATION, "key": "wants_refund"}], "writes to .wants_refund.", id="same-key"),
             pytest.param(
                 [INTENT, {**REFUND, "key": "intent_confidence"}], "where intent writes its confidence", id="confidence"
+            ),
+            pytest.param(
+                [REFUND, {**INTENT, "key": "wants_refund_confidence"}],
+                "where wants_refund writes its confidence",
+                id="yes-no-confidence",
             ),
             pytest.param([{**INTENT, "options": []}], "needs at least one option", id="choice-without-options"),
             pytest.param(
@@ -418,21 +415,7 @@ class TestUsage:
 )
 def test_a_static_router_routes_on_the_decision(httpx_mock, jev_ids, session, intent, expected):
     httpx_mock.add_response(url=URL, json=_answers(intent=intent))
-    start = start_node()
-    decide = decision_node(jev_ids, [INTENT])
-    router = state_key_router_node("intent", ["billing", "support"], data_source=StaticRouterNode.DataSource.temp_state)
-    billing = render_template_node("Billing: {{ input }}")
-    support = render_template_node("Support: {{ input }}")
-    end = end_node()
-    edges = [
-        {"id": "start -> decide", "source": start["id"], "target": decide["id"]},
-        {"id": "decide -> router", "source": decide["id"], "target": router["id"]},
-        {"id": "router -> billing", "source": router["id"], "target": billing["id"], "sourceHandle": "output_0"},
-        {"id": "router -> support", "source": router["id"], "target": support["id"], "sourceHandle": "output_1"},
-        {"id": "billing -> end", "source": billing["id"], "target": end["id"]},
-        {"id": "support -> end", "source": support["id"], "target": end["id"]},
-    ]
-    runnable = create_runnable(PipelineFactory.create(), [start, decide, router, billing, support, end], edges)
+    runnable = decision_routing_runnable(jev_ids, [INTENT], "intent", ["billing", "support"])
 
     output = runnable.invoke(
         PipelineState(messages=["I was charged twice"], experiment_session=session),
