@@ -17,6 +17,8 @@ from apps.api.v2.discovery.node_types import (
 from apps.api.v2.discovery.options import _clean_options
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
 from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE
+from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -462,6 +464,28 @@ def test_options_can_be_scoped_to_one_node_type(team_with_resources):
     scoped = client.get(reverse("api:v2:pipeline-node-options", args=["RenderTemplate"])).json()
 
     assert set(scoped) == {"template_variables"}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("node_type", "expected_type"),
+    [
+        pytest.param("DecisionNode", "jev", id="decision-node"),
+        pytest.param("LLMResponseWithPrompt", "openai", id="chat-node"),
+    ],
+)
+def test_a_node_types_default_provider_is_one_it_accepts(team, node_type, expected_type):
+    """A team with a chat and a decision provider gets the pair each node type can call."""
+    LlmProviderFactory.create(team=team, type="openai")
+    LlmProviderModelFactory.create(team=team, type="openai")
+    LlmProviderFactory.create(team=team, type="jev")
+    LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
+    client = ApiTestClient(team.members.first(), team)
+
+    default = client.get(reverse("api:v2:pipeline-node-options", args=[node_type])).json()["default_llm_provider"]
+
+    assert LlmProvider.objects.get(id=default["llm_provider_id"]).type == expected_type
+    assert LlmProviderModel.objects.get(id=default["llm_provider_model_id"]).type == expected_type
 
 
 @pytest.mark.django_db()
