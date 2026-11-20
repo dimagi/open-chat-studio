@@ -15,6 +15,7 @@ from apps.service_providers.llm_service.decision_backend import (
     YesNoAnswer,
 )
 from apps.service_providers.llm_service.jev import (
+    JEV_LIMITS,
     MAX_NESTING,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -394,3 +395,56 @@ class TestJevBackend:
                 "route": {"type": "choice", "instructions": "Pick.", "criteria": NEUTRAL_QUESTIONS["route"].options}
             },
         }
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        pytest.param(
+            decision_backend.ScoreQuestion(levels=["Calm", "Angry"], instructions="How frustrated?"),
+            {"type": "score", "instructions": "How frustrated?", "criteria": ["Calm", "Angry"]},
+            id="score",
+        ),
+        pytest.param(
+            decision_backend.YesNoQuestion(instructions="Wants a refund.", true_description="Asks"),
+            {"type": "noul", "instructions": "Wants a refund.", "criteria": {"true": "Asks", "false": None}},
+            id="yes-no",
+        ),
+        pytest.param(
+            decision_backend.YesNoQuestion(instructions="Wants a refund."),
+            {"type": "noul", "instructions": "Wants a refund.", "criteria": None},
+            id="yes-no-without-descriptions",
+        ),
+    ],
+)
+def test_the_backend_turns_score_and_yes_no_questions_into_jev_questions(question, expected):
+    request = JevBackend(JevClient(api_key="k")).request_text({}, {"q": question})
+
+    assert json.loads(request)["questions"] == {"q": expected}
+
+
+def test_the_backend_reads_each_answer_by_its_questions_type(httpx_mock):
+    answers = {
+        "frustration": {"type": "score", "score": 1.0, "confidence": 0.6, "probabilities": {"0": 0.4, "1": 0.6}},
+        "refund": {"type": "noul", "noul": 0.25},
+        "route": {"type": "noul", "noul": 0.5},
+    }
+    httpx_mock.add_response(url=URL, json={**ANSWER, "answers": answers})
+    questions = {
+        "frustration": decision_backend.ScoreQuestion(levels=["Calm", "Angry"]),
+        "refund": decision_backend.YesNoQuestion(instructions="Wants a refund."),
+        "route": NEUTRAL_QUESTIONS["route"],
+    }
+
+    response = JevBackend(JevClient(api_key="k")).ask("jev-latest", {}, questions)
+
+    assert response.answers == {
+        "frustration": ScoreAnswer(1.0, 0.6, {"0": 0.4, "1": 0.6}),
+        "refund": YesNoAnswer(0.25),
+    }
+
+
+def test_the_backend_carries_jevs_request_limits():
+    assert JevBackend.limits == JEV_LIMITS
+    assert (JEV_LIMITS.max_options, JEV_LIMITS.min_levels, JEV_LIMITS.max_levels) == (255, 1, 10)
+    assert JEV_LIMITS.max_questions is None

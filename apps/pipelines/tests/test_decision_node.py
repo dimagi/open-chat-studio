@@ -2,16 +2,18 @@
 
 import json
 import time
+from unittest import mock
 
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.chat.exceptions import ProviderConfigurationError
 from apps.cost_tracking.models import Confidence, ServiceKind
+from apps.pipelines.exceptions import NodeUserConfigRunError
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import DecisionNode, StaticRouterNode
-from apps.pipelines.repository import ORMRepository
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tests.utils import (
     create_runnable,
     decision_node,
@@ -20,6 +22,17 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
+from apps.service_providers.llm_service.decision_backend import (
+    ChoiceAnswer,
+    DecisionBackend,
+    DecisionLimits,
+    DecisionResponse,
+    DecisionUsage,
+    ScoreAnswer,
+    YesNoAnswer,
+)
+from apps.service_providers.llm_service.default_models import MODELS_BY_KEY, Model
+from apps.service_providers.llm_service.jev import JevBackend
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -139,6 +152,108 @@ class TestValidation:
         schema = DecisionNode.model_json_schema()["properties"]["llm_provider_id"]
 
         assert schema["ui:modelUse"] == "decisions"
+
+
+class TestLimits:
+    """The limits a decision is checked against come from the backend behind the selected model."""
+
+    @pytest.fixture()
+    def small_limits(self):
+        limits = DecisionLimits(max_options=2, min_levels=2, max_levels=3, max_questions=2)
+        with mock.patch.object(JevBackend, "limits", limits):
+            yield
+
+    @pytest.mark.parametrize(
+        ("decisions", "message"),
+        [
+            pytest.param(
+                [{**INTENT, "options": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}],
+                "needs 1 to 2 options",
+                id="too-many-options",
+            ),
+            pytest.param([{**FRUSTRATION, "levels": ["Calm"]}], "needs 2 to 3 levels", id="too-few-levels"),
+            pytest.param([{**FRUSTRATION, "levels": list("abcd")}], "needs 2 to 3 levels", id="too-many-levels"),
+            pytest.param([INTENT, FRUSTRATION, REFUND], "at most 2 decisions in one call", id="too-many-decisions"),
+        ],
+    )
+    def test_rejects_what_the_backend_does_not_take(self, jev_ids, small_limits, decisions, message):
+        with pytest.raises(PydanticValidationError, match=message):
+            _node(jev_ids, decisions=decisions)
+
+    def test_accepts_what_the_backend_takes(self, jev_ids, small_limits):
+        node = _node(jev_ids, decisions=[{**INTENT, "options": [{"name": "a"}, {"name": "b"}]}, FRUSTRATION])
+
+        assert len(node.decisions) == 2
+
+    def test_a_limit_error_is_reported_against_the_decisions(self, jev_ids, small_limits):
+        with pytest.raises(PydanticValidationError) as excinfo:
+            _node(jev_ids, decisions=[{**FRUSTRATION, "levels": ["Calm"]}])
+
+        assert excinfo.value.errors()[0]["ctx"]["field"] == "decisions"
+
+    def test_limits_are_skipped_when_the_provider_cannot_be_loaded(self, jev_ids):
+        """The run reports a provider it cannot load; validation should not fail on it first."""
+        with mock.patch.object(ORMRepository, "get_llm_service", side_effect=RepositoryLookupError("gone")):
+            node = _node(jev_ids, decisions=[{**FRUSTRATION, "levels": ["x"] * 11}])
+
+        assert len(node.decisions[0].levels) == 11
+
+
+def test_accepts_a_decision_model_listed_under_a_chat_provider(db):
+    """A provider whose type also offers chat models can offer a decision model, and the node takes it."""
+    provider = LlmProviderFactory.create(type="openai")
+    model = LlmProviderModelFactory.create(team=provider.team, type="openai", name="gpt-decide")
+    decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
+
+    with mock.patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}):
+        node = _node({"llm_provider_id": provider.id, "llm_provider_model_id": model.id}, decisions=[REFUND])
+
+    assert node.llm_provider_model_id == model.id
+
+
+class _FakeBackend(DecisionBackend):
+    provider_type = "fake-decisions"
+    name = "Fake"
+    limits = DecisionLimits(max_options=10, min_levels=1, max_levels=10)
+
+    def ask(self, model, input, questions):
+        answers = {
+            "intent": ChoiceAnswer("support", 0.9, {}),
+            "frustration": ScoreAnswer(2.0, 0.8, {}),
+            "wants_refund": YesNoAnswer(0.1, confidence=0.7),
+        }
+        return DecisionResponse(model, answers, DecisionUsage(50, 0), raw_answers={})
+
+    def request_text(self, input, questions):
+        return "fake request"
+
+
+class TestBackend:
+    def test_answers_from_any_backend_are_written(self, jev_ids, session):
+        with mock.patch.object(DecisionNode, "get_decision_backend", return_value=_FakeBackend()):
+            temp_state = _run(_node(jev_ids, session), session)["temp_state"]
+
+        assert {key: temp_state[key] for key in ("intent", "frustration", "wants_refund")} == {
+            "intent": "support",
+            "frustration": 2.0,
+            "wants_refund": 0.1,
+        }
+
+    def test_usage_is_recorded_under_the_backends_provider_type(self, jev_ids, session):
+        collector = MetricsCollector(start_time=time.time())
+
+        with mock.patch.object(DecisionNode, "get_decision_backend", return_value=_FakeBackend()):
+            _run(_node(jev_ids, session), session, config={"callbacks": [collector]})
+
+        events = {(e.provider_type, e.model_name, e.service_kind): e.quantity for e in collector.iter_cost_events()}
+        assert events == {("fake-decisions", "jev-latest", ServiceKind.LLM_INPUT): 50}
+
+    def test_a_provider_without_a_decision_backend_is_a_configuration_error(self, jev_ids, session):
+        node = _node(jev_ids, session)
+
+        with mock.patch("apps.service_providers.llm_service.JevLlmService.get_decision_backend", return_value=None):
+            with pytest.raises(NodeUserConfigRunError, match="cannot answer decision questions"):
+                _run(node, session)
 
 
 class TestRequest:

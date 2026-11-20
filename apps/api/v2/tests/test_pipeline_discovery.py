@@ -395,8 +395,10 @@ def test_options_carry_no_edit_urls(team_with_resources):
 
 
 def test_clean_options_drops_the_builders_model_use_marker():
-    """The builder narrows its model picker with `chat`; the API validates the node instead."""
-    options = {"llm_provider_model_id": [{"value": 3, "label": "jev-latest", "type": "jev", "chat": False}]}
+    """The builder narrows its model picker with `chat` and `decisions`; the API validates the node instead."""
+    options = {
+        "llm_provider_model_id": [{"value": 3, "label": "jev-latest", "type": "jev", "chat": False, "decisions": True}]
+    }
 
     assert _clean_options(options) == {"llm_provider_model_id": [{"value": 3, "label": "jev-latest", "type": "jev"}]}
 

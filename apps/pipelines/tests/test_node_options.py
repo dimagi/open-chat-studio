@@ -144,7 +144,7 @@ def test_get_node_default_values_skips_a_decision_only_provider():
 
 
 def test_a_decision_only_model_is_marked_for_the_builder(team):
-    """The builder offers a model marked `chat: false` only to the nodes that can call it."""
+    """The builder offers a model marked `chat: false` and `decisions: true` only to the nodes that can call it."""
     chat_model = LlmProviderModelFactory.create(team=team, type="openai")
     decision_model = LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
 
@@ -152,7 +152,9 @@ def test_a_decision_only_model_is_marked_for_the_builder(team):
     options = {option["value"]: option for option in values["llm_provider_model_id"]}
 
     assert "chat" not in options[chat_model.id]
+    assert "decisions" not in options[chat_model.id]
     assert options[decision_model.id]["chat"] is False
+    assert options[decision_model.id]["decisions"] is True
 
 
 @pytest.mark.parametrize(
@@ -161,6 +163,7 @@ def test_a_decision_only_model_is_marked_for_the_builder(team):
         pytest.param("LLMResponseWithPrompt", "chat", id="llm-node"),
         pytest.param("ExtractStructuredData", "chat", id="extract-node"),
         pytest.param("RouterNode", "any", id="router"),
+        pytest.param("DecisionNode", "decisions", id="decision-node"),
     ],
 )
 def test_each_node_names_the_models_its_picker_offers(node_title, expected):
