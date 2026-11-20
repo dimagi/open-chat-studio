@@ -1,5 +1,8 @@
+from unittest import mock
+
 import pytest
 
+from apps.service_providers.llm_service.default_models import MODELS_BY_KEY, Model
 from apps.service_providers.utils import (
     get_dropdown_llm_model_choices,
     get_first_llm_provider_by_team,
@@ -47,3 +50,18 @@ def test_translation_models_leave_out_jev(providers):
     team, _openai, _jev = providers
 
     assert set(get_models_by_team_grouped_by_provider(team)) == {"OpenAI"}
+
+
+def test_chat_pickers_leave_out_a_decision_model_of_a_chat_provider(providers):
+    team, openai, _jev = providers
+    LlmProviderModelFactory.create(team=team, type="openai", name="gpt-decide")
+
+    decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
+    with mock.patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}):
+        offered = [model["text"] for model in get_llm_provider_choices(team)[openai.id]["models"]]
+        grouped = get_models_by_team_grouped_by_provider(team)["OpenAI"]
+
+    assert f"OpenAI: gpt-x (custom for {team.name})" in offered
+    assert not [text for text in offered if "gpt-decide" in text]
+    assert "gpt-x" in grouped
+    assert "gpt-decide" not in grouped

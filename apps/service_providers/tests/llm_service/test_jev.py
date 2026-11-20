@@ -6,11 +6,18 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from apps.service_providers.llm_service import decision_backend
+from apps.service_providers.llm_service.decision_backend import (
+    DecisionAuthenticationError,
+    DecisionError,
+    DecisionUsage,
+)
 from apps.service_providers.llm_service.jev import (
     MAX_NESTING,
     ChoiceAnswer,
     ChoiceQuestion,
     JevAuthenticationError,
+    JevBackend,
     JevClient,
     JevError,
     json_safe,
@@ -232,3 +239,77 @@ def test_json_safe_flattens_containers_past_the_nesting_limit():
     for _ in range(MAX_NESTING):
         result = result[0]
     assert isinstance(result, str)
+
+
+NEUTRAL_QUESTIONS = {
+    "route": decision_backend.ChoiceQuestion(options={"BILLING": "Payments", "SUPPORT": None}, instructions="Pick.")
+}
+
+
+def _ask_backend(state=None):
+    return JevBackend(JevClient(api_key="test-key")).ask("jev-latest", state or {"input": "hi"}, NEUTRAL_QUESTIONS)
+
+
+class TestJevBackend:
+    def test_sends_a_neutral_choice_as_a_jev_choice(self, httpx_mock):
+        httpx_mock.add_response(url=URL, json=ANSWER)
+
+        _ask_backend({"input": "hi", "score": float("nan")})
+
+        assert json.loads(httpx_mock.get_request().content) == {
+            "model": "jev-latest",
+            "state": {"input": "hi", "score": None},
+            "questions": {
+                "route": {"type": "choice", "instructions": "Pick.", "criteria": NEUTRAL_QUESTIONS["route"].options}
+            },
+        }
+
+    def test_returns_neutral_answers_and_usage(self, httpx_mock):
+        httpx_mock.add_response(url=URL, json=ANSWER)
+
+        response = _ask_backend()
+
+        assert response.model == "jev-1.14.0"
+        assert response.choice("route") == ChoiceAnswer("BILLING", 0.82, {"BILLING": 0.9, "SUPPORT": 0.1})
+        assert response.usage == DecisionUsage(120, 12)
+        assert response.raw_answers == ANSWER["answers"]
+
+    def test_a_malformed_answer_is_left_out(self, httpx_mock):
+        httpx_mock.add_response(url=URL, json={**ANSWER, "answers": {"route": {"type": "choice", "choice": "X"}}})
+
+        assert _ask_backend().answers == {}
+
+    @pytest.mark.parametrize(
+        ("status_code", "expected"),
+        [
+            pytest.param(401, DecisionAuthenticationError, id="unauthorized"),
+            pytest.param(403, DecisionAuthenticationError, id="forbidden"),
+            pytest.param(422, DecisionError, id="invalid"),
+            pytest.param(500, DecisionError, id="server-error"),
+        ],
+    )
+    def test_jev_errors_become_decision_errors(self, httpx_mock, status_code, expected):
+        httpx_mock.add_response(url=URL, status_code=status_code, json={"detail": "nope"})
+
+        with pytest.raises(DecisionError) as excinfo:
+            _ask_backend()
+
+        assert type(excinfo.value) is expected
+        assert excinfo.value.status_code == status_code
+        assert f"Jev returned {status_code}: nope" in str(excinfo.value)
+
+    def test_a_network_failure_is_a_decision_error(self, httpx_mock):
+        httpx_mock.add_exception(httpx.ReadTimeout("timed out"), url=URL)
+
+        with pytest.raises(DecisionError, match="Could not reach Jev"):
+            _ask_backend()
+
+    def test_the_request_text_is_the_jev_request(self):
+        text = JevBackend(JevClient(api_key="k")).request_text({"x": float("inf")}, NEUTRAL_QUESTIONS)
+
+        assert json.loads(text) == {
+            "state": {"x": None},
+            "questions": {
+                "route": {"type": "choice", "instructions": "Pick.", "criteria": NEUTRAL_QUESTIONS["route"].options}
+            },
+        }

@@ -143,6 +143,32 @@ def test_get_node_default_values_skips_a_decision_only_provider():
     assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
 
 
+def test_a_decision_only_model_is_marked_for_the_builder(team):
+    """The builder offers a model marked `chat: false` only to the nodes that can call it."""
+    chat_model = LlmProviderModelFactory.create(team=team, type="openai")
+    decision_model = LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
+
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
+    options = {option["value"]: option for option in values["llm_provider_model_id"]}
+
+    assert "chat" not in options[chat_model.id]
+    assert options[decision_model.id]["chat"] is False
+
+
+@pytest.mark.parametrize(
+    ("node_title", "expected"),
+    [
+        pytest.param("LLMResponseWithPrompt", "chat", id="llm-node"),
+        pytest.param("ExtractStructuredData", "chat", id="extract-node"),
+        pytest.param("RouterNode", "any", id="router"),
+    ],
+)
+def test_each_node_names_the_models_its_picker_offers(node_title, expected):
+    schema = next(schema for schema in get_node_schemas() if schema["title"] == node_title)
+
+    assert schema["properties"]["llm_provider_id"]["ui:modelUse"] == expected
+
+
 @pytest.mark.django_db()
 def test_the_builder_keeps_the_models_a_node_may_already_point_at(team):
     """The builder offers every model the team can see so a node pointing at a deprecated one, or at
