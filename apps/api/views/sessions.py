@@ -19,6 +19,7 @@ from apps.api.serializers import (
 from apps.chat.models import ChatMessage
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.experiments.services import delete_tagged_items
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.trace.models import Trace
 
@@ -171,7 +172,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         session = super().get_object()
         if self.action == "retrieve":
             chat = session.chat
-            ChatMessage.prefetch_attached_files(chat=chat, messages=chat._prefetched_messages)
+            ChatMessage.prefetch_attached_files(chat._prefetched_messages)
         return session
 
     def get_queryset(self):
@@ -341,9 +342,12 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
             # Remove tagged items explicitly to avoid any potential issues with taggit's remove()
             content_type = ContentType.objects.get_for_model(session.chat)
-            CustomTaggedItem.objects.filter(
-                content_type=content_type, object_id=session.chat.id, tag__in=tags_to_remove
-            ).delete()
+            delete_tagged_items(
+                content_type.id,
+                CustomTaggedItem.objects.filter(
+                    content_type=content_type, object_id=session.chat.id, tag__in=tags_to_remove
+                ),
+            )
 
         # Return updated tag list
         updated_tags = list(session.chat.tags.values_list("name", flat=True))

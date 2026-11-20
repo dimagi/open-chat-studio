@@ -133,7 +133,7 @@ class TeamSerializer(serializers.ModelSerializer):
 
 
 class FileSerializer(serializers.ModelSerializer):
-    size = serializers.IntegerField(source="content_size")
+    size = serializers.IntegerField(source="content_size", allow_null=True)
     content_url = ApiUrlField(
         openapi_example="https://example.com/api/files/42/content",
         view_name="api:file-content",
