@@ -1,4 +1,5 @@
 import json
+import re
 from decimal import Decimal
 from unittest import mock
 
@@ -6,6 +7,8 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from apps.service_providers.exceptions import ServiceProviderConfigError
+from apps.service_providers.forms import JevConfigForm
 from apps.service_providers.llm_service import decision_backend
 from apps.service_providers.llm_service.decision_backend import (
     DecisionAuthenticationError,
@@ -13,6 +16,7 @@ from apps.service_providers.llm_service.decision_backend import (
     DecisionUsage,
 )
 from apps.service_providers.llm_service.jev import (
+    JEV_ROUTER_ONLY_MESSAGE,
     MAX_NESTING,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -22,6 +26,7 @@ from apps.service_providers.llm_service.jev import (
     JevError,
     json_safe,
 )
+from apps.service_providers.models import LlmProviderTypes
 
 URL = "https://api.typesafe.ai/v1/systemone"
 
@@ -315,3 +320,14 @@ class TestJevBackend:
                 "route": {"type": "choice", "instructions": "Pick.", "criteria": NEUTRAL_QUESTIONS["route"].options}
             },
         }
+
+
+def test_the_jev_service_cannot_attach_built_in_tools():
+    service = LlmProviderTypes.jev.get_llm_service({"jev_api_key": "test-key"})
+
+    with pytest.raises(ServiceProviderConfigError, match=re.escape(JEV_ROUTER_ONLY_MESSAGE)):
+        service.attach_built_in_tools(["web-search"])
+
+
+def test_the_jev_provider_type_is_configured_with_the_jev_form():
+    assert LlmProviderTypes.jev.form_cls is JevConfigForm
