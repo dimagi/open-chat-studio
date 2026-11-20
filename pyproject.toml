@@ -44,7 +44,7 @@ dependencies = [
     "langchain-core>=1.4.8",
     "langchain-anthropic",
     "langchain-openai>=1.4.1",
-    "langchain_google_genai",
+    "langchain-google-genai>=4.4.3",  # 4.x adds the Vertex AI backend (vertexai=True); error mapping tested on 4.4.3
     "langchain-voyageai",
     "voyageai==0.5.0",
     "langfuse>=4.14.1",
@@ -94,7 +94,6 @@ dependencies = [
     "django-oauth-toolkit>=3.2.0,<4.0.0",
     "oauthlib>=3.3.1",
     "langchain-classic>=1.0.7",
-    "langchain-google-vertexai",
     "python-json-logger>=3.2.1",
     "chardet",
     "dictdiffer>=0.9.0",
@@ -141,10 +140,6 @@ filterwarnings = [
     "ignore:Couldn't find ffmpeg or avconv:RuntimeWarning",  # pydub, no ffmpeg on the CI runner
     "ignore::SyntaxWarning:RestrictedPython.compile",  # code nodes whose restricted source prints
     "ignore:CheckConstraint.check is deprecated:django.utils.deprecation.RemovedInDjango60Warning",
-    # ChatVertexAI is deprecated in favour of langchain-google-genai's ChatGoogleGenerativeAI, which
-    # only grew a Vertex backend in 4.x. Both warnings below come from the same class. See #4580.
-    'ignore:Use \[`ChatGoogleGenerativeAI`\]:DeprecationWarning',
-    'ignore:The class `ChatVertexAI` was deprecated:DeprecationWarning',
     "ignore:`FieldValidationInfo` is deprecated:DeprecationWarning",
     "ignore:'count' is passed as positional argument:DeprecationWarning",  # mailparser-reply
     "ignore:datetime.datetime.utcnow:DeprecationWarning",  # botocore
@@ -268,7 +263,6 @@ fixture-parentheses = true
 # These libraries are expensive to import and should be lazy-loaded inside functions.
 # See docs/agents/django_performance.md for details.
 banned-module-level-imports = [
-    "langchain_google_vertexai",
     "langchain_google_genai",
     "langchain_anthropic",
     "langchain_openai",

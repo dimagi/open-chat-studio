@@ -5,7 +5,7 @@ plain functions plus a thin loop so the transforms can be unit-tested without a 
 import contextlib
 import functools
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from django.contrib.auth.models import Group
@@ -16,6 +16,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_de
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.chat.models import ChatMessageMetadataKeys
 from apps.events.versioning import get_event_action_param_specs
 from apps.teams.models import Flag, Membership, Team
 from apps.teams.utils import set_current_team
@@ -37,8 +38,8 @@ from .manifest import MANIFEST_ENTRIES as _ENTRIES
 from .seal import unseal
 from .translation import FKTranslationStore
 
-# The team is synced via a dedicated step rather than from MANIFEST_ENTRIES, but it's still a synced
-# target -- include it so FKs pointing at it resolve to the imported team instead of being nulled.
+# The team row is synced via a dedicated step; MANIFEST_ENTRIES only carries its partial settings
+# entry. Include it so FKs pointing at it resolve to the imported team instead of being nulled.
 MANIFEST_LABELS = {entry.model for entry in _ENTRIES} | {TEAM_MODEL}
 
 SIGNALS_TO_MUTE = (pre_save, post_save, pre_delete, post_delete, m2m_changed)
@@ -141,6 +142,24 @@ def remap_event_action_params(params: dict, action_type: str, store: FKTranslati
         if value in (None, "", 0):
             continue
         result[spec.param_name] = store.get_target(spec.model_label.lower(), as_int(value)) or value
+    return result
+
+
+# A source server that hasn't run chat.0033 still sends attachment ids under these keys. The migration
+# only folds rows already in this database, so messages synced in after it need folding here.
+LEGACY_ATTACHMENT_KEYS = ("cited_files", "generated_files")
+
+
+def remap_message_attachment_ids(metadata: dict, store: FKTranslationStore) -> dict:
+    """Rewrite the file ids a chat message lists under ``ocs_attachment_file_ids``, folding in any
+    under the legacy keys. Files the sync doesn't copy have no translation and are left as-is,
+    matching ``remap_node_params``."""
+    key = ChatMessageMetadataKeys.OCS_ATTACHMENT_FILE_IDS
+    result = {name: value for name, value in metadata.items() if name not in LEGACY_ATTACHMENT_KEYS}
+    file_ids = [*metadata.get(key, []), *(i for name in LEGACY_ATTACHMENT_KEYS for i in metadata.get(name, []))]
+    if file_ids:
+        remapped = (store.get_target("files.file", as_int(file_id)) or file_id for file_id in file_ids)
+        result[key] = list(dict.fromkeys(remapped))
     return result
 
 
@@ -316,21 +335,81 @@ class Importer:
         # applied to.
         self.kept_target_edits: dict[str, set[int]] = defaultdict(set)
 
-    def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
+    def import_rows(
+        self, model_label: str, rows: Iterable[dict], fields: Sequence[str] = (), null_unresolved_fks: bool = False
+    ) -> int:
         """Import every row for one model, unsealing its secret fields first when we hold the key.
-        Returns the number of rows imported this pass (for the sync's progress report)."""
+        ``fields`` marks the rows as partial (see ``ManifestEntry.fields``). Returns the number of rows
+        imported this pass (for the sync's progress report).
+
+        A partial row is read once, after which its resource cursor moves past it, so a nullable FK
+        whose synced target isn't imported yet raises ``UnresolvedForeignKey`` for the sync to catch
+        the target up. ``null_unresolved_fks`` nulls it instead, for a target the catch-up didn't find.
+        A full row always nulls such an FK."""
         model = entry_model(model_label)
         secret_fields = SECRET_REGISTRY.get(model_label, [])
+        # The full row was recorded with the same updated_at, so a partial row keeps its own checkpoint.
+        checkpoint_label = f"{model_label}[{','.join(sorted(fields))}]" if fields else model_label
         count = 0
         for row in rows:
-            if self._is_unchanged(model_label, row):
+            if self._is_unchanged(checkpoint_label, row):
                 self.skipped_rows += 1
                 continue
-            if self.private_key and secret_fields:
-                row = unseal_secrets(row, secret_fields, self.private_key)
-            self._import_row(model_label, model, row)
+            if fields:
+                self._import_partial_row(
+                    model_label=model_label,
+                    model=model,
+                    fields=fields,
+                    checkpoint_label=checkpoint_label,
+                    row=row,
+                    null_unresolved_fks=null_unresolved_fks,
+                )
+            else:
+                if self.private_key and secret_fields:
+                    row = unseal_secrets(row, secret_fields, self.private_key)
+                self._import_row(model_label, model, row)
             count += 1
         return count
+
+    def _import_partial_row(
+        self,
+        model_label: str,
+        model: type[models.Model],
+        fields: Sequence[str],
+        checkpoint_label: str,
+        row: dict,
+        null_unresolved_fks: bool,
+    ) -> None:
+        """Update the listed fields on the row an earlier step imported."""
+        source_pk = row["id"]
+        target_pk = self.store.get_target(model_label, source_pk)
+        if target_pk is None:
+            raise UnresolvedForeignKey(
+                f"{model_label}:{source_pk} has no imported row to update", target_label=model_label
+            )
+        named = set(_NAMED_LINK_FIELDS.get(model_label, []))
+        field_values, timestamps = {}, {}
+        nulled_fk = False
+        for name in fields:
+            field = model._meta.get_field(name)
+            if self._collect_concrete_field(
+                field=field, row=row, named=named, field_values=field_values, timestamps=timestamps
+            ):
+                if not null_unresolved_fks:
+                    target_label = field.related_model._meta.label_lower
+                    raise UnresolvedForeignKey(
+                        f"{model_label}.{name} -> {target_label}:{row[name]}", target_label=target_label
+                    )
+                nulled_fk = True
+        _update_without_auto_now(model=model, pk=target_pk, values={**field_values, **timestamps})
+        # A nulled FK keeps no timestamp, so a later re-read applies the row again.
+        source_updated_at = None if nulled_fk else row.get("updated_at")
+        self.store.record(
+            content_type=checkpoint_label,
+            source_key=source_pk,
+            target_key=target_pk,
+            source_updated_at=source_updated_at,
+        )
 
     def _is_unchanged(self, model_label: str, row: dict) -> bool:
         """Whether the row is already on the target at this exact source revision, so a re-read costs
@@ -412,7 +491,7 @@ class Importer:
             self._apply_named_links(model_label, instance, row)
 
             if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
-                _bypass_auto_now_update(model, instance.pk, timestamps)
+                _update_without_auto_now(model, instance.pk, timestamps)
 
             # The store commits on its own, before Postgres does. The mapping goes in first without the
             # timestamp, so a failed Postgres commit leaves a row a rerun re-imports, not one it skips.
@@ -620,6 +699,8 @@ class Importer:
             field_values["params"] = remap_event_action_params(
                 field_values["params"], field_values.get("action_type", ""), self.store
             )
+        elif model_label == "chat.chatmessage" and field_values.get("metadata"):
+            field_values["metadata"] = remap_message_attachment_ids(field_values["metadata"], self.store)
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
         """Translate each m2m field's source pks to target pks, skipping name-linked fields. A member
@@ -666,9 +747,9 @@ class Importer:
             membership.groups.set(Group.objects.filter(name__in=row.get("groups", [])))
 
 
-def _bypass_auto_now_update(model: type[models.Model], pk: int, values: dict) -> None:
-    """Write the source timestamps back. QuerySet.update() bypasses auto_now/auto_now_add; audited
-    models additionally need an explicit (non-auditing) action."""
+def _update_without_auto_now(model: type[models.Model], pk: int, values: dict) -> None:
+    """Write column values to an existing row. QuerySet.update() bypasses auto_now/auto_now_add;
+    audited models additionally need an explicit (non-auditing) action."""
     queryset = model._default_manager.filter(pk=pk)
     if isinstance(queryset, AuditingQuerySet):
         queryset.update(audit_action=AuditAction.IGNORE, **values)

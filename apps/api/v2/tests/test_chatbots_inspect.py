@@ -802,10 +802,10 @@ def _expected_full_response(bot):
         "team_slug": bot.team.slug,
         "settings": {
             "seed_message": "Welcome",
+            "unavailable_message": "",
             "conversational_consent_enabled": False,
             "voice_response_behaviour": "reciprocal",
             "echo_transcript": True,
-            "debug_mode_enabled": False,
             "file_uploads_enabled": False,
         },
         "consent_form": {

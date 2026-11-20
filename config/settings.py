@@ -555,6 +555,12 @@ SPECTACULAR_SETTINGS = {
             ),
         },
         {
+            "name": "Consent Forms",
+            "description": (
+                "List, create, update and archive the consent forms a chatbot shows before a conversation starts."
+            ),
+        },
+        {
             "name": "Me",
             "description": "Information about the authenticated user and the team the token is scoped to.",
         },
@@ -592,8 +598,26 @@ SPECTACULAR_SETTINGS = {
             ),
         },
         {
+            "name": "Source Material",
+            "description": "List, create, update and archive the source material that pipeline nodes draw on.",
+        },
+        {
             "name": "Usage",
             "description": "Inspect team usage and activity data (message counts, and more).",
+        },
+        {
+            "name": "Manifest",
+            "description": (
+                "Discover the export surface before authenticating: resource call order, per-model "
+                "config and a schema checksum."
+            ),
+        },
+        {
+            "name": "Team",
+            "description": (
+                "Export the team resolved from the API key and every resource nested under it, "
+                "paginated by `updated_at`."
+            ),
         },
     ],
 }
@@ -760,6 +784,7 @@ PROJECT_METADATA = {
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
     "MARKETING_SITE_URL": "https://openchatstudio.dimagi.com",
 }
+SPECTACULAR_SETTINGS["CONTACT"] = {"email": PROJECT_METADATA["CONTACT_EMAIL"]}
 
 USE_HTTPS_IN_ABSOLUTE_URLS = False  # set this to True in production to have URLs generated with https instead of http
 # fix ssl mixed content issues
@@ -901,10 +926,10 @@ LOGGING = {
         },
         "django": {"handlers": [HANDLER], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
         "ocs": {"handlers": [HANDLER], "level": LOG_LEVEL, "propagate": IS_TESTING},
-        "httpx": {"handlers": [HANDLER], "level": "WARN"},
-        "slack_bolt": {"handlers": [HANDLER], "level": "DEBUG"},
-        "celery.app.trace": {"level": "INFO", "handlers": [HANDLER]},
-        "ocs.request": {"handlers": [HANDLER], "level": "INFO"},
+        "httpx": {"level": "WARN"},
+        "slack_bolt": {"level": "DEBUG"},
+        "celery.app.trace": {"level": "INFO"},
+        "ocs.request": {"level": "INFO"},
         # disable these when using JSON logging (see `apps.web.request_logging_middleware.RequestLoggingMiddleware`)
         "django.request": {"handlers": [HANDLER], "level": "CRITICAL" if JSON_LOGGING else "INFO", "propagate": False},
         "django.server": {"handlers": [HANDLER], "level": "CRITICAL" if JSON_LOGGING else "INFO", "propagate": False},

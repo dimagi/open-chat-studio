@@ -3,6 +3,10 @@ from rest_framework.exceptions import APIException, NotAuthenticated, Permission
 from apps.moderation.enforcement import BLOCKED_MESSAGE
 
 
+class ChatAdmissionError(ValueError):
+    """Raised when validated request attributes cannot form one unambiguous admission."""
+
+
 class EmbeddedWidgetAuthError(Exception):
     """Base exception for embedded widget authentication errors"""
 

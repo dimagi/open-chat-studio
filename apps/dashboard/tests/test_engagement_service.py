@@ -10,7 +10,6 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant, 
 from ..engagement_service import (
     TRAILING_MONTHS,
     EngagementDashboardService,
-    _add_months,
     _breakdown_label,
     _cache_key,
     monthly_activity,
@@ -30,14 +29,6 @@ def _create_message(session, created_at, message_type=ChatMessageType.HUMAN):
     message.created_at = created_at
     message.save()
     return message
-
-
-class TestAddMonths:
-    def test_wraps_year_boundary_backwards(self):
-        assert _add_months(date(2026, 1, 1), -1) == date(2025, 12, 1)
-
-    def test_wraps_year_boundary_forwards(self):
-        assert _add_months(date(2025, 12, 1), 1) == date(2026, 1, 1)
 
 
 class TestTrailingWindow:

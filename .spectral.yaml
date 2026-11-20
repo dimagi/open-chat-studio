@@ -1,0 +1,29 @@
+# Lints api-schemas/*.yml (pre-commit hook `spectral`). A finding is fixed at its source: the
+# serializer, the `extend_schema` call, SPECTACULAR_SETTINGS, or a hook in apps/api/schema.py.
+extends: ["spectral:oas"]
+rules:
+  # DRF routes end in a slash; the one no-slash path is the documented /api/participants alias.
+  path-keys-no-trailing-slash: off
+  # The schemas are served host-relative; set_example_urls rewrites example hosts per deployment.
+  oas3-api-servers: off
+  operation-description: error
+  ocs-operation-id-snake-case:
+    description: operationIds are cited in prose as snake_case endpoint names.
+    given: "$.paths[*][get,post,put,patch,delete].operationId"
+    severity: error
+    then:
+      function: casing
+      functionOptions:
+        type: snake
+  ocs-operation-declares-security:
+    description: Every operation states which credentials reach it.
+    given: "$.paths[*][get,post,put,patch,delete]"
+    severity: error
+    then:
+      field: security
+      function: truthy
+overrides:
+  # The legacy and export surfaces predate the description rule; v2 is held to it.
+  - files: ["api-schemas/v1.yml", "api-schemas/export.yml"]
+    rules:
+      operation-description: off

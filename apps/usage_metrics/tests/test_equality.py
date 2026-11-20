@@ -1,10 +1,11 @@
 """Each usage surface equals `usage_metrics` under its own parameterisation,
 and the two surfaces equal each other where their parameters genuinely coincide
-- UTC, no tag filter, identical half-open windows, and the same question asked
-of each (the dashboard shows `sessions_active`, the API's `sessions` metric is
-`sessions_started`, so those two are compared to their own metric function, not
-to one another). Tests here are the standing guard against the two definition
-sets drifting apart again (#3905, ADR-0051).
+- no tag filter, identical half-open windows, the same timezone, and the same
+question asked of each (the dashboard shows `sessions_active`, the API's
+`sessions` metric is `sessions_started`, so those two are compared to their own
+metric function, not to one another). The properties of each definition are
+pinned once, in `test_metrics.py`; the tests here are the standing guard
+against a surface drifting off the shared definition again (#3905, ADR-0051).
 """
 
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 import time_machine
+from django.utils import timezone
 
 from apps.api.v2.usage import services as api_usage
 from apps.channels.models import ChannelPlatform
@@ -19,6 +21,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.dashboard.services import DashboardService
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.usage_metrics import metrics
+from apps.usage_metrics.buckets import Granularity
 from apps.usage_metrics.filters import UsageFilters
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -78,9 +81,11 @@ def _overview(team):
     return DashboardService(team).get_overview_stats(start_date=_START, end_date=_END)
 
 
-def _api_results(team, metric_names):
+def _api_results(team, metric_names, *, granularity=api_usage.GRANULARITY_TOTAL, tz=_TZ):
     query = api_usage.resolve_query_filters(
-        api_usage.UsageQuery(team=team, metrics=list(metric_names), start=_START, end=_END, tz=_TZ)
+        api_usage.UsageQuery(
+            team=team, metrics=list(metric_names), start=_START, end=_END, tz=tz, granularity=granularity
+        )
     )
     return api_usage.usage_query(query).results
 
@@ -101,25 +106,24 @@ class TestDashboardEqualsUsageMetrics:
 
         assert _overview(busy_team)["active_participants"] == expected
 
-    def test_session_analytics_series_sums_to_sessions_active(self, busy_team):
-        """No session in the fixture spans two days, so the per-bucket series
-        sums to the scalar. A session active across several buckets would count
+    @pytest.mark.parametrize(
+        ("series", "value_key", "scalar"),
+        [
+            pytest.param("sessions", "active_sessions", metrics.sessions_active, id="sessions"),
+            pytest.param("participants", "active_participants", metrics.active_participants, id="participants"),
+        ],
+    )
+    def test_session_analytics_series_sum_to_their_scalars(self, busy_team, series, value_key, scalar):
+        """No session in the fixture spans two days, so each per-bucket series
+        sums to its scalar. A session active across several buckets would count
         once per bucket by design, which is why this is asserted on a fixture
         that cannot exercise that case."""
         data = DashboardService(busy_team).get_session_analytics_data(
             granularity="daily", start_date=_START, end_date=_END
         )
-        expected = metrics.sessions_active(busy_team, start=_START, end=_END, filters=UsageFilters())
+        expected = scalar(busy_team, start=_START, end=_END, filters=UsageFilters())
 
-        assert sum(point["active_sessions"] for point in data["sessions"]) == expected
-
-    def test_participant_chart_sums_to_active_participants(self, busy_team):
-        data = DashboardService(busy_team).get_active_participants_data(
-            granularity="daily", start_date=_START, end_date=_END
-        )
-        expected = metrics.active_participants(busy_team, start=_START, end=_END, filters=UsageFilters())
-
-        assert sum(point["active_participants"] for point in data) == expected
+        assert sum(point[value_key] for point in data[series]) == expected
 
 
 class TestApiEqualsUsageMetrics:
@@ -233,3 +237,86 @@ class TestScalarsAndTimeseriesAgree:
             .count()
         )
         assert started + in_setup == created_in_window
+
+
+_AUCKLAND = ZoneInfo("Pacific/Auckland")
+_LATE_EVENING_IN_AUCKLAND = datetime(2026, 6, 10, 11, 30, tzinfo=UTC)
+
+
+def _dashboard_series(points, value_key):
+    return {datetime.fromisoformat(point["date"]): point[value_key] for point in points}
+
+
+def _non_empty(series):
+    return {bucket: value for bucket, value in series.items() if value}
+
+
+@pytest.mark.parametrize("granularity", [Granularity.DAILY, Granularity.WEEKLY, Granularity.MONTHLY])
+class TestSurfacesAgreePerBucket:
+    """Bucket by bucket, in a zone twelve hours off UTC, so a bucket edge falls between the fixture's
+    two message times: `_MID` is already the next day in Auckland, the late-evening message is not.
+    The dashboard reads the zone the browser detected; the API takes it as a parameter."""
+
+    @pytest.fixture()
+    def split_team(self, busy_team):
+        session = ExperimentSession.objects.filter(team=busy_team, status=SessionStatus.ACTIVE).first()
+        _message(session, when=_LATE_EVENING_IN_AUCKLAND)
+        return busy_team
+
+    def test_messages_agree_on_every_bucket(self, split_team, granularity):
+        with timezone.override(_AUCKLAND):
+            dashboard = DashboardService(split_team).get_message_volume_data(
+                granularity=granularity, start_date=_START, end_date=_END
+            )
+        api = _api_results(split_team, ["messages"], granularity=granularity, tz=_AUCKLAND)
+        shared = metrics.messages_timeseries(
+            split_team, start=_START, end=_END, granularity=granularity, tz=_AUCKLAND, filters=UsageFilters()
+        )
+
+        expected = {bucket: counts["total"] for bucket, counts in shared.items()}
+        assert _dashboard_series(dashboard["totals"], "total_messages") == expected
+        assert _non_empty({row["bucket_start"]: row["messages"]["total"] for row in api}) == expected
+        assert len(expected) == (2 if granularity == Granularity.DAILY else 1)
+
+    def test_participants_agree_on_every_bucket(self, split_team, granularity):
+        with timezone.override(_AUCKLAND):
+            dashboard = DashboardService(split_team).get_session_analytics_data(
+                granularity=granularity, start_date=_START, end_date=_END
+            )
+        api = _api_results(split_team, ["participants"], granularity=granularity, tz=_AUCKLAND)
+        shared = metrics.active_participants_timeseries(
+            split_team, start=_START, end=_END, granularity=granularity, tz=_AUCKLAND, filters=UsageFilters()
+        )
+
+        assert _dashboard_series(dashboard["participants"], "active_participants") == shared
+        assert _non_empty({row["bucket_start"]: row["participants"] for row in api}) == shared
+
+    def test_dashboard_sessions_read_the_shared_series(self, split_team, granularity):
+        with timezone.override(_AUCKLAND):
+            dashboard = DashboardService(split_team).get_session_analytics_data(
+                granularity=granularity, start_date=_START, end_date=_END
+            )
+        shared = metrics.sessions_active_timeseries(
+            split_team, start=_START, end=_END, granularity=granularity, tz=_AUCKLAND, filters=UsageFilters()
+        )
+
+        assert _dashboard_series(dashboard["sessions"], "active_sessions") == shared
+
+
+class TestHourlyDashboardReadsTheSharedSeries:
+    """Hourly is a dashboard-only granularity, so it is checked against `usage_metrics` alone."""
+
+    def test_sessions_and_participants_per_hour(self, busy_team):
+        session = ExperimentSession.objects.filter(team=busy_team, status=SessionStatus.ACTIVE).first()
+        _message(session, when=_LATE_EVENING_IN_AUCKLAND)
+        scope = {"start": _START, "end": _END, "granularity": Granularity.HOURLY, "tz": _TZ}
+
+        dashboard = DashboardService(busy_team).get_session_analytics_data(
+            granularity=Granularity.HOURLY, start_date=_START, end_date=_END
+        )
+        sessions = metrics.sessions_active_timeseries(busy_team, filters=UsageFilters(), **scope)
+        participants = metrics.active_participants_timeseries(busy_team, filters=UsageFilters(), **scope)
+
+        assert _dashboard_series(dashboard["sessions"], "active_sessions") == sessions
+        assert _dashboard_series(dashboard["participants"], "active_participants") == participants
+        assert len(sessions) == 2
