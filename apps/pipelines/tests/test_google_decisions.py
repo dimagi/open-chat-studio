@@ -13,8 +13,16 @@ from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.nodes import DecisionNode, RouterNode
 from apps.pipelines.repository import ORMRepository
-from apps.pipelines.tests.utils import build_decision_node, decision_routing_runnable
+from apps.pipelines.tests.utils import (
+    build_decision_node,
+    create_runnable,
+    decision_node,
+    decision_routing_runnable,
+    end_node,
+    start_node,
+)
 from apps.service_providers.tracing.metrics import MetricsCollector
+from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
 URL = "https://generativelanguage.googleapis.com/v1beta/decisions"
@@ -211,6 +219,47 @@ class TestDecisionNode:
 
         assert (temp_state["intent"], temp_state["intent_confidence"], temp_state["wants_refund"]) == (None, None, None)
         assert "Google returned 400 (safety)" in caplog.text
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            pytest.param({"json": {"answers": {}, "usage": USAGE}}, id="no-answer"),
+            pytest.param({"status_code": 500, "json": {"error": {"message": "boom"}}}, id="failed-call"),
+        ],
+    )
+    def test_a_noul_without_an_answer_writes_a_null_confidence(
+        self, httpx_mock, google_decision_ids, session, response
+    ):
+        httpx_mock.add_response(url=URL, **response)
+
+        temp_state = _run(_node(google_decision_ids, session, decisions=[REFUND]), session)["temp_state"]
+
+        assert {key: temp_state[key] for key in ("wants_refund", "wants_refund_confidence")} == {
+            "wants_refund": None,
+            "wants_refund_confidence": None,
+        }
+
+    def test_an_unanswered_noul_replaces_an_earlier_nodes_confidence(self, httpx_mock, google_decision_ids, session):
+        """Two nodes writing one key: the second's missing answer must not leave the first's confidence behind."""
+        answered = {"wants_refund": {"type": "noul", "noul": 0.97, "confidence": 0.95}}
+        httpx_mock.add_response(url=URL, json={"answers": answered, "usage": USAGE})
+        httpx_mock.add_response(url=URL, json={"answers": {}, "usage": USAGE})
+        start, end = start_node(), end_node()
+        first = decision_node(google_decision_ids, [REFUND], name="first")
+        second = decision_node(google_decision_ids, [REFUND], name="second")
+        edges = [
+            {"id": "start -> first", "source": start["id"], "target": first["id"]},
+            {"id": "first -> second", "source": first["id"], "target": second["id"]},
+            {"id": "second -> end", "source": second["id"], "target": end["id"]},
+        ]
+        runnable = create_runnable(PipelineFactory.create(), [start, first, second, end], edges)
+
+        output = runnable.invoke(
+            PipelineState(messages=["I was charged twice"], experiment_session=session),
+            config={"configurable": {"repo": ORMRepository(session=session)}},
+        )
+
+        assert (output["temp_state"]["wants_refund"], output["temp_state"]["wants_refund_confidence"]) == (None, None)
 
     def test_usage_is_input_only_under_google(self, httpx_mock, google_decision_ids, session):
         httpx_mock.add_response(url=URL, json={"answers": {}, "usage": USAGE})
