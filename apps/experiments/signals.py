@@ -1,4 +1,5 @@
-from django.db.models.signals import post_delete, post_save, pre_save
+from django.contrib.contenttypes.models import ContentType
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from apps.annotations.models import CustomTaggedItem, Tag
@@ -8,7 +9,7 @@ from apps.teams.models import Team
 from ..teams.utils import current_team
 from .const import DEFAULT_CONSENT_TEXT
 from .models import ConsentForm, ExperimentSession
-from .services import touch_rows_tagged_with, touch_tagged_object
+from .services import touch_rows_tagged_with, touch_tagged_objects
 
 
 @receiver(post_save, sender=Team)
@@ -35,10 +36,18 @@ def delete_chat_on_session_delete(sender, instance, **kwargs):
         Chat.objects.filter(id=instance.chat_id).delete()
 
 
-@receiver([post_save, post_delete], sender=CustomTaggedItem)
+@receiver(post_save, sender=CustomTaggedItem)
 def touch_tagged_sync_rows(sender, instance, **kwargs):
     """A tag change moves its message's or session's ``updated_at``, so the v2 sync API sends it again."""
-    touch_tagged_object(instance.content_type_id, instance.object_id)
+    touch_tagged_objects(instance.content_type_id, [instance.object_id])
+
+
+# Tag rows are removed through taggit's ``remove()``/``clear()``, which send m2m_changed, or through
+# ``delete_tagged_items``, which touches the rows itself and keeps the delete set-based.
+@receiver(m2m_changed, sender=CustomTaggedItem)
+def touch_untagged_sync_row(sender, instance, action, pk_set, **kwargs):
+    if action == "post_clear" or (action == "post_remove" and pk_set):
+        touch_tagged_objects(ContentType.objects.get_for_model(instance).id, [instance.pk])
 
 
 @receiver(pre_save, sender=Tag)
