@@ -1,11 +1,40 @@
 <dialog id="chatbot_copy_modal" class="modal">
-  <div class="modal-box">
+  <div class="modal-box" x-data="{ mode: 'new' }">
     <h3 class="font-bold text-lg">Copy Chatbot</h3>
-    <p class="py-4">Are you sure you want to create a copy of this chatbot?</p>
 
     <form method="post" action="{% url 'chatbots:copy' team_slug=team_slug pk=chatbot_id %}" id="copy-chatbot-form">
       {% csrf_token %}
-      <div class="form-control my-4">
+      {% with copies=copy_form.fields.overwrite.queryset %}
+        {% if copies and perms.experiments.change_experiment %}
+          <div class="flex flex-col gap-2 mt-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" value="new" x-model="mode" class="radio radio-sm radio-primary">
+              <span>Create a new chatbot</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" value="overwrite" x-model="mode" class="radio radio-sm radio-primary">
+              <span>Overwrite an earlier copy</span>
+            </label>
+          </div>
+          <div class="form-control my-4" x-show="mode === 'overwrite'" x-cloak>
+            <label for="overwrite-chatbot" class="label mb-2">
+              <span class="label-text font-bold">Copy to overwrite</span>
+            </label>
+            <select id="overwrite-chatbot" name="overwrite" class="select select-bordered w-full"
+                    :disabled="mode !== 'overwrite'" required>
+              <option value="" disabled selected>Select a chatbot to overwrite</option>
+              {% for copy in copies %}
+                <option value="{{ copy.id }}">{{ copy.name }}</option>
+              {% endfor %}
+            </select>
+            <p class="text-sm text-base-content/70 mt-2">
+              The copy takes this chatbot's current pipeline, settings and events. It keeps its name, channels, sessions and published versions, and any unpublished changes on it are replaced. Publish the copy afterwards to update its channels.
+            </p>
+          </div>
+        {% endif %}
+      {% endwith %}
+      <div class="form-control my-4" x-show="mode === 'new'">
+        <p class="py-2">Are you sure you want to create a copy of this chatbot?</p>
         <label for="copied-chatbot-name" class="label mb-2">
           <span class="label-text font-bold">
             New Chatbot Name
@@ -15,6 +44,7 @@
         <input type="text" id="copied-chatbot-name" name="new_name"
                placeholder="Enter name for copied chatbot"
                class="input input-bordered w-full"
+               :disabled="mode !== 'new'"
                required value="{{ name }} (copy)"/>
       </div>
     </form>
@@ -23,7 +53,8 @@
       <form method="dialog">
         <button class="btn">Cancel</button>
       </form>
-      <button type="submit" class="btn btn-primary" form="copy-chatbot-form">Confirm</button>
+      <button type="submit" class="btn btn-primary" form="copy-chatbot-form"
+              x-text="mode === 'overwrite' ? 'Overwrite' : 'Confirm'">Confirm</button>
     </div>
 
   </div>
