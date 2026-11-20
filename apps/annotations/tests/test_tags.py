@@ -1,5 +1,6 @@
 import json
 import unicodedata
+from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
@@ -191,6 +192,19 @@ def test_unlink_tag(tag, chat, client):
     client.post(unlink_url, data=data)
 
     assert CustomTaggedItem.objects.filter(team=team, tag=tag, user=user).exists() is False
+
+
+@pytest.mark.django_db()
+def test_unlink_tag_keeps_the_link_when_touching_the_session_fails(tag, chat, client):
+    _link_tag_to_item(client, tag=tag, chat=chat)
+    data = {"tag_name": tag.name, "object_info": chat.object_info}
+    unlink_url = reverse("annotations:unlink_tag", kwargs={"team_slug": tag.team.slug})
+
+    with patch("apps.experiments.signals.touch_tagged_objects", side_effect=RuntimeError("touch failed")):
+        with pytest.raises(RuntimeError):
+            client.post(unlink_url, data=data)
+
+    assert CustomTaggedItem.objects.filter(tag=tag, object_id=chat.id).exists()
 
 
 @pytest.mark.django_db()

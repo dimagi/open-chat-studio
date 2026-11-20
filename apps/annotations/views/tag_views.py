@@ -17,6 +17,7 @@ from apps.annotations.forms import TagForm
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
 from apps.annotations.tables import TagTable
 from apps.evaluations.models import AppliedTag, Evaluator, EvaluatorTagRule
+from apps.experiments.services import remove_tags
 from apps.generics.chips import Chip
 from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -150,7 +151,7 @@ class UnlinkTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         tag_name = request.POST["tag_name"]
         content_type = get_object_or_404(ContentType, app_label=object_info["app"], model=object_info["model_name"])
         obj = content_type.get_object_for_this_type(id=object_id)
-        obj.tags.remove(tag_name)
+        remove_tags(obj, tag_name)
         return HttpResponse()
 
 
