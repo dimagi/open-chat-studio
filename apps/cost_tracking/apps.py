@@ -4,6 +4,7 @@ from django.apps import AppConfig
 class CostTrackingConfig(AppConfig):
     name = "apps.cost_tracking"
     label = "cost_tracking"
+    verbose_name = "Cost tracking"
 
     def ready(self):
         """Register PricingRule signal receivers."""
