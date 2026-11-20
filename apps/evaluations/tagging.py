@@ -115,21 +115,28 @@ def apply_rules_to_result(
     tags_to_apply = {rule.tag_id: rule.tag for rule in matched_rules}
     content_type = ContentType.objects.get_for_model(type(target))
     team = evaluation_result.team
-
-    CustomTaggedItem.objects.bulk_create(
-        [
-            CustomTaggedItem(
-                content_type=content_type,
-                object_id=target.pk,
-                tag=tag,
-                team=team,
-            )
-            for tag in tags_to_apply.values()
-        ],
-        ignore_conflicts=True,
+    present = set(
+        CustomTaggedItem.objects.filter(
+            content_type=content_type, object_id=target.pk, tag_id__in=tags_to_apply
+        ).values_list("tag_id", flat=True)
     )
-    # bulk_create sends no save signal, so the tagged row is touched here.
-    touch_tagged_objects(content_type.id, [target.pk])
+    missing = [tag for tag_id, tag in tags_to_apply.items() if tag_id not in present]
+
+    if missing:
+        CustomTaggedItem.objects.bulk_create(
+            [
+                CustomTaggedItem(
+                    content_type=content_type,
+                    object_id=target.pk,
+                    tag=tag,
+                    team=team,
+                )
+                for tag in missing
+            ],
+            ignore_conflicts=True,
+        )
+        # bulk_create sends no save signal, so the tagged row is touched here.
+        touch_tagged_objects(content_type.id, [target.pk])
 
     AppliedTag.objects.bulk_create(
         [
