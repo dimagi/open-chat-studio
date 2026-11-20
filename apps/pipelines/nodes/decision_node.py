@@ -19,7 +19,12 @@ from apps.pipelines.nodes.decisions import (
     decision_questions,
     temp_state_values,
 )
-from apps.pipelines.nodes.mixins import HISTORY_TYPE_DESCRIPTION, HistoryMixin, llm_provider_id_field
+from apps.pipelines.nodes.mixins import (
+    HISTORY_TYPE_DESCRIPTION,
+    NO_DECISION_BACKEND_MESSAGE,
+    HistoryMixin,
+    llm_provider_id_field,
+)
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.decision_backend import DecisionError, DecisionLimits
@@ -78,12 +83,17 @@ class DecisionNode(PipelineNode, HistoryMixin):
         return self
 
     def _decision_limits(self) -> DecisionLimits | None:
-        """The selected provider's request limits, or None when its provider cannot be loaded, which the run reports."""
+        """The selected provider's request limits, or None when its provider cannot be loaded, which the run reports.
+
+        Raises when the provider has no decision backend to send the decisions to.
+        """
         try:
             backend = ORMRepository().get_llm_service(self.llm_provider_id).get_decision_backend()
         except (RepositoryLookupError, ServiceProviderConfigError):
             return None
-        return backend.limits if backend else None
+        if backend is None:
+            raise PydanticCustomError("invalid_provider", NO_DECISION_BACKEND_MESSAGE, {"field": "llm_provider_id"})
+        return backend.limits
 
     def check_model(self, model: LlmProviderModel) -> None:
         if not model.supports_decisions:
