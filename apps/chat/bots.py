@@ -420,7 +420,7 @@ class EventBot:
         providers whose credentials failed a check last."""
         rank = {"verified": 0, "failed": 2}
         providers = sorted(
-            self.experiment.team.llmprovider_set.all(),
+            self.experiment.team.llmprovider_set.text_generating(),
             key=lambda p: rank.get(p.verification_state, 1),
         )
         for provider in providers:

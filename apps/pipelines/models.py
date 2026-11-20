@@ -874,21 +874,17 @@ class PipelineChatHistory(BaseModel):
     def message_iterator(self) -> Iterator["PipelineChatMessages"]:
         yield from self.messages.order_by("-created_at").iterator(100)
 
-    def get_messages_until_marker(self, marker: PipelineChatHistoryModes):
-        messages = []
-        for message in self.message_iterator():
-            messages.append(message)
-            if message.compression_marker == marker:
-                break
-        return messages
-
-    def get_langchain_messages_until_marker(self, marker: PipelineChatHistoryModes):
-        messages = self.get_messages_until_marker(marker)
+    def get_langchain_messages_until_marker(self, marker: PipelineChatHistoryModes, limit: int | None = None):
+        """The messages back to the marker, oldest first. With `limit`, only the newest `limit` of them are read."""
         include_summary = marker == PipelineChatHistoryModes.SUMMARIZE
-        langchain_messages_to_last_summary = [
-            message for message_pair in messages for message in message_pair.as_langchain_messages(include_summary)
-        ]
-        return list(reversed(langchain_messages_to_last_summary))
+        newest_first = []
+        for message_pair in self.message_iterator():
+            if limit is not None and len(newest_first) >= limit:
+                break
+            newest_first.extend(message_pair.as_langchain_messages(include_summary))
+            if message_pair.compression_marker == marker:
+                break
+        return list(reversed(newest_first if limit is None else newest_first[:limit]))
 
 
 class PipelineChatMessages(BaseModel):
