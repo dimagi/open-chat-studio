@@ -65,3 +65,19 @@ def test_chat_pickers_leave_out_a_decision_model_of_a_chat_provider(providers):
     assert not [text for text in offered if "gpt-decide" in text]
     assert "gpt-x" in grouped
     assert "gpt-decide" not in grouped
+
+
+def test_chat_pickers_leave_out_googles_decision_model(db):
+    team = TeamFactory.create()
+    google = LlmProviderFactory.create(team=team, type="google")
+    LlmProviderModelFactory.create(team=team, type="google", name="gemini-3.8-flash")
+    LlmProviderModelFactory.create(team=team, type="google", name="gemini-decision-1")
+
+    offered = [model["text"] for model in get_llm_provider_choices(team)[google.id]["models"]]
+    grouped = get_models_by_team_grouped_by_provider(team)["Google Gemini"]
+
+    assert [text for text in offered if "gemini-3.8-flash" in text]
+    assert not [text for text in offered if "gemini-decision-1" in text]
+    assert "gemini-3.8-flash" in grouped
+    assert "gemini-decision-1" not in grouped
+    assert get_first_llm_provider_by_team(team.id) == google

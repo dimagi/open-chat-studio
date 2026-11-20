@@ -40,6 +40,8 @@ def test_a_provider_with_no_chat_models_has_no_default():
     ("provider_type", "model_name", "expected"),
     [
         pytest.param("jev", "jev-latest", (False, True), id="listed-decision-model"),
+        pytest.param("google", "gemini-decision-1", (False, True), id="listed-decision-model-of-a-chat-type"),
+        pytest.param("google", "gemini-3.8-flash", (True, False), id="chat-model-beside-a-decision-model"),
         pytest.param("openai", "gpt-4.1-mini", (True, False), id="listed-chat-model"),
         pytest.param("jev", "jev-next", (False, True), id="custom-model-of-a-decision-only-type"),
         pytest.param("openai", "my-fine-tune", (True, False), id="custom-model-of-a-chat-type"),
@@ -63,6 +65,7 @@ class TestChatModels:
             "jev": LlmProviderModelFactory.create(type="jev", name="jev-latest"),
             "custom-jev": LlmProviderModelFactory.create(type="jev", name="jev-next"),
             "listed-decision": LlmProviderModelFactory.create(type="openai", name="gpt-decide"),
+            "google-decision": LlmProviderModelFactory.create(type="google", name="gemini-decision-1"),
         }
 
     @pytest.fixture(autouse=True)
@@ -83,6 +86,7 @@ class TestChatModels:
             "jev": False,
             "custom-jev": False,
             "listed-decision": False,
+            "google-decision": False,
         }
 
 

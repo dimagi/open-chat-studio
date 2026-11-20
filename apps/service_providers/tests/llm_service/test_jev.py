@@ -413,3 +413,9 @@ def test_the_backend_carries_jevs_request_limits():
     assert JevBackend.limits == JEV_LIMITS
     assert (JEV_LIMITS.max_options, JEV_LIMITS.min_levels, JEV_LIMITS.max_levels) == (255, 1, 10)
     assert JEV_LIMITS.max_questions is None
+    assert JEV_LIMITS.min_options == 1
+    assert (JEV_LIMITS.key_pattern, JEV_LIMITS.max_option_length, JEV_LIMITS.requires_instructions) == (
+        None,
+        None,
+        False,
+    )
