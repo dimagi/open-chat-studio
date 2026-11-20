@@ -30,17 +30,6 @@ from .models import UserAPIKey
 logger = logging.getLogger("ocs.api")
 
 
-def _is_client_credentials_admission(request) -> bool:
-    """Return whether the request carries a machine OAuth credential.
-
-    Generic API permissions inspect the authenticated OAuth token directly. Chat admission is
-    scoped to Chat API routes; running it here would classify an ExperimentChannel placed in
-    ``request.auth`` by ChatOAuthAuthentication as a machine token and would run Chat API policy
-    on unrelated API requests.
-    """
-    return is_client_credentials_request(request)
-
-
 def _count_failed_credential_attempt(request):
     """Count a rejected key presentation against the credentials scope.
 
@@ -107,6 +96,7 @@ class WidgetDomainPermission(BasePermission):
             return False
 
         if admission.credential_kind != ChatCredentialKind.EMBED_KEY:
+            # ChatOAuthAuthentication applies the origin rule itself, where a blank domain list means server-only.
             return True
 
         return channel_origin_allowed(request, admission.channel)
@@ -213,7 +203,7 @@ class IsAuthenticatedOrMachineToken(IsAuthenticated):
 
     def has_permission(self, request, view):
         """Allow authenticated users or machine credentials admitted by OAuth scopes."""
-        if _is_client_credentials_admission(request):
+        if is_client_credentials_request(request):
             return True
         return super().has_permission(request, view)
 
@@ -228,7 +218,7 @@ class ReadOnlyAPIKeyPermission(BasePermission):
         if not hasattr(request, "auth") or request.auth is None:
             return False
 
-        if _is_client_credentials_admission(request):
+        if is_client_credentials_request(request):
             # Machine token: no user and not an API key; authorization is delegated to the OAuth
             # scope classes.
             return True
@@ -278,7 +268,7 @@ class RequiresTeamPermission(BasePermission):
 
     def has_permission(self, request, view) -> bool:
         """Require the declared team permissions unless OAuth scopes authorize a machine token."""
-        if _is_client_credentials_admission(request):
+        if is_client_credentials_request(request):
             return True
         return bool(request.user and request.user.has_perms(self.required_permissions))
 
@@ -309,7 +299,7 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
 
     def has_permission(self, request, view):
         """Allow machine credentials or the model permission derived from the current request."""
-        if _is_client_credentials_admission(request):
+        if is_client_credentials_request(request):
             # Machine token: no user, so no membership-derived model permissions. Authorization is
             # delegated to the OAuth scope classes.
             return True
@@ -352,7 +342,7 @@ class ParticipantModelPermissions(BasePermission):
 
     def has_permission(self, request, view):
         """Require the participant permissions for the request method or an admitted machine token."""
-        if _is_client_credentials_admission(request):
+        if is_client_credentials_request(request):
             # Machine token: no user, so no membership-derived model permissions. Authorization is
             # delegated to the OAuth scope classes.
             return True
@@ -378,7 +368,7 @@ class CanTriggerBotMessage(BasePermission):
 
     def has_permission(self, request, view):
         """Require participant-change permission unless OAuth scopes authorize a machine token."""
-        if _is_client_credentials_admission(request):
+        if is_client_credentials_request(request):
             return True
         return bool(request.user and request.user.has_perm("experiments.change_participant"))
 
