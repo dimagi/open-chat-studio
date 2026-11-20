@@ -77,8 +77,10 @@ class JevResponse:
             return None
         try:
             confidence = float(answer["confidence"])
+            if not isinstance(answer["choice"], str):
+                return None
             choice = ChoiceAnswer(
-                choice=str(answer["choice"]),
+                choice=answer["choice"],
                 confidence=confidence,
                 probabilities=dict(answer.get("probabilities") or {}),
             )
