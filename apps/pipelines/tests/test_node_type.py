@@ -43,6 +43,7 @@ class TestNullObject:
         assert unresolvable.default_params() == {}
         assert unresolvable.schema is None
         assert unresolvable.is_router is False
+        assert unresolvable.model_use is None
         assert unresolvable.label == node_type
         assert unresolvable.reserved_name is None
         assert unresolvable.dispatches_own_edges is False

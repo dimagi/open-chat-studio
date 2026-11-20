@@ -24,4 +24,5 @@
     deprecated?: boolean
     chat?: boolean
     decisions?: boolean
+    max_levels?: number
    };

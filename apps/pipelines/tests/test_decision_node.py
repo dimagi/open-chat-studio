@@ -201,16 +201,37 @@ class TestLimits:
                 _node(jev_ids, decisions=[decision])
 
 
-def test_accepts_a_decision_model_listed_under_a_chat_provider(db):
-    """A provider whose type also offers chat models can offer a decision model, and the node takes it."""
+def _openai_decision_model_ids() -> dict:
     provider = LlmProviderFactory.create(type="openai")
     model = LlmProviderModelFactory.create(team=provider.team, type="openai", name="gpt-decide")
+    return {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
+
+
+def test_accepts_a_decision_model_listed_under_a_chat_provider(db):
+    """A provider whose type also offers chat models can offer a decision model, and the node takes it."""
+    ids = _openai_decision_model_ids()
+    decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
+
+    backend = "apps.service_providers.llm_service.OpenAILlmService.get_decision_backend"
+    with (
+        mock.patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}),
+        mock.patch(backend, return_value=_FakeBackend()),
+    ):
+        node = _node(ids, decisions=[REFUND])
+
+    assert node.llm_provider_model_id == ids["llm_provider_model_id"]
+
+
+def test_rejects_a_provider_without_a_decision_backend(db):
+    """The provider has to answer decisions, or the node would only fail on its first run."""
+    ids = _openai_decision_model_ids()
     decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
 
     with mock.patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}):
-        node = _node({"llm_provider_id": provider.id, "llm_provider_model_id": model.id}, decisions=[REFUND])
+        with pytest.raises(PydanticValidationError, match="cannot answer decision questions") as excinfo:
+            _node(ids, decisions=[REFUND])
 
-    assert node.llm_provider_model_id == model.id
+    assert excinfo.value.errors()[0]["ctx"]["field"] == "llm_provider_id"
 
 
 class _FakeBackend(DecisionBackend):
@@ -326,6 +347,23 @@ class TestResults:
         temp_state = _run(_node(jev_ids, session), session)["temp_state"]
 
         assert (temp_state["intent"], temp_state["intent_confidence"]) == (expected, intent[1])
+
+    @pytest.mark.parametrize(
+        ("score", "expected"),
+        [
+            pytest.param(0.0, 0.0, id="lowest-level"),
+            pytest.param(2.0, 2.0, id="highest-level"),
+            pytest.param(0.8, 0.8, id="between-levels"),
+            pytest.param(2.5, None, id="above-the-rubric"),
+            pytest.param(-0.5, None, id="below-the-rubric"),
+        ],
+    )
+    def test_a_score_off_the_rubric_is_null(self, httpx_mock, jev_ids, session, score, expected):
+        httpx_mock.add_response(url=URL, json=_answers(frustration=(score, 0.9)))
+
+        temp_state = _run(_node(jev_ids, session), session)["temp_state"]
+
+        assert (temp_state["frustration"], temp_state["frustration_confidence"]) == (expected, 0.9)
 
     def test_a_score_below_its_threshold_is_null(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, json=_answers(frustration=(2.0, 0.4)))

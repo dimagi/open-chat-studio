@@ -793,21 +793,38 @@ function decisionOfType(decision: Pick<Decision, "key" | "instructions">, type: 
   };
 }
 
-function isDecisionList(value: unknown): value is Decision[] {
-  return Array.isArray(value) && value.every((item) => typeof item?.key === "string" && typeof item?.type === "string");
+/** The stored decisions with the defaults the backend applies filled in, so a decision saved without them still shows. */
+function storedDecisions(value: unknown): Decision[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => typeof item === "object" && item !== null)
+    .map((item) => ({
+      key: "",
+      instructions: "",
+      options: [],
+      levels: [],
+      true_description: "",
+      false_description: "",
+      threshold: null,
+      ...item,
+      type: item.type ?? "choice",
+    }));
 }
 
 /** Edits a Decision Node's decisions: one card per decision, with the fields its type reads. */
 function DecisionsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
   const stored = props.nodeParams[props.name];
-  const decisions = isDecisionList(stored) ? stored : [];
+  const decisions = storedDecisions(stored);
+  const maxLevels = selectedModel(props.nodeParams.llm_provider_model_id)?.max_levels;
 
   const setDecisions = (update: (current: Decision[]) => Decision[]) => {
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         const current = next.data.params[props.name];
-        next.data.params[props.name] = update(isDecisionList(current) ? current : []);
+        next.data.params[props.name] = update(storedDecisions(current));
       })
     );
   };
@@ -822,6 +839,7 @@ function DecisionsWidget(props: WidgetParams) {
             key={index}
             number={index + 1}
             decision={decision}
+            maxLevels={maxLevels}
             readOnly={props.readOnly}
             onChange={(update) => updateDecision(index, update)}
             onRemove={() => setDecisions((current) => current.filter((_, i) => i !== index))}
@@ -841,9 +859,16 @@ function DecisionsWidget(props: WidgetParams) {
   );
 }
 
-function DecisionCard({number, decision, readOnly, onChange, onRemove}: {
+/** The model option the node has selected, which carries the limits of a decision model's backend. */
+function selectedModel(modelId: unknown): LlmProviderModel | undefined {
+  const models = getCachedData().parameterValues.llm_provider_model_id as LlmProviderModel[];
+  return models.find((model) => String(model.value) === String(modelId));
+}
+
+function DecisionCard({number, decision, maxLevels, readOnly, onChange, onRemove}: {
   number: number;
   decision: Decision;
+  maxLevels: number | undefined;
   readOnly: boolean;
   onChange: (update: (decision: Decision) => Decision) => void;
   onRemove: () => void;
@@ -891,7 +916,13 @@ function DecisionCard({number, decision, readOnly, onChange, onRemove}: {
           <ChoiceOptions of={of} options={decision.options} readOnly={readOnly} onChange={(options) => set({options})} />
         )}
         {decision.type === "score" && (
-          <ScoreLevels of={of} levels={decision.levels} readOnly={readOnly} onChange={(levels) => set({levels})} />
+          <ScoreLevels
+            of={of}
+            levels={decision.levels}
+            maxLevels={maxLevels}
+            readOnly={readOnly}
+            onChange={(levels) => set({levels})}
+          />
         )}
         {decision.type === "noul" && (
           <>
@@ -991,9 +1022,10 @@ function ChoiceOptions({of, options, readOnly, onChange}: {
   );
 }
 
-function ScoreLevels({of, levels, readOnly, onChange}: {
+function ScoreLevels({of, levels, maxLevels, readOnly, onChange}: {
   of: string;
   levels: string[];
+  maxLevels: number | undefined;
   readOnly: boolean;
   onChange: (levels: string[]) => void;
 }) {
@@ -1022,7 +1054,7 @@ function ScoreLevels({of, levels, readOnly, onChange}: {
           )}
         </div>
       ))}
-      {!readOnly && levels.length < 10 && (
+      {!readOnly && levels.length < (maxLevels ?? Infinity) && (
         <button
           type="button"
           className="btn btn-xs btn-ghost self-start"

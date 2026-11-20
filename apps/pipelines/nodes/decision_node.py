@@ -72,7 +72,7 @@ class DecisionNode(PipelineNode, HistoryMixin):
 
     @model_validator(mode="after")
     def check_limits(self) -> Self:
-        if limits := decision_limits(self.llm_provider_id):
+        if limits := decision_limits(self.llm_provider_id, require_backend=True):
             check_decision_limits(self.decisions, limits)
         return self
 

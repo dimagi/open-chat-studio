@@ -56,8 +56,10 @@ def read_answer[T](answers: Mapping[str, Any], name: str, question_type: str, pa
 
 
 def choice_answer(answer: dict) -> ChoiceAnswer:
+    if not isinstance(answer["choice"], str):
+        raise TypeError(f"not a string: {answer['choice']!r}")
     probabilities = dict(answer.get("probabilities") or {})
-    return ChoiceAnswer(str(answer["choice"]), probability(answer["confidence"]), probabilities)
+    return ChoiceAnswer(answer["choice"], probability(answer["confidence"]), probabilities)
 
 
 def score_answer(answer: dict) -> ScoreAnswer:

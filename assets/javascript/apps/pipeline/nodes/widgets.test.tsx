@@ -47,7 +47,7 @@ beforeAll(() => {
     ],
     llm_provider_model_id: [
       {value: 'model-a', label: 'OpenAI: gpt-x', type: 'openai'},
-      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev', chat: false, decisions: true},
+      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev', chat: false, decisions: true, max_levels: 3},
     ],
     built_in_tools: {openai: [{value: 'web_search', label: 'Web search'}]},
     tool_config: {},
@@ -337,8 +337,8 @@ describe('DecisionsWidget', () => {
 
   const stored = () => usePipelineStore.getState().nodes[0].data.params.decisions as Record<string, unknown>[];
 
-  function Harness({readOnly = false, inputError}: {readOnly?: boolean; inputError?: string}) {
-    const params = usePipelineStore((state) => state.nodes[0].data.params);
+  function Harness({readOnly = false, inputError, modelId}: {readOnly?: boolean; inputError?: string; modelId?: string}) {
+    const params = {...usePipelineStore((state) => state.nodes[0].data.params), llm_provider_model_id: modelId};
     const Widget = getWidget('decisions', {type: 'array'} as PropertySchema);
     return (
       <Widget
@@ -378,6 +378,25 @@ describe('DecisionsWidget', () => {
     }]);
   });
 
+  it('shows a stored decision saved without the fields the backend defaults', () => {
+    seedNode([{key: 'intent', options: [{name: 'billing', description: ''}]}]);
+    const {getByLabelText} = render(<Harness />);
+
+    expect(getByLabelText('Type of decision 1')).toHaveValue('choice');
+    expect(getByLabelText('Instructions for decision 1')).toHaveValue('');
+    expect(getByLabelText('Option 1 of decision 1')).toHaveValue('billing');
+  });
+
+  it('keeps a stored decision saved without a type when another is added', () => {
+    seedNode([{key: 'intent', options: [{name: 'billing', description: ''}]}]);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Add decision'}));
+
+    expect(stored().map((decision) => [decision.key, decision.type])).toEqual([['intent', 'choice'], ['', 'choice']]);
+    expect(stored()[0].options).toEqual([{name: 'billing', description: ''}]);
+  });
+
   it('writes an edited key, option and threshold back to the node', () => {
     seedNode([choice]);
     const {getByLabelText, getByRole} = render(<Harness />);
@@ -406,6 +425,17 @@ describe('DecisionsWidget', () => {
     expect(stored()[0]).toMatchObject({key: 'intent', type, ...expected});
     expect(getByLabelText(label)).toBeInTheDocument();
     expect(queryByLabelText('Option 1 of decision 1')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {modelId: 'model-j', levels: 2, offered: true},
+    {modelId: 'model-j', levels: 3, offered: false},
+    {modelId: undefined, levels: 12, offered: true},
+  ])('offers another level below the selected model\'s limit ($modelId, $levels levels)', ({modelId, levels, offered}) => {
+    seedNode([{...choice, type: 'score', options: [], levels: Array(levels).fill('level'), threshold: null}]);
+    const {queryByRole} = render(<Harness modelId={modelId} />);
+
+    expect(queryByRole('button', {name: 'Add level to decision 1'}) !== null).toBe(offered);
   });
 
   it('shows no threshold for a noul decision', () => {

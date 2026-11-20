@@ -7,6 +7,7 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from apps.pipelines.nodes.mixins import NO_DECISION_BACKEND_MESSAGE
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.decision_backend import (
@@ -201,15 +202,18 @@ def check_option_limits(names: Sequence[str], limits: DecisionLimits, subject: s
         raise PydanticCustomError("invalid_decision", message, context | {"max": longest})
 
 
-def decision_limits(llm_provider_id: int) -> DecisionLimits | None:
+def decision_limits(llm_provider_id: int, require_backend: bool = False) -> DecisionLimits | None:
     """The request limits of the provider's decision backend, or None when it has none or cannot be loaded.
 
     A provider that cannot be loaded is reported when the node runs, so validation does not fail on it first.
+    With `require_backend`, a provider that has no decision backend raises instead.
     """
     try:
         backend = ORMRepository().get_llm_service(llm_provider_id).get_decision_backend()
     except (RepositoryLookupError, ServiceProviderConfigError):
         return None
+    if backend is None and require_backend:
+        raise PydanticCustomError("invalid_provider", NO_DECISION_BACKEND_MESSAGE, {"field": "llm_provider_id"})
     return backend.limits if backend else None
 
 
@@ -269,7 +273,8 @@ def _read_score(decision: Decision, response: DecisionResponse) -> Answer:
     score = response.score(decision.key)
     if score is None:
         return None, None
-    return score.score, score.confidence
+    on_the_rubric = 0 <= score.score <= len(decision.levels) - 1
+    return (score.score if on_the_rubric else None), score.confidence
 
 
 def _read_noul(decision: Decision, response: DecisionResponse) -> Answer:
