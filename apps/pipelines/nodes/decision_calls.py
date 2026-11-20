@@ -51,10 +51,13 @@ def ask_decisions(
 
 def build_state(node: "RouterNode", context: "NodeContext") -> dict:
     """What the model is asked about: the input, the history the node is configured to see, and the session's data."""
-    history = node.get_history(exclude_message_id=context.input_message_id) if context.session else []
+    if context.session:
+        history = node.get_history(exclude_message_id=context.input_message_id, limit=_history_limit(node))
+    else:
+        history = []
     return {
         "input": context.input,
-        "history": [_history_entry(message) for message in _recent(history, _history_limit(node))],
+        "history": [_history_entry(message) for message in history],
         "participant_data": context.state.participant_data or {},
         "session_state": context.state.session_state or {},
         "temp_state": context.state.temp or {},
@@ -63,12 +66,8 @@ def build_state(node: "RouterNode", context: "NodeContext") -> dict:
 
 def _history_limit(node: "RouterNode") -> int:
     if node.get_history_mode() == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-        return min(node.max_history_length, HISTORY_LIMIT)
+        return max(min(node.max_history_length, HISTORY_LIMIT), 0)
     return HISTORY_LIMIT
-
-
-def _recent(history: list[BaseMessage], limit: int) -> list[BaseMessage]:
-    return history[-limit:] if limit > 0 else []
 
 
 def _history_entry(message: BaseMessage) -> dict:
