@@ -793,21 +793,37 @@ function decisionOfType(decision: Pick<Decision, "key" | "instructions">, type: 
   };
 }
 
-function isDecisionList(value: unknown): value is Decision[] {
-  return Array.isArray(value) && value.every((item) => typeof item?.key === "string" && typeof item?.type === "string");
+/** The stored decisions with the defaults the backend applies filled in, so a decision saved without them still shows. */
+function storedDecisions(value: unknown): Decision[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => typeof item === "object" && item !== null)
+    .map((item) => ({
+      key: "",
+      instructions: "",
+      options: [],
+      levels: [],
+      true_description: "",
+      false_description: "",
+      threshold: null,
+      ...item,
+      type: item.type ?? "choice",
+    }));
 }
 
 /** Edits a Decision Node's decisions: one card per decision, with the fields its type reads. */
 function DecisionsWidget(props: WidgetParams) {
   const setNode = usePipelineStore((state) => state.setNode);
   const stored = props.nodeParams[props.name];
-  const decisions = isDecisionList(stored) ? stored : [];
+  const decisions = storedDecisions(stored);
 
   const setDecisions = (update: (current: Decision[]) => Decision[]) => {
     setNode(props.nodeId, (old) =>
       produce(old, (next) => {
         const current = next.data.params[props.name];
-        next.data.params[props.name] = update(isDecisionList(current) ? current : []);
+        next.data.params[props.name] = update(storedDecisions(current));
       })
     );
   };
