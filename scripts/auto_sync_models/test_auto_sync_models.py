@@ -77,6 +77,8 @@ class Model:
     is_default: bool = False
     deprecated: bool = False
     replacement: str | None = None
+    chat: bool = True
+    decisions: bool = False
 
 
 def k(n: int) -> int:
@@ -97,6 +99,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         [
             Model("claude-opus-5", k(1000)),
         ],
+    "google": [
+        Model("gemini-decision-1", 262144, chat=False, decisions=True),
+    ],
 }
 
 DELETED_MODELS = [
@@ -159,6 +164,12 @@ def test_catalogue_reads_every_provider(repo_root):
         ("openai", "gpt-5.4"),
         ("anthropic", "claude-opus-5"),
     }
+
+
+def test_catalogue_leaves_out_decision_only_models(repo_root):
+    """LiteLLM files decision models under a `decisions` mode, so comparing them would retire them on every run."""
+    parsed, _ = read_default_models(repo_root)
+    assert ("google", "gemini-decision-1") not in parsed
 
 
 @pytest.mark.parametrize(
