@@ -62,8 +62,8 @@ resurfaces.
 `updated_at > t OR (updated_at = t AND id > i)`. The response always carries `cursor` (the last
 row's keyset, or the request's cursor when the page is empty) and `has_more`. The cursor helper and
 keyset filter move out of `apps/api/export/views.py` into a shared module used by both APIs. A cursor
-is bound to the filters and the caller's reach that produced it; sent with a different selection it
-is refused with a 400, since rows of the new selection may lie before it.
+is bound to the team, the filters and the caller's reach that produced it; sent with a different
+selection it is refused with a 400, since rows of the new selection may lie before it.
 
 **Context.** DRF's `CursorPagination` positions on the first ordering field plus an offset, so many
 rows sharing an `updated_at` page by offset, and its last page has `next: null`. A sync consumer that
@@ -105,7 +105,8 @@ rejected, far more machinery than a sync API over two tables needs.
 - Tag changes write `CustomTaggedItem` rows and never touch the tagged row. Adding or removing a tag
   on a message, or on a session's chat, sets that message's or session's `updated_at`, through
   `touch_tagged_objects` in `apps/experiments/services.py`: a receiver on the tag row's save, a
-  receiver on taggit's `remove()` and `clear()`, an explicit call when evaluator tag rules
+  receiver on taggit's `remove()` and `clear()` (`remove_tags` runs the removal and that receiver in
+  one transaction, so a failed touch keeps the tag row), an explicit call when evaluator tag rules
   `bulk_create` a tag the row did not have, and `delete_tagged_items` for queryset deletes, which
   touches every affected row in one `UPDATE`. There is no receiver on the tag row's delete: it would
   turn off Django's fast delete, so bulk removals and chat or message deletes would load every tag
@@ -124,9 +125,10 @@ and tags are a common sync filter.
 
 ### D5: One scope, `sessions:read`
 
-**Decision.** `required_scopes = ["sessions:read"]` on all three endpoints. API keys and user tokens
-need `experiments.view_experimentsession`, and `chat.view_chatmessage` as well for `/messages/` and
-for the session detail, which embeds messages.
+**Decision.** OAuth tokens need the `sessions:read` scope on all three endpoints. Each view declares
+`required_scopes = ["sessions"]`, and `TokenHasOAuthResourceScope` appends `:read` for a GET. API
+keys and user tokens need `experiments.view_experimentsession`, and `chat.view_chatmessage` as well
+for `/messages/` and for the session detail, which embeds messages.
 
 **Context.** The scope is declared and unused. Messages are read in the context of their sessions,
 but message content has its own view permission in the web app.

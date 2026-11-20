@@ -150,6 +150,13 @@ def delete_tagged_items(content_type_id: int, tagged_items) -> None:
             touch_tagged_objects(content_type_id, object_ids)
 
 
+def remove_tags(tagged_object, *tags) -> None:
+    """Remove ``tags`` from ``tagged_object`` through taggit, and move its ``updated_at``, in one transaction."""
+    # taggit deletes the tag rows before it sends the m2m_changed signal that touches the row.
+    with transaction.atomic():
+        tagged_object.tags.remove(*tags)
+
+
 def touch_rows_tagged_with(tag) -> None:
     """Move ``updated_at`` on every message and session that carries ``tag``, when it is renamed or deleted."""
     tagged = CustomTaggedItem.objects.filter(tag=tag)
