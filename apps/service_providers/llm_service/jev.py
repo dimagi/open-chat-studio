@@ -6,16 +6,22 @@ See https://docs.typesafe.ai/api/system-one.
 """
 
 import json
-import math
-import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from pydantic import BaseModel
 
 from apps.service_providers.llm_service import decision_backend
+from apps.service_providers.llm_service.decision_api import (
+    choice_answer,
+    json_safe,
+    post_with_retry,
+    probability,
+    read_answer,
+    score_answer,
+    token_count,
+)
 from apps.service_providers.llm_service.decision_backend import (
     Answer,
     ChoiceAnswer,
@@ -34,19 +40,12 @@ JEV_ROUTER_ONLY_MESSAGE = "Jev can only be used by the LLM Router and Decision n
 SYSTEM_ONE_PATH = "/v1/systemone"
 JEV_TIMEOUT_SECONDS = 10.0
 
-# Jev asks callers to back off and retry on these. One retry absorbs a brief spike without
-# holding up the conversation that is waiting on the answer.
+# Jev asks callers to back off and retry on these.
 RETRY_STATUSES = frozenset({429, 529})
-RETRY_DELAY_SECONDS = 1.0
-MAX_RETRY_DELAY_SECONDS = 5.0
 
 # A choice question takes 1 to 255 options and a score question 1 to 10 levels. Jev sets no limit on
 # the number of questions in one request.
 JEV_LIMITS = DecisionLimits(max_options=255, min_levels=1, max_levels=10)
-
-# Jev rejects deeper nesting in `state`, and numbers it cannot represent exactly.
-MAX_NESTING = 64
-MAX_EXACT_INT = 2**53
 
 
 class JevError(Exception):
@@ -109,48 +108,15 @@ class JevResponse:
 
     def choice(self, name: str) -> ChoiceAnswer | None:
         """The answer to the choice question `name`, or None when there is no well-formed one."""
-        return self._read(name, "choice", _choice_answer)
+        return read_answer(self.answers, name, "choice", choice_answer)
 
     def score(self, name: str) -> ScoreAnswer | None:
         """The answer to the score question `name`, or None when there is no well-formed one."""
-        return self._read(name, "score", _score_answer)
+        return read_answer(self.answers, name, "score", score_answer)
 
     def noul(self, name: str) -> YesNoAnswer | None:
         """The answer to the noul question `name`, or None when there is no well-formed one."""
-        return self._read(name, "noul", lambda answer: YesNoAnswer(probability=_probability(answer["noul"])))
-
-    def _read[T](self, name: str, question_type: str, parse: Callable[[dict], T]) -> T | None:
-        answer = self.answers.get(name)
-        if not isinstance(answer, dict) or answer.get("type") != question_type:
-            return None
-        try:
-            return parse(answer)
-        except (KeyError, TypeError, ValueError):
-            return None
-
-
-def _choice_answer(answer: dict) -> ChoiceAnswer:
-    probabilities = dict(answer.get("probabilities") or {})
-    return ChoiceAnswer(str(answer["choice"]), _probability(answer["confidence"]), probabilities)
-
-
-def _score_answer(answer: dict) -> ScoreAnswer:
-    probabilities = dict(answer.get("probabilities") or {})
-    return ScoreAnswer(_finite(answer["score"]), _probability(answer["confidence"]), probabilities)
-
-
-def _finite(value: Any) -> float:
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError(f"not a finite number: {value!r}")
-    return number
-
-
-def _probability(value: Any) -> float:
-    number = float(value)
-    if not 0.0 <= number <= 1.0:
-        raise ValueError(f"not between 0 and 1: {value!r}")
-    return number
+        return read_answer(self.answers, name, "noul", lambda answer: YesNoAnswer(probability(answer["noul"])))
 
 
 class JevClient:
@@ -171,23 +137,11 @@ class JevClient:
     def _post(self, body: dict) -> httpx.Response:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(self.url, json=body, headers=headers)
-                if response.status_code in RETRY_STATUSES:
-                    time.sleep(_retry_delay(response))
-                    response = client.post(self.url, json=body, headers=headers)
+            response = post_with_retry(self.url, body, headers, self.timeout, RETRY_STATUSES)
         except httpx.HTTPError as e:
             raise JevError(f"Could not reach Jev: {type(e).__name__}: {e}") from e
         _raise_for_status(response)
         return response
-
-
-def _retry_delay(response: httpx.Response) -> float:
-    try:
-        delay = float(response.headers.get("retry-after", RETRY_DELAY_SECONDS))
-    except ValueError:
-        delay = RETRY_DELAY_SECONDS
-    return min(max(delay, 0.0), MAX_RETRY_DELAY_SECONDS)
 
 
 def _raise_for_status(response: httpx.Response) -> None:
@@ -214,50 +168,10 @@ def _parse_response(response: httpx.Response) -> JevResponse:
         return JevResponse(
             model=str(data.get("model", "")),
             answers=dict(data["answers"]),
-            usage=DecisionUsage(_token_count(usage, "input_tokens"), _token_count(usage, "output_tokens")),
+            usage=DecisionUsage(token_count(usage, "input_tokens"), token_count(usage, "output_tokens")),
         )
     except (ValueError, KeyError, TypeError, AttributeError) as e:
         raise JevError(f"Jev returned a response that could not be read: {e}", response.status_code) from e
-
-
-def _token_count(usage: dict, key: str) -> int:
-    """The count Jev reported under `key`, or 0 when it reported none."""
-    value = usage.get(key, 0)
-    # `type` rather than `isinstance`: bool is a subclass of int, and `true` is not a count.
-    if type(value) is not int or value < 0:
-        raise ValueError(f"invalid {key}: {value!r}")
-    return value
-
-
-def json_safe(value: Any, depth: int = 0) -> Any:
-    """`value` as JSON Jev accepts.
-
-    Non-finite floats become null and integers too large to be exact become strings. A container
-    nested past Jev's limit is sent as its JSON text, and anything JSON has no type for as its str().
-    """
-    if isinstance(value, BaseModel):
-        value = value.model_dump(mode="json")
-    if isinstance(value, Mapping | list | tuple | set | frozenset):
-        return _container_json_safe(value, depth)
-    return _scalar_json_safe(value)
-
-
-def _container_json_safe(value: Mapping | list | tuple | set | frozenset, depth: int) -> Any:
-    if depth >= MAX_NESTING:
-        return json.dumps(value, default=str)
-    if isinstance(value, Mapping):
-        return {str(key): json_safe(item, depth + 1) for key, item in value.items()}
-    return [json_safe(item, depth + 1) for item in value]
-
-
-def _scalar_json_safe(value: Any) -> Any:
-    if value is None or isinstance(value, str | bool):
-        return value
-    if isinstance(value, int):
-        return value if abs(value) <= MAX_EXACT_INT else str(value)
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    return str(value)
 
 
 class JevBackend(DecisionBackend):
