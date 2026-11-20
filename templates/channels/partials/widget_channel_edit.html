@@ -1,0 +1,111 @@
+{% with name=form.name enabled=form.enabled message=form.disabled_message lifetime=extra_form.session_token_lifetime domains=extra_form.allowed_domains all_domains=extra_form.allow_all_domains %}
+  <div class="px-6 pt-6 pb-4 flex items-start gap-3">
+    <div class="size-10 shrink-0 rounded-lg bg-primary/10 text-primary grid place-items-center">
+      <i class="fa-regular fa-comment"></i>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h3 class="text-lg font-bold">Chat widget &amp; API channel</h3>
+      <p class="text-sm opacity-70 truncate">{{ experiment.name }} <span class="opacity-60 mx-1">/</span> {{ extra_form.serves_published_version|yesno:"Published Version,Working Version" }}</p>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close" onclick="this.closest('dialog').close()">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+  <div class="px-6 border-b border-base-300 flex flex-wrap items-center justify-between gap-x-2">
+    <c-ui.tabs class="flex-nowrap">
+      <c-ui.tab label="Settings" id="widget-tab-settings" aria-controls="widget-panel-settings" class="font-semibold whitespace-nowrap"
+                ::class="tab === 'settings' && 'tab-active'" ::aria-selected="tab === 'settings'" ::tabindex="tab === 'settings' ? 0 : -1"
+                @click="tab = 'settings'" @keydown.left.prevent="focusTab('embed')" @keydown.right.prevent="focusTab('embed')" />
+      <c-ui.tab label="Embed & API" id="widget-tab-embed" aria-controls="widget-panel-embed" class="font-semibold whitespace-nowrap"
+                ::class="tab === 'embed' && 'tab-active'" ::aria-selected="tab === 'embed'" ::tabindex="tab === 'embed' ? 0 : -1"
+                @click="tab = 'embed'" @keydown.left.prevent="focusTab('settings')" @keydown.right.prevent="focusTab('settings')" />
+    </c-ui.tabs>
+    {% with status=channel.widget_update_status %}
+      {% if status %}
+        <button type="button" class="btn btn-sm btn-soft btn-{{ status.level }} rounded-lg max-sm:mb-2" @click="tab = 'embed'">
+          <i class="fa-solid {{ status.icon }}"></i> Widget update available
+        </button>
+      {% endif %}
+    {% endwith %}
+  </div>
+
+  <div class="px-6 py-5 flex flex-col gap-5">
+    {{ form.non_field_errors }}{{ extra_form.non_field_errors }}
+    {% if success_message %}
+      <div role="alert" class="alert alert-success alert-soft"><span>{{ success_message }}</span></div>
+    {% endif %}
+    {% if warning_message %}
+      <div role="alert" class="alert alert-warning alert-soft"><span>{{ warning_message }}</span></div>
+    {% endif %}
+
+    <div role="tabpanel" id="widget-panel-settings" aria-labelledby="widget-tab-settings" class="flex flex-col gap-5"
+         x-show="tab === 'settings'">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5 items-start">
+        <c-ui.field label="Name" :input_id="name.id_for_label" :errors="name.errors" description="Leave blank to use the chatbot name.">
+          <input type="text" id="{{ name.id_for_label }}" name="{{ name.html_name }}" value="{{ name.value|default_if_none:'' }}"
+                 class="input w-full h-11 rounded-lg" placeholder="{{ experiment.name }}"
+                 aria-describedby="{{ name.id_for_label }}_helptext{% if name.errors %} {{ name.id_for_label }}_error{% endif %}"
+                 {% if name.errors %}aria-invalid="true"{% endif %}>
+        </c-ui.field>
+        <c-ui.field label="Session lifetime" :input_id="lifetime.id_for_label" :errors="lifetime.errors">
+          <c-slot name="description">
+            Sessions end this long after they start; activity does not extend them. Leave blank for the system default.
+            Use <code>HH:MM:SS</code>, or <code>D HH:MM:SS</code> for days.
+          </c-slot>
+          <input type="text" id="{{ lifetime.id_for_label }}" name="{{ lifetime.html_name }}" value="{{ lifetime.value|default_if_none:'' }}"
+                 class="input w-full h-11 rounded-lg font-mono" placeholder="e.g. 12:00:00"
+                 aria-describedby="{{ lifetime.id_for_label }}_helptext{% if lifetime.errors %} {{ lifetime.id_for_label }}_error{% endif %}"
+                 {% if lifetime.errors %}aria-invalid="true"{% endif %}>
+        </c-ui.field>
+      </div>
+
+      <label class="flex items-center justify-between gap-4 rounded-lg bg-base-200 p-4 cursor-pointer">
+        <span>
+          <span class="block font-semibold">Channel enabled</span>
+          <span class="block text-sm opacity-70">Participants can start new sessions on the web widget and API.</span>
+        </span>
+        <input type="checkbox" name="{{ enabled.html_name }}" class="toggle toggle-primary"
+               x-model.boolean="channelEnabled" {% if enabled.value %}checked{% endif %}>
+      </label>
+
+      <c-ui.field label="Disabled message" :input_id="message.id_for_label" :errors="message.errors" x-show="!channelEnabled" x-cloak>
+        <c-slot name="label_end"><span class="text-sm opacity-60">Optional</span></c-slot>
+        <c-slot name="description">
+          The chat API returns this when someone starts a chat while the channel is off. Leave blank for a generic
+          "currently unavailable" message. The web widget shows its own generic error instead.
+        </c-slot>
+        <textarea id="{{ message.id_for_label }}" name="{{ message.html_name }}" rows="3" class="textarea w-full rounded-lg"
+                  placeholder="This assistant is offline for maintenance. Please try again later."
+                  aria-describedby="{{ message.id_for_label }}_helptext{% if message.errors %} {{ message.id_for_label }}_error{% endif %}"
+                  {% if message.errors %}aria-invalid="true"{% endif %}>{{ message.value|default_if_none:'' }}</textarea>
+      </c-ui.field>
+
+      <c-ui.field label="Credential" :input_id="extra_form.credential_mode.id_for_label" :description="extra_form.credential_mode.help_text"
+                  :errors="extra_form.credential_mode.errors">
+        {{ extra_form.credential_mode }}
+      </c-ui.field>
+
+      {% include "channels/partials/widget_domains_field.html" %}
+    </div>
+
+    <div role="tabpanel" id="widget-panel-embed" aria-labelledby="widget-tab-embed" x-show="tab === 'embed'" x-cloak>
+      {{ extra_form.widget_token }}
+    </div>
+  </div>
+
+  <div class="px-6 py-4 border-t border-base-300 bg-base-200/50 flex items-center gap-2">
+    <button type="button" id="delete-channel-button" class="btn btn-ghost text-error h-11 rounded-lg"
+            hx-post="{% url 'channels:delete_channel' request.team.slug experiment.id channel.id %}"
+            hx-trigger="confirmed"
+            onclick="confirmThenTrigger('delete-channel-button', 'Delete this channel? This cannot be undone.')"
+            hx-target="#channel_create_edit_modal_placeholder"
+            hx-disabled-elt="input, select, textarea, button"
+            hx-swap="innerHTML">
+      <i class="fa-regular fa-trash-can"></i> Delete channel
+    </button>
+    <span class="flex-1"></span>
+    <span class="loading loading-spinner loading-sm htmx-indicator"></span>
+    <button type="button" class="btn h-11 rounded-lg" onclick="this.closest('dialog').close()">{{ save_successful|yesno:"Close,Cancel" }}</button>
+    <button type="submit" class="btn btn-primary h-11 rounded-lg">Save changes</button>
+  </div>
+{% endwith %}
