@@ -1,11 +1,14 @@
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import DateTimeField, F, OuterRef, Q, Subquery
+from django.utils import timezone
 from field_audit.models import AuditAction
 
+from apps.annotations.models import CustomTaggedItem
 from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
 from apps.usage_metrics.filters import activity_sessions
@@ -124,3 +127,41 @@ def last_activity_subquery() -> Subquery:
         .values("last_activity_at")[:1],
         output_field=DateTimeField(),
     )
+
+
+def touch_tagged_objects(content_type_id: int, object_ids) -> None:
+    """Move ``updated_at`` on the messages, or the chats' sessions, that a tag change applies to.
+
+    Tags are rows of their own, and the v2 sync API pages messages and sessions by ``updated_at``.
+    """
+    if content_type_id == ContentType.objects.get_for_model(ChatMessage).id:
+        ChatMessage.objects.filter(pk__in=object_ids).update(updated_at=timezone.now())
+    elif content_type_id == ContentType.objects.get_for_model(Chat).id:
+        ExperimentSession.objects.filter(chat_id__in=object_ids).update(updated_at=timezone.now())
+
+
+def delete_tagged_items(content_type_id: int, tagged_items) -> None:
+    """Delete ``tagged_items``, tag rows of one content type, and move ``updated_at`` on the rows they tagged."""
+    # One transaction, so a failed touch also leaves the tag rows in place for a retry to remove.
+    with transaction.atomic():
+        object_ids = set(tagged_items.values_list("object_id", flat=True))
+        if object_ids:
+            tagged_items.delete()
+            touch_tagged_objects(content_type_id, object_ids)
+
+
+def remove_tags(tagged_object, *tags) -> None:
+    """Remove ``tags`` from ``tagged_object`` through taggit, and move its ``updated_at``, in one transaction."""
+    # taggit deletes the tag rows before it sends the m2m_changed signal that touches the row.
+    with transaction.atomic():
+        tagged_object.tags.remove(*tags)
+
+
+def touch_rows_tagged_with(tag) -> None:
+    """Move ``updated_at`` on every message and session that carries ``tag``, when it is renamed or deleted."""
+    tagged = CustomTaggedItem.objects.filter(tag=tag)
+    now = timezone.now()
+    message_ids = tagged.filter(content_type=ContentType.objects.get_for_model(ChatMessage)).values("object_id")
+    chat_ids = tagged.filter(content_type=ContentType.objects.get_for_model(Chat)).values("object_id")
+    ChatMessage.objects.filter(pk__in=message_ids).update(updated_at=now)
+    ExperimentSession.objects.filter(chat_id__in=chat_ids).update(updated_at=now)
