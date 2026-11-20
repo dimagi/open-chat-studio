@@ -1,4 +1,4 @@
-"""The Decision Node: several Jev questions in one call, with the answers written to the temporary state."""
+"""The Decision Node: several questions in one call to a decision model, the answers written to the temporary state."""
 
 import json
 import logging
@@ -30,11 +30,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.pipelines.nodes")
 
-JEV_MODEL_REQUIRED_MESSAGE = "The Decision Node needs a TypeSafe Jev model"
+DECISION_MODEL_REQUIRED_MESSAGE = "The Decision Node needs a decision model"
 
 
 class DecisionNode(PipelineNode, HistoryMixin):
-    """Answers several questions about the conversation in one Jev call and writes the answers to the temporary state"""
+    """Asks a decision model several questions in one call and writes the answers to the temporary state"""
 
     model_config = ConfigDict(
         json_schema_extra=NodeSchema(
@@ -49,7 +49,7 @@ class DecisionNode(PipelineNode, HistoryMixin):
     llm_provider_id: int = llm_provider_id_field(
         ModelUse.decisions,
         title="Model",
-        description="The TypeSafe Jev provider this node calls.",
+        description="The decision model this node calls.",
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.GLOBAL,
@@ -87,7 +87,8 @@ class DecisionNode(PipelineNode, HistoryMixin):
 
     def check_model(self, model: LlmProviderModel) -> None:
         if not model.supports_decisions:
-            raise PydanticCustomError("invalid_model", JEV_MODEL_REQUIRED_MESSAGE, {"field": "llm_provider_model_id"})
+            field = {"field": "llm_provider_model_id"}
+            raise PydanticCustomError("invalid_model", DECISION_MODEL_REQUIRED_MESSAGE, field)
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
         backend = self.get_decision_backend()

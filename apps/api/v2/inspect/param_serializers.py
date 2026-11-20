@@ -198,7 +198,7 @@ class DecisionNodeParams(_HistoryParams):
         child=serializers.DictField(),
         required=False,
         help_text=(
-            "The questions answered in one call to the TypeSafe Jev model. Each has a ``key``, a ``type`` "
+            "The questions answered in one call to the decision model. Each has a ``key``, a ``type`` "
             "(``choice``, ``score`` or ``noul``), ``instructions``, ``options`` for a choice, ``levels`` for a "
             "score, ``true_description`` and ``false_description`` for a noul, and an optional ``threshold``. "
             "The answer is written to ``temp_state[key]``, and a choice or score's confidence to "

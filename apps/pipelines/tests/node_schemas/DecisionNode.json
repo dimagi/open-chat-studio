@@ -1,8 +1,8 @@
 {
-  "description": "Answers several questions about the conversation in one Jev call and writes the answers to the temporary state",
+  "description": "Asks a decision model several questions in one call and writes the answers to the temporary state",
   "properties": {
     "llm_provider_id": {
-      "description": "The TypeSafe Jev provider this node calls.",
+      "description": "The decision model this node calls.",
       "title": "Model",
       "type": "integer",
       "ui:modelUse": "decisions",

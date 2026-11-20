@@ -132,7 +132,7 @@ class TestValidation:
         model = LlmProviderModelFactory.create(team=provider.team)
         ids = {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
 
-        with pytest.raises(PydanticValidationError, match="The Decision Node needs a TypeSafe Jev model"):
+        with pytest.raises(PydanticValidationError, match="The Decision Node needs a decision model"):
             _node(ids)
 
     def test_the_model_picker_offers_only_jev(self):

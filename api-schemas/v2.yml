@@ -619,7 +619,7 @@ paths:
                       true_description: ''
                       false_description: ''
                       threshold: null
-                summary: 'DecisionNode: Needs a TypeSafe Jev model. Asks every decision
+                summary: 'DecisionNode: Needs a decision model. Asks every decision
                   in one call and writes each answer to `temp_state[key]`, plus `temp_state[key
                   + ''_confidence'']` for choice and score decisions.'
               StaticRouterNode:
@@ -3094,8 +3094,8 @@ components:
           items:
             type: object
             additionalProperties: {}
-          description: The questions answered in one call to the TypeSafe Jev model.
-            Each has a ``key``, a ``type`` (``choice``, ``score`` or ``noul``), ``instructions``,
+          description: The questions answered in one call to the decision model. Each
+            has a ``key``, a ``type`` (``choice``, ``score`` or ``noul``), ``instructions``,
             ``options`` for a choice, ``levels`` for a score, ``true_description``
             and ``false_description`` for a noul, and an optional ``threshold``. The
             answer is written to ``temp_state[key]``, and a choice or score's confidence

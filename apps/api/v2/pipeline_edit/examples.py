@@ -179,7 +179,7 @@ NOTES: dict[str, str] = {
         "version; omit it for the latest. `confidence_threshold` is used only with a decision model."
     ),
     "DecisionNode": (
-        "Needs a TypeSafe Jev model. Asks every decision in one call and writes each answer to "
+        "Needs a decision model. Asks every decision in one call and writes each answer to "
         "`temp_state[key]`, plus `temp_state[key + '_confidence']` for choice and score decisions."
     ),
     "StaticRouterNode": "Routes on stored data instead of an LLM; takes no LLM params.",
