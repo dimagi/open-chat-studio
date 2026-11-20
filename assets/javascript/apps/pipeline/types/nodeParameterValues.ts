@@ -22,4 +22,5 @@
    export type LlmProviderModel = TypedOption & {
     max_token_limit: number
     deprecated?: boolean
+    chat?: boolean
    };

@@ -3,9 +3,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import HumanMessage
 
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import (
     AnthropicLlmService,
     AzureLlmService,
+    JevLlmService,
     OpenAILlmService,
     OpenRouterLlmService,
     VoyageAILlmService,
@@ -136,6 +138,33 @@ def test_voyage_ai_service():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     assert isinstance(service, VoyageAILlmService)
     assert not service.supports_transcription
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_url"),
+    [
+        pytest.param({"jev_api_key": "test"}, "https://api.typesafe.ai/v1/systemone", id="default-base"),
+        pytest.param(
+            {"jev_api_key": "test", "jev_api_base": "http://localhost:9999/"},
+            "http://localhost:9999/v1/systemone",
+            id="custom-base",
+        ),
+    ],
+)
+def test_jev_service_builds_a_client(config, expected_url):
+    service = LlmProviderTypes.jev.get_llm_service(config)
+
+    assert isinstance(service, JevLlmService)
+    client = service.get_jev_client()
+    assert client.url == expected_url
+    assert client.api_key == "test"
+
+
+def test_jev_service_cannot_build_a_chat_model():
+    service = LlmProviderTypes.jev.get_llm_service({"jev_api_key": "test"})
+
+    with pytest.raises(ServiceProviderConfigError, match="Jev can only be used by the LLM Router node"):
+        service.get_chat_model("jev-latest")
 
 
 def test_voyage_ai_service_returns_local_index_manager():

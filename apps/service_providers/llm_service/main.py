@@ -26,6 +26,7 @@ from apps.service_providers.llm_service.index_managers import (
     OpenAIRemoteIndexManager,
     VoyageAILocalIndexManager,
 )
+from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE, JEV_ROUTER_ONLY_MESSAGE, JevBackend, JevClient
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
     from openai._base_client import SyncAPIClient
 
     from apps.experiments.models import ExperimentSession
+    from apps.service_providers.llm_service.decision_backend import DecisionBackend
 
 logger = logging.getLogger("ocs.llm_service")
 
@@ -102,6 +104,10 @@ class LlmService(pydantic.BaseModel):
 
         Providers with automatic server-side caching (OpenAI, Azure, DeepSeek) return None.
         """
+        return None
+
+    def get_decision_backend(self) -> DecisionBackend | None:
+        """The backend that answers this provider's decision models, or None when it has none."""
         return None
 
     def get_output_parser(self):
@@ -559,6 +565,23 @@ class VoyageAILlmService(LlmService):
 
     def get_reranker(self, model: str) -> Reranker:
         return VoyageReranker(api_key=self.voyage_api_key, model=model)
+
+
+class JevLlmService(LlmService):
+    jev_api_key: pydantic.SecretStr
+    jev_api_base: str = DEFAULT_JEV_API_BASE
+
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        raise ServiceProviderConfigError(self._type, JEV_ROUTER_ONLY_MESSAGE)
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        raise ServiceProviderConfigError(self._type, JEV_ROUTER_ONLY_MESSAGE)
+
+    def get_jev_client(self) -> JevClient:
+        return JevClient(api_key=self.jev_api_key.get_secret_value(), base_url=self.jev_api_base)
+
+    def get_decision_backend(self) -> JevBackend:
+        return JevBackend(self.get_jev_client())
 
 
 class GoogleVertexAILlmService(LlmService):
