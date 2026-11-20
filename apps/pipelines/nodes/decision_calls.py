@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from langchain_core.callbacks import CallbackManager
+from langchain_core.callbacks import CallbackManager, CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
@@ -37,11 +37,15 @@ def ask_decisions(
     """
     model_name = node.repo.get_llm_provider_model(node.llm_provider_model_id).name
     state = build_state(node, context)
+    run = _start_call(node, backend, model_name, backend.request_text(state, questions))
     try:
         response = backend.ask(model_name, state, questions)
-    except DecisionAuthenticationError as e:
-        raise ProviderConfigurationError(f"{AUTHENTICATION_MESSAGE} {e}") from e
-    _report_call(node, backend, model_name, backend.request_text(state, questions), response)
+    except Exception as e:
+        run.on_llm_error(e)
+        if isinstance(e, DecisionAuthenticationError):
+            raise ProviderConfigurationError(f"{AUTHENTICATION_MESSAGE} {e}") from e
+        raise
+    _end_call(run, response)
     return response
 
 
@@ -71,13 +75,10 @@ def _history_entry(message: BaseMessage) -> dict:
     return {"role": message.type, "content": message.text[:MESSAGE_CHARACTER_LIMIT]}
 
 
-def _report_call(
-    node: "RouterNode", backend: DecisionBackend, model_name: str, request_text: str, response: DecisionResponse
-) -> None:
-    """Report the call to the run's callbacks as an LLM call, so tracers and cost tracking see its usage.
-
-    Reported only once a response is in hand: a failed call has no usage to record.
-    """
+def _start_call(
+    node: "RouterNode", backend: DecisionBackend, model_name: str, request_text: str
+) -> CallbackManagerForLLMRun:
+    """Report the call to the run's callbacks as an LLM call, so tracers and cost tracking see it."""
     config = node._config or {}
     manager = CallbackManager.configure(
         inheritable_callbacks=config.get("callbacks"),
@@ -86,6 +87,10 @@ def _report_call(
         local_metadata={"ocs_provider_type": backend.provider_type, "ls_model_name": model_name},
     )
     (run,) = manager.on_llm_start({"name": backend.name}, [request_text], invocation_params={"model": model_name})
+    return run
+
+
+def _end_call(run: CallbackManagerForLLMRun, response: DecisionResponse) -> None:
     usage = response.usage
     message = AIMessage(
         content=json.dumps(response.raw_answers),
