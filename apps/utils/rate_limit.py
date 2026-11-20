@@ -6,6 +6,7 @@ Log-only unless settings.RATE_LIMIT_ENFORCE is True.
 import hashlib
 import ipaddress
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -25,6 +26,11 @@ RATE_LIMIT_EXEMPT_FLAG = "flag_ignore_rate_limiting"
 # incrementing every request; logging each one is unbounded (e.g. 4000 lines/window for
 # a team at 3x its limit). Log the crossing request, then sample every Nth after that.
 WOULD_BLOCK_LOG_INTERVAL = 100
+
+# Percentages of the limit at which an identity's usage is logged once per window. Without
+# them, nothing is recorded about an identity that stays under its limit, so a threshold
+# cannot be set from how close real traffic comes to it.
+NEAR_LIMIT_PERCENTS = (50, 80)
 
 _RATE_RE = re.compile(r"^(?P<count>\d+)/(?P<magnitude>\d*)(?P<unit>[smh])$")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
@@ -125,27 +131,47 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
         )
         return _degraded_result(limit, window_seconds, fail_open, refuses)
     if count > limit:
+        sampled = count == limit + 1 or count % WOULD_BLOCK_LOG_INTERVAL == 0
         if settings.RATE_LIMIT_ENFORCE and refuses:
+            if sampled:
+                _log_usage("rate_limit.blocked", scope, identity_type, identity, count, limit, team_id)
             return RateLimitResult(
                 allowed=False, limit=limit, remaining=0, reset_seconds=reset_seconds, retry_after=reset_seconds
             )
         # Reached either before the enforcement flip or, for a scope that never refuses,
         # for good. That scope produces no 429s, so this line is its only signal that an
         # identity crossed its limit and has to keep running after the flip.
-        if count == limit + 1 or count % WOULD_BLOCK_LOG_INTERVAL == 0:
-            logger.info(
-                "rate_limit.would_block",
-                extra={
-                    "scope": scope,
-                    "identity_type": identity_type,
-                    "key_hash": hashlib.sha256(identity.encode()).hexdigest()[:12],
-                    "count": count,
-                    "limit": limit,
-                    "team_id": team_id,
-                },
-            )
+        if sampled:
+            _log_usage("rate_limit.would_block", scope, identity_type, identity, count, limit, team_id)
         return RateLimitResult(allowed=True, limit=limit, remaining=0, reset_seconds=reset_seconds)
+    if percent := _near_limit_percent(count, limit):
+        _log_usage("rate_limit.near_limit", scope, identity_type, identity, count, limit, team_id, percent=percent)
     return RateLimitResult(allowed=True, limit=limit, remaining=limit - count, reset_seconds=reset_seconds)
+
+
+def _near_limit_percent(count: int, limit: int) -> int | None:
+    """The highest `NEAR_LIMIT_PERCENTS` entry whose threshold is exactly `count`, if any.
+
+    Counts rise by one per request, so matching on equality logs each threshold once per
+    window. A small limit can put two thresholds on the same count; the higher one wins.
+    """
+    matched = [percent for percent in NEAR_LIMIT_PERCENTS if count == math.ceil(limit * percent / 100)]
+    return max(matched, default=None)
+
+
+def _log_usage(event, scope, identity_type, identity, count, limit, team_id, **fields):
+    logger.info(
+        event,
+        extra={
+            "scope": scope,
+            "identity_type": identity_type,
+            "key_hash": hashlib.sha256(identity.encode()).hexdigest()[:12],
+            "count": count,
+            "limit": limit,
+            "team_id": team_id,
+            **fields,
+        },
+    )
 
 
 def client_ip(request) -> str:
