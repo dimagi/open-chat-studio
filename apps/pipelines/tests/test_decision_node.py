@@ -105,7 +105,7 @@ class TestValidation:
             pytest.param(
                 [INTENT, {**REFUND, "key": "intent_confidence"}], "where intent writes its confidence", id="confidence"
             ),
-            pytest.param([{**INTENT, "options": []}], "needs 1 to 255 options", id="choice-without-options"),
+            pytest.param([{**INTENT, "options": []}], "needs at least one option", id="choice-without-options"),
             pytest.param(
                 [{**INTENT, "options": [{"name": str(i)} for i in range(256)]}],
                 "needs 1 to 255 options",
@@ -115,7 +115,7 @@ class TestValidation:
             pytest.param(
                 [{**INTENT, "options": [{"name": "Yes"}, {"name": "YES"}]}], "more than once", id="repeated-option"
             ),
-            pytest.param([{**FRUSTRATION, "levels": []}], "needs 1 to 10 levels", id="score-without-levels"),
+            pytest.param([{**FRUSTRATION, "levels": []}], "needs at least one level", id="score-without-levels"),
             pytest.param([{**FRUSTRATION, "levels": ["x"] * 11}], "needs 1 to 10 levels", id="too-many-levels"),
             pytest.param([{**FRUSTRATION, "levels": ["Calm", ""]}], "describe every level", id="blank-level"),
             pytest.param([{**REFUND, "threshold": 0.5}], "threshold does not apply", id="noul-threshold"),
@@ -191,12 +191,25 @@ class TestLimits:
 
         assert excinfo.value.errors()[0]["ctx"]["field"] == "decisions"
 
-    def test_limits_are_skipped_when_the_provider_cannot_be_loaded(self, jev_ids):
+    def test_upper_limits_are_skipped_when_the_provider_cannot_be_loaded(self, jev_ids):
         """The run reports a provider it cannot load; validation should not fail on it first."""
         with mock.patch.object(ORMRepository, "get_llm_service", side_effect=RepositoryLookupError("gone")):
             node = _node(jev_ids, decisions=[{**FRUSTRATION, "levels": ["x"] * 11}])
 
         assert len(node.decisions[0].levels) == 11
+
+    @pytest.mark.parametrize(
+        ("decision", "message"),
+        [
+            pytest.param({**INTENT, "options": []}, "needs at least one option", id="choice-without-options"),
+            pytest.param({**FRUSTRATION, "levels": []}, "needs at least one level", id="score-without-levels"),
+        ],
+    )
+    def test_an_empty_decision_is_rejected_when_the_provider_cannot_be_loaded(self, jev_ids, decision, message):
+        """No backend takes a choice with nothing to choose or a score with no rubric, so this needs no backend."""
+        with mock.patch.object(ORMRepository, "get_llm_service", side_effect=RepositoryLookupError("gone")):
+            with pytest.raises(PydanticValidationError, match=message):
+                _node(jev_ids, decisions=[decision])
 
 
 def test_accepts_a_decision_model_listed_under_a_chat_provider(db):
