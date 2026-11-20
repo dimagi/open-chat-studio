@@ -40,6 +40,7 @@ from apps.pipelines.models import (
 from apps.pipelines.nodes import router_prompts
 from apps.pipelines.nodes.base import (
     Intents,
+    ModelUse,
     NodeSchema,
     OptionsSource,
     PipelineNode,
@@ -51,13 +52,12 @@ from apps.pipelines.nodes.base import (
     deprecated_node,
 )
 from apps.pipelines.nodes.context import PipelineAccessor
+from apps.pipelines.nodes.decision_router import route_with_decisions
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
-from apps.pipelines.nodes.jev_router import route_with_jev
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.nodes.restricted_http import RestrictedHttpClient
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError
 from apps.pipelines.tasks import send_email_from_pipeline
-from apps.service_providers.llm_service import JevLlmService
 from apps.service_providers.llm_service.outcomes import provider_reason
 from apps.service_providers.llm_service.prompt_context import (
     PipelineParticipantDataProxy,
@@ -699,9 +699,9 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
             ],
         )
     )
-    accepts_router_only_providers: ClassVar[bool] = True
+    model_use: ClassVar[ModelUse] = ModelUse.any
 
-    llm_provider_id: int = llm_provider_id_field(accepts_router_only_providers=True)
+    llm_provider_id: int = llm_provider_id_field(ModelUse.any)
     prompt_mode: RouterPromptMode = Field(
         RouterPromptMode.STANDARD,
         title="Prompt Mode",
@@ -770,7 +770,7 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         le=1.0,
         title="Confidence Threshold",
         description=(
-            "Only used with a Jev provider. When Jev's confidence in the route it chose is below this, "
+            "Only used with a decision model. When the model's confidence in the route it chose is below this, "
             "the router takes the default route instead. 0 always takes the chosen route."
         ),
         json_schema_extra=UiSchema(widget=Widgets.range),
@@ -834,9 +834,8 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
     def _process_conditional(self, context: "NodeContext"):
         default_keyword = self.keywords[self.default_keyword_index] if self.keywords else None
         system_message = self._system_message(context, default_keyword)
-        llm_service = self.get_llm_service()
-        if isinstance(llm_service, JevLlmService):
-            keyword = route_with_jev(self, context, system_message.text, llm_service.get_jev_client())
+        if not self.repo.get_llm_provider_model(self.llm_provider_model_id).supports_chat:
+            keyword = route_with_decisions(self, context, system_message.text, self.get_decision_backend())
         else:
             keyword = self._route_with_agent(context.input, system_message)
 

@@ -1245,8 +1245,13 @@ export function LlmWidget(props: WidgetParams) {
     );
   };
 
+  const modelUse = props.schema["ui:modelUse"];
+  const offeredModels = (parameterValues.llm_provider_model_id as LlmProviderModel[]).filter(
+    (model) => modelUse !== "chat" || model.chat !== false
+  );
+
   type ProviderModelsByType = { [type: string]: TypedOption[] };
-    const providerModelsByType = parameterValues.llm_provider_model_id.reduce((acc, provModel) => {
+    const providerModelsByType = offeredModels.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
       acc[provModel.type] = [];
     }
@@ -1254,11 +1259,6 @@ export function LlmWidget(props: WidgetParams) {
     return acc;
   }, {} as ProviderModelsByType);
 
-
-  const excludedProviderTypes = props.schema["ui:excludedProviderTypes"] ?? [];
-  const providers = parameterValues.llm_provider_id.filter(
-    (provider) => !excludedProviderTypes.includes(provider.type)
-  );
 
   const providerId = concatenate(props.nodeParams.llm_provider_id);
   const providerModelId = concatenate(props.nodeParams.llm_provider_model_id);
@@ -1291,8 +1291,8 @@ export function LlmWidget(props: WidgetParams) {
           <option value="" disabled>
             Select a model
           </option>
-          {providers.map((provider) => {
-            const providersWithSameType = providers.filter(p => p.type === provider.type).length;
+          {parameterValues.llm_provider_id.map((provider) => {
+            const providersWithSameType = parameterValues.llm_provider_id.filter(p => p.type === provider.type).length;
 
             return providerModelsByType[provider.type] &&
               providerModelsByType[provider.type].map((providerModel) => (

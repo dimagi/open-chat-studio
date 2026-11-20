@@ -55,8 +55,10 @@ class VoiceProviderObjectManager(AuditingManager):
 
 class LlmProviderQuerySet(AuditingQuerySet):
     def text_generating(self) -> "LlmProviderQuerySet":
-        """The providers that can write text, leaving out those that only classify."""
-        return self.exclude(type__in=LlmProviderTypes.router_only_slugs)
+        """The providers that can write text, leaving out those whose models only make decisions."""
+        from apps.service_providers.llm_service.default_models import DECISION_ONLY_TYPES  # noqa: PLC0415 - circular
+
+        return self.exclude(type__in=DECISION_ONLY_TYPES)
 
 
 class LlmProviderObjectManagerObjectManager(AuditingManager.from_queryset(LlmProviderQuerySet)):
@@ -128,15 +130,6 @@ class LlmProviderTypes(LlmProviderType, Enum):
         has a type and no row yet.
         """
         return self not in (LlmProviderTypes.voyage, LlmProviderTypes.jev)
-
-    @property
-    def router_only(self) -> bool:
-        """Whether this type classifies instead of generating text, so only the LLM Router node can use it."""
-        return self == LlmProviderTypes.jev
-
-    @classproperty
-    def router_only_slugs(cls) -> list[str]:
-        return [member.slug for member in cls if member.router_only]
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -426,7 +419,15 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         self.extra_data = extra_data
 
 
-class LlmProviderModelManager(models.Manager):
+class LlmProviderModelQuerySet(models.QuerySet):
+    def chat(self) -> "LlmProviderModelQuerySet":
+        """The models that write text, leaving out those that only make decisions."""
+        from apps.service_providers.llm_service.default_models import chat_models_q  # noqa: PLC0415 - circular
+
+        return self.filter(chat_models_q())
+
+
+class LlmProviderModelManager(models.Manager.from_queryset(LlmProviderModelQuerySet)):
     def get_or_create_for_team(self, team, name, type, max_token_limit=8192):
         try:
             return self.for_team(team).get(name=name, type=type, max_token_limit=max_token_limit), False
@@ -469,6 +470,12 @@ class LlmProviderModel(BaseTeamModel):
     @property
     def display_name(self):
         return f"{self.name} (Deprecated)" if self.deprecated else self.name
+
+    @property
+    def supports_chat(self) -> bool:
+        from apps.service_providers.llm_service.default_models import model_uses  # noqa: PLC0415 - circular
+
+        return model_uses(self.type, self.name)[0]
 
     objects = LlmProviderModelManager()
 

@@ -129,7 +129,7 @@ def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
 
 
 @pytest.mark.django_db()
-def test_get_node_default_values_skips_a_router_only_provider():
+def test_get_node_default_values_skips_a_decision_only_provider():
     """Every node type starts from these defaults, and only the router accepts a Jev provider."""
     team = TeamWithUsersFactory.create()
     LlmProviderFactory.create(team=team, type="jev")

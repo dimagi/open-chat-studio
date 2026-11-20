@@ -186,7 +186,7 @@ class RouterNodeParams(_HistoryParams, _RouterParams):
     confidence_threshold = serializers.FloatField(
         required=False,
         help_text=(
-            "Only used with a Jev provider: below this confidence in the chosen route, the router takes the "
+            "Only used with a decision model: below this confidence in the chosen route, the router takes the "
             "default route. ``0`` always takes the chosen route."
         ),
     )

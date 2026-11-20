@@ -11,7 +11,7 @@ from apps.chat.exceptions import ProviderConfigurationError
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
-from apps.pipelines.nodes.jev_router import HISTORY_LIMIT
+from apps.pipelines.nodes.decision_calls import HISTORY_LIMIT
 from apps.pipelines.nodes.nodes import (
     ExtractParticipantData,
     ExtractStructuredData,
@@ -259,7 +259,7 @@ class TestUsage:
     ],
 )
 def test_only_the_router_accepts_a_jev_provider(jev_ids, node_class, params):
-    with pytest.raises(PydanticValidationError, match="Jev can only be used by the LLM Router node"):
+    with pytest.raises(PydanticValidationError, match="only the LLM Router node can use it"):
         node_class(node_id="node", django_node=None, name="node", **jev_ids, **params)
 
 

@@ -130,7 +130,7 @@ NOTES: dict[str, str] = {
         "`keywords[i]` routes to handle `output_i`; keywords are uppercased on save. The standard prompt "
         "lists each keyword with its `route_descriptions` entry; `custom_context` adds to it, and `prompt` "
         "is used only when `prompt_mode` is `custom`. `prompt_template_version` picks the standard prompt "
-        "version; omit it for the latest. `confidence_threshold` is used only with a Jev provider."
+        "version; omit it for the latest. `confidence_threshold` is used only with a decision model."
     ),
     "StaticRouterNode": "Routes on stored data instead of an LLM; takes no LLM params.",
     "LLMResponseWithPrompt": "A normal LLM node, with every optional param set.",

@@ -131,7 +131,7 @@ class EvaluatorFormsetMixin:
         llm_providers = list(
             LlmProvider.objects.filter(team=self.request.team).text_generating().values("id", "name", "type")
         )
-        llm_provider_models = list(LlmProviderModel.objects.for_team(self.request.team))
+        llm_provider_models = list(LlmProviderModel.objects.for_team(self.request.team).chat())
         return {
             "evaluator_schemas": _evaluator_schemas(),
             "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),

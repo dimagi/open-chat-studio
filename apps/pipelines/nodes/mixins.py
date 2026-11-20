@@ -14,6 +14,7 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import Tag, TagCategories
 from apps.pipelines.exceptions import (
+    NodeUserConfigRunError,
     PipelineNodeBuildError,
     PipelineNodeRunError,
 )
@@ -22,6 +23,7 @@ from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
 from apps.pipelines.nodes.base import (
+    ModelUse,
     OptionsSource,
     PipelineState,
     UiSchema,
@@ -37,12 +39,12 @@ from apps.pipelines.nodes.history_middleware import (
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError, get_prefetched_llm_provider_model
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service.decision_backend import DecisionBackend
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
-from apps.service_providers.llm_service.jev import JEV_ROUTER_ONLY_MESSAGE
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
-from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.json import dict_to_json_schema
 from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
@@ -74,8 +76,11 @@ class OutputMessageTagMixin(BaseModel):
         return tags
 
 
-def llm_provider_id_field(accepts_router_only_providers: bool = False) -> Any:
-    excluded_provider_types = None if accepts_router_only_providers else LlmProviderTypes.router_only_slugs
+DECISION_ONLY_MODEL_MESSAGE = "This model only makes decisions, so only the LLM Router node can use it"
+NO_DECISION_BACKEND_MESSAGE = "The selected provider cannot answer decision questions"
+
+
+def llm_provider_id_field(model_use: ModelUse = ModelUse.chat) -> Any:
     return Field(
         ...,
         title="LLM Model",
@@ -83,14 +88,14 @@ def llm_provider_id_field(accepts_router_only_providers: bool = False) -> Any:
         json_schema_extra=UiSchema(
             widget=Widgets.llm_provider_model,
             options_source=OptionsSource.llm_provider_id,
-            excluded_provider_types=excluded_provider_types,
+            model_use=model_use,
         ),
     )
 
 
 class LLMResponseMixin(BaseModel):
-    # Jev classifies and cannot generate text, so only a node that overrides this can use it.
-    accepts_router_only_providers: ClassVar[bool] = False
+    # Kept in step with the `model_use` of the node's `llm_provider_id_field`.
+    model_use: ClassVar[ModelUse] = ModelUse.chat
 
     llm_provider_id: int = llm_provider_id_field()
     llm_provider_model_id: int = Field(
@@ -143,14 +148,18 @@ class LLMResponseMixin(BaseModel):
                 {"field": "llm_provider_model_id"},
             ) from None
 
-        if model.type in LlmProviderTypes.router_only_slugs and not self.accepts_router_only_providers:
-            raise PydanticCustomError("invalid_model", JEV_ROUTER_ONLY_MESSAGE, {"field": "llm_provider_model_id"})
+        self.check_model(model)
 
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
             params_cls.model_validate(self.llm_model_parameters)
 
         return self
+
+    def check_model(self, model: LlmProviderModel) -> None:
+        """Raise when this node cannot call `model`."""
+        if self.model_use == ModelUse.chat and not model.supports_chat:
+            raise PydanticCustomError("invalid_model", DECISION_ONLY_MODEL_MESSAGE, {"field": "llm_provider_model_id"})
 
     def get_llm_service(self) -> LlmService:
         try:
@@ -163,6 +172,13 @@ class LLMResponseMixin(BaseModel):
             # A configured provider that fails to initialise (e.g. credentials that won't decrypt) is an
             # operational failure that may be systemic -- raise a run error so it still reaches Sentry.
             raise PipelineNodeRunError("There was an issue configuring the LLM service provider") from e
+
+    def get_decision_backend(self) -> DecisionBackend:
+        """The backend that answers the node's decision model."""
+        backend = self.get_llm_service().get_decision_backend()
+        if backend is None:
+            raise NodeUserConfigRunError(NO_DECISION_BACKEND_MESSAGE)
+        return backend
 
     def get_chat_model(self):
         model_name = self.repo.get_llm_provider_model(self.llm_provider_model_id).name

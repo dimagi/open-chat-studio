@@ -5,6 +5,7 @@
       "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
+      "ui:modelUse": "any",
       "ui:optionsSource": "llm_provider_id",
       "ui:widget": "llm_provider_model"
     },
@@ -180,7 +181,7 @@
     },
     "confidence_threshold": {
       "default": 0.0,
-      "description": "Only used with a Jev provider. When Jev's confidence in the route it chose is below this, the router takes the default route instead. 0 always takes the chosen route.",
+      "description": "Only used with a decision model. When the model's confidence in the route it chose is below this, the router takes the default route instead. 0 always takes the chosen route.",
       "maximum": 1.0,
       "minimum": 0.0,
       "title": "Confidence Threshold",

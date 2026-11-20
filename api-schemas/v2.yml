@@ -572,7 +572,7 @@ paths:
                   its `route_descriptions` entry; `custom_context` adds to it, and
                   `prompt` is used only when `prompt_mode` is `custom`. `prompt_template_version`
                   picks the standard prompt version; omit it for the latest. `confidence_threshold`
-                  is used only with a Jev provider.'
+                  is used only with a decision model.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -4807,9 +4807,9 @@ components:
         confidence_threshold:
           type: number
           format: double
-          description: 'Only used with a Jev provider: below this confidence in the
-            chosen route, the router takes the default route. ``0`` always takes the
-            chosen route.'
+          description: 'Only used with a decision model: below this confidence in
+            the chosen route, the router takes the default route. ``0`` always takes
+            the chosen route.'
     ScheduledTriggerWrite:
       type: object
       description: A chatbot trigger and the action it runs.
