@@ -123,9 +123,10 @@ and tags are a common sync filter.
 
 ### D5: One scope, `sessions:read`
 
-**Decision.** `required_scopes = ["sessions:read"]` on all three endpoints. API keys and user tokens
-need `experiments.view_experimentsession`, and `chat.view_chatmessage` as well for `/messages/` and
-for the session detail, which embeds messages.
+**Decision.** OAuth tokens need the `sessions:read` scope on all three endpoints. Each view declares
+`required_scopes = ["sessions"]`, and `TokenHasOAuthResourceScope` appends `:read` for a GET. API
+keys and user tokens need `experiments.view_experimentsession`, and `chat.view_chatmessage` as well
+for `/messages/` and for the session detail, which embeds messages.
 
 **Context.** The scope is declared and unused. Messages are read in the context of their sessions,
 but message content has its own view permission in the web app.
