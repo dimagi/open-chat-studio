@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from apps.chat.agent.tools import get_tool_for_custom_action_operation
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
+from apps.service_providers.llm_service.google_decisions import GOOGLE_DECISION_LIMITS
 from apps.service_providers.llm_service.jev import JEV_LIMITS
 from apps.service_providers.models import LlmProviderModel, VoiceProviderType
 from apps.utils.factories.custom_actions import ACTION_SCHEMA, CustomActionFactory, CustomActionOperationFactory
@@ -145,13 +146,15 @@ def test_get_node_default_values_skips_a_decision_only_provider():
 
 
 @pytest.mark.parametrize(
-    ("provider_type", "model_name"),
+    ("provider_type", "model_name", "max_levels"),
     [
-        pytest.param("jev", "jev-latest", id="decision-only-type"),
-        pytest.param("google", "gemini-decision-1", id="decision-model-of-a-chat-type"),
+        pytest.param("jev", "jev-latest", JEV_LIMITS.max_levels, id="decision-only-type"),
+        pytest.param(
+            "google", "gemini-decision-1", GOOGLE_DECISION_LIMITS.max_levels, id="decision-model-of-a-chat-type"
+        ),
     ],
 )
-def test_a_decision_only_model_is_marked_for_the_builder(team, provider_type, model_name):
+def test_a_decision_only_model_is_marked_for_the_builder(team, provider_type, model_name, max_levels):
     """The builder offers a model marked `chat: false` and `decisions: true` only to the nodes that can call it."""
     chat_model = LlmProviderModelFactory.create(team=team, type="openai")
     decision_model = LlmProviderModelFactory.create(team=team, type=provider_type, name=model_name)
@@ -164,7 +167,7 @@ def test_a_decision_only_model_is_marked_for_the_builder(team, provider_type, mo
     assert "max_levels" not in options[chat_model.id]
     assert options[decision_model.id]["chat"] is False
     assert options[decision_model.id]["decisions"] is True
-    assert options[decision_model.id]["max_levels"] == JEV_LIMITS.max_levels
+    assert options[decision_model.id]["max_levels"] == max_levels
 
 
 @pytest.mark.parametrize(
