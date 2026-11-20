@@ -97,6 +97,8 @@ def test_a_custom_base_url_is_used(httpx_mock):
         pytest.param({"type": "choice", "choice": "BILLING", "confidence": "NaN"}, id="nan-confidence"),
         pytest.param({"type": "choice", "choice": "BILLING", "confidence": 1.5}, id="confidence-above-one"),
         pytest.param({"type": "choice", "choice": "BILLING", "confidence": -0.1}, id="negative-confidence"),
+        pytest.param({"type": "choice", "choice": None, "confidence": 0.9}, id="null-choice"),
+        pytest.param({"type": "choice", "choice": 1, "confidence": 0.9}, id="number-choice"),
     ],
 )
 def test_a_missing_or_malformed_answer_reads_as_none(httpx_mock, answer):
