@@ -5,7 +5,13 @@ hidden tab. The fields are laid out by hand because the layout pairs fields from
 {% endcomment %}
 <dialog class="modal" open>
   <div class="modal-box p-0 {% if channel %}max-w-3xl{% else %}max-w-2xl{% endif %}"
-       x-data="{ tab: '{% if channel and platform %}embed{% else %}settings{% endif %}' }">
+       x-data="{
+               tab: '{% if channel and platform %}embed{% else %}settings{% endif %}',
+               focusTab(name) {
+                 this.tab = name;
+                 this.$nextTick(() => document.getElementById('widget-tab-' + name).focus());
+               },
+               }">
     <form method="post"
       {% if channel %}
         hx-post="{% url "channels:channel_edit_dialog" request.team.slug experiment.id channel.id %}"

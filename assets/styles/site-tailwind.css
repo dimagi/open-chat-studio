@@ -10,6 +10,7 @@
 @config '../../tailwind.config.js';
 @plugin "@tailwindcss/typography";
 @source inline("alert-success", "alert-info", "alert-error", "alert-warning", "alertify-notifier");
+@source inline("btn-{info,warning,error}");
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 @plugin "daisyui" {

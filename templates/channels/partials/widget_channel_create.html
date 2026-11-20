@@ -1,20 +1,19 @@
 {% with name=form.name domains=extra_form.allowed_domains all_domains=extra_form.allow_all_domains %}
   <div class="px-6 pt-6">
     <h3 class="text-lg font-bold">Add Chat Widget &amp; API Channel</h3>
-    <p class="text-sm opacity-70">Two things to decide. The embed code comes after.</p>
+    <p class="text-sm opacity-70">Name the channel and choose where it can be embedded. You’ll get the embed code next.</p>
   </div>
   <div class="px-6 py-5 flex flex-col gap-5">
     {{ form.non_field_errors }}{{ extra_form.non_field_errors }}
     {# A new channel starts enabled; the toggle is on the edit view. #}
     <input type="hidden" name="enabled" value="on">
     {{ extra_form.widget_token }}
-    <div>
-      <label for="{{ name.id_for_label }}" class="block text-sm font-semibold mb-1.5">Channel name</label>
+    <c-ui.field label="Channel name" :input_id="name.id_for_label" :errors="name.errors" description="Leave blank to use the chatbot name.">
       <input type="text" id="{{ name.id_for_label }}" name="{{ name.html_name }}" value="{{ name.value|default_if_none:'' }}"
-             class="input w-full h-11 rounded-lg" placeholder="{{ experiment.name }}">
-      <p class="text-sm opacity-70 mt-1.5">Leave blank to use the chatbot name.</p>
-      {% for error in name.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
-    </div>
+             class="input w-full h-11 rounded-lg" placeholder="{{ experiment.name }}"
+             aria-describedby="{{ name.id_for_label }}_helptext{% if name.errors %} {{ name.id_for_label }}_error{% endif %}"
+             {% if name.errors %}aria-invalid="true"{% endif %}>
+    </c-ui.field>
     <fieldset>
       <legend class="text-sm font-semibold mb-1.5">Where the widget may be embedded</legend>
       <div class="flex flex-col gap-2">
@@ -24,7 +23,7 @@
                  x-model.boolean="allowAllDomains" :value="true">
           <span>
             <span class="block font-semibold">Any domain</span>
-            <span class="block text-sm opacity-70">The embed token is the only thing standing between a page and this chatbot.</span>
+            <span class="block text-sm opacity-70">Any website with the embed token can load this chatbot.</span>
           </span>
         </label>
         <label class="flex gap-3 items-start rounded-lg border p-3 cursor-pointer"
@@ -33,30 +32,21 @@
                  x-model.boolean="allowAllDomains" :value="false">
           <span>
             <span class="block font-semibold">Only these domains</span>
-            <span class="block text-sm opacity-70">One per line. Wildcards allowed, e.g. *.mysite.org</span>
+            <span class="block text-sm opacity-70">Pages on any other domain are refused.</span>
           </span>
         </label>
         <div class="pl-8" x-show="!allowAllDomains">
-          <label for="{{ domains.id_for_label }}" class="sr-only">Allowed domains</label>
-          <textarea id="{{ domains.id_for_label }}" name="{{ domains.html_name }}" rows="3" class="textarea w-full rounded-lg font-mono"
-                    placeholder="example.com
-*.mysite.org" :disabled="allowAllDomains"
-                    {% if domains.errors %}aria-invalid="true" aria-describedby="{{ domains.id_for_label }}_errors"{% endif %}>{{ domains.value|default_if_none:'' }}</textarea>
-          {% if domains.errors %}
-            <div id="{{ domains.id_for_label }}_errors">
-              {% for error in domains.errors %}<p class="text-sm text-error mt-1">{{ error }}</p>{% endfor %}
-            </div>
-          {% endif %}
+          {% include "channels/partials/widget_domains_field.html" with all_domains=None %}
         </div>
       </div>
     </fieldset>
     <div class="flex gap-3 rounded-lg border border-dashed border-base-300 bg-base-200/50 p-4 text-sm">
-      <i class="fa-solid fa-lock opacity-60 mt-0.5"></i>
+      <i class="fa-solid fa-code opacity-60 mt-0.5"></i>
       <div>
-        <p class="font-semibold">Install</p>
+        <p class="font-semibold">Next: embed code</p>
         <p class="opacity-70">
-          Chatbot ID, embed token and the script tag to paste into your site appear here once the channel exists.
-          Session lifetime, the credential type and the disabled-channel message become available too.
+          The chatbot ID, embed token and script tag are on the Embed &amp; API tab.
+          More settings are available after you create the channel.
         </p>
       </div>
     </div>
