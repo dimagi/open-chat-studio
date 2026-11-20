@@ -136,6 +136,8 @@ def decision_error(decision: Decision, message: str, **context: str) -> Pydantic
 
 def _check_options(decision: Decision) -> None:
     names = [_normalized(option.name) for option in decision.options]
+    if not names:
+        raise decision_error(decision, "Decision {key} needs at least one option")
     if not all(names):
         raise decision_error(decision, "Every option of decision {key} needs a name")
     if len(set(names)) != len(names):
@@ -143,6 +145,8 @@ def _check_options(decision: Decision) -> None:
 
 
 def _check_levels(decision: Decision) -> None:
+    if not decision.levels:
+        raise decision_error(decision, "Decision {key} needs at least one level")
     if not all(level.strip() for level in decision.levels):
         raise decision_error(decision, "Decision {key} must describe every level")
 
