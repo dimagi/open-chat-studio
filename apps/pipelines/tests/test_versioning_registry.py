@@ -68,7 +68,7 @@ def test_revert_referenced_record_maps_version_to_working_id():
     source_material = SourceMaterialFactory.create()
     version = source_material.create_new_version()
     node = NodeFactory.create(type="LLMResponseWithPrompt", params={"source_material_id": str(version.id)})
-    node.update_from_params()  # mirror the versioned id into the source_material FK
+    node.update_from_params()  # load the versioned id into the authoritative source_material FK
     assert node.source_material_id == version.id
 
     spec = {spec.param_name: spec for spec in NODE_PARAM_SPECS["LLMResponseWithPrompt"]}["source_material_id"]

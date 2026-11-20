@@ -7,7 +7,8 @@ from functools import cached_property
 from uuid import uuid4
 
 import pydantic
-from django.db import DatabaseError, models, transaction
+from django.core.exceptions import ValidationError
+from django.db import DatabaseError, connection, models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -33,6 +34,7 @@ from apps.pipelines.flow import (
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.node_type import NodeType, node_types_declaring, server_managed_node_types
 from apps.pipelines.node_writes import content_nodes_from_data, write_content_nodes
+from apps.pipelines.resource_references import split_resource_params
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
@@ -64,6 +66,22 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
 #: these related rows per node, so ``flow_data`` is an N+1 without them.
 NODE_RESOURCE_PREFETCHES = ("node_set__collection_indexes", "node_set__custom_action_operations")
+NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID = 4503001
+
+
+class NodeResourceCutoverState(models.Model):
+    """Track the one-time transition from legacy JSON mirrors to relation-only storage."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    legacy_json_compatibility_enabled = models.BooleanField(default=False)
+    cleanup_completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "pipelines_node_resource_cutover_state"
+
+    def __str__(self) -> str:
+        """Identify the singleton resource cutover state in admin and logs."""
+        return "Node resource cutover state"
 
 
 class Pipeline(BaseTeamModel, VersionsMixin):
@@ -202,8 +220,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """
         from apps.pipelines.repository import prefetch_llm_provider_models  # noqa: PLC0415 - circular
 
+        models.prefetch_related_objects([self], *NODE_RESOURCE_PREFETCHES)
         nodes = self.node_set.all()
-        llm_model_ids = [model_id for node in nodes if (model_id := node.params.get("llm_provider_model_id"))]
+        llm_model_ids = [model_id for node in nodes if (model_id := node.runtime_params().get("llm_provider_model_id"))]
         with prefetch_llm_provider_models(llm_model_ids):
             return self._validate(nodes, full)
 
@@ -260,7 +279,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # validation.
             return {"root": f"Unknown node type: {node.type}"}
         try:
-            node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
+            node_class.model_validate({**node.runtime_params(), "node_id": node.flow_id, "django_node": node})
         except pydantic.ValidationError as e:
             # A model-level error carries no ``loc`` and names its field in ``ctx`` instead (see the
             # PydanticCustomError raises under apps/pipelines/nodes). A validator raising a plain
@@ -612,6 +631,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         return self.node_type.output_handles(self.params or {}, self.flow_id, django_node=self)
 
+    @transaction.atomic()
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
         Create a new version of the node. Params that reference versioned records (see
@@ -621,6 +641,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             pipeline: If provided, the new version will be assigned to this pipeline before saving,
                 avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
+        preserve_legacy_json = self._lock_resource_cutover_state()
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -628,44 +649,103 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if not new_version.node_type.is_server_managed and new_version.name == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
+        resource_params = self.resource_params()
+        versioned_params = {**new_version.params, **resource_params}
         if not is_copy:
             for spec in self.node_type.versioned_param_specs:
-                spec.version_referenced_record(new_version.params)
+                spec.version_referenced_record(versioned_params)
+
+        new_version.params, resource_params = split_resource_params(versioned_params, self.resource_param_names())
+        for field_name in self.resource_fk_fields():
+            setattr(new_version, f"{field_name}_id", as_int(resource_params.get(f"{field_name}_id")))
 
         if pipeline is not None:
             new_version.pipeline = pipeline
         new_version.save()
+        new_version.collection_indexes.set(self.collection_indexes.all())
         if self.node_type.declares("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
-        new_version._sync_resource_fk_fields()
-
+        new_version._mirror_resource_params_for_legacy_runtime(preserve_legacy_json)
         return new_version
 
     def set_params(self, params):
-        """Assign params, persist them, and re-derive the resource FK mirror.
+        """Replace the node's complete configuration and its resource relationships.
 
-        Prefer this over assigning ``self.params`` and calling ``save()`` directly: it keeps
-        the FK columns (a derived mirror of the ids in params) from drifting away from params.
-        See ``_sync_resource_fk_fields``.
+        This is the full-replacement API used by maintenance code. Missing scalar references are
+        cleared, as are missing list references; partial editor updates use ``update_from_params``
+        instead so omitted references are preserved.
         """
-        self.params = params
-        # Persist only params (not a full save of a possibly-stale instance) so concurrent
-        # writes to unrelated columns aren't clobbered. _sync_resource_fk_fields handles the
-        # derived FK columns.
+        ordinary_params, resource_params = split_resource_params(params, self.resource_param_names())
+        resource_params.update(
+            {
+                name: [] if name in {"collection_index_ids", "custom_actions"} else None
+                for name in self.resource_param_names()
+                if name not in resource_params
+            }
+        )
+        self.update_from_params(resource_params, ordinary_params=ordinary_params, team=self.pipeline.team)
+
+    @transaction.atomic()
+    def update_from_params(self, resource_params=None, *, ordinary_params=None, team=None):
+        """Apply resource relations from an editor payload without duplicate IDs in JSON.
+
+        API callers validate submitted references with the pipeline-edit reference checker before
+        reaching this persistence adapter. Other callers may use this method to normalize legacy
+        or internally constructed rows, so the adapter verifies that referenced rows exist but does
+        not impose the API's team-ownership policy a second time.
+        """
+        if ordinary_params is None:
+            ordinary_params, inferred_resources = split_resource_params(self.params or {}, self.resource_param_names())
+            if resource_params is None:
+                resource_params = inferred_resources
+        resource_params = resource_params or {}
+        declared_params = self.node_type.declared_params
+        resource_params.update(
+            {
+                name: [] if name in {"collection_index_ids", "custom_actions"} else None
+                for name in self.resource_param_names()
+                if name not in declared_params
+            }
+        )
+        preserve_legacy_json = self._lock_resource_cutover_state()
+        self.params = ordinary_params
+        invalid_resource_params = {}
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            value = resource_params.get(param_name)
+            related_model = self._meta.get_field(field_name).related_model
+            if value not in (None, "") and not related_model._base_manager.filter(pk=as_int(value)).exists():
+                # Keep an invalid value visible to runtime validation. API callers reject it before
+                # this adapter, while internal and legacy callers need the existing error message.
+                invalid_resource_params[param_name] = value
         self.save(update_fields=["params"])
-        self._sync_resource_fk_fields()
+        self._apply_resource_params(resource_params)
+        self._mirror_resource_params_for_legacy_runtime(preserve_legacy_json, invalid_resource_params)
 
-    def update_from_params(self):
-        """Callback to do DB related updates pertaining to the node params"""
-        self._sync_resource_fk_fields()
+    @staticmethod
+    def _lock_resource_cutover_state() -> bool:
+        """Read the compatibility flag while excluding a concurrent cutover transition."""
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock_shared(%s)", [NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID])
+        state, _created = NodeResourceCutoverState.objects.get_or_create(pk=1)
+        return state.legacy_json_compatibility_enabled
 
-        if self.node_type.declares("custom_actions"):
-            custom_action_infos = []
-            for custom_action_operation in self.params.get("custom_actions") or []:
-                custom_action_id, operation_id = custom_action_operation.split(":")
-                custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
+    def _mirror_resource_params_for_legacy_runtime(self, enabled: bool, invalid_params: dict | None = None) -> None:
+        """Keep JSON resource ids available to old application tasks during the first rollout."""
+        if not enabled:
+            return
 
-            set_custom_actions(self, custom_action_infos)
+        params = self.params.copy()
+        resource_params = self.resource_params()
+        for param_name in self.node_type.declared_params & self.resource_param_names():
+            value = resource_params.get(param_name)
+            if value in (None, []):
+                params.pop(param_name, None)
+            else:
+                params[param_name] = value
+        params.update(invalid_params or {})
+        self.params = params
+        self.save(update_fields=["params"])
 
     @classmethod
     def resource_fk_fields(cls):
@@ -687,72 +767,195 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def resource_params(self) -> dict:
-        """The resources this node references, read off its FK columns, its M2M and its related rows.
+        """Return resource IDs from relations, with a safe bridge for pre-cutover rows.
 
-        Params carries copies of these ids, but the rows are the constraint-backed mirror of them
-        (see ``_sync_resource_fk_fields`` and ``update_from_params``): deleting a resource nulls the
-        column or cascades the row away while the stale id lingers in params. ``to_flow_node`` serves
-        what this returns, so a dangling reference reads as unset rather than as an id that no longer
-        resolves.
+        Relations win whenever they contain a value. A legacy JSON value is considered only when
+        its relation is empty and the referenced row still exists; this keeps old rows runnable
+        during the rolling deployment before the cutover migration, without resurrecting deleted
+        resources or overriding a relation that has already been cleared.
         """
         resource_params = {
             f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
         }
+        legacy_params = self.params or {}
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            if resource_params[param_name] is not None or param_name not in legacy_params:
+                continue
+            value = as_int(legacy_params[param_name])
+            related_model = self._meta.get_field(field_name).related_model
+            if value is not None and related_model._base_manager.filter(pk=value).exists():
+                resource_params[param_name] = value
+
         # sorted because the related rows have no ordering of their own and the read must be stable.
-        resource_params["collection_index_ids"] = sorted(index.id for index in self.collection_indexes.all())
-        # ``CustomActionOperation`` rows are the mirror for ``custom_actions``: ``update_from_params``
-        # writes them, and deleting the action cascades them away. Read here in the param's own
-        # ``"<action id>:<operation id>"`` spelling.
-        resource_params["custom_actions"] = sorted(
-            operation.get_model_id(with_holder=False) for operation in self.custom_action_operations.all()
-        )
+        try:
+            declares_collection_indexes = self.node_type.declares("collection_index_ids")
+            declares_custom_actions = self.node_type.declares("custom_actions")
+        except TypeError:
+            declares_collection_indexes = declares_custom_actions = False
+
+        if declares_collection_indexes:
+            indexes = list(self.collection_indexes.all())
+            resource_params["collection_index_ids"] = sorted(index.id for index in indexes)
+            if not indexes and "collection_index_ids" in legacy_params:
+                resource_params["collection_index_ids"] = self._existing_legacy_collection_indexes(legacy_params)
+        else:
+            resource_params["collection_index_ids"] = []
+
+        # Custom actions are relation-backed operation rows, rendered in the editor's composite-id
+        # spelling for wire compatibility.
+        if declares_custom_actions:
+            operations = list(self.custom_action_operations.all())
+            resource_params["custom_actions"] = sorted(
+                operation.get_model_id(with_holder=False) for operation in operations
+            )
+            if not operations and "custom_actions" in legacy_params:
+                resource_params["custom_actions"] = self._existing_legacy_custom_actions(legacy_params)
+        else:
+            resource_params["custom_actions"] = []
         return resource_params
 
-    def _sync_resource_fk_fields(self):
-        """Populate FK/M2M fields from the params JSON.
+    @staticmethod
+    def _existing_legacy_collection_indexes(params: dict) -> list[int]:
+        """Return existing collection-index IDs from a legacy node payload."""
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
 
-        The FK columns are a derived mirror of the IDs in params (non-int/boolean values
-        map to null). A dangling scalar id is coerced to null rather than written straight
-        through: not every SET_NULL resource is protected by a delete guard (an LlmProvider,
-        for one, can be deleted while a node references it — SET_NULL nulls the FK column but
-        the stale id lingers in params), so re-deriving it verbatim would resurrect the
-        dangling reference and trip the deferred DB FK constraint at commit. Existence is
-        checked against ``_base_manager`` so a still-valid reference to a soft-deleted
-        (archived) resource isn't mistaken for dangling. This mirrors the collection_indexes
-        M2M below and the ``backfill_node_fks`` command. Versions may point at a since-deleted
-        resource, but they're never re-synced. Only saves when a scalar FK changed.
-        """
-        params = self.params or {}
+        raw_values = params.get("collection_index_ids") or []
+        if not isinstance(raw_values, list | tuple | set):
+            raw_values = [raw_values]
+        ids = [as_int(value) for value in raw_values]
+        return sorted(
+            Collection._base_manager.filter(id__in=[value for value in ids if value]).values_list("id", flat=True)
+        )
+
+    def _existing_legacy_custom_actions(self, params: dict) -> list[str]:
+        """Return legacy custom-action selections whose action rows still exist."""
+        from apps.custom_actions.models import CustomAction  # noqa: PLC0415 - avoid circular import
+
+        selections = []
+        action_ids = set()
+        for value in params.get("custom_actions") or []:
+            action_id, separator, operation_id = str(value).partition(":")
+            parsed_action_id = as_int(action_id)
+            if separator and parsed_action_id is not None and operation_id:
+                selections.append((parsed_action_id, operation_id, str(value)))
+                action_ids.add(parsed_action_id)
+        existing_actions = {
+            action.id: action
+            for action in CustomAction._base_manager.filter(id__in=action_ids).only("id", "allowed_operations")
+        }
+        return sorted(
+            value
+            for action_id, operation_id, value in selections
+            if action_id in existing_actions and operation_id in existing_actions[action_id].allowed_operations
+        )
+
+    def runtime_params(self) -> dict:
+        """Overlay relation IDs, retaining legacy scalar values until validation or cutover."""
+        params = copy.deepcopy(self.params or {})
+        if self.pk is None:
+            return params
+
+        resource_params = self.resource_params()
+        try:
+            declared_params = self.node_type.declared_params
+        except TypeError:
+            # A test or maintenance caller may temporarily replace a node class with a mock. The
+            # runtime validator should receive that mock's failure, rather than the resource adapter
+            # masking it while inspecting ``model_fields``.
+            declared_params = frozenset()
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            if param_name in declared_params and resource_params.get(param_name) is None and param_name in params:
+                # Keep a dangling legacy ID visible so existing validators report it until cleanup.
+                params[param_name] = self.params[param_name]
+        params.update(
+            {
+                name: value
+                for name, value in resource_params.items()
+                if name in declared_params and value not in (None, [])
+            }
+        )
+        return params
+
+    @classmethod
+    def params_to_store(cls, params: dict) -> dict:
+        """Remove every relation-backed resource key before params are persisted."""
+        ordinary_params, _resource_params = split_resource_params(params, cls.resource_param_names())
+        return ordinary_params
+
+    @classmethod
+    def split_resource_params(cls, params: dict) -> tuple[dict, dict]:
+        """Split an editor payload into ordinary params and relation-backed resource values."""
+        return split_resource_params(params, cls.resource_param_names())
+
+    def _sync_resource_fk_fields(self):
+        """Import legacy resource keys through the relation-authoritative write path."""
+        _ordinary_params, resource_params = split_resource_params(self.params or {}, self.resource_param_names())
         update_fields = []
         for field_name in self.resource_fk_fields():
-            value = as_int(params.get(f"{field_name}_id"))
-            if value is not None:
-                related_model = self._meta.get_field(field_name).related_model
-                if not related_model._base_manager.filter(pk=value).exists():
-                    value = None
+            param_name = f"{field_name}_id"
+            value = as_int(resource_params.get(param_name))
+            related_model = self._meta.get_field(field_name).related_model
+            if value is not None and not related_model._base_manager.filter(pk=value).exists():
+                value = None
             if getattr(self, f"{field_name}_id") != value:
                 setattr(self, f"{field_name}_id", value)
                 update_fields.append(f"{field_name}_id")
         if update_fields:
             self.save(update_fields=update_fields)
-        self._sync_collection_indexes(params)
+        if "collection_index_ids" in resource_params:
+            self._sync_collection_indexes(resource_params)
 
     def _sync_collection_indexes(self, params: dict):
-        """Mirror ``params["collection_index_ids"]`` onto the ``collection_indexes`` M2M."""
-        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
-
-        raw_index_ids = params.get("collection_index_ids") or []
-        if not isinstance(raw_index_ids, list | tuple | set):
-            raw_index_ids = [raw_index_ids]
-        # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
-        # than blowing up the id__in query.
-        index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
-        # A caller that prefetched ``collection_indexes`` lets the no-op case skip the write without
-        # a read; without the prefetch, set() diffs against the rows itself.
+        """Apply legacy collection-index values for callers that still use this helper."""
+        if "collection_index_ids" not in params:
+            return
+        raw_ids = params.get("collection_index_ids") or []
+        if not isinstance(raw_ids, list | tuple | set):
+            raw_ids = [raw_ids]
+        index_ids = [as_int(value) for value in raw_ids if as_int(value) is not None]
         prefetched = getattr(self, "_prefetched_objects_cache", {}).get("collection_indexes")
         if prefetched is not None and set(index_ids) == {index.id for index in prefetched}:
             return
-        self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
+        self._apply_resource_params({"collection_index_ids": index_ids})
+
+    def _apply_resource_params(self, resource_params: dict) -> None:
+        """Apply only the relation keys present in an already validated payload."""
+        update_fields = []
+        for field_name in self.resource_fk_fields():
+            param_name = f"{field_name}_id"
+            if param_name not in resource_params:
+                continue
+            value = resource_params[param_name]
+            value = None if value in (None, "") else as_int(value)
+            related_model = self._meta.get_field(field_name).related_model
+            if value is not None and not related_model._base_manager.filter(pk=value).exists():
+                value = None
+            setattr(self, f"{field_name}_id", value)
+            update_fields.append(f"{field_name}_id")
+        if update_fields:
+            self.save(update_fields=update_fields)
+
+        if "collection_index_ids" in resource_params:
+            from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
+
+            raw_index_ids = resource_params["collection_index_ids"] or []
+            if not isinstance(raw_index_ids, list | tuple | set):
+                raw_index_ids = [raw_index_ids]
+            index_ids = [as_int(value) for value in raw_index_ids if as_int(value) is not None]
+            prefetched = getattr(self, "_prefetched_objects_cache", {}).get("collection_indexes")
+            if prefetched is None or set(index_ids) != {index.id for index in prefetched}:
+                self.collection_indexes.set(Collection.objects.filter(id__in=[value for value in index_ids if value]))
+
+        if "custom_actions" in resource_params:
+            custom_action_infos = []
+            for operation in resource_params["custom_actions"] or []:
+                custom_action_id, separator, operation_id = operation.partition(":")
+                if not separator:
+                    raise ValidationError({"params": [f"Invalid operation: {operation!r}."]})
+                custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
+            set_custom_actions(self, custom_action_infos)
 
     def archive(self, *, with_pipeline: bool = False) -> bool:
         """
@@ -782,7 +985,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         specs_by_param = {spec.param_name: spec for spec in self.node_type.versioned_param_specs}
         param_versions = []
-        for name, value in self.params.items():
+        for name, value in self.runtime_params().items():
             display_formatter = None
             if spec := specs_by_param.get(name):
                 # Load the referenced record(s) for display
@@ -802,7 +1005,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
             )
 
-        if self.node_type.declares("custom_actions") and self.params.get("custom_actions"):
+        if self.node_type.declares("custom_actions") and self.resource_params()["custom_actions"]:
             param_versions.append(
                 VersionField(
                     group_name=node_name,
@@ -823,14 +1026,17 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def _archive_related_params(self):
         """
-        Archive related params that were also versioned along with this node
+        Archive relation-backed resources that were versioned along with this node
         """
+        params = self.runtime_params()
         for spec in self.node_type.versioned_param_specs:
-            spec.archive_referenced_record(self.params)
+            spec.archive_referenced_record(params)
 
     def _unarchive_related_params(self):
+        """Restore relation-backed resources that this archived node version owns."""
+        params = self.runtime_params()
         for spec in self.node_type.versioned_param_specs:
-            spec.unarchive_referenced_record(self.params)
+            spec.unarchive_referenced_record(params)
 
 
 class PipelineEventInputs(models.TextChoices):

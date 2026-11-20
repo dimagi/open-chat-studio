@@ -719,7 +719,7 @@ def _expected_pipeline_nodes(bot):
                     "name": "Session Completion",
                     "description": "Custom action description",
                     "server_url": "https://api.weather.com",
-                    "allowed_operations": ["weather_get", "pollen_get"],
+                    "allowed_operations": ["pollen_get", "weather_get"],
                     "api_schema": {"paths": ["/pollen", "/weather"]},
                     "auth_provider": {
                         "id": bot.auth_provider.id,
@@ -975,7 +975,7 @@ def _adversarial_bot():
 # fields run Pipeline.validate(), which fetches the provider models of every LLM-bearing node in one
 # query — the same cost the builder pays on save. ``deprecated_models`` adds one more: a single lookup
 # covering every model the graph references, whatever the node fan-out.
-EXPECTED_RENDER_QUERIES = 18
+EXPECTED_RENDER_QUERIES = 16
 
 
 @pytest.mark.django_db()

@@ -203,9 +203,10 @@ class TestTheResponseEnvelope:
         ).json()["node"]
 
         stored = Node.objects.get(pipeline=chatbot.pipeline, flow_id=created["node_id"]).params
-        # Every param the write reported is on the row with the value it reported, as are the defaults
-        # for the withheld params -- left out of the response only because PATCH would refuse them back.
-        assert created["params"].items() <= stored.items()
+        # Resource values are rendered in the response from relation columns, while ordinary params
+        # and defaults remain in the JSON column.
+        assert Node.params_to_store(created["params"]).items() <= stored.items()
+        assert not set(stored) & Node.resource_param_names()
         assert "mcp_tools" in stored
         assert "mcp_tools" not in created["params"]
 

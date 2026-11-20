@@ -93,7 +93,7 @@ IGNORE_APPS = {
     "oauth2_provider",
 }
 
-IGNORE_MODELS = {"teams": {"flag"}}
+IGNORE_MODELS = {"pipelines": {"noderesourcecutoverstate"}, "teams": {"flag"}}
 
 
 def test_missing_content_types():

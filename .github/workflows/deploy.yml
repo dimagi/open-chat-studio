@@ -240,6 +240,7 @@ jobs:
           --cli-input-json file:///tmp/migration-task-def.json \
           --query 'taskDefinition.taskDefinitionArn' \
           --output text)
+        echo "task_definition_arn=$TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
 
         # Run the migration task
         TASK_ARN=$(aws ecs run-task \
@@ -320,6 +321,34 @@ jobs:
       env:
         LOG_GROUP: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-DjangoMigrationLogs
         LOG_STREAM_PREFIX: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-migrate/migrate
+
+    - name: Prepare node resource compatibility for rolling deployment
+      run: |
+        set -e
+        TASK_ARN=$(aws ecs run-task \
+          --cluster "$ECS_CLUSTER" \
+          --task-definition "${{ steps.run-migration.outputs.task_definition_arn }}" \
+          --launch-type FARGATE \
+          --network-configuration "awsvpcConfiguration={subnets=[${{ steps.stack-outputs.outputs.subnets }}],securityGroups=[${{ steps.stack-outputs.outputs.security_group }}],assignPublicIp=DISABLED}" \
+          --overrides '{"containerOverrides":[{"name":"migrate","command":["python","manage.py","node_resource_params_compatibility","prepare"]}]}' \
+          --query 'tasks[0].taskArn' \
+          --output text)
+
+        if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+          echo "ECS did not start the node resource compatibility task"
+          exit 1
+        fi
+
+        aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK_ARN"
+        EXIT_CODE=$(aws ecs describe-tasks \
+          --cluster "$ECS_CLUSTER" \
+          --tasks "$TASK_ARN" \
+          --query "tasks[0].containers[?name=='migrate'].exitCode | [0]" \
+          --output text)
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "Preparing node resource compatibility failed with exit code: $EXIT_CODE"
+          exit 1
+        fi
 
     - name: Deploy Django Web
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2

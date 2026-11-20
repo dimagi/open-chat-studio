@@ -128,7 +128,9 @@ class TestReferencesMustBeReachable:
         response = client.patch(node_url(chatbot, node_id), {"params": {"llm_provider_id": ours.id}}, format="json")
 
         assert response.status_code == 200, response.content
-        assert Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id).params["llm_provider_id"] == ours.id
+        node = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
+        assert node.llm_provider_id == ours.id
+        assert "llm_provider_id" not in node.params
 
     def test_a_list_valued_reference_is_checked_per_entry(self, client, chatbot, team):
         """`collection_index_ids` holds a list, so the check has to look at every entry rather than at
@@ -158,7 +160,9 @@ class TestReferencesMustBeReachable:
         response = client.patch(node_url(chatbot, node_id), {"params": {"llm_provider_id": None}}, format="json")
 
         assert response.status_code == 200, response.content
-        assert Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id).params["llm_provider_id"] is None
+        node = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
+        assert node.llm_provider_id is None
+        assert "llm_provider_id" not in node.params
 
 
 @pytest.mark.django_db()

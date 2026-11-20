@@ -27,6 +27,11 @@ from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 
+def _seed_legacy_node_params(pipeline, flow_id, params):
+    """Create the JSON shape found on a pre-cutover row without using the normalized write path."""
+    Node.objects.filter(pipeline=pipeline, flow_id=flow_id).update(params=params)
+
+
 class TestNodeValidationErrors:
     """How one node's pydantic errors are keyed by field."""
 
@@ -159,6 +164,7 @@ class TestPipelineBuildState:
             {"id": "e2", "source": "llm-1", "target": end["id"]},
         ]
         pipeline = create_pipeline_model([start, llm, end], edges)
+        _seed_legacy_node_params(pipeline, "llm-1", llm["params"])
 
         state = pipeline_build_state(pipeline)
 
@@ -212,6 +218,7 @@ class TestPipelineBuildState:
             {"id": "e2", "source": "llm-1", "target": end["id"]},
         ]
         pipeline = create_pipeline_model([start, llm, end], edges)
+        _seed_legacy_node_params(pipeline, "llm-1", llm["params"])
 
         assert pipeline_build_state(pipeline)["errors"]["node"] == {"llm-1": expected}
 

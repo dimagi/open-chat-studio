@@ -791,8 +791,7 @@ class TestSourceMaterialArchiving:
         published.save()
 
         published_node = published.pipeline.node_set.get(flow_id=node.flow_id)
-        shared_version_id = published_node.params["source_material_id"]
-        shared_version = SourceMaterial.objects.get(id=shared_version_id)
+        shared_version = SourceMaterial.objects.get(id=published_node.source_material_id)
 
         assert shared_version.archive() is False
         shared_version.refresh_from_db()

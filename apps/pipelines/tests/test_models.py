@@ -62,13 +62,13 @@ class TestVersioningNodes:
             # ADR-0031: index collections are live shared resources. Publishing keeps the working
             # id verbatim and does NOT create a collection version.
             assert not collection.versions.exists()
-            assert node.versions.first().params[param_name] == [collection.id]
-            assert node.versions.last().params[param_name] == [collection.id]
+            assert list(node.versions.first().collection_indexes.values_list("id", flat=True)) == [collection.id]
+            assert list(node.versions.last().collection_indexes.values_list("id", flat=True)) == [collection.id]
         else:
             # ADR-0031: media collections are also live shared resources — not versioned per bot.
             assert not collection.versions.exists()
-            assert node.versions.first().params[param_name] == str(collection.id)
-            assert node.versions.last().params[param_name] == str(collection.id)
+            assert node.versions.first().collection_id == collection.id
+            assert node.versions.last().collection_id == collection.id
 
     def test_version_llm_with_prompt_node_with_source_material(self):
         node_type = LLMResponseWithPrompt.__name__
@@ -81,7 +81,7 @@ class TestVersioningNodes:
 
         assert pipeline_version.node_set.count() == 3
         node_version = pipeline_version.node_set.filter(type=node_type).first()
-        assert node_version.params["source_material_id"] == str(source_material_version.id)
+        assert node_version.source_material_id == source_material_version.id
 
     def test_version_llm_with_prompt_node_with_multiple_dependencies(self):
         """
@@ -112,9 +112,9 @@ class TestVersioningNodes:
         source_material_version = source_material.latest_version
 
         node_version = pipeline_version.node_set.get(type=node_type)
-        assert node_version.params["collection_id"] == str(collection.id)
-        assert node_version.params["collection_index_ids"] == [str(collection_index.id)]
-        assert node_version.params["source_material_id"] == str(source_material_version.id)
+        assert node_version.collection_id == collection.id
+        assert list(node_version.collection_indexes.values_list("id", flat=True)) == [collection_index.id]
+        assert node_version.source_material_id == source_material_version.id
         assert not collection.versions.exists()
         assert not collection_index.versions.exists()
 
@@ -122,9 +122,9 @@ class TestVersioningNodes:
         pipeline_version_2 = pipeline.create_new_version()
 
         node_version_2 = pipeline_version_2.node_set.get(type=node_type)
-        assert node_version_2.params["collection_id"] == str(collection.id)
-        assert node_version_2.params["collection_index_ids"] == [str(collection_index.id)]
-        assert node_version_2.params["source_material_id"] == str(source_material_version.id)
+        assert node_version_2.collection_id == collection.id
+        assert list(node_version_2.collection_indexes.values_list("id", flat=True)) == [collection_index.id]
+        assert node_version_2.source_material_id == source_material_version.id
 
     def test_published_node_resolves_live_index(self):
         """A bot published after ADR-0031 references the live working index, not a frozen copy."""
@@ -137,7 +137,7 @@ class TestVersioningNodes:
         node_version = pipeline_version.node_set.get(type=node_type)
         # End-to-end: publishing keeps the working id (precondition), and runtime lookup resolves it to the live
         # working index.
-        published_ids = node_version.params["collection_index_ids"]
+        published_ids = list(node_version.collection_indexes.values_list("id", flat=True))
         assert published_ids == [collection_index.id]
 
         resolved = ORMRepository().get_collections_for_search(published_ids)
@@ -547,9 +547,9 @@ class TestPipelineRevert:
         pipeline.save(update_fields=["data"])
         version = pipeline.create_new_version()
 
-        # On publish, the version's node params point at the versioned records.
+        # On publish, the version's relation points at the versioned record.
         version_llm = version.node_set.get(type=LLMResponseWithPrompt.__name__)
-        assert version_llm.params["source_material_id"] == str(source_material.latest_version.id)
+        assert version_llm.source_material_id == source_material.latest_version.id
 
         # Edit the working pipeline so revert has something to undo.
         llm["params"]["source_material_id"] = str(other_material.id)
@@ -558,14 +558,12 @@ class TestPipelineRevert:
         pipeline.revert_to_version(version)
 
         working_llm = pipeline.node_set.get(type=LLMResponseWithPrompt.__name__)
-        # Params point at the working record, not the versioned one from the snapshot.
-        assert working_llm.params["source_material_id"] == str(source_material.id)
-        # The mirrored resource FK column is re-synced to the working record too.
+        # The relation points at the working record, not the versioned one from the snapshot.
         assert working_llm.source_material_id == source_material.id
 
         # The version's nodes are untouched by the revert.
         version_llm.refresh_from_db()
-        assert version_llm.params["source_material_id"] == str(source_material.latest_version.id)
+        assert "source_material_id" not in version_llm.params
         assert version_llm.source_material_id == source_material.latest_version.id
 
     def test_revert_leaves_no_stale_node_caches(self):
@@ -609,9 +607,8 @@ class TestPipelineRevert:
         assert "nodes" not in pipeline.data
         working_template = pipeline.node_set.get(type="RenderTemplate")
         version_template = version.node_set.get(type="RenderTemplate")
-        # What the version's row holds, plus the resource ids read off its columns (all unset
-        # here) — not the stale blob embedded in the version's ``data``.
-        assert working_template.params == {**version_template.params, **version_template.resource_params()}
+        # What the version's row holds, not the stale blob embedded in the version's ``data``.
+        assert working_template.params == version_template.params
 
 
 def assert_no_errors(report):

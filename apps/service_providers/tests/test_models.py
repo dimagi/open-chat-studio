@@ -77,7 +77,7 @@ class TestServiceProviderModel:
     @pytest.mark.django_db()
     def test_cannot_delete_provider_models_with_associated_pipeline(self, pipeline):
         node = pipeline.node_set.get(flow_id="1")
-        provider_model = LlmProviderModel.objects.get(id=node.params["llm_provider_model_id"])
+        provider_model = node.llm_provider_model
         with pytest.raises(ValidationError, match=pipeline.name):
             provider_model.delete()
 

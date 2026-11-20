@@ -89,7 +89,7 @@ def test_converts_custom_models_to_global_models_pipelines():
     global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
     # pipeline is updated to use the custom model
     pipeline.refresh_from_db()
-    assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == global_model.id
+    assert pipeline.node_set.get(type="LLMResponseWithPrompt").llm_provider_model_id == global_model.id
 
 
 @pytest.mark.django_db()
@@ -149,7 +149,7 @@ def test_converts_custom_models_to_global_models_pipelines_from_a_migration(requ
 
     global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
     node = pipeline.node_set.get(type="LLMResponseWithPrompt")
-    assert node.params["llm_provider_model_id"] == global_model.id
+    assert node.llm_provider_model_id == global_model.id
     assert node.llm_provider_model_id == global_model.id
 
 

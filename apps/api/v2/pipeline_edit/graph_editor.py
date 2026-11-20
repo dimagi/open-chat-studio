@@ -134,15 +134,12 @@ def find_node(flow: Flow, node_id: str) -> tuple[FlowNode, FlowNodeData]:
 
 
 def stored_params(content: FlowNodeData) -> dict[str, Any]:
-    """The params a node's row actually holds, out of the graph's copy of them.
+    """Return the complete editor payload for the node write adapter.
 
-    ``Node.to_flow_node`` merges the resource-id mirror into *every* node type's params, so the graph
-    shows a ``CodeNode`` carrying ``llm_provider_id`` and others it does not declare. Merging those
-    back would write them to the row on any edit, label-only ones included.
+    ``Node.to_flow_node`` includes relation-backed resource values for wire compatibility. The
+    pipeline write adapter separates those values from ordinary JSON before saving them.
     """
-    declared = content.node_type.declared_params
-    mirrored = Node.resource_param_names()
-    return {name: value for name, value in content.params.items() if name in declared or name not in mirrored}
+    return dict(content.params)
 
 
 def settable_params(node: Node) -> dict[str, Any]:
@@ -151,7 +148,7 @@ def settable_params(node: Node) -> dict[str, Any]:
     The write response is documented as a valid request body, so it must not carry a param PATCH
     would refuse -- ``mcp_tools`` is stored with its default but withheld from the schema.
     """
-    params = node.params or {}
+    params = node.to_flow_node().data.params
     try:
         node_type_schema = get_node_type_schema(node.type)
     except NotFound:
