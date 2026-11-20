@@ -193,6 +193,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-3.1-flash-lite", 1048576),
         Model("gemini-2.5-flash", 1048576, deprecated=True, replacement="gemini-3.8-flash"),
         Model("gemini-2.5-pro", 1048576, deprecated=True, replacement="gemini-3.8-flash"),
+        Model("gemini-decision-1", 262144, parameters=NoParameters, chat=False, decisions=True),
     ],
     "google_vertex_ai": [
         Model("gemini-4-carbon", 1048576),

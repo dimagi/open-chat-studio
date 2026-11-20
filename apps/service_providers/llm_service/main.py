@@ -15,6 +15,7 @@ from apps.documents.rerankers import Reranker, VoyageReranker
 from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.google_decisions import GoogleDecisionBackend
 from apps.service_providers.llm_service.image_types import (
     DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
     GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES,
@@ -545,6 +546,9 @@ class GoogleLlmService(LlmService):
             embedding_model_name=embedding_model_name,
             contextualizer=contextualizer,
         )
+
+    def get_decision_backend(self) -> GoogleDecisionBackend:
+        return GoogleDecisionBackend(api_key=self.google_api_key.get_secret_value())
 
 
 class VoyageAILlmService(LlmService):
