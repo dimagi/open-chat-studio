@@ -11,6 +11,8 @@ from apps.service_providers.llm_service.decision_backend import (
     DecisionAuthenticationError,
     DecisionError,
     DecisionUsage,
+    ScoreAnswer,
+    YesNoAnswer,
 )
 from apps.service_providers.llm_service.jev import (
     MAX_NESTING,
@@ -20,9 +22,7 @@ from apps.service_providers.llm_service.jev import (
     JevBackend,
     JevClient,
     JevError,
-    NoulAnswer,
     NoulQuestion,
-    ScoreAnswer,
     ScoreQuestion,
     json_safe,
 )
@@ -154,7 +154,7 @@ def test_reads_score_and_noul_answers(httpx_mock):
     response = _ask()
 
     assert response.score("frustration") == ScoreAnswer(1.7, 0.55, {"0": 0.1, "1": 0.1, "2": 0.8})
-    assert response.noul("refund") == NoulAnswer(0.98)
+    assert response.noul("refund") == YesNoAnswer(0.98)
 
 
 @pytest.mark.parametrize(

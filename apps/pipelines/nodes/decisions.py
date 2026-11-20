@@ -1,4 +1,4 @@
-"""The decisions a Decision Node asks Jev, and the temporary state its answers become."""
+"""The decisions a Decision Node asks a decision model, and the temporary state its answers become."""
 
 import logging
 from collections.abc import Callable
@@ -7,12 +7,12 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-from apps.service_providers.llm_service.jev import (
+from apps.service_providers.llm_service.decision_backend import (
     ChoiceQuestion,
-    JevResponse,
-    NoulQuestion,
+    DecisionResponse,
     Question,
     ScoreQuestion,
+    YesNoQuestion,
 )
 
 logger = logging.getLogger("ocs.pipelines.nodes")
@@ -111,8 +111,8 @@ class Decision(BaseModel):
     def question(self) -> Question:
         return QUESTION_BUILDERS[self.type](self)
 
-    def answer(self, response: JevResponse) -> Answer:
-        """The value and confidence Jev gave, each None where it gave none."""
+    def answer(self, response: DecisionResponse) -> Answer:
+        """The value and confidence the model gave, each None where it gave none."""
         return ANSWER_READERS[self.type](self, response)
 
     def temp_state(self, value: Any, confidence: float | None) -> dict[str, Any]:
@@ -165,18 +165,20 @@ def _optional(text: str) -> str | None:
 
 
 def _choice_question(decision: Decision) -> Question:
-    criteria = {option.name: _optional(option.description) for option in decision.options}
-    return ChoiceQuestion(criteria=criteria, instructions=_optional(decision.instructions))
+    options = {option.name: _optional(option.description) for option in decision.options}
+    return ChoiceQuestion(options=options, instructions=_optional(decision.instructions))
 
 
 def _score_question(decision: Decision) -> Question:
-    return ScoreQuestion(criteria=decision.levels, instructions=_optional(decision.instructions))
+    return ScoreQuestion(levels=decision.levels, instructions=_optional(decision.instructions))
 
 
 def _noul_question(decision: Decision) -> Question:
-    criteria = {"true": _optional(decision.true_description), "false": _optional(decision.false_description)}
-    has_criteria = any(criteria.values())
-    return NoulQuestion(instructions=_optional(decision.instructions), criteria=criteria if has_criteria else None)
+    return YesNoQuestion(
+        instructions=_optional(decision.instructions),
+        true_description=_optional(decision.true_description),
+        false_description=_optional(decision.false_description),
+    )
 
 
 QUESTION_BUILDERS: dict[str, Callable[[Decision], Question]] = {
@@ -186,26 +188,26 @@ QUESTION_BUILDERS: dict[str, Callable[[Decision], Question]] = {
 }
 
 
-def _read_choice(decision: Decision, response: JevResponse) -> Answer:
+def _read_choice(decision: Decision, response: DecisionResponse) -> Answer:
     choice = response.choice(decision.key)
     if choice is None:
         return None, None
     return _option_named(decision, choice.choice), choice.confidence
 
 
-def _read_score(decision: Decision, response: JevResponse) -> Answer:
+def _read_score(decision: Decision, response: DecisionResponse) -> Answer:
     score = response.score(decision.key)
     if score is None:
         return None, None
     return score.score, score.confidence
 
 
-def _read_noul(decision: Decision, response: JevResponse) -> Answer:
-    noul = response.noul(decision.key)
-    return (noul.noul if noul else None), None
+def _read_noul(decision: Decision, response: DecisionResponse) -> Answer:
+    answer = response.yes_no(decision.key)
+    return (answer.probability if answer else None), None
 
 
-ANSWER_READERS: dict[str, Callable[[Decision, JevResponse], Answer]] = {
+ANSWER_READERS: dict[str, Callable[[Decision, DecisionResponse], Answer]] = {
     "choice": _read_choice,
     "score": _read_score,
     "noul": _read_noul,
@@ -213,7 +215,7 @@ ANSWER_READERS: dict[str, Callable[[Decision, JevResponse], Answer]] = {
 
 
 def _option_named(decision: Decision, name: str) -> str | None:
-    """The configured option Jev named, matched without regard to case or surrounding space."""
+    """The configured option the model named, matched without regard to case or surrounding space."""
     wanted = _normalized(name)
     return next((option.name for option in decision.options if _normalized(option.name) == wanted), None)
 
@@ -248,12 +250,12 @@ def decision_questions(decisions: list[Decision]) -> dict[str, Question]:
     return {decision.key: decision.question() for decision in decisions}
 
 
-def temp_state_values(node_name: str, decisions: list[Decision], response: JevResponse | None) -> dict[str, Any]:
+def temp_state_values(node_name: str, decisions: list[Decision], response: DecisionResponse | None) -> dict[str, Any]:
     """The temporary state each decision writes. A decision with no usable answer writes null."""
     values = {}
     for decision in decisions:
         value, confidence = decision.answer(response) if response else (None, None)
         if response and value is None:
-            logger.warning("Decision node %s got no usable answer for %s from Jev", node_name, decision.key)
+            logger.warning("Decision node %s got no usable answer for %s", node_name, decision.key)
         values |= decision.temp_state(value, confidence)
     return values

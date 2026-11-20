@@ -9,14 +9,12 @@ from pydantic import Field, field_validator
 from pydantic.config import ConfigDict
 from pydantic_core import PydanticCustomError
 
-from apps.pipelines.exceptions import NodeUserConfigRunError
 from apps.pipelines.models import PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import ModelUse, NodeSchema, PipelineNode, PipelineState, UiSchema, Widgets
+from apps.pipelines.nodes.decision_calls import ask_decisions
 from apps.pipelines.nodes.decisions import Decision, check_decision_keys, decision_questions, temp_state_values
-from apps.pipelines.nodes.jev_calls import ask_jev
 from apps.pipelines.nodes.mixins import HISTORY_TYPE_DESCRIPTION, HistoryMixin, llm_provider_id_field
-from apps.service_providers.llm_service import JevLlmService
-from apps.service_providers.llm_service.jev import JevError
+from apps.service_providers.llm_service.decision_backend import DecisionError
 from apps.service_providers.models import LlmProviderModel
 
 if TYPE_CHECKING:
@@ -70,13 +68,11 @@ class DecisionNode(PipelineNode, HistoryMixin):
             raise PydanticCustomError("invalid_model", JEV_MODEL_REQUIRED_MESSAGE, {"field": "llm_provider_model_id"})
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:
-        llm_service = self.get_llm_service()
-        if not isinstance(llm_service, JevLlmService):
-            raise NodeUserConfigRunError(JEV_MODEL_REQUIRED_MESSAGE)
+        backend = self.get_decision_backend()
         try:
-            response = ask_jev(self, context, decision_questions(self.decisions), llm_service.get_jev_client())
-        except JevError as e:
-            logger.warning("Decision node %s got no answers from Jev: %s", self.name, e)
+            response = ask_decisions(self, context, decision_questions(self.decisions), backend)
+        except DecisionError as e:
+            logger.warning("Decision node %s got no answers from %s: %s", self.name, backend.name, e)
             response = None
 
         values = temp_state_values(self.name, self.decisions, response)

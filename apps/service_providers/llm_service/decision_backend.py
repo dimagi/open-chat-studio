@@ -5,7 +5,7 @@ The pipeline nodes ask their questions through it and never see the provider's o
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -30,7 +30,24 @@ class ChoiceQuestion:
     instructions: str | None = None
 
 
-Question = ChoiceQuestion
+@dataclass(frozen=True)
+class ScoreQuestion:
+    """Answered with a score on the rubric `levels`, one description per level from lowest (0) to highest."""
+
+    levels: Sequence[str]
+    instructions: str | None = None
+
+
+@dataclass(frozen=True)
+class YesNoQuestion:
+    """Answered with the probability that the statement in `instructions` is true."""
+
+    instructions: str | None = None
+    true_description: str | None = None
+    false_description: str | None = None
+
+
+Question = ChoiceQuestion | ScoreQuestion | YesNoQuestion
 
 
 @dataclass(frozen=True)
@@ -40,7 +57,21 @@ class ChoiceAnswer:
     probabilities: dict[str, float]
 
 
-Answer = ChoiceAnswer
+@dataclass(frozen=True)
+class ScoreAnswer:
+    score: float
+    confidence: float
+    probabilities: dict[str, float]
+
+
+@dataclass(frozen=True)
+class YesNoAnswer:
+    probability: float
+    # Not every provider reports a confidence for a yes/no answer.
+    confidence: float | None = None
+
+
+Answer = ChoiceAnswer | ScoreAnswer | YesNoAnswer
 
 
 @dataclass(frozen=True)
@@ -59,8 +90,19 @@ class DecisionResponse:
 
     def choice(self, name: str) -> ChoiceAnswer | None:
         """The answer to the choice question `name`, or None when there is no well-formed one."""
+        return self._answer(name, ChoiceAnswer)
+
+    def score(self, name: str) -> ScoreAnswer | None:
+        """The answer to the score question `name`, or None when there is no well-formed one."""
+        return self._answer(name, ScoreAnswer)
+
+    def yes_no(self, name: str) -> YesNoAnswer | None:
+        """The answer to the yes/no question `name`, or None when there is no well-formed one."""
+        return self._answer(name, YesNoAnswer)
+
+    def _answer[T](self, name: str, answer_type: type[T]) -> T | None:
         answer = self.answers.get(name)
-        return answer if isinstance(answer, ChoiceAnswer) else None
+        return answer if isinstance(answer, answer_type) else None
 
 
 class DecisionBackend(ABC):

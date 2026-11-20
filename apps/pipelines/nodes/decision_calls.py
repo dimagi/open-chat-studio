@@ -20,7 +20,10 @@ from apps.service_providers.llm_service.error_classification import AUTHENTICATI
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
+    from apps.pipelines.nodes.decision_node import DecisionNode
     from apps.pipelines.nodes.nodes import RouterNode
+
+    DecidingNode = RouterNode | DecisionNode
 
 # These bounds keep the conversation well inside a decision model's context; Jev reads at most 64k tokens.
 HISTORY_LIMIT = 20
@@ -28,7 +31,7 @@ MESSAGE_CHARACTER_LIMIT = 2000
 
 
 def ask_decisions(
-    node: "RouterNode", context: "NodeContext", questions: Mapping[str, Question], backend: DecisionBackend
+    node: "DecidingNode", context: "NodeContext", questions: Mapping[str, Question], backend: DecisionBackend
 ) -> DecisionResponse:
     """Ask every question about the run's state in one request, and report the call's usage.
 
@@ -45,7 +48,7 @@ def ask_decisions(
     return response
 
 
-def build_state(node: "RouterNode", context: "NodeContext") -> dict:
+def build_state(node: "DecidingNode", context: "NodeContext") -> dict:
     """What the model is asked about: the input, the history the node is configured to see, and the session's data."""
     history = node.get_history(exclude_message_id=context.input_message_id) if context.session else []
     return {
@@ -57,7 +60,7 @@ def build_state(node: "RouterNode", context: "NodeContext") -> dict:
     }
 
 
-def _history_limit(node: "RouterNode") -> int:
+def _history_limit(node: "DecidingNode") -> int:
     if node.get_history_mode() == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
         return min(node.max_history_length, HISTORY_LIMIT)
     return HISTORY_LIMIT
@@ -72,7 +75,7 @@ def _history_entry(message: BaseMessage) -> dict:
 
 
 def _report_call(
-    node: "RouterNode", backend: DecisionBackend, model_name: str, request_text: str, response: DecisionResponse
+    node: "DecidingNode", backend: DecisionBackend, model_name: str, request_text: str, response: DecisionResponse
 ) -> None:
     """Report the call to the run's callbacks as an LLM call, so tracers and cost tracking see its usage.
 

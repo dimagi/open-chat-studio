@@ -17,12 +17,15 @@ from pydantic import BaseModel
 
 from apps.service_providers.llm_service import decision_backend
 from apps.service_providers.llm_service.decision_backend import (
+    Answer,
     ChoiceAnswer,
     DecisionAuthenticationError,
     DecisionBackend,
     DecisionError,
     DecisionResponse,
     DecisionUsage,
+    ScoreAnswer,
+    YesNoAnswer,
 )
 
 DEFAULT_JEV_API_BASE = "https://api.typesafe.ai"
@@ -94,18 +97,6 @@ Question = ChoiceQuestion | ScoreQuestion | NoulQuestion
 
 
 @dataclass(frozen=True)
-class ScoreAnswer:
-    score: float
-    confidence: float
-    probabilities: dict[str, float]
-
-
-@dataclass(frozen=True)
-class NoulAnswer:
-    noul: float
-
-
-@dataclass(frozen=True)
 class JevResponse:
     model: str
     answers: dict[str, Any]
@@ -119,9 +110,9 @@ class JevResponse:
         """The answer to the score question `name`, or None when there is no well-formed one."""
         return self._read(name, "score", _score_answer)
 
-    def noul(self, name: str) -> NoulAnswer | None:
+    def noul(self, name: str) -> YesNoAnswer | None:
         """The answer to the noul question `name`, or None when there is no well-formed one."""
-        return self._read(name, "noul", lambda answer: NoulAnswer(noul=_probability(answer["noul"])))
+        return self._read(name, "noul", lambda answer: YesNoAnswer(probability=_probability(answer["noul"])))
 
     def _read[T](self, name: str, question_type: str, parse: Callable[[dict], T]) -> T | None:
         answer = self.answers.get(name)
@@ -280,7 +271,9 @@ class JevBackend(DecisionBackend):
             raise DecisionAuthenticationError(str(e), e.status_code) from e
         except JevError as e:
             raise DecisionError(str(e), e.status_code) from e
-        answers = {name: answer for name in questions if (answer := response.choice(name)) is not None}
+        answers = {
+            name: answer for name, question in questions.items() if (answer := _answer(response, name, question))
+        }
         return DecisionResponse(response.model, answers, response.usage, raw_answers=response.answers)
 
     def request_text(self, input: Any, questions: Mapping[str, decision_backend.Question]) -> str:
@@ -288,8 +281,26 @@ class JevBackend(DecisionBackend):
         return json.dumps({"state": json_safe(input), "questions": jev_questions})
 
 
-def _jev_questions(questions: Mapping[str, decision_backend.Question]) -> dict[str, ChoiceQuestion]:
-    return {
-        name: ChoiceQuestion(criteria=dict(question.options), instructions=question.instructions)
-        for name, question in questions.items()
-    }
+def _jev_questions(questions: Mapping[str, decision_backend.Question]) -> dict[str, Question]:
+    return {name: _jev_question(question) for name, question in questions.items()}
+
+
+def _jev_question(question: decision_backend.Question) -> Question:
+    match question:
+        case decision_backend.ChoiceQuestion():
+            return ChoiceQuestion(criteria=dict(question.options), instructions=question.instructions)
+        case decision_backend.ScoreQuestion():
+            return ScoreQuestion(criteria=list(question.levels), instructions=question.instructions)
+        case decision_backend.YesNoQuestion():
+            criteria = {"true": question.true_description, "false": question.false_description}
+            return NoulQuestion(question.instructions, criteria if any(criteria.values()) else None)
+
+
+def _answer(response: JevResponse, name: str, question: decision_backend.Question) -> Answer | None:
+    match question:
+        case decision_backend.ChoiceQuestion():
+            return response.choice(name)
+        case decision_backend.ScoreQuestion():
+            return response.score(name)
+        case decision_backend.YesNoQuestion():
+            return response.noul(name)
