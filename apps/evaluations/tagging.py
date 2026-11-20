@@ -15,6 +15,7 @@ from django.db.models import Q
 
 from apps.annotations.models import CustomTaggedItem
 from apps.evaluations.models import AppliedTag, ConditionType, EvaluationMode, EvaluationRunType, Evaluator
+from apps.experiments.services import delete_tagged_items, touch_tagged_objects
 
 if TYPE_CHECKING:
     from apps.chat.models import Chat, ChatMessage
@@ -114,19 +115,28 @@ def apply_rules_to_result(
     tags_to_apply = {rule.tag_id: rule.tag for rule in matched_rules}
     content_type = ContentType.objects.get_for_model(type(target))
     team = evaluation_result.team
-
-    CustomTaggedItem.objects.bulk_create(
-        [
-            CustomTaggedItem(
-                content_type=content_type,
-                object_id=target.pk,
-                tag=tag,
-                team=team,
-            )
-            for tag in tags_to_apply.values()
-        ],
-        ignore_conflicts=True,
+    present = set(
+        CustomTaggedItem.objects.filter(
+            content_type=content_type, object_id=target.pk, tag_id__in=tags_to_apply
+        ).values_list("tag_id", flat=True)
     )
+    missing = [tag for tag_id, tag in tags_to_apply.items() if tag_id not in present]
+
+    if missing:
+        CustomTaggedItem.objects.bulk_create(
+            [
+                CustomTaggedItem(
+                    content_type=content_type,
+                    object_id=target.pk,
+                    tag=tag,
+                    team=team,
+                )
+                for tag in missing
+            ],
+            ignore_conflicts=True,
+        )
+        # bulk_create sends no save signal, so the tagged row is touched here.
+        touch_tagged_objects(content_type.id, [target.pk])
 
     AppliedTag.objects.bulk_create(
         [
@@ -211,7 +221,7 @@ def reverse_stale_tags(run: EvaluationRun) -> None:
     for target_pk, tag_ids in stale_by_target.items():
         filter_q |= Q(object_id=target_pk, tag_id__in=tag_ids)
 
-    CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q).delete()
+    delete_tagged_items(content_type.id, CustomTaggedItem.objects.filter(content_type=content_type).filter(filter_q))
 
 
 def remove_applied_tags_for_runs(runs) -> None:
@@ -251,4 +261,6 @@ def remove_applied_tags_for_runs(runs) -> None:
     filter_q = Q()
     for object_id, tag_id in pairs:
         filter_q |= Q(object_id=object_id, tag_id=tag_id)
-    CustomTaggedItem.objects.filter(content_type=content_type, user__isnull=True).filter(filter_q).delete()
+    delete_tagged_items(
+        content_type.id, CustomTaggedItem.objects.filter(content_type=content_type, user__isnull=True).filter(filter_q)
+    )
