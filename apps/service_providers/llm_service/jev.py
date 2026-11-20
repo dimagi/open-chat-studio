@@ -130,8 +130,10 @@ class JevResponse:
 
 
 def _choice_answer(answer: dict) -> ChoiceAnswer:
+    if not isinstance(answer["choice"], str):
+        raise TypeError(f"not a string: {answer['choice']!r}")
     probabilities = dict(answer.get("probabilities") or {})
-    return ChoiceAnswer(str(answer["choice"]), _probability(answer["confidence"]), probabilities)
+    return ChoiceAnswer(answer["choice"], _probability(answer["confidence"]), probabilities)
 
 
 def _score_answer(answer: dict) -> ScoreAnswer:

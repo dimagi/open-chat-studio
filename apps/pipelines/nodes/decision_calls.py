@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from langchain_core.callbacks import CallbackManager
+from langchain_core.callbacks import CallbackManager, CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
@@ -40,20 +40,27 @@ def ask_decisions(
     """
     model_name = node.repo.get_llm_provider_model(node.llm_provider_model_id).name
     state = build_state(node, context)
+    run = _start_call(node, backend, model_name, backend.request_text(state, questions))
     try:
         response = backend.ask(model_name, state, questions)
-    except DecisionAuthenticationError as e:
-        raise ProviderConfigurationError(f"{AUTHENTICATION_MESSAGE} {e}") from e
-    _report_call(node, backend, model_name, backend.request_text(state, questions), response)
+    except Exception as e:
+        run.on_llm_error(e)
+        if isinstance(e, DecisionAuthenticationError):
+            raise ProviderConfigurationError(f"{AUTHENTICATION_MESSAGE} {e}") from e
+        raise
+    _end_call(run, response)
     return response
 
 
 def build_state(node: "DecidingNode", context: "NodeContext") -> dict:
     """What the model is asked about: the input, the history the node is configured to see, and the session's data."""
-    history = node.get_history(exclude_message_id=context.input_message_id) if context.session else []
+    if context.session:
+        history = node.get_history(exclude_message_id=context.input_message_id, limit=_history_limit(node))
+    else:
+        history = []
     return {
         "input": context.input,
-        "history": [_history_entry(message) for message in _recent(history, _history_limit(node))],
+        "history": [_history_entry(message) for message in history],
         "participant_data": context.state.participant_data or {},
         "session_state": context.state.session_state or {},
         "temp_state": context.state.temp or {},
@@ -62,25 +69,18 @@ def build_state(node: "DecidingNode", context: "NodeContext") -> dict:
 
 def _history_limit(node: "DecidingNode") -> int:
     if node.get_history_mode() == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
-        return min(node.max_history_length, HISTORY_LIMIT)
+        return max(min(node.max_history_length, HISTORY_LIMIT), 0)
     return HISTORY_LIMIT
-
-
-def _recent(history: list[BaseMessage], limit: int) -> list[BaseMessage]:
-    return history[-limit:] if limit > 0 else []
 
 
 def _history_entry(message: BaseMessage) -> dict:
     return {"role": message.type, "content": message.text[:MESSAGE_CHARACTER_LIMIT]}
 
 
-def _report_call(
-    node: "DecidingNode", backend: DecisionBackend, model_name: str, request_text: str, response: DecisionResponse
-) -> None:
-    """Report the call to the run's callbacks as an LLM call, so tracers and cost tracking see its usage.
-
-    Reported only once a response is in hand: a failed call has no usage to record.
-    """
+def _start_call(
+    node: "DecidingNode", backend: DecisionBackend, model_name: str, request_text: str
+) -> CallbackManagerForLLMRun:
+    """Report the call to the run's callbacks as an LLM call, so tracers and cost tracking see it."""
     config = node._config or {}
     manager = CallbackManager.configure(
         inheritable_callbacks=config.get("callbacks"),
@@ -89,6 +89,10 @@ def _report_call(
         local_metadata={"ocs_provider_type": backend.provider_type, "ls_model_name": model_name},
     )
     (run,) = manager.on_llm_start({"name": backend.name}, [request_text], invocation_params={"model": model_name})
+    return run
+
+
+def _end_call(run: CallbackManagerForLLMRun, response: DecisionResponse) -> None:
     usage = response.usage
     message = AIMessage(
         content=json.dumps(response.raw_answers),

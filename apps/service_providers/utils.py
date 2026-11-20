@@ -261,7 +261,7 @@ def get_llm_provider_by_team(team):
 
 
 def get_models_by_provider(provider, team):
-    model_objects = LlmProviderModel.objects.for_team(team).filter(type=provider)
+    model_objects = LlmProviderModel.objects.for_team(team).chat().filter(type=provider)
     return [{"value": model.id, "label": model.display_name} for model in model_objects]
 
 

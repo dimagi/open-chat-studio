@@ -45,6 +45,7 @@ def experiments_prompt_builder(request, team_slug: str):
     if default_llm_provider:
         default_llm_provider_model_id = (
             LlmProviderModel.objects.for_team(request.team)
+            .chat()
             .filter(type=default_llm_provider.type)
             .values_list("id", flat=True)
             .first()

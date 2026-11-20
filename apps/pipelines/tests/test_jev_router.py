@@ -5,10 +5,12 @@ import time
 from unittest import mock
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.chat.exceptions import ProviderConfigurationError
 from apps.cost_tracking.models import Confidence, ServiceKind
+from apps.pipelines.models import PipelineChatMessages
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
 from apps.pipelines.nodes.decision_calls import HISTORY_LIMIT
@@ -23,6 +25,7 @@ from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceAnswer,
     DecisionBackend,
+    DecisionError,
     DecisionResponse,
     DecisionUsage,
 )
@@ -44,6 +47,35 @@ class _FakeBackend(DecisionBackend):
 
     def request_text(self, input, questions):
         return "fake request"
+
+
+class _RecordingBackend(_FakeBackend):
+    """Logs its request into `events`, which a `_Recorder` shares, so a test can see where the request falls."""
+
+    def __init__(self, events: list[str], error: DecisionError | None = None):
+        super().__init__(ChoiceAnswer("SUPPORT", 0.9, {}))
+        self.events = events
+        self.error = error
+
+    def ask(self, model, input, questions):
+        self.events.append("ask")
+        if self.error:
+            raise self.error
+        return super().ask(model, input, questions)
+
+
+class _Recorder(BaseCallbackHandler):
+    def __init__(self, events: list[str]):
+        self.events = events
+
+    def on_llm_start(self, serialized, prompts, **kwargs):
+        self.events.append("start")
+
+    def on_llm_end(self, response, **kwargs):
+        self.events.append("end")
+
+    def on_llm_error(self, error, **kwargs):
+        self.events.append(f"error: {error}")
 
 
 def _answer(choice="billing", confidence=0.9):
@@ -92,6 +124,9 @@ def _route(router: RouterNode, session, participant_data=None, config=None):
         session_state={"plan": "pro"},
     )
     return router._process_conditional(NodeContext(state))
+
+
+_as_langchain_messages = PipelineChatMessages.as_langchain_messages
 
 
 def _sent(httpx_mock) -> dict:
@@ -164,6 +199,19 @@ class TestRequest:
 
         history = _sent(httpx_mock)["state"]["history"]
         assert [entry["content"] for entry in history] == expected
+
+    def test_only_the_history_sent_is_read(self, httpx_mock, jev_ids, session):
+        httpx_mock.add_response(url=URL, json=_answer())
+        router = _router(jev_ids, session, history_mode="max_history_length", max_history_length=3)
+        for turn in range(HISTORY_LIMIT):
+            router.save_history(f"question {turn}", "SUPPORT")
+
+        with mock.patch.object(
+            PipelineChatMessages, "as_langchain_messages", autospec=True, side_effect=_as_langchain_messages
+        ) as read:
+            _route(router, session)
+
+        assert read.call_count == 2
 
     def test_no_history_is_sent_when_history_is_off(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, json=_answer())
@@ -267,6 +315,24 @@ class TestUsage:
 
         events = {(e.provider_type, e.model_name, e.service_kind): e.quantity for e in collector.iter_cost_events()}
         assert events == {("fake-decisions", "jev-latest", ServiceKind.LLM_INPUT): 30}
+
+    @pytest.mark.parametrize(
+        ("error", "expected_route", "expected_events"),
+        [
+            pytest.param(None, ("SUPPORT", False), ["start", "ask", "end"], id="answered"),
+            pytest.param(DecisionError("boom"), ("BILLING", True), ["start", "ask", "error: boom"], id="failed"),
+        ],
+    )
+    def test_the_call_is_reported_from_before_the_request(
+        self, jev_ids, session, error, expected_route, expected_events
+    ):
+        events = []
+        router = _router(jev_ids, session)
+
+        with mock.patch.object(RouterNode, "get_decision_backend", return_value=_RecordingBackend(events, error)):
+            assert _route(router, session, config={"callbacks": [_Recorder(events)]}) == expected_route
+
+        assert events == expected_events
 
     def test_a_failed_call_records_nothing(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, status_code=500, json={"detail": "boom"})

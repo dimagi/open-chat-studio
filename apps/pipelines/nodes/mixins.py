@@ -266,9 +266,10 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, exclude_message_id: int | None = None) -> list[BaseMessage]:
+    def get_history(self, exclude_message_id: int | None = None, limit: int | None = None) -> list[BaseMessage]:
         """
-        Returns the chat history messages for the node based on its history configuration.
+        Returns the chat history messages for the node based on its history configuration, only the
+        newest `limit` of them when given.
 
         Global - Returns the chat history of the session up to the summary marker.
         Node/Named - Returns the chat history for this node from the pipeline chat history.
@@ -278,10 +279,12 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            return self.repo.get_session_messages(self.get_history_mode(), exclude_message_id=exclude_message_id)
+            return self.repo.get_session_messages(
+                self.get_history_mode(), exclude_message_id=exclude_message_id, limit=limit
+            )
         else:
             history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
-            return history.get_langchain_messages_until_marker(self.get_history_mode())
+            return history.get_langchain_messages_until_marker(self.get_history_mode(), limit=limit)
 
     def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
         """Persist the correct compression marker for this node's history mode.
