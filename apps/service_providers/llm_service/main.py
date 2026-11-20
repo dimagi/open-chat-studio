@@ -52,7 +52,7 @@ logger = logging.getLogger("ocs.llm_service")
 
 # The limits of each decision backend, by the type of the models it answers, for a caller that has a
 # model but no provider to ask for its backend.
-DECISION_LIMITS_BY_TYPE = {backend.provider_type: backend.limits for backend in (JevBackend,)}
+DECISION_LIMITS_BY_TYPE = {backend.provider_type: backend.limits for backend in (JevBackend, GoogleDecisionBackend)}
 
 
 class OpenAIBuiltinTool(dict):
