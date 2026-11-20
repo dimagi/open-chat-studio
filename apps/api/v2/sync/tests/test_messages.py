@@ -166,3 +166,18 @@ def test_message_reads_need_the_message_permission(team):
 
     assert client.get(reverse("api:v2:session-list")).status_code == 200
     assert client.get(URL).status_code == 403
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("same_team", "status"),
+    [pytest.param(True, 200, id="issuing-team"), pytest.param(False, 400, id="other-team")],
+)
+def test_a_cursor_is_bound_to_the_team_that_issued_it(team, client, same_team, status):
+    _message(_session(team), minutes=1)
+    cursor = client.get(URL).json()["cursor"]
+    other_team = TeamWithUsersFactory.create()
+    _message(_session(other_team))
+    reader = client if same_team else ApiTestClient(other_team.members.first(), other_team)
+
+    assert reader.get(URL, {"cursor": cursor}).status_code == status
