@@ -103,8 +103,12 @@ rejected, far more machinery than a sync API over two tables needs.
   adds `updated_at` to every partial save, so new call sites are covered too.
 - Tag changes write `CustomTaggedItem` rows and never touch the tagged row. Adding or removing a tag
   on a message, or on a session's chat, sets that message's or session's `updated_at`, through
-  `touch_tagged_object` in `apps/experiments/services.py`: a receiver on the tag row's save and delete,
-  plus an explicit call after evaluator tag rules `bulk_create` their rows, which sends no signal.
+  `touch_tagged_objects` in `apps/experiments/services.py`: a receiver on the tag row's save, a
+  receiver on taggit's `remove()` and `clear()`, an explicit call when evaluator tag rules
+  `bulk_create` a tag the row did not have, and `delete_tagged_items` for queryset deletes, which
+  touches every affected row in one `UPDATE`. There is no receiver on the tag row's delete: it would
+  turn off Django's fast delete, so bulk removals and chat or message deletes would load every tag
+  row and run one `UPDATE` per row.
 
 **Context.** The cursor only sees what moves `updated_at`. Each gap above is a change a consumer would
 never receive.
