@@ -18,6 +18,7 @@ from apps.teams.flags import Flags
 from apps.utils.factories.team import TeamFactory
 from apps.utils.rate_limit import (
     RATE_LIMIT_EXEMPT_FLAG,
+    WOULD_BLOCK_LOG_INTERVAL,
     RateLimitHeadersMiddleware,
     RateLimitResult,
     _scope_config,
@@ -184,6 +185,52 @@ def test_over_limit_would_block_logging_is_sampled_after_the_crossing(caplog):
     would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
     assert len(would_block) < over_limit_requests
     assert would_block[0].count == 4
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_over_limit_logs_blocked_when_enforcing(caplog):
+    """A refused request is logged with the same fields as would_block, sampled the same way."""
+    for _ in range(3):
+        check("api", "team", "42")
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        for _ in range(WOULD_BLOCK_LOG_INTERVAL):
+            check("api", "team", "42", team_id=7)
+    blocked = [r for r in caplog.records if r.message == "rate_limit.blocked"]
+    assert [r.count for r in blocked] == [4, WOULD_BLOCK_LOG_INTERVAL]
+    assert blocked[0].scope == "api"
+    assert blocked[0].identity_type == "team"
+    assert blocked[0].limit == 3
+    assert blocked[0].team_id == 7
+    assert blocked[0].key_hash != "42"
+    assert not [r for r in caplog.records if r.message == "rate_limit.would_block"]
+
+
+@override_settings(RATE_LIMITS={"api": {"rate": "10/5m"}}, RATE_LIMIT_ENFORCE=False)
+def test_near_limit_is_logged_once_per_threshold(caplog):
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        for _ in range(10):
+            check("api", "team", "42", team_id=7)
+    near_limit = [r for r in caplog.records if r.message == "rate_limit.near_limit"]
+    assert [(r.percent, r.count) for r in near_limit] == [(50, 5), (80, 8)]
+    assert near_limit[0].limit == 10
+    assert near_limit[0].team_id == 7
+    assert near_limit[0].key_hash != "42"
+
+
+@pytest.mark.parametrize(
+    ("limit", "expected"),
+    [
+        pytest.param(1, [(80, 1)], id="both-thresholds-on-one-count"),
+        pytest.param(3, [(50, 2), (80, 3)], id="rounds-up"),
+    ],
+)
+def test_near_limit_with_small_limits(caplog, limit, expected):
+    with override_settings(RATE_LIMITS={"api": {"rate": f"{limit}/5m"}}, RATE_LIMIT_ENFORCE=False):
+        with caplog.at_level("INFO", logger="ocs.rate_limit"):
+            for _ in range(limit + 1):
+                check("api", "team", "42")
+    near_limit = [r for r in caplog.records if r.message == "rate_limit.near_limit"]
+    assert [(r.percent, r.count) for r in near_limit] == expected
 
 
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
