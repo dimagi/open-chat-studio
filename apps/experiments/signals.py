@@ -1,5 +1,5 @@
 from django.contrib.contenttypes.models import ContentType
-from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
 from apps.annotations.models import CustomTaggedItem, Tag
@@ -61,3 +61,9 @@ def touch_rows_of_renamed_tag(sender, instance, created, **kwargs):
     """A renamed tag changes the ``tags`` the v2 sync API returns for every row that carries it."""
     if not created and getattr(instance, "_saved_name", None) not in (None, instance.name):
         touch_rows_tagged_with(instance)
+
+
+@receiver(pre_delete, sender=Tag)
+def touch_rows_of_deleted_tag(sender, instance, **kwargs):
+    """Deleting a tag removes it from the ``tags`` the v2 sync API returns for every row that carried it."""
+    touch_rows_tagged_with(instance)
