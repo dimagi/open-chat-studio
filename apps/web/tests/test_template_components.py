@@ -486,6 +486,26 @@ def test_tab(source, context, expected, unexpected):
             ["w-full", "<small>", "for="],
             id="inline-checkbox-layout",
         ),
+        pytest.param(
+            '<c-ui.field label="Domains" input_id="id_domains" :errors="errors">'
+            '<c-slot name="label_end"><b>TOGGLE</b></c-slot>'
+            '<c-slot name="description">Wildcards, e.g. <code>*.org</code></c-slot>CTRL</c-ui.field>',
+            [
+                '<div class="flex items-center justify-between gap-2"> <label class="label font-bold" '
+                'for="id_domains">',
+                "</label> <b>TOGGLE</b></div> CTRL",
+                '<p class="text-sm text-base-content/70" id="id_domains_helptext">'
+                'Wildcards, e.g. <code>*.org</code></p> <ul class="errorlist">',
+            ],
+            [],
+            id="label-end-and-description",
+        ),
+        pytest.param(
+            '<c-ui.field label="Name" input_id="id_name">CTRL</c-ui.field>',
+            ['<label class="label font-bold" for="id_name"> <div> Name </div> </label> CTRL </div>'],
+            ["justify-between", "_helptext"],
+            id="no-label-end-or-description",
+        ),
     ],
 )
 def test_field(source, expected, unexpected):

@@ -9,12 +9,12 @@ from django.db import models
 from django.db.models.signals import post_save
 
 from apps.annotations.models import CustomTaggedItem, Tag, UserComment
-from apps.api.export.serializers import build_resource_serializer
+from apps.api.export.serializers import build_entry_serializer, build_resource_serializer
 from apps.assessments.models import Score
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.events.models import EventAction
-from apps.experiments.models import ConsentForm, ExperimentSession
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import Annotation, AnnotationQueue
 from apps.ocs_notifications.models import EventType, EventUser, LevelChoices
@@ -24,8 +24,16 @@ from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
-from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
-from apps.teams.export.tests.sync_fakes import PAST
+from apps.teams.export.manifest import (
+    GLOBAL_CONFIG,
+    MANIFEST_ENTRIES,
+    TEAM_SETTINGS_FIELDS,
+    ManifestEntry,
+    entry_model,
+    generic_fk_fields,
+    get_manifest_entry,
+)
+from apps.teams.export.tests.sync_fakes import PAST, team_settings_row
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
@@ -92,6 +100,7 @@ from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
     MessagingProviderFactory,
+    ModerationProviderFactory,
     TraceProviderFactory,
     VoiceProviderFactory,
 )
@@ -495,6 +504,51 @@ def _chat_message_row(source_id, chat_src, message_type, created_at):
     }
 
 
+def _import_message_with_metadata(store, metadata):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows("chat.chat", [_chat_row(source_id=77)])
+    importer.import_rows("chat.chatmessage", [{**_chat_message_row(101, 77, "ai", PAST), "metadata": metadata}])
+    return ChatMessage.objects.get(pk=store.get_target("chat.chatmessage", 101)).metadata
+
+
+def test_message_attachment_ids_point_at_the_imported_files(store):
+    """A message's attachment ids are file pks; on the target the same files have new pks."""
+    first, second = FileFactory.create(), FileFactory.create()
+    store.record("files.file", 501, first.pk)
+    store.record("files.file", 502, second.pk)
+
+    metadata = _import_message_with_metadata(store, {"ocs_attachment_file_ids": [501, 502], "trace_info": {"t": 1}})
+
+    assert metadata == {"ocs_attachment_file_ids": [first.pk, second.pk], "trace_info": {"t": 1}}
+
+
+@pytest.mark.parametrize(
+    ("source_metadata", "expected_source_ids"),
+    [
+        pytest.param({"cited_files": [501], "generated_files": [502]}, [501, 502], id="legacy-keys"),
+        pytest.param(
+            {"ocs_attachment_file_ids": [501], "cited_files": [501, 502], "generated_files": []},
+            [501, 502],
+            id="merged-and-deduped",
+        ),
+        pytest.param({"cited_files": [], "generated_files": []}, None, id="empty-legacy-keys-dropped"),
+    ],
+)
+def test_an_older_export_has_its_attachment_keys_folded(store, source_metadata, expected_source_ids):
+    """Exports from before the ids moved under one key still have them under the legacy keys."""
+    files = {501: FileFactory.create(), 502: FileFactory.create()}
+    for source_pk, file in files.items():
+        store.record("files.file", source_pk, file.pk)
+
+    metadata = _import_message_with_metadata(store, source_metadata)
+
+    if expected_source_ids is None:
+        assert metadata == {}
+    else:
+        assert metadata == {"ocs_attachment_file_ids": [files[pk].pk for pk in expected_source_ids]}
+
+
 def test_muted_import_keeps_session_activity_timestamps_from_source(store):
     """Within mute_signals, importing chat messages no longer fires the ChatMessage post_save handler
     that would otherwise stamp the session's activity timestamps to the import time -- so the session
@@ -599,6 +653,22 @@ def test_tag_slug_taken_by_another_team_gets_a_fresh_slug(store):
     assert tag.name == "urgent"
     assert tag.slug
     assert tag.slug != "urgent"
+
+
+def test_experiment_row_from_an_older_source_with_debug_mode_enabled_imports(store, keypair):
+    """A source on code from before #4375 still sends ``debug_mode_enabled``. The importer reads only
+    the model's own fields, so the key is ignored and the row imports."""
+    public_key, _ = keypair
+    manifest_labels = {entry.model for entry in MANIFEST_ENTRIES}
+    mock_ids = {entry.model: 1000 + i for i, entry in enumerate(MANIFEST_ENTRIES)}
+    row = _serialized_row(get_manifest_entry("chatbots"), mock_ids, manifest_labels, public_key)
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("experiments.experiment", [{**row, "debug_mode_enabled": True}])
+
+    target = store.get_target("experiments.experiment", row["id"])
+    assert Experiment.objects.get(pk=target).name == row["name"]
 
 
 def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
@@ -1081,6 +1151,8 @@ FACTORIES = {
     "service_providers.messagingprovider": MessagingProviderFactory,
     "service_providers.authprovider": AuthProviderFactory,
     "service_providers.traceprovider": TraceProviderFactory,
+    "service_providers.moderationprovider": ModerationProviderFactory,
+    "teams.team": TeamFactory,
     "service_providers.llmprovidermodel": LlmProviderModelFactory,
     "service_providers.embeddingprovidermodel": EmbeddingProviderModelFactory,
     "experiments.syntheticvoice": SyntheticVoiceFactory,
@@ -1160,10 +1232,11 @@ def _commit_file_fields(obj) -> None:
                 fieldfile.save(fieldfile.name, fieldfile, save=False)
 
 
-def _serialized_row(model_label, mock_ids, manifest_labels, public_key):
+def _serialized_row(entry: ManifestEntry, mock_ids, manifest_labels, public_key):
     """The row exactly as the endpoint would serve it: a factory-built instance carrying mock source
     ids -- its own pk and every synced FK (self-refs and FKs to unsynced models nulled) -- run
-    through the model's real export serializer."""
+    through the entry's real export serializer."""
+    model_label = entry.model
     model = entry_model(model_label)
     obj = FACTORIES[model_label].build(**BUILD_OVERRIDES.get(model_label, {}))
     obj.pk = mock_ids[model_label]
@@ -1181,7 +1254,7 @@ def _serialized_row(model_label, mock_ids, manifest_labels, public_key):
         label = f"{ct.app_label}.{ct.model}"
         setattr(obj, fk_field, mock_ids[label] if label in manifest_labels else None)
     _commit_file_fields(obj)
-    return dict(build_resource_serializer(model)(obj, context={"public_key": public_key}).data)
+    return dict(build_entry_serializer(entry)(obj, context={"public_key": public_key}).data)
 
 
 def test_registry_covers_every_manifest_entry():
@@ -1207,8 +1280,8 @@ def test_every_manifest_entry_imports(store, keypair):
         importer.import_rows("teams.team", [team_row])
 
         for entry in MANIFEST_ENTRIES:
-            row = _serialized_row(entry.model, mock_ids, manifest_labels, public_key)
-            importer.import_rows(entry.model, [row])
+            row = _serialized_row(entry, mock_ids, manifest_labels, public_key)
+            importer.import_rows(entry.model, [row], fields=entry.fields)
 
     not_imported = []
     for entry in MANIFEST_ENTRIES:
@@ -1340,3 +1413,56 @@ def test_a_row_whose_fk_was_nulled_is_reapplied_on_reread(store):
 
     node.refresh_from_db()
     assert node.llm_provider_id == store.get_target("service_providers.llmprovider", 7)
+
+
+def test_a_partial_row_updates_its_fields_on_the_imported_row(store):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    provider = ModerationProviderFactory(team=importer.target_team)
+    store.record("service_providers.moderationprovider", 40, provider.pk)
+
+    importer.import_rows("teams.team", [team_settings_row(moderation_provider=40)], fields=TEAM_SETTINGS_FIELDS)
+
+    team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+    assert team.moderation_provider == provider
+    assert team.moderation_enabled is True
+    assert team.slug == "imported-team-xyz"
+
+
+def test_a_partial_row_is_skipped_only_once_it_was_applied(store):
+    """The full team row was recorded with the same updated_at, which must not skip the partial row."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    row = team_settings_row()
+
+    assert importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS) == 1
+    assert importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS) == 0
+
+
+def test_a_partial_row_with_an_unimported_fk_target_raises_for_a_catch_up(store):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    with pytest.raises(UnresolvedForeignKey) as exc_info:
+        importer.import_rows("teams.team", [team_settings_row(moderation_provider=40)], fields=TEAM_SETTINGS_FIELDS)
+
+    assert exc_info.value.target_label == "service_providers.moderationprovider"
+    assert Team.objects.get(pk=importer.target_team.pk).moderation_enabled is False
+
+
+def test_a_partial_row_whose_fk_was_nulled_is_reapplied_on_reread(store):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    row = team_settings_row(moderation_provider=40)
+    importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS, null_unresolved_fks=True)
+    assert Team.objects.get(pk=importer.target_team.pk).moderation_provider is None
+
+    provider = ModerationProviderFactory(team=importer.target_team)
+    store.record("service_providers.moderationprovider", 40, provider.pk)
+    assert importer.import_rows("teams.team", [row], fields=TEAM_SETTINGS_FIELDS) == 1
+    assert Team.objects.get(pk=importer.target_team.pk).moderation_provider == provider
+
+
+def test_a_partial_row_without_an_imported_row_raises(store):
+    with pytest.raises(UnresolvedForeignKey):
+        Importer(store).import_rows("teams.team", [team_settings_row()], fields=TEAM_SETTINGS_FIELDS)

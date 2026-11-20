@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import PurePath
 
 from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex
@@ -19,6 +20,29 @@ from apps.utils.deletion import get_related_m2m_objects
 from apps.utils.fields import SanitizedJSONField
 from apps.web.meta import absolute_url
 
+# Stored names leave headroom under File.file's max_length for the storage location prefix and the
+# random suffix Django appends when a name is already taken.
+MAX_STORED_FILENAME_LENGTH = 150
+
+
+def file_upload_to(instance, filename: str) -> str:
+    """Return a storage-safe name for an uploaded file.
+
+    Django's ``get_available_name`` treats everything after the first dot as the extension and only
+    truncates the part before it, so names like ``V.R_some_very_long_name.xlsm`` can't be shortened
+    and raise ``SuspiciousFileOperation``. Keep only the final extension, replace other dots, and cap
+    the length. The original display name is preserved on ``File.name``.
+    """
+    path = PurePath(filename)
+    ext = path.suffix
+    stem = path.name[: -len(ext)] if ext else path.name
+    stem = stem.replace(".", "_") or "file"
+    if len(ext) > 16:
+        # Not a real extension; keep it as part of the stem instead.
+        stem, ext = f"{stem}{ext.replace('.', '_')}", ""
+    max_stem_length = MAX_STORED_FILENAME_LENGTH - len(ext)
+    return f"{stem[:max_stem_length]}{ext}"
+
 
 class FilePurpose(models.TextChoices):
     COLLECTION = "collection", "Collection"
@@ -33,7 +57,7 @@ class FileObjectManager(VersionsObjectManagerMixin, models.Manager):
 
 class File(BaseTeamModel, VersionsMixin):
     name = models.CharField(max_length=255)
-    file = models.FileField()
+    file = models.FileField(max_length=255, upload_to=file_upload_to)
     external_source = models.CharField(max_length=255, blank=True)
     external_id = models.CharField(max_length=255, blank=True)
     content_size = models.PositiveIntegerField(null=True, blank=True)

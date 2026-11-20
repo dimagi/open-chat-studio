@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.annotations.models import Tag, TagCategories
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Experiment, Participant
+from apps.usage_metrics.buckets import Granularity
 
 
 class DashboardFilterForm(forms.Form):
@@ -19,14 +20,6 @@ class DashboardFilterForm(forms.Form):
         ("90", _("Last 3 months")),
         ("365", _("Last year")),
         ("custom", _("Custom range")),
-    ]
-
-    # Time granularity options
-    GRANULARITY_CHOICES = [
-        ("hourly", _("Hourly")),
-        ("daily", _("Daily")),
-        ("weekly", _("Weekly")),
-        ("monthly", _("Monthly")),
     ]
 
     date_range = forms.ChoiceField(
@@ -47,8 +40,8 @@ class DashboardFilterForm(forms.Form):
     )
 
     granularity = forms.ChoiceField(
-        choices=GRANULARITY_CHOICES,
-        initial="daily",
+        choices=Granularity.choices,
+        initial=Granularity.DAILY,
         required=False,
         widget=forms.Select(attrs={"data-filter-type": "granularity"}),
     )

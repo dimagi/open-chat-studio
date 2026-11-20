@@ -17,7 +17,6 @@ from apps.experiments.export import (
     UTF8_BOM,
     _build_message_queryset,
     _SessionCache,
-    count_export_messages,
     export_rows_to_csv_stream,
     generate_export_rows,
     resolve_export_columns,
@@ -303,20 +302,19 @@ def test_trace_id_resolved_per_message_trace_info():
 
     experiment = Mock(public_id="exp123", name="Test Experiment")
 
-    # Build a chainable mock queryset that supports the keyset-pagination pattern:
-    # ChatMessage.objects.filter(...).select_related(...).prefetch_related(...).order_by("pk")
-    # then base_qs.filter(pk__gt=last_pk)[:CHUNK_SIZE] → messages
+    # One chunk of mock messages, loaded through the chained message queryset.
     mock_messages_qs = MagicMock()
     mock_messages_qs.select_related.return_value = mock_messages_qs
     mock_messages_qs.prefetch_related.return_value = mock_messages_qs
     mock_messages_qs.order_by.return_value = mock_messages_qs
-    mock_messages_qs.filter.return_value.__getitem__ = Mock(return_value=messages)
+    mock_messages_qs.filter.return_value = messages
 
     with (
-        patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs),
+        patch("apps.experiments.export.ChatMessage.objects", mock_messages_qs),
+        patch("apps.experiments.export._message_id_chunks", return_value=[[1, 2, 3, 4]]),
         patch("apps.experiments.export.flag_is_active_for_team", return_value=True),
     ):
-        csv_text = _export_csv_text(experiment, Mock())
+        csv_text = _export_csv_text(experiment, MagicMock())
         rows = list(csv.reader(io.StringIO(csv_text), delimiter=","))
 
     header = rows[0]
@@ -392,12 +390,6 @@ def _make_session_with_messages(count: int):
 
 
 @pytest.mark.django_db()
-def test_count_export_messages():
-    session = _make_session_with_messages(3)
-    assert count_export_messages(session.experiment.sessions.all()) == 3
-
-
-@pytest.mark.django_db()
 def test_generate_export_rows_reports_progress_every_interval():
     """progress_callback fires every PROGRESS_UPDATE_INTERVAL messages, plus a final total."""
     session = _make_session_with_messages(5)
@@ -408,12 +400,12 @@ def test_generate_export_rows_reports_progress_every_interval():
             generate_export_rows(
                 session.experiment,
                 session.experiment.sessions.all(),
-                progress_callback=calls.append,
+                progress_callback=lambda current, total: calls.append((current, total)),
             )
         )
 
     # Fires at 2 and 4 (every interval), then a final flush at 5 (partial interval).
-    assert calls == [2, 4, 5]
+    assert calls == [(2, 5), (4, 5), (5, 5)]
 
 
 @pytest.mark.django_db()
@@ -427,7 +419,7 @@ def test_generate_export_rows_progress_interval_independent_of_chunk_size():
             generate_export_rows(
                 session.experiment,
                 session.experiment.sessions.all(),
-                progress_callback=calls.append,
+                progress_callback=lambda current, total: calls.append(current),
             )
         )
 
@@ -631,7 +623,7 @@ def test_unselected_columns_are_not_computed():
     ],
 )
 def test_message_queryset_prefetches_only_selected_columns(columns, expected_prefetches):
-    queryset = _build_message_queryset(ExperimentSession.objects.none(), columns=resolve_export_columns(columns))
+    queryset = _build_message_queryset(columns=resolve_export_columns(columns))
     assert set(queryset._prefetch_related_lookups) == expected_prefetches
 
 

@@ -1,3 +1,4 @@
+import re
 import unicodedata
 import uuid
 from functools import cached_property
@@ -79,6 +80,7 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.teams.utils import flag_is_active_for_team
 from apps.trace.models import Trace
+from apps.usage_metrics.filters import activity_sessions, evaluation_platform
 from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
 from apps.utils.sunset import sunset_view
@@ -223,25 +225,17 @@ class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 score=0.1,
             )
 
-        session_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .values("experiment_id")
-            .annotate(count=Count("id"))
-            .values("count")
-        )
-
+        counted_sessions = activity_sessions(ExperimentSession.objects.filter(experiment_id=OuterRef("pk")))
+        session_count_subquery = counted_sessions.values("experiment_id").annotate(count=Count("id")).values("count")
         participant_count_subquery = (
-            ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-            .exclude(platform=ChannelPlatform.EVALUATIONS)
-            .values("experiment_id")
+            counted_sessions.values("experiment_id")
             .annotate(count=Count("participant_id", distinct=True))
             .values("count")
         )
 
         interaction_count_subquery = (
             Trace.objects.filter(experiment=OuterRef("pk"))
-            .exclude(session__platform=ChannelPlatform.EVALUATIONS)
+            .exclude(evaluation_platform("session__"))
             .values("experiment_id")
             .annotate(count=Count("id"))
             .values("count")
@@ -776,12 +770,16 @@ def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UU
 @login_and_team_required
 @permission_required("experiments.download_chats", raise_exception=True)
 def export_chatbot_session_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Stream a session CSV and signal the browser when the download response starts."""
     session = get_object_or_404(
         ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=request.team
     )
     rows = generate_export_rows(session.experiment, ExperimentSession.objects.filter(id=session.id))
     response = StreamingHttpResponse(export_rows_to_csv_stream(rows), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{session.external_id}_messages_export.csv"'
+    download_token = request.GET.get("download_token", "")
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", download_token):
+        response.set_cookie(f"session_export_download_{download_token}", "1", max_age=60, samesite="Lax")
     return response
 
 

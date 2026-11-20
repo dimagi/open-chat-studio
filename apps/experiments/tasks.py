@@ -14,7 +14,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.web_channel import WebChannel
 from apps.chat.bots import create_conversation
-from apps.experiments.export import count_export_messages, export_to_tempfile, get_filtered_sessions
+from apps.experiments.export import export_to_tempfile, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.retry import with_llm_retry
@@ -38,9 +38,8 @@ def async_export_chat(self, experiment_id: int, query_params: str, time_zone, co
     filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv.gz"
 
     progress_recorder = ProgressRecorder(self)
-    total = count_export_messages(filtered_sessions)
 
-    def report_progress(current):
+    def report_progress(current, total):
         progress_recorder.set_progress(current, total, description=f"Processing {current} of {total} messages")
         logger.info("Chat export '%s': processed %s/%s messages", experiment.name, current, total)
 

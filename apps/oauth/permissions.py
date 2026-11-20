@@ -106,6 +106,17 @@ def token_reaches_all_data(token) -> bool:
     return not is_client_credentials_token(token) or token.application.all_data
 
 
+def token_allowed_chatbots(token, chatbots):
+    """Narrow `chatbots`, a queryset of working versions, to the ones `token` may reach.
+
+    The collection-side counterpart of `token_allows_chatbot`: a list has no one chatbot to refuse, so
+    the ones a limited machine token may not reach are left out of it.
+    """
+    if token_reaches_all_data(token):
+        return chatbots
+    return chatbots.filter(oauth_applications=token.application)
+
+
 def applications_allowing_chatbot(experiment):
     """The team's machine applications that may reach `experiment` -- inverse of `token_allows_chatbot`.
 
@@ -139,18 +150,6 @@ def enforce_application_chatbot_access(request, experiment) -> None:
     """
     if not application_allows_chatbot(request, experiment):
         raise exceptions.PermissionDenied("This application is not authorized to interact with this chatbot.")
-
-
-def enforce_application_chatbot_write(request, experiment) -> None:
-    """Raise `PermissionDenied` unless the request may modify `experiment`'s configuration.
-
-    Same allowlist as the chat path, different message: reconfiguring a chatbot is at least as
-    sensitive as conversing with it, so a machine token reaches only the chatbots its application allows.
-    Creating a chatbot is deliberately *not* gated -- a chatbot that does not exist yet cannot be on
-    any allowlist, so gating it would leave a machine token unable to bootstrap one.
-    """
-    if not application_allows_chatbot(request, experiment):
-        raise exceptions.PermissionDenied("This application is not authorized to modify this chatbot.")
 
 
 def token_admits_chatbot(token, experiment) -> bool:

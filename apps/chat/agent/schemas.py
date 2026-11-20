@@ -81,6 +81,10 @@ class AttachMediaSchema(BaseModel):
     file_ids: list[int] = Field(description="The IDs of the media files to attach (max 5)")
 
 
+class AttachCardSchema(BaseModel):
+    html: str = Field(description="The complete, self-contained HTML document of the card")
+
+
 class SearchIndexSchema(BaseModel):
     query: str = Field(
         description="A natural language query to search for relevant information in the documents. "

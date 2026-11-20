@@ -23,6 +23,9 @@ class ManifestEntry:
     resource: str  # the URL-facing name the sync endpoint is mounted at
     cursor: str  # pk | updated_at_id
     secret: bool = False
+    # Set on a partial entry: it serves only these fields (plus id and updated_at) of rows an earlier
+    # step imported, and the importer updates those rows in place rather than creating them.
+    fields: tuple[str, ...] = ()
 
 
 # Pulled in dependency order: a referencing model always follows what it points at. Versioned models
@@ -32,9 +35,11 @@ class ManifestEntry:
 # test_working_version_always_served_before_its_published_copies.
 # The team itself is synced too, but not as a generic paginated resource. It's auto-resolved from
 # the API key, served as a single object at the ``team/`` root (see apps/api/export/views.TeamView),
-# and imported first as the anchor every other row is reassigned to -- so it's deliberately absent
-# from MANIFEST_ENTRIES. ``test_every_first_party_model_is_synced_or_ignored`` accounts for it.
+# and imported first as the anchor every other row is reassigned to. Its fields that reference rows
+# imported after it are left out of that row and served by the partial ``team_settings`` entry, placed
+# after the rows they reference.
 TEAM_MODEL = "teams.team"
+TEAM_SETTINGS_FIELDS = ("created_by", "moderation_provider", "moderation_enabled", "auto_block_enabled")
 
 MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("users.customuser", "users", "pk"),
@@ -43,6 +48,8 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("service_providers.messagingprovider", "messaging_providers", "pk", secret=True),
     ManifestEntry("service_providers.authprovider", "auth_providers", "pk", secret=True),
     ManifestEntry("service_providers.traceprovider", "trace_providers", "pk", secret=True),
+    ManifestEntry("service_providers.moderationprovider", "moderation_providers", "updated_at_id", secret=True),
+    ManifestEntry(TEAM_MODEL, "team_settings", "updated_at_id", fields=TEAM_SETTINGS_FIELDS),
     ManifestEntry("service_providers.llmprovidermodel", "llm_provider_models", "pk"),
     ManifestEntry("service_providers.embeddingprovidermodel", "embedding_provider_models", "pk"),
     # Team-specific pricing overrides only; global rules (team=NULL) are excluded by the team filter
@@ -112,6 +119,7 @@ SECRET_REGISTRY: dict[str, list[str]] = {
     "service_providers.messagingprovider": ["config"],
     "service_providers.authprovider": ["config"],
     "service_providers.traceprovider": ["config"],
+    "service_providers.moderationprovider": ["config"],
     "experiments.participantdata": ["data", "encryption_key"],
     "documents.documentsource": ["config"],
     "bot_channels.experimentchannel": ["extra_data"],
@@ -128,9 +136,7 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
         "files_export_task_id",
         "is_migrating",
         "exportable_experiments",
-        "moderation_enabled",
-        "moderation_provider",
-        "auto_block_enabled",
+        *TEAM_SETTINGS_FIELDS,
     ],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # The denylist (moderation.deniedparticipant) is not synced, so imported participants start with no strikes.
@@ -157,6 +163,7 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).
 # Default is "team" (the direct FK on every BaseTeamModel); only models without one need an entry.
 TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
+    TEAM_MODEL: "pk",
     "users.customuser": "teams",
     "pipelines.node": "pipeline__team",
     "experiments.syntheticvoice": "voice_provider__team",
@@ -323,6 +330,7 @@ def build_manifest() -> dict:
                 "resource": e.resource,
                 "cursor": e.cursor,
                 "secret": e.secret,
+                "fields": list(e.fields),
                 "reread_under_selection": CHATBOT_SCOPE_REGISTRY[e.model].reread_under_selection,
             }
             for e in MANIFEST_ENTRIES

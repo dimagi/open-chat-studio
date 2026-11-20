@@ -11,12 +11,13 @@ from rest_framework.generics import GenericAPIView, get_object_or_404
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
-from apps.api.v2.lookups import get_working_chatbot
+from apps.api.v2.lookups import get_authorized_chatbot
+from apps.api.v2.permissions import ApplicationAllowsChatbot
 from apps.api.v2.write.base import DescribesPatch
 from apps.api.v2.write.serializers import ResourceArchivedSerializer
 from apps.events.models import ScheduledTrigger, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
-from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
+from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 from .schema import scheduled_trigger_schema, static_trigger_schema, timeout_trigger_schema
 from .serializers import (
@@ -33,7 +34,12 @@ class TriggerView(GenericAPIView):
     Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers.
     """
 
-    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [
+        *BASE_PERMISSION_CLASSES,
+        DjangoModelPermissionsWithView,
+        TokenHasOAuthResourceScope,
+        ApplicationAllowsChatbot,
+    ]
     required_scopes = ["chatbots"]
     metadata_class = DescribesPatch
     serializer_class: type[BaseTriggerSerializer]
@@ -71,9 +77,7 @@ class TriggerView(GenericAPIView):
         return Response(ResourceArchivedSerializer({"archived": True}).data)
 
     def _chatbot(self, public_id: str) -> Experiment:
-        chatbot = get_working_chatbot(self.request.team, public_id)
-        enforce_application_chatbot_write(self.request, chatbot)
-        return chatbot
+        return get_authorized_chatbot(self, public_id)
 
     def _working_triggers(self) -> models.QuerySet:
         return self.model.objects.working_versions_queryset().filter(experiment=self.chatbot)

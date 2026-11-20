@@ -320,7 +320,7 @@ class MessageProcessingPipeline:
             logger.warning(
                 "Chatbot configuration error (%s, node=%s): %s", type(e).__name__, getattr(e, "node_id", None), e
             )
-            ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
+            ctx.early_exit_response = self._default_reply(ctx)
             ctx.processing_errors.append(str(e))
             ctx.configuration_error = e
             return None
@@ -367,6 +367,9 @@ class MessageProcessingPipeline:
                 f"according to the following error message: {exception}"
             )
         else:
+            if ctx.experiment.unavailable_message:
+                # The model is the likely failure, so the team's own text is sent without asking one.
+                return self._default_reply(ctx)
             prompt = (
                 "Tell the user that something went wrong while processing their message"
                 " and that they should try again later."
@@ -387,15 +390,21 @@ class MessageProcessingPipeline:
             prompt=prompt,
             trace_name="error",
             trace_metadata={"error": str(exception), **getattr(exception, "trace_metadata", {})},
-            fallback=self._fallback_reply(exception),
+            fallback=self._fallback_reply(ctx, exception),
             log_failure=log_failure,
         )
 
-    def _fallback_reply(self, exception: Exception) -> str:
+    def _fallback_reply(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Return the exception's own message for a participant-actionable error, the canned text otherwise.
 
         An empty reply would otherwise be sent as nothing at all.
         """
         if isinstance(exception, UserActionableError):
             return str(exception)
+        return self._default_reply(ctx)
+
+    def _default_reply(self, ctx: MessageProcessingContext) -> str:
+        """The canned error reply, followed by the chatbot's unavailable message when it has one."""
+        if message := ctx.experiment.unavailable_message:
+            return f"{self.DEFAULT_ERROR_RESPONSE_TEXT}\n\n{message}"
         return self.DEFAULT_ERROR_RESPONSE_TEXT
