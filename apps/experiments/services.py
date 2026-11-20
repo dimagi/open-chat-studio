@@ -151,7 +151,7 @@ def delete_tagged_items(content_type_id: int, tagged_items) -> None:
 
 
 def touch_rows_tagged_with(tag) -> None:
-    """Move ``updated_at`` on every message and session that carries ``tag``, after it is renamed."""
+    """Move ``updated_at`` on every message and session that carries ``tag``, when it is renamed or deleted."""
     tagged = CustomTaggedItem.objects.filter(tag=tag)
     now = timezone.now()
     message_ids = tagged.filter(content_type=ContentType.objects.get_for_model(ChatMessage)).values("object_id")
