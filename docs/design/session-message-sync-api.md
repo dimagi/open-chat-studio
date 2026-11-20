@@ -139,7 +139,7 @@ sessions.
 
 **Decision.** `chatbot`, `participant`, `platform` and `tags` are plain queryset filters in each view.
 The platform filter and field are named `platform`, as in the v1 sessions API and the v2 usage API,
-rather than the issue's `channel`.
+not `channel`.
 
 **Context.** `ExperimentSessionFilter` serves the filter widget's `f_<column>` / `op_<column>` wire
 format and HTML UI, not a public `?participant=<id>` contract.
