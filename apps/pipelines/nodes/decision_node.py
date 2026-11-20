@@ -89,7 +89,7 @@ class DecisionNode(PipelineNode, HistoryMixin):
             logger.warning("Decision node %s got no answers from %s: %s", self.name, backend.name, e)
             response = None
 
-        values = temp_state_values(self.name, self.decisions, response)
+        values = temp_state_values(self.name, self.decisions, response, backend.reports_yes_no_confidence)
         if context.session:
             self.save_history(context.input, json.dumps(values))
         return PipelineState.from_node_output(

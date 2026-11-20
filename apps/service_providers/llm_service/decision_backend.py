@@ -132,6 +132,8 @@ class DecisionBackend(ABC):
     # The name the run's trace shows for the call.
     name: ClassVar[str]
     limits: ClassVar[DecisionLimits]
+    # Whether a yes/no answer carries a confidence. Not every provider reports one.
+    reports_yes_no_confidence: ClassVar[bool] = False
 
     @abstractmethod
     def ask(self, model: str, input: Any, questions: Mapping[str, Question]) -> DecisionResponse:

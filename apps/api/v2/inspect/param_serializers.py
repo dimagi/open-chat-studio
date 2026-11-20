@@ -202,7 +202,7 @@ class DecisionNodeParams(_HistoryParams):
             "(``choice``, ``score`` or ``noul``), ``instructions``, ``options`` for a choice, ``levels`` for a "
             "score, ``true_description`` and ``false_description`` for a noul, and an optional ``threshold``. "
             "The answer is written to ``temp_state[key]``, and a choice or score's confidence to "
-            "``temp_state[key + '_confidence']``, as is a noul's when the model reports one."
+            "``temp_state[key + '_confidence']``, as is a noul's when the model's provider reports one."
         ),
     )
 
