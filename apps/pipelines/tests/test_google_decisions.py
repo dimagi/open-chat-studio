@@ -157,6 +157,10 @@ class TestRouter:
 
         assert excinfo.value.errors()[0]["ctx"]["field"] == "keywords"
 
+    def test_a_route_name_with_a_control_character_is_rejected(self, google_decision_ids):
+        with pytest.raises(PydanticValidationError, match="cannot hold control characters"):
+            _router(google_decision_ids, keywords=("billing", "support\x7f"))
+
     def test_a_route_name_longer_than_google_takes_is_rejected(self, google_decision_ids):
         with pytest.raises(PydanticValidationError, match="of at most 128 characters"):
             _router(google_decision_ids, keywords=["billing", "s" * 129])
@@ -283,6 +287,16 @@ class TestDecisionNode:
                 "of at most 128 characters",
                 id="option-name-too-long",
             ),
+            pytest.param(
+                [{**INTENT, "options": [{"name": "billing"}, {"name": "Billing\tissue"}]}],
+                "does not accept, 'Billing\\\\tissue'",
+                id="option-name-with-a-tab",
+            ),
+            pytest.param(
+                [{**INTENT, "options": [{"name": "billing"}, {"name": "Billing\u00a0issue"}]}],
+                "cannot hold control characters, spaces other than plain ones",
+                id="option-name-with-a-non-breaking-space",
+            ),
             pytest.param([{**REFUND, "instructions": " "}], "needs instructions", id="no-instructions"),
             pytest.param([{**REFUND, "key": f"q{i}"} for i in range(1001)], "at most 1000 decisions", id="too-many"),
         ],
@@ -299,6 +313,7 @@ class TestDecisionNode:
             pytest.param({**INTENT, "options": [{"name": "billing"}]}, id="one-option"),
             pytest.param({**REFUND, "instructions": ""}, id="no-instructions"),
             pytest.param({**REFUND, "key": "intención"}, id="non-ascii-key"),
+            pytest.param({**INTENT, "options": [{"name": "Billing\tissue"}]}, id="option-name-with-a-tab"),
         ],
     )
     def test_jev_still_takes_what_google_does_not(self, jev_ids, decision):
