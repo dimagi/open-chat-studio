@@ -136,6 +136,23 @@ def test_machine_token_reads_only_the_chatbots_it_reaches(team, all_data):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize("allowed", [pytest.param(True, id="allowed-chatbot"), pytest.param(False, id="other-chatbot")])
+def test_machine_token_reads_messages_on_a_version_of_an_allowed_chatbot(team, allowed):
+    chatbot = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, experiment=chatbot.create_new_version(make_default=True))
+    message = _message(session)
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[chatbot if allowed else ExperimentFactory.create(team=team)],
+    )
+
+    assert _ids(client.get(URL)) == ([message.id] if allowed else [])
+
+
+@pytest.mark.django_db()
 def test_attachments_and_tags_load_in_the_same_queries_whatever_the_page_size(team, client):
     tag = TagFactory.create(team=team, name="refund")
 
