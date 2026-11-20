@@ -378,6 +378,25 @@ describe('DecisionsWidget', () => {
     }]);
   });
 
+  it('shows a stored decision saved without the fields the backend defaults', () => {
+    seedNode([{key: 'intent', options: [{name: 'billing', description: ''}]}]);
+    const {getByLabelText} = render(<Harness />);
+
+    expect(getByLabelText('Type of decision 1')).toHaveValue('choice');
+    expect(getByLabelText('Instructions for decision 1')).toHaveValue('');
+    expect(getByLabelText('Option 1 of decision 1')).toHaveValue('billing');
+  });
+
+  it('keeps a stored decision saved without a type when another is added', () => {
+    seedNode([{key: 'intent', options: [{name: 'billing', description: ''}]}]);
+    const {getByRole} = render(<Harness />);
+
+    fireEvent.click(getByRole('button', {name: 'Add decision'}));
+
+    expect(stored().map((decision) => [decision.key, decision.type])).toEqual([['intent', 'choice'], ['', 'choice']]);
+    expect(stored()[0].options).toEqual([{name: 'billing', description: ''}]);
+  });
+
   it('writes an edited key, option and threshold back to the node', () => {
     seedNode([choice]);
     const {getByLabelText, getByRole} = render(<Harness />);
