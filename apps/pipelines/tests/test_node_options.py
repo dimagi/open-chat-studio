@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from apps.chat.agent.tools import get_tool_for_custom_action_operation
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
+from apps.service_providers.llm_service.jev import JEV_LIMITS
 from apps.service_providers.models import LlmProviderModel, VoiceProviderType
 from apps.utils.factories.custom_actions import ACTION_SCHEMA, CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -153,8 +154,10 @@ def test_a_decision_only_model_is_marked_for_the_builder(team):
 
     assert "chat" not in options[chat_model.id]
     assert "decisions" not in options[chat_model.id]
+    assert "max_levels" not in options[chat_model.id]
     assert options[decision_model.id]["chat"] is False
     assert options[decision_model.id]["decisions"] is True
+    assert options[decision_model.id]["max_levels"] == JEV_LIMITS.max_levels
 
 
 @pytest.mark.parametrize(

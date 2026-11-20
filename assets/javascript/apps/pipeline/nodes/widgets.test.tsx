@@ -47,7 +47,7 @@ beforeAll(() => {
     ],
     llm_provider_model_id: [
       {value: 'model-a', label: 'OpenAI: gpt-x', type: 'openai'},
-      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev', chat: false, decisions: true},
+      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev', chat: false, decisions: true, max_levels: 3},
     ],
     built_in_tools: {openai: [{value: 'web_search', label: 'Web search'}]},
     tool_config: {},
@@ -337,8 +337,8 @@ describe('DecisionsWidget', () => {
 
   const stored = () => usePipelineStore.getState().nodes[0].data.params.decisions as Record<string, unknown>[];
 
-  function Harness({readOnly = false, inputError}: {readOnly?: boolean; inputError?: string}) {
-    const params = usePipelineStore((state) => state.nodes[0].data.params);
+  function Harness({readOnly = false, inputError, modelId}: {readOnly?: boolean; inputError?: string; modelId?: string}) {
+    const params = {...usePipelineStore((state) => state.nodes[0].data.params), llm_provider_model_id: modelId};
     const Widget = getWidget('decisions', {type: 'array'} as PropertySchema);
     return (
       <Widget
@@ -425,6 +425,17 @@ describe('DecisionsWidget', () => {
     expect(stored()[0]).toMatchObject({key: 'intent', type, ...expected});
     expect(getByLabelText(label)).toBeInTheDocument();
     expect(queryByLabelText('Option 1 of decision 1')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {modelId: 'model-j', levels: 2, offered: true},
+    {modelId: 'model-j', levels: 3, offered: false},
+    {modelId: undefined, levels: 12, offered: true},
+  ])('offers another level below the selected model\'s limit ($modelId, $levels levels)', ({modelId, levels, offered}) => {
+    seedNode([{...choice, type: 'score', options: [], levels: Array(levels).fill('level'), threshold: null}]);
+    const {queryByRole} = render(<Harness modelId={modelId} />);
+
+    expect(queryByRole('button', {name: 'Add level to decision 1'}) !== null).toBe(offered);
   });
 
   it('shows no threshold for a noul decision', () => {
