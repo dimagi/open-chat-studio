@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
@@ -12,12 +13,16 @@ from apps.ocs_notifications.notifications import (
     custom_action_unexpected_error_notification,
     deleted_model_notification,
     deprecated_model_notification,
+    deprecated_widget_version_notification,
     file_delivery_failure_notification,
     message_delivery_failure_notification,
     moderation_skipped_notification,
     participant_auto_blocked_notification,
     trace_error_notification,
+    widget_auth_level_upgrade_notification,
+    widget_version_release_notification,
 )
+from apps.ocs_notifications.tests.rendering_helpers import rendered_message
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.moderation import DeniedParticipantFactory
@@ -169,6 +174,133 @@ class TestTraceErrorNotification:
         call_kwargs = mock_create_notification.call_args.kwargs
         assert call_kwargs["slug"] == "seed-message"
         assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("build", "expected"),
+    [
+        pytest.param(
+            lambda: custom_action_api_failure_notification(
+                CustomActionFactory.create(), _function_def(), KeyError("__init__")
+            ),
+            "POST 'create_user' API call failed: '__init__'",
+            id="exception-with-markdown-syntax",
+        ),
+        pytest.param(
+            lambda: trace_error_notification(
+                experiment=ExperimentFactory.create(),
+                session=None,
+                span_name="llm_response",
+                error_message="<Response [500]>",
+                permissions=None,
+            ),
+            "An error occurred during 'llm_response' for participant 'unknown': <Response [500]>",
+            id="error-that-looks-like-html",
+        ),
+        pytest.param(
+            lambda: audio_synthesis_failure_notification(ExperimentFactory.create(name="Weather *beta*")),
+            "An error occurred while synthesizing a voice response for 'Weather *beta*'",
+            id="name-with-markdown-syntax",
+        ),
+        pytest.param(
+            lambda: deleted_model_notification(TeamFactory.create(), "old-model", "Weather *beta*", _affected()),
+            "The model 'old-model' has been removed from the platform. some resources were affected. "
+            "References have been automatically updated to use 'Weather *beta*'.",
+            id="replacement-model-name",
+        ),
+        pytest.param(
+            lambda: custom_action_health_check_failure_notification(
+                CustomActionFactory.create(name="Weather *beta*"), "KeyError: '__init__'"
+            ),
+            "The custom action 'Weather *beta*' health check failed: KeyError: '__init__'.",
+            id="custom-action-health-check",
+        ),
+        pytest.param(
+            lambda: custom_action_unexpected_error_notification(
+                CustomActionFactory.create(), _function_def(), KeyError("__init__")
+            ),
+            "POST 'create_user' failed with an unexpected error: '__init__'",
+            id="custom-action-unexpected-error",
+        ),
+        pytest.param(
+            lambda: audio_transcription_failure_notification(
+                ExperimentFactory.create(name="Weather *beta*"), "WhatsApp"
+            ),
+            "An error occurred while transcribing a voice message for 'Weather *beta*'",
+            id="audio-transcription",
+        ),
+        pytest.param(
+            lambda: file_delivery_failure_notification(
+                ExperimentFactory.create(name="Weather *beta*"),
+                "WhatsApp",
+                "image/png",
+                ExperimentSessionFactory.create(),
+            ),
+            "An error occurred while delivering a file attachment to the user via WhatsApp for 'Weather *beta*'",
+            id="file-delivery",
+        ),
+        pytest.param(
+            lambda: message_delivery_failure_notification(
+                ExperimentFactory.create(), None, "WhatsApp", "text message", recipient="__init__"
+            ),
+            "An error occurred while delivering a text message to __init__ via WhatsApp",
+            id="message-delivery",
+        ),
+        pytest.param(
+            lambda: deprecated_model_notification(TeamFactory.create(), "*old*", "Weather *beta*", _affected()),
+            "The model '*old*' has been deprecated and will be removed soon. some resources are still using it. "
+            "Please update to 'Weather *beta*' before it is removed.",
+            id="deprecated-model",
+        ),
+        pytest.param(
+            lambda: participant_auto_blocked_notification(
+                ExperimentFactory.create(name="Weather *beta*"),
+                DeniedParticipantFactory.create(participant__identifier="__init__"),
+                "*illicit*",
+            ),
+            "Participant '__init__' was blocked after repeated flagged messages to 'Weather *beta*'. "
+            "Flagged categories: *illicit*.",
+            id="participant-auto-blocked",
+        ),
+        pytest.param(
+            lambda: moderation_skipped_notification(
+                ExperimentFactory.create(name="Weather *beta*"), ExperimentSessionFactory.create(), "timeout"
+            ),
+            "A message to 'Weather *beta*' was answered without moderation because no moderation result arrived "
+            "in time.",
+            id="moderation-skipped",
+        ),
+        pytest.param(
+            lambda: deprecated_widget_version_notification(
+                TeamFactory.create(), {}, {"0.9.0-*rc*"}, datetime(2027, 1, 1), "1.0.0-*rc*", "https://example.com"
+            ),
+            "0 chatbot(s) on your team use a deprecated chat widget version (0.9.0-*rc*). Support ends 01 Jan "
+            "2027. Please update the embed snippet on your site to version 1.0.0-*rc*.",
+            id="deprecated-widget-version",
+        ),
+        pytest.param(
+            lambda: widget_version_release_notification(
+                TeamFactory.create(), "1.0.0-*rc*", "", "https://example.com", {}
+            ),
+            "Version 1.0.0-*rc* of the embedded chat widget is now available. Update the embed snippet on your "
+            "site to use the latest version.",
+            id="widget-version-release",
+        ),
+        pytest.param(
+            lambda: widget_auth_level_upgrade_notification(
+                TeamFactory.create(), {}, "1.0.0-*rc*", datetime(2027, 1, 1), "https://example.com"
+            ),
+            "0 chatbot(s) on your team now run an upgraded chat widget. On 01 Jan 2027 the authentication required "
+            "from these widgets will be raised. Make sure every embed of these chatbots is on widget version "
+            "1.0.0-*rc* or newer before then, or older embeds will stop connecting.",
+            id="widget-auth-level-upgrade",
+        ),
+    ],
+)
+def test_runtime_values_render_as_written(build, expected):
+    """Names and error text are data, not markdown, so the rendered message shows them exactly."""
+    assert rendered_message("apps.ocs_notifications.notifications.create_notification", build) == expected
 
 
 def _affected(chatbots=None, pipelines=None, evaluators=None) -> AffectedResources:

@@ -2,6 +2,9 @@
 {% if save_successful %}
   {% include "chatbots/partials/channel_buttons_oob.html" %}
 {% endif %}
+{% if channel.platform_enum == "embedded_widget" or platform == "embedded_widget" %}
+  {% include "channels/partials/widget_channel_dialog.html" %}
+{% else %}
 <dialog class="modal" open>
   <div class="modal-box">
     <h3 class="font-bold text-lg">
@@ -78,3 +81,4 @@
     <button>close</button>
   </form>
 </dialog>
+{% endif %}

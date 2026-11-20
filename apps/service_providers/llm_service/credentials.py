@@ -72,7 +72,6 @@ def _google_vertex_ai() -> ProviderCredentials | None:
         {
             "credentials_json": credentials,
             "location": os.environ.get("GOOGLE_VERTEX_AI_LOCATION", "global"),
-            "api_transport": os.environ.get("GOOGLE_VERTEX_AI_API_TRANSPORT", "rest"),
         },
     )
 

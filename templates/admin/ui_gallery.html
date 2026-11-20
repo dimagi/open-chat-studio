@@ -138,6 +138,15 @@ When a component is added under templates/cotton/, add an example here.
           <c-ui.field label="{% translate 'Enabled' %}" help="{% translate 'Inline layout for a checkbox or toggle.' %}" inline>
             <input type="checkbox" class="checkbox" checked />
           </c-ui.field>
+          <c-ui.field label="{% translate 'Allowed domains' %}" input_id="gallery-field-domains">
+            <c-slot name="label_end">
+              <label class="flex items-center gap-2 text-sm cursor-pointer">
+                {% translate "Allow all" %} <input type="checkbox" class="toggle toggle-sm" />
+              </label>
+            </c-slot>
+            <c-slot name="description">{% translate "A description under the control, with a toggle on the label row." %}</c-slot>
+            <input id="gallery-field-domains" type="text" class="input w-full" aria-describedby="gallery-field-domains_helptext" value="example.org" />
+          </c-ui.field>
         </div>
       </section>
 

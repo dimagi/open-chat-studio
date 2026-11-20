@@ -11,6 +11,7 @@ from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import Chat, ChatMessage
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
+from apps.usage_metrics.filters import activity_sessions
 
 from .models import Experiment, ExperimentSession, Participant, SessionStatus
 
@@ -119,10 +120,9 @@ def publish_version(version: Experiment) -> None:
 
 
 def last_activity_subquery() -> Subquery:
-    """Annotation for an ``Experiment`` queryset: the latest ``last_activity_at`` of its non-evaluation sessions."""
+    """Annotation for an ``Experiment`` queryset: the latest ``last_activity_at`` of its counted sessions (ADR-0051)."""
     return Subquery(
-        ExperimentSession.objects.filter(experiment_id=OuterRef("pk"))
-        .exclude(platform=ChannelPlatform.EVALUATIONS)
+        activity_sessions(ExperimentSession.objects.filter(experiment_id=OuterRef("pk")))
         .order_by(F("last_activity_at").desc(nulls_last=True))
         .values("last_activity_at")[:1],
         output_field=DateTimeField(),

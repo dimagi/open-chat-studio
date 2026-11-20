@@ -237,3 +237,20 @@ def test_deleting_the_selected_provider_turns_moderation_off(delete):
     team.refresh_from_db()
     assert team.moderation_provider is None
     assert team.moderation_enabled is False
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("moderation_enabled", [pytest.param(True, id="enabled"), pytest.param(False, id="disabled")])
+def test_deleting_the_selected_provider_moves_the_team_updated_at(moderation_enabled):
+    """The team sync picks up changed teams by updated_at, so clearing the provider must move it."""
+    provider = ModerationProviderFactory.create()
+    team = provider.team
+    team.moderation_enabled = moderation_enabled
+    team.moderation_provider = provider
+    team.save()
+    before = team.updated_at
+
+    provider.delete()
+
+    team.refresh_from_db()
+    assert team.updated_at > before

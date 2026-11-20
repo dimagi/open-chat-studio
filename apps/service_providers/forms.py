@@ -181,6 +181,24 @@ class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
 
+class GeminiVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["gemini_api_key"]
+
+    gemini_api_key = forms.CharField(
+        label=_("API Key"),
+        help_text=render_help_with_link(
+            "Transcription only: Gemini has no voices here, so chatbots using this provider reply in text.",
+            "https://aistudio.google.com/app/apikey",
+            link_text="Get a Gemini API key",
+        ),
+    )
+    gemini_transcription_model = forms.CharField(
+        label=_("Transcription Model"),
+        initial="gemini-3.5-transcribe",
+        help_text=_("The Gemini model that transcribes voice messages."),
+    )
+
+
 class IntronVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["intron_api_key"]
 
@@ -254,15 +272,6 @@ class VoyageAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class GoogleVertexAIConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["credentials_json"]
-    api_transport = forms.ChoiceField(
-        label=_("API Transport"),
-        choices=[("grpc", "gRPC"), ("rest", "REST")],
-        help_text=_(
-            "Advanced parameter to select the transport protocol for the API calls. "
-            "Refer to the Google documentation for details."
-        ),
-        initial="grpc",
-    )
     location = forms.CharField(
         label=_("Google Cloud Platform Location"),
         help_text=render_help_with_link(
