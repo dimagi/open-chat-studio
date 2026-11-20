@@ -44,11 +44,15 @@ def k(n: int) -> int:
 
 DEFAULT_LLM_PROVIDER_MODELS = {
     "azure": [
-        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
-        Model("o3", 200000, parameters=OpenAIReasoningParameters),
-        Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
+        # Microsoft retires o3, o3-mini and o4-mini on 2026-11-19; replacements are the ones its
+        # retirement schedule names.
+        Model("o4-mini", 200000, deprecated=True, replacement="gpt-5.6-terra", parameters=OpenAIReasoningParameters),
+        Model("o3", 200000, deprecated=True, replacement="gpt-5.6-sol", parameters=OpenAIReasoningParameters),
+        Model("o3-mini", 200000, deprecated=True, replacement="gpt-5.6-terra", parameters=OpenAIReasoningParameters),
         # Token limits are the total context window Microsoft publishes for the deployment, not the
         # separate input-only figure it also lists.
+        Model("gpt-6.2-astra", 1050000, parameters=GPT6Parameters),
+        Model("gpt-6.2-sol", 1050000, parameters=GPT6Parameters),
         Model("gpt-6.1-terra", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6.1-sol", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
@@ -112,6 +116,8 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.6-terra", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-sol", 1050000, parameters=GPT52Parameters),
         Model("gpt-5.6-luna", 1050000, parameters=GPT52Parameters),
+        Model("gpt-6.2-astra", 1050000, parameters=GPT6Parameters),
+        Model("gpt-6.2-sol", 1050000, parameters=GPT6Parameters),
         Model("gpt-6.1-terra", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6.1-sol", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
@@ -163,7 +169,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         # `reasoning`, which that endpoint rejects, so effort is not exposed. MiniMax defaults it to `max`.
         Model("MiniMax-M3.1-Flash", 1000000),
         # MiniMax retires the M2.7 and M2.5 families on 2026-11-18.
-        Model("MiniMax-M2.7", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2", 200000),
     ],
@@ -175,6 +180,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),
         Model("gemini-4-hydrogen", 1048576),
+        Model("gemini-4-neon", 1048576),
         Model("gemini-3.8-flash", 1048576, is_default=True, is_translation_default=True),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576),
@@ -189,9 +195,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),
         Model("gemini-4-hydrogen", 1048576),
+        Model("gemini-4-neon", 1048576),
         Model("gemini-3.8-flash", 1048576, is_translation_default=True),
         Model("gemini-3.7-flash", 1048576),
-        Model("gemini-3.6-flash", 1048576),
+        Model("gemini-3.6-flash", 1048576, deprecated=True, replacement="gemini-3.8-flash"),
         Model("gemini-3.5-flash", 1048576, is_default=True),
         Model("gemini-3.5-flash-lite", 1048576),
         Model("gemini-3.1-pro-preview", 1048576),
@@ -276,6 +283,8 @@ DELETED_MODELS = [
     ("perplexity", "llama-3.1-sonar-huge-128k-online"),
     ("perplexity", "llama-3.1-sonar-small-128k-chat", "sonar"),
     ("perplexity", "llama-3.1-sonar-large-128k-chat", "sonar-pro"),
+    # MiniMax
+    ("minimax", "MiniMax-M2.7", "MiniMax-M3"),
     # Google
     ("google", "gemini-1.5-flash"),
     ("google", "gemini-1.5-flash-8b"),

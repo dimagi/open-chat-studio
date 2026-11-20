@@ -504,6 +504,51 @@ def _chat_message_row(source_id, chat_src, message_type, created_at):
     }
 
 
+def _import_message_with_metadata(store, metadata):
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    importer.import_rows("chat.chat", [_chat_row(source_id=77)])
+    importer.import_rows("chat.chatmessage", [{**_chat_message_row(101, 77, "ai", PAST), "metadata": metadata}])
+    return ChatMessage.objects.get(pk=store.get_target("chat.chatmessage", 101)).metadata
+
+
+def test_message_attachment_ids_point_at_the_imported_files(store):
+    """A message's attachment ids are file pks; on the target the same files have new pks."""
+    first, second = FileFactory.create(), FileFactory.create()
+    store.record("files.file", 501, first.pk)
+    store.record("files.file", 502, second.pk)
+
+    metadata = _import_message_with_metadata(store, {"ocs_attachment_file_ids": [501, 502], "trace_info": {"t": 1}})
+
+    assert metadata == {"ocs_attachment_file_ids": [first.pk, second.pk], "trace_info": {"t": 1}}
+
+
+@pytest.mark.parametrize(
+    ("source_metadata", "expected_source_ids"),
+    [
+        pytest.param({"cited_files": [501], "generated_files": [502]}, [501, 502], id="legacy-keys"),
+        pytest.param(
+            {"ocs_attachment_file_ids": [501], "cited_files": [501, 502], "generated_files": []},
+            [501, 502],
+            id="merged-and-deduped",
+        ),
+        pytest.param({"cited_files": [], "generated_files": []}, None, id="empty-legacy-keys-dropped"),
+    ],
+)
+def test_an_older_export_has_its_attachment_keys_folded(store, source_metadata, expected_source_ids):
+    """Exports from before the ids moved under one key still have them under the legacy keys."""
+    files = {501: FileFactory.create(), 502: FileFactory.create()}
+    for source_pk, file in files.items():
+        store.record("files.file", source_pk, file.pk)
+
+    metadata = _import_message_with_metadata(store, source_metadata)
+
+    if expected_source_ids is None:
+        assert metadata == {}
+    else:
+        assert metadata == {"ocs_attachment_file_ids": [files[pk].pk for pk in expected_source_ids]}
+
+
 def test_muted_import_keeps_session_activity_timestamps_from_source(store):
     """Within mute_signals, importing chat messages no longer fires the ChatMessage post_save handler
     that would otherwise stamp the session's activity timestamps to the import time -- so the session

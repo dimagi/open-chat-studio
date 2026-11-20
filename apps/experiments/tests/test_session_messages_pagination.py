@@ -72,6 +72,9 @@ class TestSessionMessagesLoadOnScroll:
         assert content.index("Message 9") < content.index('id="messages-loading-more"')
         assert content.index('data-session-message-page-trigger="1"') < content.index('id="messages-loading-more"')
         assert 'data-session-message-page-trigger="2"' in next_page_content
+        assert "Loading more..." in content
+        assert "Unable to load more messages." in content
+        assert "Retry" in content
         assert "Loading more..." not in next_page_content
 
     def test_each_page_has_only_one_next_page_trigger(self, client, experiment, session_with_messages):
@@ -124,6 +127,8 @@ class TestSessionMessagesLoadOnScroll:
         content = response.content.decode()
         assert "data-load-all-messages-button" in content
         assert "Load all messages" in content
+        assert "Loading all messages..." in content
+        assert "Unable to load all messages. Try again." in content
         assert 'name="show_all"' not in content
         assert "show_all=on" in content
         assert 'hx-disabled-elt="this"' in content

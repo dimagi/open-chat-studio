@@ -808,6 +808,11 @@
     z-index: 9999;
   }
 
+  .confirmation-overlay-kiosk {
+    /* Cover the kiosk chat area only, not the host page */
+    @apply absolute;
+  }
+
   .confirmation-dialog {
     @apply max-w-sm w-full mx-4;
     background-color: var(--confirmation-dialog-bg-color);

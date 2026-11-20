@@ -472,6 +472,7 @@ class AgentTools(models.TextChoices):
     APPEND_TO_SESSION_STATE = "append-to-session-state", gettext("Append to Session State")
     INCREMENT_SESSION_STATE_COUNTER = "increment-session-state-counter", gettext("Increment Session State Counter")
     CALCULATOR = "calculator", gettext("Calculator")
+    ATTACH_CARD = "attach-card", gettext("Attach Card (CommCare Connect)")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
@@ -1190,6 +1191,10 @@ class Participant(BaseTeamModel):
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
+            models.Index(fields=["remote_id"], name="participant_remote_id_idx"),
+            # Trigram indexes on UPPER(identifier) and UPPER(name), which serve the participant
+            # filter's `icontains`, are created in migration 0158 with raw SQL: Django renders an
+            # OpClass over an expression as invalid SQL unless django.contrib.postgres is installed.
         ]
 
     @classmethod
@@ -1782,7 +1787,8 @@ class ExperimentSession(BaseTeamModel):
             trace_info: Metadata for adding to the trace
             fail_silently: Exceptions will not be suppresed if this is True
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
-            specific child bot to handle the check-in.
+            specific child bot to handle the check-in. Defaults to the published version, or the working version
+            if none is published.
             message_text: A message to deliver to the participant directly, bypassing the LLM.
         """
         if (instruction_prompt is None) == (message_text is None):
@@ -1808,7 +1814,7 @@ class ExperimentSession(BaseTeamModel):
         trace_service = None
         try:
             with transaction.atomic(), current_team(self.team):
-                experiment = use_experiment or self.experiment
+                experiment = use_experiment or self.experiment_version
                 trace_service = TracingService.create_for_experiment(experiment)
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
@@ -1883,7 +1889,7 @@ class ExperimentSession(BaseTeamModel):
             ExperimentHistoryManager,
         )
 
-        experiment = use_experiment or self.experiment
+        experiment = use_experiment or self.experiment_version
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
@@ -1923,7 +1929,13 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """The Chatbot Version this session executes against — Published if one exists, Working otherwise."""
+        """The Chatbot Version this session executes against.
+
+        A session bound to a version snapshot uses that snapshot. Otherwise this is the Published Version if one
+        exists, else the Working Version.
+        """
+        if not self.experiment.is_working_version:
+            return self.experiment
         return resolve_published_or_working(self.experiment)
 
     @cached_property

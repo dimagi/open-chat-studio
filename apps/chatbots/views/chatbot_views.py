@@ -1,3 +1,4 @@
+import re
 import unicodedata
 import uuid
 from functools import cached_property
@@ -769,12 +770,16 @@ def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UU
 @login_and_team_required
 @permission_required("experiments.download_chats", raise_exception=True)
 def export_chatbot_session_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    """Stream a session CSV and signal the browser when the download response starts."""
     session = get_object_or_404(
         ExperimentSession, experiment__public_id=experiment_id, external_id=session_id, team=request.team
     )
     rows = generate_export_rows(session.experiment, ExperimentSession.objects.filter(id=session.id))
     response = StreamingHttpResponse(export_rows_to_csv_stream(rows), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{session.external_id}_messages_export.csv"'
+    download_token = request.GET.get("download_token", "")
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", download_token):
+        response.set_cookie(f"session_export_download_{download_token}", "1", max_age=60, samesite="Lax")
     return response
 
 

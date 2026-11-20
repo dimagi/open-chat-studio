@@ -276,6 +276,11 @@
         </div>
       </div>
     </div>
+    {% if perms.experiments.download_chats %}
+      <iframe name="session-export-frame"
+              title="{% translate 'Session export download' %}"
+              class="hidden"></iframe>
+    {% endif %}
     {% if perms.experiments.view_participantdata %}
       <div x-show="tab === 'data'" x-cloak class="pt-3">
         <div class="app-card">
@@ -317,6 +322,7 @@
   >
   </script>
   <script src="{% static 'js/scrollProgress-bundle.js' %}"></script>
+  <script src="{% static 'js/sessionExport-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
       SiteJS.tagMultiselect.setupTagSelects();

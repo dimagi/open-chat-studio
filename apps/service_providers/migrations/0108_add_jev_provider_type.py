@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0105_moderationprovider_updated_at_id_idx'),
+        ('service_providers', '0107_auto_model_sync_20261119'),
     ]
 
     operations = [
