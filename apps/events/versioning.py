@@ -6,31 +6,18 @@ by ``apps.experiments.models``, which ``apps.events.models`` itself imports.
 
 import copy
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from django.apps import apps
 from django.db import transaction
+
+from apps.experiments.versioning import Operation
 
 if TYPE_CHECKING:
     from apps.events.models import EventAction
     from apps.experiments.models import Experiment
 
 TRIGGER_ACCESSORS = ("static_triggers", "timeout_triggers", "scheduled_triggers")
-
-
-class TriggerSyncMode(StrEnum):
-    """Direction of a :func:`sync_triggers` call, which determines how versioned
-    references in ``EventAction.params`` are rewritten."""
-
-    PUBLISH = "publish"
-    """working -> version: pin params that reference versioned records to a version."""
-
-    REVERT = "revert"
-    """version -> working: map versioned params back to their working records."""
-
-    COPY = "copy"
-    """duplicate a working experiment: keep params verbatim (still working refs)."""
 
 
 @dataclass(frozen=True)
@@ -89,18 +76,17 @@ def get_event_action_param_specs(action_type: str) -> tuple[EventActionParamSpec
 
 
 @transaction.atomic()
-def sync_triggers(source: "Experiment", target: "Experiment", mode: TriggerSyncMode = TriggerSyncMode.PUBLISH) -> None:
+def sync_triggers(source: "Experiment", target: "Experiment", mode: Operation = Operation.PUBLISH) -> None:
     """Make ``target``'s static and timeout triggers mirror ``source``'s.
 
     Every trigger on ``source`` is copied onto ``target`` together with its
     ``EventAction``; triggers already on ``target`` with no counterpart on ``source``
-    are archived. ``mode`` selects the direction: publish (working -> version) pins
-    versioned references, revert (version -> working) maps them back, and copy keeps
-    them verbatim.
+    are archived. ``mode`` is the operation: publish (working -> version) pins versioned
+    references, revert (version -> working) maps them back, and copy keeps them verbatim.
     """
     # Publish records the new version's link back to the working trigger; revert and copy
     # produce standalone working triggers (no ``working_version`` link).
-    is_copy = mode is not TriggerSyncMode.PUBLISH
+    is_copy = mode is not Operation.PUBLISH
     for accessor in TRIGGER_ACCESSORS:
         stale_triggers = list(getattr(target, accessor).all())
         for trigger in getattr(source, accessor).all():
@@ -115,17 +101,17 @@ def sync_triggers(source: "Experiment", target: "Experiment", mode: TriggerSyncM
             trigger.archive()
 
 
-def _remap_action_params(action: "EventAction", mode: TriggerSyncMode) -> None:
-    if mode is TriggerSyncMode.COPY:
+def _remap_action_params(action: "EventAction", mode: Operation) -> None:
+    if mode is Operation.COPY:
         return  # copies keep params verbatim; nothing to rewrite or persist
     specs = get_event_action_param_specs(action.action_type)
     if not specs:
         return
     original = copy.deepcopy(action.params)
     for spec in specs:
-        if mode is TriggerSyncMode.PUBLISH:
+        if mode is Operation.PUBLISH:
             spec.pin_to_version(action.params)
-        elif mode is TriggerSyncMode.REVERT:
+        elif mode is Operation.REVERT:
             spec.revert_to_working(action.params)
     # Only persist when a reference actually moved, so an unchanged param never triggers an
     # EventAction.save side effect (e.g. schedule recalculation).

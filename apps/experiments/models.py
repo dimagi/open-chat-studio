@@ -37,10 +37,20 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.events.versioning import TriggerSyncMode, sync_triggers
+from apps.events.versioning import TRIGGER_ACCESSORS, sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
-from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
+from apps.experiments.versioning import (
+    Operation,
+    OwnedSet,
+    Reference,
+    Strategy,
+    VersionDetails,
+    VersionField,
+    VersionsMixin,
+    VersionsObjectManagerMixin,
+    VersionSpec,
+)
 from apps.generics.chips import Chip
 from apps.generics.components import render_component
 from apps.moderation.enforcement import is_participant_blocked
@@ -490,6 +500,61 @@ class AgentTools(models.TextChoices):
         return [(tool.value, tool.label) for tool in AgentTools if tool not in excluded_tools]
 
 
+def _sync_trigger_sets(working: Experiment, other: Experiment, operation: Operation) -> None:
+    """Carry the three trigger sets until the trigger models have specs of their own.
+
+    Publish and copy flow from the working chatbot to the new row; revert flows from the version
+    back onto the working chatbot."""
+    if operation is Operation.REVERT:
+        sync_triggers(other, working, mode=operation)
+    else:
+        sync_triggers(working, other, mode=operation)
+
+
+class ExperimentVersionSpec(VersionSpec):
+    """How a chatbot travels between its working row and its versions."""
+
+    class Meta:
+        model = "experiments.Experiment"
+        identity = frozenset(
+            {
+                "id",
+                "team",
+                "owner",
+                "public_id",
+                "created_at",
+                "updated_at",
+                "working_version",
+                "version_number",
+                "is_default_version",
+                "is_archived",
+                "version_description",
+                "create_version_task_id",
+            }
+        )
+        regenerated = {"public_id": uuid4, "create_version_task_id": str}
+
+    consent_form = Reference(Strategy.REUSE_UNCHANGED)
+    pipeline = Reference(Strategy.NEW_VERSION, owned=True, provides="pipeline")
+    # After the pipeline: a trigger that references this chatbot's own pipeline pins to the
+    # version made just above.
+    triggers = OwnedSet(via=_sync_trigger_sets, accessors=TRIGGER_ACCESSORS, reads=("pipeline",))
+
+    def on_publish(self, working, version, *, version_description: str = "", make_default: bool = False, **options):
+        version.version_description = version_description
+        version.is_default_version = make_default or version.version_number == 1
+        if make_default:
+            working.versions.filter(is_default_version=True).update(
+                is_default_version=False, audit_action=AuditAction.AUDIT
+            )
+
+    def on_copy(self, working, copy, *, name: str | None = None, **options):
+        copy.name = name if name is not None else f"{copy.name}_copy"
+        if copy.pipeline:
+            copy.pipeline.name = copy.name
+            copy.pipeline.save(update_fields=["name"])
+
+
 @audit_fields(*model_audit_fields.EXPERIMENT_FIELDS, audit_special_queryset_writes=True)
 class Experiment(BaseTeamModel, VersionsMixin):
     """
@@ -504,50 +569,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     # ``get_absolute_url`` deep-links a snapshot into the versions tab, so callers may
     # link straight to a version number.
     has_version_specific_url = True
-
-    # Every concrete model field must appear in exactly one of the two sets below
-    # (enforced by a guard test). Version creation clones the whole row, so a new
-    # field is versioned content unless it is explicitly classified as identity/state.
-    VERSIONED_CONTENT_FIELDS = frozenset(
-        {
-            "name",
-            "description",
-            "pipeline",
-            "seed_message",
-            "unavailable_message",
-            "consent_form",
-            "voice_provider",
-            "synthetic_voice",
-            "conversational_consent_enabled",
-            "voice_response_behaviour",
-            "echo_transcript",
-            "trace_provider",
-            "trace_sample_rate",
-            "participant_allowlist",
-            "file_uploads_enabled",
-        }
-    )
-    """The versioned snapshot: fields cloned into a version on publish, and the
-    surface a revert copies from a version back onto the working row."""
-
-    VERSION_IDENTITY_FIELDS = frozenset(
-        {
-            "id",
-            "team",
-            "owner",
-            "public_id",
-            "created_at",
-            "updated_at",
-            "working_version",
-            "version_number",
-            "is_default_version",
-            "is_archived",
-            "version_description",
-            "create_version_task_id",
-        }
-    )
-    """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
-    cloning (or owned by a single row) and never copied between rows in a family."""
 
     # Null for a chatbot created by a client-credentials (machine) token, which has no user.
     # ``CASCADE`` is retained deliberately: nullable permits an ownerless row, it does not change
@@ -898,7 +919,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def release_version_operation_lock(cls, experiment_id: int):
         cls.objects.get_all().filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
-    @transaction.atomic()
     def create_new_version(  # ty: ignore[invalid-method-override]
         self,
         version_description: str | None = None,
@@ -906,81 +926,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
         is_copy: bool = False,
         name: str | None = None,
     ):
-        """
-        Creates a copy of an experiment as a new version of the original experiment.
-        """
+        """Publish a snapshot of this working chatbot, or copy it into a new working chatbot."""
         if make_default and is_copy:
             raise ValueError("Cannot make a copy of an experiment the default version")
-
-        version_number = self.version_number
-        if not is_copy:
-            self.version_number = version_number + 1
-            self.save(update_fields=["version_number"])
-
-        # Fetch a new instance so the previous instance reference isn't simply being updated. I am not 100% sure
-        # why simply chaing the pk, id and _state.adding wasn't enough.
-        new_version = super().create_new_version(save=False, is_copy=is_copy)
-        new_version.version_description = version_description or ""
-        new_version.public_id = uuid4()
-        new_version.version_number = version_number
-
-        if not is_copy and (new_version.version_number == 1 or make_default):
-            new_version.is_default_version = True
-
-        if make_default:
-            self.versions.filter(is_default_version=True).update(
-                is_default_version=False, audit_action=AuditAction.AUDIT
-            )
+        spec = ExperimentVersionSpec()
         if is_copy:
-            new_version.name = name if name is not None else new_version.name + "_copy"
-            new_version.version_number = 1
-        new_version.save()
-
-        if not is_copy:
-            # nothing to do for copy - just reference the same object in the new copy
-            self._copy_attr_to_new_version("consent_form", new_version)
-            new_version.save(update_fields=["consent_form"])
-
-        # Version the pipeline before the triggers so a trigger referencing this experiment's own
-        # pipeline pins to the version just created here rather than spawning a redundant one.
-        self._copy_pipeline_to_new_version(new_version, is_copy)
-        sync_triggers(self, new_version, mode=TriggerSyncMode.COPY if is_copy else TriggerSyncMode.PUBLISH)
-
-        return new_version
-
-    @transaction.atomic()
-    def revert_to_version(self, version: Experiment) -> None:
-        """Revert this working experiment to the content of ``version``.
-
-        Versioned content fields are copied from the version onto the working row and the working
-        pipeline is reset to the version's pipeline (see ``Pipeline.revert_to_version``). The
-        operation is non-destructive: no version rows are modified and ``is_default_version`` is
-        left untouched.
-        """
-        if not self.is_working_version:
-            raise ValueError("Can only revert the working version of an experiment")
-        if version.get_working_version_id() != self.id:
-            raise ValueError("Can only revert to a version of this experiment")
-
-        # `pipeline` and `consent_form` are versioned content but need special handling: the working
-        # pipeline is reset in place rather than re-pointed, and the consent form is remapped to its
-        # working version rather than the version's frozen copy.
-        for field in self.VERSIONED_CONTENT_FIELDS - {"pipeline", "consent_form"}:
-            setattr(self, field, getattr(version, field))
-
-        self.consent_form = version.consent_form.get_working_version() if version.consent_form else None
-        self.save()
-
-        self._revert_pipeline_to_version(version)
-        sync_triggers(version, self, mode=TriggerSyncMode.REVERT)
-
-    def _revert_pipeline_to_version(self, version: Experiment) -> None:
-        """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
-        if not version.pipeline:
-            return
-        if not self.pipeline:
-            raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
-        self.pipeline.revert_to_version(version.pipeline)
+            return spec.copy(self, name=name)
+        return spec.publish(self, version_description=version_description or "", make_default=make_default)
 
     def get_fields_to_exclude(self):
         return [*super().get_fields_to_exclude(), "is_default_version", "public_id", "version_description"]
@@ -1050,41 +1002,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 continue
             channel.restore()
         return skipped
-
-    def _copy_pipeline_to_new_version(self, new_version, is_copy: bool = False):
-        if not self.pipeline:
-            return
-        new_pipeline = self.pipeline.create_new_version(is_copy=is_copy)
-        if is_copy:
-            new_pipeline.name = new_version.name
-            new_pipeline.save(update_fields=["name"])
-        new_version.pipeline = new_pipeline
-        new_version.save(update_fields=["pipeline"])
-
-    def _copy_attr_to_new_version(self, attr_name, new_version: Experiment):
-        """Copies the attribute `attr_name` to the new version by creating a new version of the related record and
-        linking that to `new_version`
-
-        If the related field's version matches the current value, link it to the new experiment version; otherwise,
-        create a new version of it.
-        Q: Why?
-        A: When a new experiment version is created, the a new version is also created for the related field. If no
-        new changes was made to this new version by the time we want to create another version of the experiment, it
-        would make sense to add the already versioned related field to the versioned experiment instead of creating yet
-        another version of it.
-        """
-        attr_instance = getattr(self, attr_name)
-        if not attr_instance:
-            return
-
-        latest_attr_version = attr_instance.latest_version
-
-        if latest_attr_version and not differs(
-            attr_instance, latest_attr_version, exclude_model_fields=latest_attr_version.get_fields_to_exclude()
-        ):
-            setattr(new_version, attr_name, latest_attr_version)
-        else:
-            setattr(new_version, attr_name, attr_instance.create_new_version())
 
     @property
     def latest_version(self):

@@ -16,6 +16,7 @@ from apps.utils.tests.fixtures import (  # noqa: F401 -- registers the shared fi
     admin,
     auto_block_session,
     connect_request_headers,
+    isolated_spec_registry,
     keypair,
     moderated_session,
     slack_service,

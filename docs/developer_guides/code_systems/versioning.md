@@ -37,21 +37,68 @@ Users are always working on the **latest version** of their chatbot. When they c
 
 ## How to Version a Model
 
-If you add a model that needs to be versioned, you generally need to do the following:
+A versioned model declares, once, how it travels between its working row and its versions. The
+declaration is a `VersionSpec` (`apps/experiments/versioning.py`), and the publish, copy and revert
+operations are generated from it. To version a model:
 
-1. Inherit from mixins:
-    - [`VersionsMixin`](https://github.com/dimagi/open-chat-studio/blob/94569be2a5af5860682a1ac2ba829129ea0d3fc6/apps/experiments/versioning.py) - Adds utility methods for working with versions.
-    - [`VersionsObjectManagerMixin`](https://github.com/dimagi/open-chat-studio/blob/94569be2a5af5860682a1ac2ba829129ea0d3fc6/apps/experiments/versioning.py) - This ensures that archived objects are excluded by default and helpful annotations are added to querysets of your model.
+1. Inherit from the mixins:
+    - `VersionsMixin` - the version operations and the family helpers (`get_working_version`,
+      `latest_version`, `is_a_version`).
+    - `VersionsObjectManagerMixin` on the model's manager - excludes archived rows by default and
+      annotates querysets with `is_version`.
 
-2. Add these fields to your model:
-    - `working_version`: A nullable foreign key to itself
-    - `is_archived`: A `BooleanField` indicating whether or not this instance is archived
-    - `version_number`: (optional) `IntegerField` used to track the object's version number. This is usually only necessary for top-level objects.
+2. Add the family columns:
+    - `working_version`: a nullable foreign key to itself, `related_name="versions"`.
+    - `is_archived`: a `BooleanField`.
+    - `version_number`: (optional) a `PositiveIntegerField`, for top-level models whose versions
+      users see numbered. The spec assigns the working number to each snapshot and advances the
+      working row.
 
-3. Implement `version_details`: See the [VersionDetails section](#the-versiondetails-class)
-4. Filter returned objects to the UI: Be sure to only return working versions to users.
+3. Declare a `VersionSpec` next to the model:
 
-If the model can be linked to a Pipeline Node, be sure to version this object whenever the node is versioned. The same goes for archiving. Whenever this node is archived and it is a versioned node, we need to make sure that all related versioned models are archived as well.
+    ```python
+    class WidgetVersionSpec(VersionSpec):
+        class Meta:
+            model = "widgets.Widget"
+            identity = frozenset(
+                {"id", "team", "created_at", "updated_at", "working_version", "version_number", "is_archived", "public_id"}
+            )
+            regenerated = {"public_id": uuid4}
+
+        template = Reference(Strategy.NEW_VERSION, owned=True, provides="template")
+        collection = Reference(Strategy.LIVE_REFERENCE)
+    ```
+
+    - `Meta.identity` names the fields that never travel: the row's own identity, the family
+      columns and lifecycle state. Every other concrete field is a row field and travels by being
+      cloned, so a new field is versioned content unless you add it to `identity`.
+    - `Meta.regenerated` gives an identity field a fresh value on the clone before its first save,
+      which is how a `unique=True` column such as `public_id` survives cloning.
+    - A `Reference` member declares how a foreign key to another versioned model travels on publish
+      (its `Strategy`), whether the target is `owned` (so a copy copies it and a revert resets it in
+      place), and what it `provides` to members declared after it. An `OwnedSet` member carries rows
+      reached through reverse accessors. Members run in class-body order; a member that `reads` a
+      key no earlier member `provides` raises `VersionSpecError`, and the surrounding transaction
+      rolls back the clone and the advanced version number.
+    - `on_publish(working, version, **options)` and `on_copy(working, copy, **options)` are the only
+      place model-specific imperative code remains. They run after the members and before the
+      snapshot's final save, with the options the caller passed to `create_new_version`.
+
+4. Run `manage.py check`. The `versioning.*` system checks (`apps/experiments/checks.py`) reject a
+   member that names nothing on the model, a foreign key to a versioned model that no member
+   declares, a `reads` that nothing provides, and identity names that are not fields. A versioned
+   model that lacks the family columns is reported too.
+
+5. Implement `version_details`: see the [VersionDetails section](#the-versiondetails-class).
+
+6. Filter returned objects to the UI: be sure to only return working versions to users.
+
+Calling `create_new_version()` on a spec-bound model publishes it; `create_new_version(is_copy=True)`
+copies it; `revert_to_version(version)` resets the working row. A model that has no spec yet falls
+back to cloning its row, and should get a spec before it grows references of its own.
+
+The shared test helpers in `apps/utils/tests/versioning_helpers.py` (`assert_snapshot`,
+`assert_family`) assert, in both directions, which fields a version carries.
 
 ## The `VersionDetails` class
 

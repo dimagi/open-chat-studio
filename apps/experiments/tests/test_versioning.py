@@ -440,39 +440,6 @@ class TestRelatedManagerGetAll:
         assert not Node.objects.filter(id__in=other_node_ids).exists()
 
 
-class TestExperimentFieldClassification:
-    """Guards against drift in the Experiment field classification.
-
-    Version creation clones the whole row, so every new field is implicitly part of
-    the versioned content unless classified otherwise. These tests force that
-    decision to be made explicitly when a field is added, renamed, or removed.
-    """
-
-    def test_every_concrete_field_is_classified(self):
-        concrete_fields = {field.name for field in Experiment._meta.get_fields() if field.concrete}
-        classified = Experiment.VERSIONED_CONTENT_FIELDS | Experiment.VERSION_IDENTITY_FIELDS
-
-        unclassified = concrete_fields - classified
-        assert not unclassified, (
-            f"Unclassified Experiment fields: {sorted(unclassified)}. Add each one to either "
-            "Experiment.VERSIONED_CONTENT_FIELDS (cloned on publish, restored on revert) or "
-            "Experiment.VERSION_IDENTITY_FIELDS (per-row identity/state, never copied)."
-        )
-
-        stale = classified - concrete_fields
-        assert not stale, f"Classified names that are not Experiment fields: {sorted(stale)}"
-
-    def test_classifications_are_disjoint(self):
-        overlap = Experiment.VERSIONED_CONTENT_FIELDS & Experiment.VERSION_IDENTITY_FIELDS
-        assert not overlap, f"Fields classified as both content and identity: {sorted(overlap)}"
-
-    def test_comparison_exclusions_are_not_content_fields(self):
-        """Fields excluded from version comparison must not be versioned content."""
-        excluded = set(Experiment().get_fields_to_exclude())
-        overlap = excluded & Experiment.VERSIONED_CONTENT_FIELDS
-        assert not overlap, f"Versioned content fields excluded from comparison: {sorted(overlap)}"
-
-
 @pytest.mark.django_db()
 def test_allowlist_is_gone_from_the_version_diff_but_still_cloned():
     experiment = ExperimentFactory.create(participant_allowlist=["+27123456789"])
@@ -480,8 +447,8 @@ def test_allowlist_is_gone_from_the_version_diff_but_still_cloned():
     assert "allowlist" not in [field.name for field in experiment.version_details.fields]
 
     version = experiment.create_new_version()
-    # Phase 1 of the two-phase drop: the column and its VERSIONED_CONTENT_FIELDS entry
-    # survive to Phase 2 (#4278), so the dormant value is still cloned.
+    # Phase 1 of the two-phase drop: the column survives to Phase 2 (#4278), so the
+    # dormant value is still cloned.
     assert version.participant_allowlist == ["+27123456789"]
 
 

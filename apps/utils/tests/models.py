@@ -1,4 +1,4 @@
-"""Models for testing deletion utilities.
+"""Models for testing deletion utilities and the version spec framework.
 
 These only exist in the test database. Changes to the model classes require
 rebuilding the test database (use `--create-db`).
@@ -13,11 +13,19 @@ Relationships:
 - Param -> Tool (CASCADE)
 - Webhook -> Bot (PROTECT)
 - CycleA <-> CycleB (PROTECT both ways, for deletion-order cycle tests)
+
+Versioned models (`BaseModel` + `VersionsMixin`, no spec of their own; tests bind throwaway specs):
+- VersionedWidget -> VersionedPart twice (`part`, `live_part`), with a unique token to regenerate
 """
+
+import uuid
 
 from django.db import models
 from field_audit import audit_fields
 from field_audit.models import AuditingManager
+
+from apps.experiments.versioning import VersionsMixin
+from apps.utils.models import BaseModel
 
 
 @audit_fields("name", audit_special_queryset_writes=True)
@@ -83,3 +91,32 @@ class CycleB(models.Model):
 
 
 MODEL_NAMES = [f"{model.__module__}.{model.__name__}" for model in [Bot, Tool, Collection, Param]]
+
+
+class VersionedPart(BaseModel, VersionsMixin):
+    name = models.CharField(max_length=100)
+    working_version = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="versions"
+    )
+    is_archived = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+
+class VersionedWidget(BaseModel, VersionsMixin):
+    name = models.CharField(max_length=100)
+    note = models.TextField(blank=True, default="")
+    token = models.UUIDField(default=uuid.uuid4, unique=True)
+    part = models.ForeignKey(VersionedPart, on_delete=models.SET_NULL, null=True, blank=True, related_name="widgets")
+    live_part = models.ForeignKey(
+        VersionedPart, on_delete=models.SET_NULL, null=True, blank=True, related_name="live_widgets"
+    )
+    working_version = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True, related_name="versions"
+    )
+    version_number = models.PositiveIntegerField(default=1)
+    is_archived = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
