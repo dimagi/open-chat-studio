@@ -98,6 +98,7 @@ def test_the_translation_form_leaves_out_a_decision_model_of_a_chat_provider(cli
 @pytest.mark.django_db()
 def test_the_prompt_builders_default_model_is_a_chat_model(client, team_with_users, providers):
     openai, _jev, _jev_model = providers
+    LlmProviderModelFactory.create(team=team_with_users, type="openai", name="gpt-y")
     first = LlmProviderModel.objects.for_team(team_with_users).filter(type=openai.type).first()
     client.force_login(team_with_users.members.first())
 
