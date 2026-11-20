@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0157_drop_experiment_debug_mode_enabled'),
+        ('experiments', '0158_participant_search_indexes'),
     ]
 
     operations = [
