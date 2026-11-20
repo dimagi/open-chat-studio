@@ -105,7 +105,7 @@ from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import MembershipFactory, TeamFactory
-from apps.utils.factories.traces import TraceFactory
+from apps.utils.factories.traces import CustomActionRequestFactory, TraceFactory
 from apps.utils.factories.user import UserFactory
 
 
@@ -1183,6 +1183,7 @@ FACTORIES = {
     "chat.chatattachment": ChatAttachmentFactory,
     "chat.chatmessage": ChatMessageFactory,
     "trace.trace": TraceFactory,
+    "trace.customactionrequest": CustomActionRequestFactory,
     "pipelines.pipelinechathistory": PipelineChatHistoryFactory,
     "pipelines.pipelinechatmessages": PipelineChatMessagesFactory,
     "events.scheduledmessage": ScheduledMessageFactory,
