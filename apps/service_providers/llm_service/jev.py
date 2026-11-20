@@ -15,6 +15,16 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
+from apps.service_providers.llm_service import decision_backend
+from apps.service_providers.llm_service.decision_backend import (
+    ChoiceAnswer,
+    DecisionAuthenticationError,
+    DecisionBackend,
+    DecisionError,
+    DecisionResponse,
+    DecisionUsage,
+)
+
 DEFAULT_JEV_API_BASE = "https://api.typesafe.ai"
 JEV_ROUTER_ONLY_MESSAGE = "Jev can only be used by the LLM Router and Decision nodes"
 SYSTEM_ONE_PATH = "/v1/systemone"
@@ -84,13 +94,6 @@ Question = ChoiceQuestion | ScoreQuestion | NoulQuestion
 
 
 @dataclass(frozen=True)
-class ChoiceAnswer:
-    choice: str
-    confidence: float
-    probabilities: dict[str, float]
-
-
-@dataclass(frozen=True)
 class ScoreAnswer:
     score: float
     confidence: float
@@ -103,16 +106,10 @@ class NoulAnswer:
 
 
 @dataclass(frozen=True)
-class JevUsage:
-    input_tokens: int
-    output_tokens: int
-
-
-@dataclass(frozen=True)
 class JevResponse:
     model: str
     answers: dict[str, Any]
-    usage: JevUsage
+    usage: DecisionUsage
 
     def choice(self, name: str) -> ChoiceAnswer | None:
         """The answer to the choice question `name`, or None when there is no well-formed one."""
@@ -221,7 +218,7 @@ def _parse_response(response: httpx.Response) -> JevResponse:
         return JevResponse(
             model=str(data.get("model", "")),
             answers=dict(data["answers"]),
-            usage=JevUsage(_token_count(usage, "input_tokens"), _token_count(usage, "output_tokens")),
+            usage=DecisionUsage(_token_count(usage, "input_tokens"), _token_count(usage, "output_tokens")),
         )
     except (ValueError, KeyError, TypeError, AttributeError) as e:
         raise JevError(f"Jev returned a response that could not be read: {e}", response.status_code) from e
@@ -265,3 +262,34 @@ def _scalar_json_safe(value: Any) -> Any:
     if isinstance(value, float):
         return value if math.isfinite(value) else None
     return str(value)
+
+
+class JevBackend(DecisionBackend):
+    """Asks Jev, sending the input as Jev's `state`."""
+
+    provider_type = "jev"
+    name = "Jev"
+
+    def __init__(self, client: JevClient):
+        self.client = client
+
+    def ask(self, model: str, input: Any, questions: Mapping[str, decision_backend.Question]) -> DecisionResponse:
+        try:
+            response = self.client.ask(model, input, _jev_questions(questions))
+        except JevAuthenticationError as e:
+            raise DecisionAuthenticationError(str(e), e.status_code) from e
+        except JevError as e:
+            raise DecisionError(str(e), e.status_code) from e
+        answers = {name: answer for name in questions if (answer := response.choice(name)) is not None}
+        return DecisionResponse(response.model, answers, response.usage, raw_answers=response.answers)
+
+    def request_text(self, input: Any, questions: Mapping[str, decision_backend.Question]) -> str:
+        jev_questions = {name: question.to_json() for name, question in _jev_questions(questions).items()}
+        return json.dumps({"state": json_safe(input), "questions": jev_questions})
+
+
+def _jev_questions(questions: Mapping[str, decision_backend.Question]) -> dict[str, ChoiceQuestion]:
+    return {
+        name: ChoiceQuestion(criteria=dict(question.options), instructions=question.instructions)
+        for name, question in questions.items()
+    }

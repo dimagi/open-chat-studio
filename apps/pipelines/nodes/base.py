@@ -483,6 +483,14 @@ class Widgets(StrEnum):
     decisions = "decisions"
 
 
+class ModelUse(StrEnum):
+    """The models a node can call: chat models, decision models, or either."""
+
+    chat = "chat"
+    decisions = "decisions"
+    any = "any"
+
+
 class OptionsSource(StrEnum):
     llm_provider_id = "llm_provider_id"
     llm_provider_model_id = "llm_provider_model_id"
@@ -541,8 +549,7 @@ _UI_SCHEMA_KEYS = {
     "rows": "ui:rows",
     "default_on_show": "ui:onShowDefault",
     "keep_value_when_hidden": "ui:keepValueWhenHidden",
-    "excluded_provider_types": "ui:excludedProviderTypes",
-    "included_provider_types": "ui:includedProviderTypes",
+    "model_use": "ui:modelUse",
 }
 
 
@@ -577,11 +584,8 @@ class UiSchema(BaseModel):
     # Number of rows for textarea-based widgets (e.g. jinja_template). Defaults to 2.
     rows: int | None = None
 
-    # LLM provider types the provider widget leaves out of its options.
-    excluded_provider_types: list[str] | None = None
-
-    # When set, the provider widget offers only these LLM provider types.
-    included_provider_types: list[str] | None = None
+    # Which models the provider widget offers.
+    model_use: ModelUse | None = None
 
     def __call__(self, schema: JsonDict):
         for field, schema_key in _UI_SCHEMA_KEYS.items():

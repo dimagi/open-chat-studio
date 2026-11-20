@@ -320,7 +320,7 @@ class EvaluatorForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
         self.fields["llm_provider"].queryset = LlmProvider.objects.filter(team=team).text_generating()
-        self.fields["llm_provider_model"].queryset = LlmProviderModel.objects.for_team(team)
+        self.fields["llm_provider_model"].queryset = LlmProviderModel.objects.for_team(team).chat()
 
     def clean(self):
         cleaned_data = super().clean()

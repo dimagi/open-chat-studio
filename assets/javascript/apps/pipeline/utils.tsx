@@ -1,7 +1,7 @@
 import React from "react"
 import {addEdge, Connection} from "reactflow";
 import ShortUniqueId from "short-unique-id";
-import {NodeParameterValues, Option} from "./types/nodeParameterValues";
+import {LlmProviderModel, NodeParameterValues, Option} from "./types/nodeParameterValues";
 import {JsonSchema, NodeData, NodeParams, PropertySchema} from "./types/nodeParams";
 
 declare global {
@@ -142,27 +142,31 @@ export function getDefaultParamValues(schema: JsonSchema): NodeParams {
     ) ?? null;
   }
   const providerField = schema.properties.llm_provider_id;
-  if (providerField?.["ui:includedProviderTypes"]) {
+  if (providerField?.["ui:modelUse"] === "decisions") {
     Object.assign(defaults, firstOfferedModel(providerField));
   }
   return defaults;
 }
 
-/** Whether the provider field described by `schema` offers providers of `type`. */
-export function offersProviderType(schema: PropertySchema, type: string): boolean {
-  const included = schema["ui:includedProviderTypes"];
-  if (included) {
-    return included.includes(type);
+/** Whether the provider field described by `schema` offers `model`. */
+export function offersModel(schema: PropertySchema, model: LlmProviderModel): boolean {
+  switch (schema["ui:modelUse"]) {
+    case "chat":
+      return model.chat !== false;
+    case "decisions":
+      return model.decisions === true;
+    default:
+      return true;
   }
-  return !(schema["ui:excludedProviderTypes"] ?? []).includes(type);
 }
 
-/** The first provider and model the field offers, since the site-wide default may be of a type it leaves out. */
+/** The first provider and model the field offers, since the site-wide default is a chat model. */
 function firstOfferedModel(providerField: PropertySchema) {
   const {parameterValues} = getCachedData();
+  const models = parameterValues.llm_provider_model_id as LlmProviderModel[];
   for (const provider of parameterValues.llm_provider_id) {
-    const model = parameterValues.llm_provider_model_id.find((option) => option.type === provider.type);
-    if (model && offersProviderType(providerField, provider.type)) {
+    const model = models.find((option) => option.type === provider.type && offersModel(providerField, option));
+    if (model) {
       return {llm_provider_id: provider.value, llm_provider_model_id: model.value};
     }
   }

@@ -138,8 +138,7 @@ class TestValidation:
     def test_the_model_picker_offers_only_jev(self):
         schema = DecisionNode.model_json_schema()["properties"]["llm_provider_id"]
 
-        assert schema["ui:includedProviderTypes"] == ["jev"]
-        assert "ui:excludedProviderTypes" not in schema
+        assert schema["ui:modelUse"] == "decisions"
 
 
 class TestRequest:

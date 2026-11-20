@@ -47,7 +47,7 @@ beforeAll(() => {
     ],
     llm_provider_model_id: [
       {value: 'model-a', label: 'OpenAI: gpt-x', type: 'openai'},
-      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev'},
+      {value: 'model-j', label: 'TypeSafe Jev: jev-latest', type: 'jev', chat: false, decisions: true},
     ],
     built_in_tools: {openai: [{value: 'web_search', label: 'Web search'}]},
     tool_config: {},
@@ -175,30 +175,15 @@ describe('LlmWidget', () => {
     return getAllByRole('option').map((option) => option.textContent);
   };
 
-  it('offers every provider when the node excludes no provider type', () => {
-    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model'} as PropertySchema;
+  it.each([
+    {modelUse: undefined, expected: ['Select a model', 'OpenAI: gpt-x', 'TypeSafe Jev: jev-latest']},
+    {modelUse: 'any', expected: ['Select a model', 'OpenAI: gpt-x', 'TypeSafe Jev: jev-latest']},
+    {modelUse: 'chat', expected: ['Select a model', 'OpenAI: gpt-x']},
+    {modelUse: 'decisions', expected: ['Select a model', 'TypeSafe Jev: jev-latest']},
+  ])('offers the models the node can call (modelUse $modelUse)', ({modelUse, expected}) => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model', 'ui:modelUse': modelUse} as PropertySchema;
 
-    expect(optionLabels(schema)).toEqual(['Select a model', 'OpenAI: gpt-x', 'TypeSafe Jev: jev-latest']);
-  });
-
-  it('leaves out the provider types the node excludes', () => {
-    const schema = {
-      type: 'integer',
-      'ui:widget': 'llm_provider_model',
-      'ui:excludedProviderTypes': ['jev'],
-    } as PropertySchema;
-
-    expect(optionLabels(schema)).toEqual(['Select a model', 'OpenAI: gpt-x']);
-  });
-
-  it('offers only the provider types the node includes', () => {
-    const schema = {
-      type: 'integer',
-      'ui:widget': 'llm_provider_model',
-      'ui:includedProviderTypes': ['jev'],
-    } as PropertySchema;
-
-    expect(optionLabels(schema)).toEqual(['Select a model', 'TypeSafe Jev: jev-latest']);
+    expect(optionLabels(schema)).toEqual(expected);
   });
 
   it.each([

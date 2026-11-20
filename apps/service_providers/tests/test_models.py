@@ -102,7 +102,7 @@ class TestServiceProviderModel:
 
 
 @pytest.mark.django_db()
-def test_text_generating_leaves_out_router_only_providers():
+def test_text_generating_leaves_out_decision_only_providers():
     openai = LlmProviderFactory.create()
     LlmProviderFactory.create(team=openai.team, type=str(LlmProviderTypes.jev))
 

@@ -193,7 +193,7 @@ def formfield_for_dbfield(db_field: Field, provider: ServiceProvider, **kwargs):
 def get_llm_provider_choices(team) -> dict[int, dict[str, list[dict[str, Any]]]]:
     providers = {}
     provider_models_by_type = defaultdict(list)
-    for provider_model in LlmProviderModel.objects.for_team(team):
+    for provider_model in LlmProviderModel.objects.for_team(team).chat():
         provider_models_by_type[provider_model.type].append(
             {
                 "value": provider_model.id,
@@ -215,7 +215,7 @@ def get_dropdown_llm_model_choices(team) -> list[tuple[str, str]]:
     """Get LLM provider model dropdown choices for the team"""
     llm_providers = LlmProvider.objects.filter(team=team).text_generating()
     llm_provider_models_by_type = {}
-    for model in LlmProviderModel.objects.for_team(team):
+    for model in LlmProviderModel.objects.for_team(team).chat():
         llm_provider_models_by_type.setdefault(model.type, []).append(model)
 
     model_choices = []
@@ -267,7 +267,7 @@ def get_models_by_provider(provider, team):
 
 def get_models_by_team_grouped_by_provider(team):
     provider_types = LlmProvider.objects.filter(team=team).text_generating().values_list("type", flat=True)
-    model_objects = LlmProviderModel.objects.for_team(team).filter(type__in=provider_types)
+    model_objects = LlmProviderModel.objects.for_team(team).chat().filter(type__in=provider_types)
 
     provider_dict = defaultdict(list)
     for model in model_objects:

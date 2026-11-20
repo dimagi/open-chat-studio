@@ -11,7 +11,7 @@ from apps.chat.exceptions import ProviderConfigurationError
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.nodes.context import NodeContext
-from apps.pipelines.nodes.jev_calls import HISTORY_LIMIT
+from apps.pipelines.nodes.decision_calls import HISTORY_LIMIT
 from apps.pipelines.nodes.nodes import (
     ExtractParticipantData,
     ExtractStructuredData,
@@ -20,10 +20,30 @@ from apps.pipelines.nodes.nodes import (
     RouterNode,
 )
 from apps.pipelines.repository import ORMRepository
+from apps.service_providers.llm_service.decision_backend import (
+    ChoiceAnswer,
+    DecisionBackend,
+    DecisionResponse,
+    DecisionUsage,
+)
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 URL = "https://api.typesafe.ai/v1/systemone"
+
+
+class _FakeBackend(DecisionBackend):
+    provider_type = "fake-decisions"
+    name = "Fake"
+
+    def __init__(self, answer: ChoiceAnswer):
+        self.answer = answer
+
+    def ask(self, model, input, questions):
+        return DecisionResponse(model, {"route": self.answer}, DecisionUsage(30, 0), raw_answers={})
+
+    def request_text(self, input, questions):
+        return "fake request"
 
 
 def _answer(choice="billing", confidence=0.9):
@@ -193,6 +213,15 @@ class TestRouting:
         with pytest.raises(ProviderConfigurationError, match="rejected the credentials"):
             _route(_router(jev_ids, session), session)
 
+    def test_a_custom_model_of_a_decision_only_type_routes_through_the_backend(self, httpx_mock, jev_ids, session):
+        custom = LlmProviderModelFactory.create(type="jev", name="jev-next")
+        httpx_mock.add_response(url=URL, json=_answer("support"))
+
+        router = _router({**jev_ids, "llm_provider_model_id": custom.id}, session)
+
+        assert _route(router, session) == ("SUPPORT", False)
+        assert _sent(httpx_mock)["model"] == "jev-next"
+
     def test_an_llm_provider_still_routes_with_the_agent(self, httpx_mock, session):
         router = RouterNode(
             node_id="router",
@@ -227,6 +256,18 @@ class TestUsage:
         }
         assert collector.get_metrics().n_turns == 1
 
+    def test_usage_is_recorded_under_the_backends_provider_type(self, jev_ids, session):
+        """Each decision backend is priced from its own entry, not from the provider it sits behind."""
+        collector = MetricsCollector(start_time=time.time())
+        backend = _FakeBackend(ChoiceAnswer("SUPPORT", 0.9, {}))
+        router = _router(jev_ids, session)
+
+        with mock.patch.object(RouterNode, "get_decision_backend", return_value=backend):
+            assert _route(router, session, config={"callbacks": [collector]}) == ("SUPPORT", False)
+
+        events = {(e.provider_type, e.model_name, e.service_kind): e.quantity for e in collector.iter_cost_events()}
+        assert events == {("fake-decisions", "jev-latest", ServiceKind.LLM_INPUT): 30}
+
     def test_a_failed_call_records_nothing(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, status_code=500, json={"detail": "boom"})
         collector = MetricsCollector(start_time=time.time())
@@ -246,7 +287,7 @@ class TestUsage:
     ],
 )
 def test_a_text_generating_node_rejects_a_jev_provider(jev_ids, node_class, params):
-    with pytest.raises(PydanticValidationError, match="Jev can only be used by the LLM Router and Decision nodes"):
+    with pytest.raises(PydanticValidationError, match="only the LLM Router and Decision nodes can use it"):
         node_class(node_id="node", django_node=None, name="node", **jev_ids, **params)
 
 

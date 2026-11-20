@@ -36,7 +36,7 @@ beforeAll(() => {
     ],
     llm_provider_model_id: [
       {value: 10, label: 'OpenAI: gpt-x', type: 'openai'},
-      {value: 20, label: 'TypeSafe Jev: jev-latest', type: 'jev'},
+      {value: 20, label: 'TypeSafe Jev: jev-latest', type: 'jev', chat: false, decisions: true},
     ],
   });
   setScript('default-values', {llm_provider_id: 1, llm_provider_model_id: 10});
@@ -74,22 +74,16 @@ describe('getDefaultParamValues', () => {
     expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([1, 10]);
   });
 
-  it('starts a node that takes only some provider types on the first model of those types', () => {
-    const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['jev']}));
+  it('starts a node that takes decision models on the first decision model, past providers without one', () => {
+    const params = getDefaultParamValues(schema({'ui:modelUse': 'decisions'}));
 
     expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([2, 20]);
   });
 
-  it('skips an included provider that has no model', () => {
-    const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['groq', 'jev']}));
+  it('starts a node that takes any model on the team default model', () => {
+    const params = getDefaultParamValues(schema({'ui:modelUse': 'any'}));
 
-    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([2, 20]);
-  });
-
-  it('leaves the model unset when the team has none of the included types', () => {
-    const params = getDefaultParamValues(schema({'ui:includedProviderTypes': ['groq']}));
-
-    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([null, null]);
+    expect([params.llm_provider_id, params.llm_provider_model_id]).toEqual([1, 10]);
   });
 });
 

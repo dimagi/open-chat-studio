@@ -5,9 +5,7 @@
       "description": "The TypeSafe Jev provider this node calls.",
       "title": "Model",
       "type": "integer",
-      "ui:includedProviderTypes": [
-        "jev"
-      ],
+      "ui:modelUse": "decisions",
       "ui:optionsSource": "llm_provider_id",
       "ui:widget": "llm_provider_model"
     },

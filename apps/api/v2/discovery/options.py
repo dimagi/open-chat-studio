@@ -12,6 +12,9 @@ from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node
 from apps.teams.models import Team
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
+# Option keys only the UI builder reads: its edit links, and the model uses that narrow its model picker.
+BUILDER_ONLY_KEYS = frozenset({"edit_url", "chat", "decisions"})
+
 # The option lists holding prompt variables rather than referenceable resource ids.
 PROMPT_VAR_OPTION_SOURCES = (
     OptionsSource.template_variables,
@@ -48,10 +51,10 @@ def _is_placeholder(option: Any) -> bool:
 
 
 def _clean_option(option: Any) -> Any:
-    """One option entry, with its ``edit_url`` link into the UI builder dropped."""
+    """One option entry, with the keys only the UI builder reads dropped."""
     if not isinstance(option, dict):
         return option
-    return {key: item for key, item in option.items() if key != "edit_url"}
+    return {key: item for key, item in option.items() if key not in BUILDER_ONLY_KEYS}
 
 
 def _describe_prompt_vars(options: dict) -> dict:

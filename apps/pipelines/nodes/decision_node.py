@@ -11,13 +11,13 @@ from pydantic_core import PydanticCustomError
 
 from apps.pipelines.exceptions import NodeUserConfigRunError
 from apps.pipelines.models import PipelineChatHistoryTypes
-from apps.pipelines.nodes.base import NodeSchema, PipelineNode, PipelineState, UiSchema, Widgets
+from apps.pipelines.nodes.base import ModelUse, NodeSchema, PipelineNode, PipelineState, UiSchema, Widgets
 from apps.pipelines.nodes.decisions import Decision, check_decision_keys, decision_questions, temp_state_values
 from apps.pipelines.nodes.jev_calls import ask_jev
 from apps.pipelines.nodes.mixins import HISTORY_TYPE_DESCRIPTION, HistoryMixin, llm_provider_id_field
 from apps.service_providers.llm_service import JevLlmService
 from apps.service_providers.llm_service.jev import JevError
-from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.models import LlmProviderModel
 
 if TYPE_CHECKING:
     from apps.pipelines.nodes.context import NodeContext
@@ -38,11 +38,10 @@ class DecisionNode(PipelineNode, HistoryMixin):
             field_order=["llm_provider_id", "history_type", "decisions"],
         )
     )
-    accepts_router_only_providers: ClassVar[bool] = True
+    model_use: ClassVar[ModelUse] = ModelUse.decisions
 
     llm_provider_id: int = llm_provider_id_field(
-        accepts_router_only_providers=True,
-        included_provider_types=LlmProviderTypes.router_only_slugs,
+        ModelUse.decisions,
         title="Model",
         description="The TypeSafe Jev provider this node calls.",
     )
@@ -66,8 +65,8 @@ class DecisionNode(PipelineNode, HistoryMixin):
     def check_keys(cls, value: list[Decision]) -> list[Decision]:
         return check_decision_keys(value)
 
-    def check_provider_type(self, provider_type: str) -> None:
-        if provider_type not in LlmProviderTypes.router_only_slugs:
+    def check_model(self, model: LlmProviderModel) -> None:
+        if not model.supports_decisions:
             raise PydanticCustomError("invalid_model", JEV_MODEL_REQUIRED_MESSAGE, {"field": "llm_provider_model_id"})
 
     def _process(self, state: PipelineState, context: "NodeContext") -> PipelineState:

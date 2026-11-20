@@ -19,7 +19,7 @@ from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import NodeSchema, OptionsSource
-from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes, VoiceProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.teams.models import Team
 from apps.utils.fields import as_int
 from apps.utils.prompt import PromptVars
@@ -134,11 +134,18 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
             _option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers
         ],
         OptionsSource.llm_provider_model_id: [
-            _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
+            _model_option(model)
             # `str(model)` names the owning team for custom models; join it rather than query per row.
             for model in llm_provider_models.select_related("team")
         ],
     }
+
+
+def _model_option(model: LlmProviderModel) -> dict:
+    """A model's option, marked where it differs from a chat model, so the builder offers it to the right nodes."""
+    option = _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
+    option = option | ({} if model.supports_chat else {"chat": False})
+    return option | ({"decisions": True} if model.supports_decisions else {})
 
 
 def _team_resource_options(team: Team, include_versions: bool) -> dict:
@@ -263,9 +270,7 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
     provider_id = None
     if len(llm_providers) > 0:
         for provider in llm_providers:
-            if provider["type"] in LlmProviderTypes.router_only_slugs:
-                continue
-            llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
+            llm_provider_model = llm_provider_models.filter(type=provider["type"]).chat().first()
             if llm_provider_model:
                 provider_id = provider["id"]
                 break
