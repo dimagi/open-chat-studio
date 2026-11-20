@@ -63,7 +63,7 @@ def _answer(choice="billing", confidence=0.9):
 
 @pytest.fixture(autouse=True)
 def no_sleep():
-    with mock.patch("apps.service_providers.llm_service.jev.time.sleep"):
+    with mock.patch("apps.service_providers.llm_service.decision_api.time.sleep"):
         yield
 
 
