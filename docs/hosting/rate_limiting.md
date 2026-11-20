@@ -1,7 +1,8 @@
 # Rate Limiting
 
-Open Chat Studio counts inbound requests per surface and can refuse the ones over budget. It
-ships counting only. A new deployment records what it would have blocked without turning anyone
+Open Chat Studio counts inbound requests per surface, such as API calls and channel deliveries,
+and can refuse the ones over budget. It also counts the outbound calls chatbots make through
+custom actions, under the `custom_actions` scope. It ships counting only. A new deployment records what it would have blocked without turning anyone
 away, and enforcement is switched on separately once you have numbers to set it from.
 
 This page covers the switch-on. The variables themselves are listed in the
@@ -11,7 +12,8 @@ than a library is in
 
 ## How Counting Works
 
-Every request resolves to a **scope**, meaning the surface it arrived on, and an **identity**,
+Every request resolves to a **scope**, meaning the surface it arrived on or, for an outbound
+custom action call, the `custom_actions` scope, and an **identity**,
 meaning whose budget it spends. That pair addresses a counter in Redis which resets on a fixed
 window.
 
@@ -23,6 +25,7 @@ window.
 | `public_chat` | 100/5m | the public web chat views |
 | `channels` | 3000/5m | inbound deliveries from messaging providers |
 | `credentials` | 100/5m | OAuth token endpoints, rejected API keys, Connect key exchange |
+| `custom_actions` | 1000/5m | outbound custom action calls, per auth provider |
 
 What counts as an identity differs by scope: a team, an API key, a chat session, a widget
 channel, an identifier carried in a webhook URL, or the caller's address where nothing better is

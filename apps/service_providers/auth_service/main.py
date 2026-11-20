@@ -6,12 +6,22 @@ import tenacity
 from django.conf import settings
 
 from apps.service_providers.auth_service.schemes import CommCareAuth, HeaderAuth
+from apps.web.meta import absolute_url
+
+
+def outbound_user_agent() -> str:
+    """The User-Agent sent on requests made with an auth provider."""
+    if settings.OUTBOUND_USER_AGENT:
+        return settings.OUTBOUND_USER_AGENT
+    product = str(settings.PROJECT_METADATA["NAME"]).replace(" ", "")
+    return f"{product} (+{absolute_url('')})"
 
 
 class AuthService(pydantic.BaseModel):
     def get_http_client(self) -> httpx.Client:
         kwargs = {
             **self._get_http_client_kwargs(),
+            "headers": {"User-Agent": outbound_user_agent()},
             "timeout": settings.RESTRICTED_HTTP_MAX_TIMEOUT,
             "limits": httpx.Limits(max_keepalive_connections=5, max_connections=10),
         }
@@ -42,14 +52,11 @@ class AuthService(pydantic.BaseModel):
         return tenacity.wait.wait_exponential_jitter()
 
     def get_auth_headers(self) -> dict:
-        """Extract auth headers from the auth object by constructing a dummy request and auth flow."""
-        kwargs = self._get_http_client_kwargs()
-        if auth := kwargs.get("auth"):
-            request = httpx.Request("GET", "")
-            auth_flow = auth.auth_flow(request)
-            auth_request = next(auth_flow)
-            return dict(auth_request.headers)
-        return {}
+        """Headers for a request made with this provider: its auth headers and the outbound User-Agent."""
+        request = httpx.Request("GET", "", headers={"User-Agent": outbound_user_agent()})
+        if auth := self._get_http_client_kwargs().get("auth"):
+            request = next(auth.auth_flow(request))
+        return dict(request.headers)
 
 
 class BasicAuthService(AuthService):

@@ -41,3 +41,17 @@ class TestMcpServer:
                 mock_fetch.return_value = []
                 server.fetch_tools()
                 mock_fetch.assert_called_once_with({"Authorization": "Bearer token"})
+
+    def test_fetch_tools_sends_outbound_user_agent(self, team, settings):
+        settings.OUTBOUND_USER_AGENT = "TestAgent/1.0"
+        auth_provider = AuthProviderFactory.create(team=team, type="bearer", config={"token": "secret"})
+        server = McpServer.objects.create(
+            team=team, name="Test Server", server_url="http://example.com/mcp", auth_provider=auth_provider
+        )
+
+        with patch("apps.mcp_integrations.models.McpServer._fetch_tools_from_mcp_server", return_value=[]) as fetch:
+            server.fetch_tools()
+
+        headers = fetch.call_args.args[0]
+        assert headers["user-agent"] == "TestAgent/1.0"
+        assert headers["authorization"] == "Bearer secret"
