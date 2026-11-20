@@ -51,7 +51,7 @@ class SyncView(APIView):
         return rows
 
     def selection(self, params) -> str:
-        """Identifies the rows a cursor walks: the filters and which chatbots the caller reaches."""
+        """Identifies the rows a cursor walks: the team, the filters and which chatbots the caller reaches."""
         filters = {
             key: sorted(value) if isinstance(value, list) else value
             for key, value in params.items()
@@ -60,7 +60,7 @@ class SyncView(APIView):
         reach = None
         if not token_reaches_all_data(self.request.auth):
             reach = sorted(self.request.auth.application.allowed_chatbots.values_list("id", flat=True))
-        selection = json.dumps([filters, reach], sort_keys=True, default=str)
+        selection = json.dumps([self.request.team.pk, filters, reach], sort_keys=True, default=str)
         return hashlib.sha256(selection.encode()).hexdigest()[:16]
 
     def reachable_sessions(self):
