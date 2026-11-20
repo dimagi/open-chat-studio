@@ -359,6 +359,23 @@ class TestResults:
 
         assert (temp_state["intent"], temp_state["intent_confidence"]) == (expected, intent[1])
 
+    @pytest.mark.parametrize(
+        ("score", "expected"),
+        [
+            pytest.param(0.0, 0.0, id="lowest-level"),
+            pytest.param(2.0, 2.0, id="highest-level"),
+            pytest.param(0.8, 0.8, id="between-levels"),
+            pytest.param(2.5, None, id="above-the-rubric"),
+            pytest.param(-0.5, None, id="below-the-rubric"),
+        ],
+    )
+    def test_a_score_off_the_rubric_is_null(self, httpx_mock, jev_ids, session, score, expected):
+        httpx_mock.add_response(url=URL, json=_answers(frustration=(score, 0.9)))
+
+        temp_state = _run(_node(jev_ids, session), session)["temp_state"]
+
+        assert (temp_state["frustration"], temp_state["frustration_confidence"]) == (expected, 0.9)
+
     def test_a_score_below_its_threshold_is_null(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, json=_answers(frustration=(2.0, 0.4)))
         decisions = [{**FRUSTRATION, "threshold": 0.5}]
