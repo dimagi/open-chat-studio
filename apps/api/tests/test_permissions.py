@@ -15,7 +15,6 @@ from apps.api.permissions import (
     ApiKeyAuthentication,
     ReadOnlyAPIKeyPermission,
     RequiresTeamPermission,
-    _is_client_credentials_admission,
 )
 from apps.api.v2.discovery.views import (
     ChatbotOptionsView,
@@ -33,7 +32,7 @@ from apps.api.views.files import FileContentView
 from apps.api.views.participants import ParticipantView
 from apps.api.views.sessions import ExperimentSessionViewSet
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
-from apps.oauth.permissions import OAuth2AccessTokenAuthentication, TokenHasOAuthScope
+from apps.oauth.permissions import OAuth2AccessTokenAuthentication, TokenHasOAuthScope, is_client_credentials_request
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -96,7 +95,7 @@ def test_generic_permissions_do_not_treat_a_chat_channel_as_a_machine_token():
     channel = ExperimentChannelFactory.create()
     request = Mock(auth=channel)
 
-    assert _is_client_credentials_admission(request) is False
+    assert is_client_credentials_request(request) is False
 
 
 class TestRequiresTeamPermission:

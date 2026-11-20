@@ -27,14 +27,10 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
     OAuth2 authentication backend that sets the team on the request.
     """
 
-    def authenticate(self, request, *, check_team_membership: bool = True):
+    def authenticate(self, request):
         """
         Returns two-tuple of (user, token) if authentication succeeds,
         or None otherwise.
-
-        ``check_team_membership=False`` is reserved for the Chat API admission adapter. It still
-        validates the OAuth token and records its team, but lets the chat-specific client-credentials
-        policy produce its uniform admission refusal for authorization-code tokens.
         """
         response = super().authenticate(request)
         if response is None:
@@ -56,8 +52,6 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
             set_request_attrs(request, team_membership=SyntheticTeamMembership(access_token.team))
         else:
             request.user = user
-            if not check_team_membership:
-                return user, access_token
             membership = get_team_membership_for_request(request)
             if not membership:
                 raise exceptions.AuthenticationFailed()
