@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.annotations import TagFactory
@@ -52,36 +53,53 @@ def test_partial_message_save_moves_updated_at(message):
     assert _moved(ChatMessage, message)
 
 
+def _apply_tag_change(tagged, tag, team, change):
+    if change == "add":
+        tagged.add_tag(tag, team=team)
+    elif change == "remove":
+        tagged.tags.remove(tag.name)
+    else:
+        tagged.tags.clear()
+
+
+TAG_CHANGES = [pytest.param("add", id="add"), pytest.param("remove", id="remove"), pytest.param("clear", id="clear")]
+
+
 @pytest.mark.django_db()
-@pytest.mark.parametrize("remove", [pytest.param(False, id="add"), pytest.param(True, id="remove")])
-def test_message_tag_change_moves_the_message(message, remove):
+@pytest.mark.parametrize("change", TAG_CHANGES)
+def test_message_tag_change_moves_the_message(message, change):
     tag = TagFactory.create(team=message.chat.team)
-    if remove:
+    if change != "add":
         message.add_tag(tag, team=message.chat.team)
     _age(ChatMessage, message)
 
-    if remove:
-        message.tags.remove(tag)
-    else:
-        message.add_tag(tag, team=message.chat.team)
+    _apply_tag_change(message, tag, message.chat.team, change)
 
     assert _moved(ChatMessage, message)
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("remove", [pytest.param(False, id="add"), pytest.param(True, id="remove")])
-def test_chat_tag_change_moves_the_session(session, remove):
+@pytest.mark.parametrize("change", TAG_CHANGES)
+def test_chat_tag_change_moves_the_session(session, change):
     tag = TagFactory.create(team=session.team)
-    if remove:
+    if change != "add":
         session.chat.add_tag(tag, team=session.team)
     _age(ExperimentSession, session)
 
-    if remove:
-        session.chat.tags.remove(tag)
-    else:
-        session.chat.add_tag(tag, team=session.team)
+    _apply_tag_change(session.chat, tag, session.team, change)
 
     assert _moved(ExperimentSession, session)
+
+
+@pytest.mark.django_db()
+def test_removing_tag_rows_in_bulk_is_one_query(session, django_assert_num_queries):
+    tag = TagFactory.create(team=session.team)
+    for content in ["a", "b", "c"]:
+        message = ChatMessage.objects.create(chat=session.chat, content=content, message_type=ChatMessageType.HUMAN)
+        message.add_tag(tag, team=session.team)
+
+    with django_assert_num_queries(1):
+        CustomTaggedItem.objects.filter(tag=tag).delete()
 
 
 @pytest.mark.django_db()
