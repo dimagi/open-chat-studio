@@ -159,7 +159,16 @@ def _near_limit_percent(count: int, limit: int) -> int | None:
     return max(matched, default=None)
 
 
-def _log_usage(event, scope, identity_type, identity, count, limit, team_id, **fields):
+def _log_usage(
+    event: str,
+    scope: str,
+    identity_type: str,
+    identity: str,
+    count: int,
+    limit: int,
+    team_id: int | None,
+    **fields,
+) -> None:
     logger.info(
         event,
         extra={
