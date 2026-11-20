@@ -198,8 +198,8 @@ says what a machine token may do, the allowlist which chatbots it may do it to, 
 Source material and consent forms stay readable team-wide only because they belong to no chatbot;
 sessions and messages each belong to one.
 
-**Alternatives considered.** Team-wide reads for every token, as the v2 chatbot list allows: rejected,
-conversation content is the data the allowlist exists to fence.
+**Alternatives considered.** Team-wide reads for every token: rejected, conversation content is the
+data the allowlist exists to fence.
 
 ## Known limitations
 
