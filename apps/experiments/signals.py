@@ -42,8 +42,8 @@ def touch_tagged_sync_rows(sender, instance, **kwargs):
     touch_tagged_objects(instance.content_type_id, [instance.object_id])
 
 
-# Tag rows are removed through taggit's ``remove()``/``clear()``, which send m2m_changed, or through
-# ``delete_tagged_items``, which touches the rows itself and keeps the delete set-based.
+# Tag rows are removed through ``remove_tags``, which runs taggit's ``remove()`` and this receiver in one
+# transaction, or through ``delete_tagged_items``, which touches the rows itself and keeps the delete set-based.
 @receiver(m2m_changed, sender=CustomTaggedItem)
 def touch_untagged_sync_row(sender, instance, action, pk_set, **kwargs):
     if action == "post_clear" or (action == "post_remove" and pk_set):
