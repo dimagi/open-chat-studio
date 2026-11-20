@@ -1929,7 +1929,13 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """The Chatbot Version this session executes against — Published if one exists, Working otherwise."""
+        """The Chatbot Version this session executes against.
+
+        A session bound to a version snapshot uses that snapshot. Otherwise this is the Published Version if one
+        exists, else the Working Version.
+        """
+        if not self.experiment.is_working_version:
+            return self.experiment
         return resolve_published_or_working(self.experiment)
 
     @cached_property
