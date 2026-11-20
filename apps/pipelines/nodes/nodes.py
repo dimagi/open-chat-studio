@@ -53,7 +53,7 @@ from apps.pipelines.nodes.base import (
 )
 from apps.pipelines.nodes.context import PipelineAccessor
 from apps.pipelines.nodes.decision_node import DecisionNode as DecisionNode
-from apps.pipelines.nodes.decision_router import route_with_decisions
+from apps.pipelines.nodes.decision_router import check_keyword_limits, route_with_decisions
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
 from apps.pipelines.nodes.llm_node import execute_sub_agent
 from apps.pipelines.nodes.restricted_http import RestrictedHttpClient
@@ -66,6 +66,7 @@ from apps.service_providers.llm_service.prompt_context import (
     SafeAccessWrapper,
 )
 from apps.service_providers.llm_service.retry import with_llm_retry
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
@@ -821,6 +822,11 @@ class RouterNode(RouteTagMixin, RouterMixin, PipelineRouterNode, HistoryMixin):
         else:
             self._check_template_variables("custom_context", self.custom_context)
         return self
+
+    def check_model(self, model: LlmProviderModel) -> None:
+        super().check_model(model)
+        if not model.supports_chat:
+            check_keyword_limits(self)
 
     def _check_template_variables(self, field: str, text: str) -> None:
         try:

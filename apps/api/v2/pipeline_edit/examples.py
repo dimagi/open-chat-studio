@@ -180,7 +180,8 @@ NOTES: dict[str, str] = {
     ),
     "DecisionNode": (
         "Needs a decision model. Asks every decision in one call and writes each answer to "
-        "`temp_state[key]`, plus `temp_state[key + '_confidence']` for choice and score decisions."
+        "`temp_state[key]`, plus `temp_state[key + '_confidence']` for choice and score decisions, and for noul "
+        "decisions when the model reports a confidence."
     ),
     "StaticRouterNode": "Routes on stored data instead of an LLM; takes no LLM params.",
     "LLMResponseWithPrompt": "A normal LLM node, with every optional param set.",

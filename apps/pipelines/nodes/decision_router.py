@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from apps.pipelines.nodes.decision_calls import ask_decisions
+from apps.pipelines.nodes.decisions import check_option_limits, decision_limits
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceQuestion,
     DecisionBackend,
@@ -31,6 +32,12 @@ def route_with_decisions(
         logger.warning("Router %s got no route from %s: %s", node.name, backend.name, e)
         return None
     return _keyword_from_response(node, backend, response)
+
+
+def check_keyword_limits(node: "RouterNode") -> None:
+    """Raise when the decision backend behind the router's provider does not take its keywords as options."""
+    if limits := decision_limits(node.llm_provider_id):
+        check_option_limits(node.keywords, limits, subject="The router", noun="routes", field="keywords")
 
 
 def _options(node: "RouterNode") -> dict[str, str | None]:

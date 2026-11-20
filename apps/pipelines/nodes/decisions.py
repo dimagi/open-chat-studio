@@ -1,12 +1,14 @@
 """The decisions a Decision Node asks a decision model, and the temporary state its answers become."""
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from apps.pipelines.repository import ORMRepository, RepositoryLookupError
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceQuestion,
     DecisionLimits,
@@ -47,7 +49,7 @@ class Decision(BaseModel):
     key: str = Field(
         description=(
             "The temporary state key the answer is written to. Choice and score decisions also write "
-            "their confidence to `<key>_confidence`."
+            "their confidence to `<key>_confidence`, and a noul decision does when the model reports one."
         )
     )
     type: Literal["choice", "score", "noul"] = Field(
@@ -107,8 +109,8 @@ class Decision(BaseModel):
         return self
 
     @property
-    def confidence_key(self) -> str | None:
-        return None if self.type == "noul" else f"{self.key}_confidence"
+    def confidence_key(self) -> str:
+        return f"{self.key}_confidence"
 
     def question(self) -> Question:
         return QUESTION_BUILDERS[self.type](self)
@@ -118,9 +120,12 @@ class Decision(BaseModel):
         return ANSWER_READERS[self.type](self, response)
 
     def temp_state(self, value: Any, confidence: float | None) -> dict[str, Any]:
-        """The entries this decision writes: null for the value when the confidence is below the threshold."""
+        """The entries this decision writes: null for the value when the confidence is below the threshold.
+
+        Not every backend reports a confidence for a noul, so a noul writes one only when it has one.
+        """
         values = {self.key: None if self._below_threshold(confidence) else value}
-        if self.confidence_key:
+        if self.type != "noul" or confidence is not None:
             values[self.confidence_key] = confidence
         return values
 
@@ -167,12 +172,45 @@ def check_decision_limits(decisions: list[Decision], limits: DecisionLimits) -> 
             {"max": limits.max_questions, "field": "decisions"},
         )
     for decision in decisions:
+        _check_key_and_instructions(decision, limits)
         LIMIT_CHECKS[decision.type](decision, limits)
 
 
+def _check_key_and_instructions(decision: Decision, limits: DecisionLimits) -> None:
+    if not limits.accepts_key(decision.key):
+        message = "'{key}' is not a key this model accepts: keys must match {pattern}"
+        raise decision_error(decision, message, pattern=str(limits.key_pattern))
+    if limits.requires_instructions and not decision.instructions.strip():
+        raise decision_error(decision, "Decision {key} needs instructions for this model")
+
+
 def _check_option_count(decision: Decision, limits: DecisionLimits) -> None:
-    if not 1 <= len(decision.options) <= limits.max_options:
-        raise decision_error(decision, "Decision {key} needs 1 to {max} options", max=str(limits.max_options))
+    names = [option.name for option in decision.options]
+    check_option_limits(names, limits, subject=f"Decision {decision.key}", noun="options", field="decisions")
+
+
+def check_option_limits(names: Sequence[str], limits: DecisionLimits, subject: str, noun: str, field: str) -> None:
+    """Raise when the backend takes fewer or more options than `names`, or none as long as one of them."""
+    context = {"subject": subject, "noun": noun, "field": field}
+    if not limits.min_options <= len(names) <= limits.max_options:
+        bounds = {"min": limits.min_options, "max": limits.max_options}
+        raise PydanticCustomError("invalid_decision", "{subject} needs {min} to {max} {noun}", context | bounds)
+    longest = limits.max_option_length
+    if longest is not None and any(len(name) > longest for name in names):
+        message = "{subject} needs {noun} of at most {max} characters"
+        raise PydanticCustomError("invalid_decision", message, context | {"max": longest})
+
+
+def decision_limits(llm_provider_id: int) -> DecisionLimits | None:
+    """The request limits of the provider's decision backend, or None when it has none or cannot be loaded.
+
+    A provider that cannot be loaded is reported when the node runs, so validation does not fail on it first.
+    """
+    try:
+        backend = ORMRepository().get_llm_service(llm_provider_id).get_decision_backend()
+    except (RepositoryLookupError, ServiceProviderConfigError):
+        return None
+    return backend.limits if backend else None
 
 
 def _check_level_count(decision: Decision, limits: DecisionLimits) -> None:
@@ -236,7 +274,7 @@ def _read_score(decision: Decision, response: DecisionResponse) -> Answer:
 
 def _read_noul(decision: Decision, response: DecisionResponse) -> Answer:
     answer = response.yes_no(decision.key)
-    return (answer.probability if answer else None), None
+    return (answer.probability, answer.confidence) if answer else (None, None)
 
 
 ANSWER_READERS: dict[str, Callable[[Decision, DecisionResponse], Answer]] = {
@@ -268,7 +306,7 @@ def _check_unique_keys(keys: list[str]) -> None:
 
 
 def _check_confidence_keys(decisions: list[Decision]) -> None:
-    owners = {decision.confidence_key: decision.key for decision in decisions if decision.confidence_key}
+    owners = {decision.confidence_key: decision.key for decision in decisions}
     clash = next((decision.key for decision in decisions if decision.key in owners), None)
     if clash:
         raise PydanticCustomError(

@@ -16,13 +16,12 @@ from apps.pipelines.nodes.decisions import (
     Decision,
     check_decision_keys,
     check_decision_limits,
+    decision_limits,
     decision_questions,
     temp_state_values,
 )
 from apps.pipelines.nodes.mixins import HISTORY_TYPE_DESCRIPTION, HistoryMixin, llm_provider_id_field
-from apps.pipelines.repository import ORMRepository, RepositoryLookupError
-from apps.service_providers.exceptions import ServiceProviderConfigError
-from apps.service_providers.llm_service.decision_backend import DecisionError, DecisionLimits
+from apps.service_providers.llm_service.decision_backend import DecisionError
 from apps.service_providers.models import LlmProviderModel
 
 if TYPE_CHECKING:
@@ -73,17 +72,9 @@ class DecisionNode(PipelineNode, HistoryMixin):
 
     @model_validator(mode="after")
     def check_limits(self) -> Self:
-        if limits := self._decision_limits():
+        if limits := decision_limits(self.llm_provider_id):
             check_decision_limits(self.decisions, limits)
         return self
-
-    def _decision_limits(self) -> DecisionLimits | None:
-        """The selected provider's request limits, or None when its provider cannot be loaded, which the run reports."""
-        try:
-            backend = ORMRepository().get_llm_service(self.llm_provider_id).get_decision_backend()
-        except (RepositoryLookupError, ServiceProviderConfigError):
-            return None
-        return backend.limits if backend else None
 
     def check_model(self, model: LlmProviderModel) -> None:
         if not model.supports_decisions:

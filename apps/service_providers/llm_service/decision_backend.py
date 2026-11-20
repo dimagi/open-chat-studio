@@ -4,6 +4,7 @@ A provider that offers decision models returns a `DecisionBackend` from `LlmServ
 The pipeline nodes ask their questions through it and never see the provider's own request format.
 """
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -107,12 +108,20 @@ class DecisionResponse:
 
 @dataclass(frozen=True)
 class DecisionLimits:
-    """What one request to a backend may carry. `max_questions` is None where the provider sets no limit."""
+    """What one request to a backend may carry. A None limit is one the provider does not set."""
 
     max_options: int
     min_levels: int
     max_levels: int
     max_questions: int | None = None
+    min_options: int = 1
+    # A regular expression every question key must match in full.
+    key_pattern: str | None = None
+    max_option_length: int | None = None
+    requires_instructions: bool = False
+
+    def accepts_key(self, key: str) -> bool:
+        return self.key_pattern is None or re.fullmatch(self.key_pattern, key) is not None
 
 
 class DecisionBackend(ABC):
