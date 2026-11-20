@@ -1,11 +1,17 @@
 """Tests for the "Clear all" action: un-apply eval tags and delete all runs for a config."""
 
+from datetime import timedelta
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem
+from apps.chat.models import ChatMessage
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
@@ -150,6 +156,35 @@ class TestRemoveAppliedTagsForRuns:
         remove_applied_tags_for_runs(EvaluationRun.objects.filter(pk=run.pk))  # must not raise
 
         assert CustomTaggedItem.objects.count() == 0
+
+    def _run_with_applied_tags(self, team, evaluator, tag, rule, count):
+        messages = EvaluationMessageFactory.create_batch(count, create_chat_messages=True)
+        run = _build_run(team, evaluator, messages)
+        for message in messages:
+            message.expected_output_chat_message.tags.add(tag, through_defaults={"team": team})
+            result = EvaluationResultFactory.create(team=team, evaluator=evaluator, message=message, run=run, output={})
+            AppliedTagFactory.create(team=team, evaluation_result=result, rule=rule, tag=tag)
+        return run, [message.expected_output_chat_message.pk for message in messages]
+
+    def test_removal_moves_the_target_updated_at(self, team, evaluator, tag_a, tag_rule):
+        run, message_ids = self._run_with_applied_tags(team, evaluator, tag_a, tag_rule, 2)
+        past = timezone.now() - timedelta(days=1)
+        ChatMessage.objects.filter(pk__in=message_ids).update(updated_at=past)
+
+        remove_applied_tags_for_runs(EvaluationRun.objects.filter(pk=run.pk))
+
+        assert all(m.updated_at > past for m in ChatMessage.objects.filter(pk__in=message_ids))
+
+    def test_query_count_does_not_grow_with_targets(self, team, evaluator, tag_a, tag_rule):
+        def count_queries(run):
+            with CaptureQueriesContext(connection) as ctx:
+                remove_applied_tags_for_runs(EvaluationRun.objects.filter(pk=run.pk))
+            return len(ctx.captured_queries)
+
+        one, _ = self._run_with_applied_tags(team, evaluator, tag_a, tag_rule, 1)
+        many, _ = self._run_with_applied_tags(team, evaluator, tag_a, tag_rule, 4)
+
+        assert count_queries(many) == count_queries(one)
 
 
 class TestClearEvaluationRunsView:

@@ -1,8 +1,14 @@
 """Tests for reverse_stale_tags — stale eval-driven tag cleanup after a run."""
 
+from datetime import timedelta
+
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem
+from apps.chat.models import ChatMessage
 from apps.evaluations.models import (
     ConditionType,
     EvaluationMode,
@@ -195,6 +201,35 @@ class TestReverseStaleTags:
         reverse_stale_tags(run)
 
         assert not chat.tags.filter(pk=tag_a.pk).exists()
+
+    def _run_with_stale_tags(self, team, evaluator, tag, count):
+        messages = EvaluationMessageFactory.create_batch(count, create_chat_messages=True)
+        for message in messages:
+            message.expected_output_chat_message.tags.add(tag, through_defaults={"team": team})
+        run = _build_run(team, evaluator, messages)
+        for message in messages:
+            EvaluationResultFactory.create(team=team, evaluator=evaluator, message=message, run=run, output={})
+        return run, [message.expected_output_chat_message.pk for message in messages]
+
+    def test_removal_moves_the_target_updated_at(self, team, evaluator, tag_a, tag_rule):
+        run, message_ids = self._run_with_stale_tags(team, evaluator, tag_a, 2)
+        past = timezone.now() - timedelta(days=1)
+        ChatMessage.objects.filter(pk__in=message_ids).update(updated_at=past)
+
+        reverse_stale_tags(run)
+
+        assert all(m.updated_at > past for m in ChatMessage.objects.filter(pk__in=message_ids))
+
+    def test_query_count_does_not_grow_with_targets(self, team, evaluator, tag_a, tag_rule):
+        def count_queries(run):
+            with CaptureQueriesContext(connection) as ctx:
+                reverse_stale_tags(run)
+            return len(ctx.captured_queries)
+
+        one, _ = self._run_with_stale_tags(team, evaluator, tag_a, 1)
+        many, _ = self._run_with_stale_tags(team, evaluator, tag_a, 4)
+
+        assert count_queries(many) == count_queries(one)
 
 
 class TestFrozenPlan:

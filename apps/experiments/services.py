@@ -129,15 +129,25 @@ def last_activity_subquery() -> Subquery:
     )
 
 
-def touch_tagged_object(content_type_id: int, object_id: int) -> None:
-    """Move ``updated_at`` on the message, or the chat's session, that a tag change applies to.
+def touch_tagged_objects(content_type_id: int, object_ids) -> None:
+    """Move ``updated_at`` on the messages, or the chats' sessions, that a tag change applies to.
 
     Tags are rows of their own, and the v2 sync API pages messages and sessions by ``updated_at``.
     """
     if content_type_id == ContentType.objects.get_for_model(ChatMessage).id:
-        ChatMessage.objects.filter(pk=object_id).update(updated_at=timezone.now())
+        ChatMessage.objects.filter(pk__in=object_ids).update(updated_at=timezone.now())
     elif content_type_id == ContentType.objects.get_for_model(Chat).id:
-        ExperimentSession.objects.filter(chat_id=object_id).update(updated_at=timezone.now())
+        ExperimentSession.objects.filter(chat_id__in=object_ids).update(updated_at=timezone.now())
+
+
+def delete_tagged_items(content_type_id: int, tagged_items) -> None:
+    """Delete ``tagged_items``, tag rows of one content type, and move ``updated_at`` on the rows they tagged."""
+    # One transaction, so a failed touch also leaves the tag rows in place for a retry to remove.
+    with transaction.atomic():
+        object_ids = set(tagged_items.values_list("object_id", flat=True))
+        if object_ids:
+            tagged_items.delete()
+            touch_tagged_objects(content_type_id, object_ids)
 
 
 def touch_rows_tagged_with(tag) -> None:
