@@ -49,6 +49,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.llm_service")
 
+# The limits of each decision backend, by the type of the models it answers, for a caller that has a
+# model but no provider to ask for its backend.
+DECISION_LIMITS_BY_TYPE = {backend.provider_type: backend.limits for backend in (JevBackend,)}
+
 
 class OpenAIBuiltinTool(dict):
     """A simple wrapper for OpenAI's builtin tools. This is used to easily distinquish OpenAI tools from dicts"""

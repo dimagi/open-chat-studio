@@ -19,6 +19,7 @@ from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import ModelUse, NodeSchema, OptionsSource
+from apps.service_providers.llm_service.main import DECISION_LIMITS_BY_TYPE
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.teams.models import Team
 from apps.utils.fields import as_int
@@ -142,10 +143,16 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
 
 
 def _model_option(model: LlmProviderModel) -> dict:
-    """A model's option, marked where it differs from a chat model, so the builder offers it to the right nodes."""
+    """A model's option, marked where it differs from a chat model, so the builder offers it to the right nodes.
+
+    A decision model also carries its backend's level limit, which caps a score decision's rubric in the builder.
+    """
     option = _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
     option = option | ({} if model.supports_chat else {"chat": False})
-    return option | ({"decisions": True} if model.supports_decisions else {})
+    limits = DECISION_LIMITS_BY_TYPE.get(model.type)
+    if model.supports_decisions:
+        option = option | {"decisions": True} | ({"max_levels": limits.max_levels} if limits else {})
+    return option
 
 
 def _team_resource_options(team: Team, include_versions: bool) -> dict:
