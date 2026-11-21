@@ -78,8 +78,11 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     # cleaning up unused files
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
+# A system user gets /nonexistent as its home unless one is given, and libraries that
+# cache under the home directory (huggingface_hub, used by the voyageai client to fetch
+# a tokenizer when batching embedding requests) then fail with PermissionError.
 RUN addgroup --system django \
-    && adduser --system --ingroup django django
+    && adduser --system --ingroup django --home /home/django django
 
 WORKDIR /code
 COPY --from=build-node /code/static /code/static
@@ -91,6 +94,11 @@ COPY --chown=django:django . /code
 
 RUN SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost python manage.py collectstatic --noinput --settings=config.settings_production
 RUN chown django:django -R static_root
+
+# Set explicitly rather than relying on the runtime to read it from /etc/passwd,
+# since not every container platform does.
+ENV HOME=/home/django \
+    HF_HOME=/home/django/.cache/huggingface
 
 USER django
 
