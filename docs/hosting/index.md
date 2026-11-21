@@ -80,7 +80,9 @@ The production Dockerfile is a multi-stage build:
 2. **Node stage** — compiles JS and CSS assets
 3. **Runtime stage** — `python:3.13-slim-bullseye` with pre-built assets baked in
 
-The image runs as a non-root `django` user.
+The image runs as a non-root `django` user whose home is `/home/django`. That home must stay
+writable: libraries cache downloads there (`HF_HOME` points at `/home/django/.cache/huggingface`,
+where the tokenizer used for Voyage AI embeddings is cached).
 
 ```bash
 docker build -t open-chat-studio:latest .
