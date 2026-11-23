@@ -201,20 +201,21 @@ class TestLimits:
                 _node(jev_ids, decisions=[decision])
 
 
-def _openai_decision_model_ids() -> dict:
-    provider = LlmProviderFactory.create(type="openai")
-    model = LlmProviderModelFactory.create(team=provider.team, type="openai", name="gpt-decide")
+def _anthropic_decision_model_ids() -> dict:
+    config = {"anthropic_api_key": "k", "anthropic_api_base": "https://api.anthropic.com"}
+    provider = LlmProviderFactory.create(type="anthropic", config=config)
+    model = LlmProviderModelFactory.create(team=provider.team, type="anthropic", name="claude-decide")
     return {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
 
 
 def test_accepts_a_decision_model_listed_under_a_chat_provider(db):
     """A provider whose type also offers chat models can offer a decision model, and the node takes it."""
-    ids = _openai_decision_model_ids()
-    decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
+    ids = _anthropic_decision_model_ids()
+    decision_model = Model("claude-decide", 1000, chat=False, decisions=True)
 
-    backend = "apps.service_providers.llm_service.OpenAILlmService.get_decision_backend"
+    backend = "apps.service_providers.llm_service.AnthropicLlmService.get_decision_backend"
     with (
-        mock.patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}),
+        mock.patch.dict(MODELS_BY_KEY, {("anthropic", "claude-decide"): decision_model}),
         mock.patch(backend, return_value=_FakeBackend()),
     ):
         node = _node(ids, decisions=[REFUND])
@@ -224,10 +225,10 @@ def test_accepts_a_decision_model_listed_under_a_chat_provider(db):
 
 def test_rejects_a_provider_without_a_decision_backend(db):
     """The provider has to answer decisions, or the node would only fail on its first run."""
-    ids = _openai_decision_model_ids()
-    decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
+    ids = _anthropic_decision_model_ids()
+    decision_model = Model("claude-decide", 1000, chat=False, decisions=True)
 
-    with mock.patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}):
+    with mock.patch.dict(MODELS_BY_KEY, {("anthropic", "claude-decide"): decision_model}):
         with pytest.raises(PydanticValidationError, match="cannot answer decision questions") as excinfo:
             _node(ids, decisions=[REFUND])
 

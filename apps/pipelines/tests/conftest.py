@@ -22,5 +22,10 @@ def google_decision_ids(db):
 
 
 @pytest.fixture()
+def openai_decision_ids(db):
+    return _decision_model_ids("openai", "gpt-6-luna")
+
+
+@pytest.fixture()
 def session(db):
     return ExperimentSessionFactory.create()

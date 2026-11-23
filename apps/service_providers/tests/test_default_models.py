@@ -43,6 +43,8 @@ def test_a_provider_with_no_chat_models_has_no_default():
         pytest.param("google", "gemini-decision-1", (False, True), id="listed-decision-model-of-a-chat-type"),
         pytest.param("google", "gemini-3.8-flash", (True, False), id="chat-model-beside-a-decision-model"),
         pytest.param("openai", "gpt-4.1-mini", (True, False), id="listed-chat-model"),
+        pytest.param("openai", "gpt-6-luna", (True, True), id="chat-and-decision-model"),
+        pytest.param("azure", "gpt-6-luna", (True, False), id="same-model-on-a-type-without-a-backend"),
         pytest.param("jev", "jev-next", (False, True), id="custom-model-of-a-decision-only-type"),
         pytest.param("openai", "my-fine-tune", (True, False), id="custom-model-of-a-chat-type"),
         pytest.param("litellm", "anything", (True, False), id="type-with-no-listed-models"),

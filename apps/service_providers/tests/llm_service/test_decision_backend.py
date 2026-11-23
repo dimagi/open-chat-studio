@@ -1,6 +1,6 @@
 import pytest
 
-from apps.service_providers.llm_service import AnthropicLlmService, JevLlmService, OpenAILlmService
+from apps.service_providers.llm_service import AnthropicLlmService, JevLlmService
 from apps.service_providers.llm_service.decision_backend import (
     ChoiceAnswer,
     DecisionAuthenticationError,
@@ -63,7 +63,6 @@ def test_an_authentication_error_is_a_decision_error():
 @pytest.mark.parametrize(
     "service",
     [
-        pytest.param(OpenAILlmService(openai_api_key="k"), id="openai"),
         pytest.param(AnthropicLlmService(anthropic_api_key="k", anthropic_api_base="https://x"), id="anthropic"),
     ],
 )
