@@ -10,6 +10,7 @@ from apps.service_providers.auth_service import (
     CommCareAuthService,
 )
 from apps.service_providers.auth_service.main import outbound_user_agent
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.forms import ApiKeyAuthConfigForm
 from apps.service_providers.models import AuthProviderType
 
@@ -79,7 +80,7 @@ def test_api_key_header_name_is_rejected(header_name):
 )
 def test_a_stored_blocked_header_name_is_refused_when_the_service_is_built(header_name, message):
     """Config saved before the form check, read straight from the database."""
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ServiceProviderConfigError, match=message):
         AuthProviderType.api_key.get_auth_service({"key": header_name, "value": "secret"})
 
 
