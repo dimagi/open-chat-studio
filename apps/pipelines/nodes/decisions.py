@@ -46,8 +46,8 @@ class ChoiceOption(BaseModel):
 class Decision(BaseModel):
     key: str = Field(
         description=(
-            "The temporary state key the answer is written to. Choice and score decisions also write "
-            "their confidence to `<key>_confidence`."
+            "The temporary state key the answer is written to. Each decision also writes its confidence "
+            "to `<key>_confidence`, which is null when the model reports none."
         )
     )
     type: Literal["choice", "score", "noul"] = Field(
@@ -107,8 +107,8 @@ class Decision(BaseModel):
         return self
 
     @property
-    def confidence_key(self) -> str | None:
-        return None if self.type == "noul" else f"{self.key}_confidence"
+    def confidence_key(self) -> str:
+        return f"{self.key}_confidence"
 
     def question(self) -> Question:
         return QUESTION_BUILDERS[self.type](self)
@@ -118,11 +118,12 @@ class Decision(BaseModel):
         return ANSWER_READERS[self.type](self, response)
 
     def temp_state(self, value: Any, confidence: float | None) -> dict[str, Any]:
-        """The entries this decision writes: null for the value when the confidence is below the threshold."""
-        values = {self.key: None if self._below_threshold(confidence) else value}
-        if self.confidence_key:
-            values[self.confidence_key] = confidence
-        return values
+        """The entries this decision writes: null for the value when the confidence is below the threshold.
+
+        The confidence is written even when it is null, so that an earlier node's confidence under the same
+        key does not outlive this answer.
+        """
+        return {self.key: None if self._below_threshold(confidence) else value, self.confidence_key: confidence}
 
     def _below_threshold(self, confidence: float | None) -> bool:
         if self.threshold is None or confidence is None:
@@ -269,7 +270,7 @@ def _check_unique_keys(keys: list[str]) -> None:
 
 
 def _check_confidence_keys(decisions: list[Decision]) -> None:
-    owners = {decision.confidence_key: decision.key for decision in decisions if decision.confidence_key}
+    owners = {decision.confidence_key: decision.key for decision in decisions}
     clash = next((decision.key for decision in decisions if decision.key in owners), None)
     if clash:
         raise PydanticCustomError(
