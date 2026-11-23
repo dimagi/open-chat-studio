@@ -35,6 +35,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.chat.exceptions import ProviderConfigurationError
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.versioning import TriggerSyncMode, sync_triggers
@@ -1830,7 +1831,10 @@ class ExperimentSession(UpdatedAtOnPartialSaveMixin, BaseTeamModel):
                     span.set_outputs({"response": bot_message})
                     return trace_service.get_trace_metadata()
         except Exception as e:
-            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if isinstance(e, ProviderConfigurationError):
+                log.warning("Could not send message to experiment session %s. Reason: %s", self.id, e)
+            else:
+                log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
                 if trace_service:
                     trace_metadata = trace_service.get_trace_metadata()
