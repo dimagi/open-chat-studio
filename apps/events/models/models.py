@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
+from apps.chat.exceptions import ProviderConfigurationError
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events import actions
@@ -510,13 +511,17 @@ class ScheduledMessage(BaseTeamModel):
             attempt.save()
 
         except Exception as e:
-            logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
+            is_configuration_error = isinstance(e, ProviderConfigurationError)
+            if is_configuration_error:
+                logger.warning("Could not send scheduled message %s. Error: %s", self.id, e)
+            else:
+                logger.exception(f"An error occurred while trying to send scheduled message {self.id}. Error: {e}")
             trace_metadata = getattr(e, "trace_metadata", {})
             attempt.attempt_result = EventLogStatusChoices.FAILURE
             attempt.log_message = str(e)
             attempt.trace_info = trace_metadata
             attempt.save()
-            if attempt_number < 3:
+            if attempt_number < 3 and not is_configuration_error:
                 backoff_seconds = 2 ** (attempt_number - 1)
                 retry_scheduled_message.apply_async(args=[self.id, attempt_number + 1], countdown=backoff_seconds)
 

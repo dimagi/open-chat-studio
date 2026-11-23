@@ -16,7 +16,11 @@ from rest_framework import exceptions
 
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.oauth.models import OAuth2Application
-from apps.teams.helpers import SyntheticTeamMembership, get_team_membership_for_request, set_request_attrs
+from apps.teams.helpers import (
+    SyntheticTeamMembership,
+    get_team_membership_for_request,
+    set_request_attrs,
+)
 from apps.teams.utils import set_current_team
 
 from .models import OAuth2AccessToken

@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from time_machine import travel
 
+from apps.chat.exceptions import ProviderConfigurationError
 from apps.events.models import (
     EventActionType,
     EventLogStatusChoices,
@@ -369,6 +370,33 @@ def test_action_params_with_versioning():
     # now it should reference the published version
     message = ScheduledMessage.objects.get(id=message.id)
     assert message.params["prompt_text"] == "hello"
+
+
+@pytest.mark.django_db()
+@patch("apps.events.tasks.retry_scheduled_message.apply_async")
+@patch("apps.experiments.models.ExperimentSession.ad_hoc_bot_message")
+def test_scheduled_message_provider_configuration_error_is_not_retried(ad_hoc_bot_message, mock_retry_task, caplog):
+    """Retrying cannot clear an exhausted quota or a revoked key, and it is not a bug to report."""
+    ad_hoc_bot_message.side_effect = ProviderConfigurationError("no credit")
+    session = ExperimentSessionFactory.create()
+    event_action, _params = _construct_event_action(
+        frequency=1, time_period="minutes", repetitions=1, experiment_id=session.experiment.id
+    )
+    sm = ScheduledMessageFactory.create(
+        participant=session.participant,
+        action=event_action,
+        team=session.team,
+        experiment=session.experiment,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="ocs.events"):
+        sm.safe_trigger()
+
+    attempt = ScheduledMessageAttempt.objects.get(scheduled_message=sm)
+    assert attempt.attempt_result == EventLogStatusChoices.FAILURE
+    assert attempt.log_message == "no credit"
+    mock_retry_task.assert_not_called()
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
 @pytest.mark.django_db()

@@ -80,6 +80,9 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["token_usage"] = trace_token_usage(self.object)
+        context["custom_action_requests"] = list(
+            self.object.custom_action_requests.select_related("custom_action").order_by("id")
+        )
         context["breadcrumbs"] = [
             (_("Traces"), reverse("trace:home", args=[self.request.team.slug])),
             (

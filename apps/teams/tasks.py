@@ -10,16 +10,10 @@ from django.core.files import File as DjangoFile
 from django.utils import timezone
 
 from apps.files.models import File, FilePurpose
+from apps.teams.deletion import delete_team_if_due, get_teams_due_for_deletion
 from apps.teams.invitations import send_invitation_accepted
-from apps.teams.models import Invitation, Membership, Team
-from apps.teams.utils import current_team
+from apps.teams.models import Invitation, Team
 from apps.utils.celery import Queues
-from apps.utils.deletion import (
-    chunk_list,
-    delete_object_with_auditing_of_related_objects,
-    get_admin_emails_with_delete_permission,
-    send_team_deleted_notification,
-)
 
 logger = logging.getLogger("ocs.teams")
 
@@ -33,20 +27,16 @@ def send_invitation_accepted_notification(invitation_id):
 
 
 @shared_task(queue=Queues.BACKGROUND)
-def delete_team_async(team_id, user_email, notify_recipients="self"):
-    team = Team.objects.get(id=team_id)
-    emails = [user_email]  # default case: user sends email just to themselves
-    if notify_recipients == "admins":
-        emails = get_admin_emails_with_delete_permission(team)
-    elif notify_recipients == "all":
-        emails = list(Membership.objects.filter(team__name=team.name).values_list("user__email", flat=True))
-    team_name = team.name
-    chunk_size = 50
-    chunked_emails = chunk_list(emails, chunk_size)
-    with current_team(team):
-        delete_object_with_auditing_of_related_objects(team)
-        for chunk_emails in chunked_emails:
-            send_team_deleted_notification(team_name, chunk_emails)
+def delete_teams_past_grace_period():
+    """Queue the permanent deletion of every team whose deletion grace period has passed."""
+    for team_id in get_teams_due_for_deletion().values_list("id", flat=True):
+        delete_team_task.delay(team_id)
+
+
+@shared_task(queue=Queues.BACKGROUND)
+def delete_team_task(team_id):
+    if delete_team_if_due(team_id):
+        logger.info("Deleted team %s after its deletion grace period", team_id)
 
 
 def get_team_files_queryset(team):

@@ -17,6 +17,7 @@ from apps.api.permissions import (
     IsAuthenticatedOrMachineToken,
     ParticipantModelPermissions,
     ReadOnlyAPIKeyPermission,
+    TeamNotPendingDeletion,
 )
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
 from apps.api.tasks import (
@@ -40,6 +41,7 @@ class ParticipantView(APIView):
     permission_classes = [
         IsAuthenticatedOrMachineToken,
         ReadOnlyAPIKeyPermission,
+        TeamNotPendingDeletion,
         TokenHasOAuthResourceScope,
         # The caller's role must grant the same participant model permissions the UI requires for
         # these operations; membership alone is not enough.

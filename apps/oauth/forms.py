@@ -5,6 +5,7 @@ from oauth2_provider.forms import AllowForm
 
 from apps.experiments.models import Experiment
 from apps.oauth.models import OAuth2Application
+from apps.teams.helpers import active_teams_for_user
 
 
 class AuthorizationForm(AllowForm):
@@ -23,7 +24,7 @@ class AuthorizationForm(AllowForm):
             self.fields["team_slug"].disabled = True
             return
 
-        self.fields["team_slug"].choices = [(team.slug, team.name) for team in user.teams.all()]
+        self.fields["team_slug"].choices = [(team.slug, team.name) for team in active_teams_for_user(user)]
         if team_requested:
             self.fields["team_slug"].widget = forms.HiddenInput()
             self.fields["team_slug"].disabled = True
@@ -32,7 +33,7 @@ class AuthorizationForm(AllowForm):
         # Every path that populates this field is either user-supplied or derived from the application,
         # so membership is asserted here rather than at each of them.
         team_slug = self.cleaned_data["team_slug"]
-        if not self.user.teams.filter(slug=team_slug).exists():
+        if not active_teams_for_user(self.user).filter(slug=team_slug).exists():
             raise forms.ValidationError(_("You are not a member of this team."))
         return team_slug
 

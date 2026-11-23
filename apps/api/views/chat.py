@@ -412,7 +412,7 @@ def _channel_disabled_response(experiment_channel) -> Response | None:
     """
     if not experiment_channel.is_disabled:
         return None
-    detail = experiment_channel.disabled_message or "This chatbot is currently unavailable."
+    detail = experiment_channel.disabled_reply or "This chatbot is currently unavailable."
     return Response({"error": detail}, status=status.HTTP_403_FORBIDDEN)
 
 

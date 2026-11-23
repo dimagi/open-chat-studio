@@ -105,6 +105,7 @@ def _data_context(request) -> dict:
     return {
         **public_key_context(TeamPublicKeyForm(instance=request.team)),
         "notify_recipients_form": NotifyRecipientsForm(),
+        "deletion_grace_period_days": settings.TEAM_DELETION_GRACE_PERIOD.days,
         **_team_files_export_context(request.team),
     }
 

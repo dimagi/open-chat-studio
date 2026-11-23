@@ -482,6 +482,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "apps.api.permissions.IsAuthenticatedOrMachineToken",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
+        "apps.api.permissions.TeamNotPendingDeletion",
         "apps.oauth.permissions.TokenHasOAuthScope",
     ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
@@ -661,6 +662,8 @@ def _celery_task_queues() -> tuple[Queue, ...]:
 
 CELERY_TASK_QUEUES = _celery_task_queues()
 
+TEAM_DELETION_GRACE_PERIOD = timedelta(days=env.int("TEAM_DELETION_GRACE_PERIOD_DAYS", default=30))
+
 SCHEDULED_TASKS = {
     "files.tasks.clean_up_expired_files": {
         "task": "apps.files.tasks.clean_up_expired_files",
@@ -718,6 +721,10 @@ SCHEDULED_TASKS = {
     "evaluations.auto_population.auto_populate_eval_datasets": {
         "task": "apps.evaluations.auto_population.auto_populate_eval_datasets",
         "schedule": timedelta(minutes=5),
+    },
+    "teams.tasks.delete_teams_past_grace_period": {
+        "task": "apps.teams.tasks.delete_teams_past_grace_period",
+        "schedule": crontab(minute="15", hour="3"),
     },
     "evaluations.tasks.coordinate_evaluation_runs": {
         "task": "apps.evaluations.tasks.coordinate_evaluation_runs",

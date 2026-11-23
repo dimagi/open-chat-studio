@@ -91,9 +91,13 @@ class SessionListView(SyncView):
         query.is_valid(raise_exception=True)
         params = query.validated_data
 
-        sessions = self.reachable_sessions().select_related("experiment", "participant", "chat")
+        sessions = self.reachable_sessions().select_related("experiment__working_version", "participant", "chat")
         if "chatbot" in params:
-            sessions = sessions.filter(experiment__public_id=params["chatbot"])
+            # A session on a published version points at that version, which has its own public ID.
+            chatbot = params["chatbot"]
+            sessions = sessions.filter(
+                Q(experiment__public_id=chatbot) | Q(experiment__working_version__public_id=chatbot)
+            )
         if "participant" in params:
             sessions = sessions.filter(participant__public_id=params["participant"])
         if "platform" in params:
