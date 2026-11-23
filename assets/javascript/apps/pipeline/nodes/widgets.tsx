@@ -1527,6 +1527,8 @@ export function LlmWidget(props: WidgetParams) {
     const llmModelParamsSchemaName = modelParams[selectedModelName] || "BasicParameters";
     return modelParamSchemas[llmModelParamsSchemaName];
   }
+  // A decision call sends no generation settings, even to a model that also chats and takes some.
+  const takesModelParameters = props.schema["ui:modelUse"] !== "decisions";
 
   const setNode = usePipelineStore((state) => state.setNode);
   const updateParamValue = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -1539,7 +1541,7 @@ export function LlmWidget(props: WidgetParams) {
         next.data.params.llm_provider_model_id = providerModelId;
 
         // Update the LLM parameters only when the model's parameter set changed
-        const currModelParamSchema = getSelectedModelSchema(providerModelId);
+        const currModelParamSchema = takesModelParameters ? getSelectedModelSchema(providerModelId) : undefined;
         const prevModelParamSchema = getSelectedModelSchema(old.data.params.llm_provider_model_id);
 
         if (currModelParamSchema && prevModelParamSchema != currModelParamSchema) {
@@ -1591,7 +1593,7 @@ export function LlmWidget(props: WidgetParams) {
   const warning = selectedModel?.deprecated
     ? "Deprecated — move to a supported model before it is removed."
     : undefined;
-  const llmModelParamsSchema = getSelectedModelSchema(providerModelId);
+  const llmModelParamsSchema = takesModelParameters ? getSelectedModelSchema(providerModelId) : undefined;
   return (
     <>
       <InputField label={props.label} help_text={props.helpText} inputError={error} inputWarning={warning}>
