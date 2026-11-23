@@ -210,10 +210,7 @@ class IsAuthenticatedOrMachineToken(IsAuthenticated):
 
 
 class TeamNotPendingDeletion(BasePermission):
-    """Refuses requests for a team that is scheduled for deletion.
-
-    The export API leaves this out so a team can still be migrated off the server while it waits.
-    """
+    """Refuses requests for a team that is scheduled for deletion."""
 
     message = gettext_lazy("This team is scheduled for deletion.")
 

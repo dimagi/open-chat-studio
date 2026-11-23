@@ -267,12 +267,12 @@ def test_pending_team_is_not_a_default_team(pending_team):
 @pytest.mark.parametrize(
     ("url_name", "status_code"),
     [
-        pytest.param("api:experiment-list", 403, id="api-refused"),
-        pytest.param("api:export:team", 200, id="export-allowed"),
+        pytest.param("api:experiment-list", 403, id="api"),
+        pytest.param("api:export:team", 403, id="export-api"),
     ],
 )
 def test_api_for_pending_team(pending_team, url_name, status_code):
-    """The API refuses a pending team, except the export API, so the team can still be migrated out."""
+    """Every API refuses a team that is pending deletion, the export API included."""
     client = ApiTestClient(_admin(pending_team), pending_team)
     assert client.get(reverse(url_name)).status_code == status_code
 
