@@ -160,6 +160,8 @@ class LLMResponseMixin(BaseModel):
         """Raise when this node cannot call `model`."""
         if self.model_use == ModelUse.chat and not model.supports_chat:
             raise PydanticCustomError("invalid_model", DECISION_ONLY_MODEL_MESSAGE, {"field": "llm_provider_model_id"})
+        if not model.supports_chat and not _provider_answers_decisions(self.llm_provider_id):
+            raise PydanticCustomError("invalid_provider", NO_DECISION_BACKEND_MESSAGE, {"field": "llm_provider_id"})
 
     def get_llm_service(self) -> LlmService:
         try:
@@ -192,6 +194,14 @@ HISTORY_TYPE_DESCRIPTION = (
     "remembers just this node's own turns; `named` shares one history between every node set "
     "to the same `history_name`; `global` uses the participant's whole conversation."
 )
+
+
+def _provider_answers_decisions(llm_provider_id: int) -> bool:
+    """Whether the provider has a decision backend. A provider that cannot be loaded is reported when the node runs."""
+    try:
+        return ORMRepository().get_llm_service(llm_provider_id).get_decision_backend() is not None
+    except (RepositoryLookupError, ServiceProviderConfigError):
+        return True
 
 
 class HistoryMixin(LLMResponseMixin):
