@@ -1,0 +1,12 @@
+{% extends "account/email/email_template_base.html" %}
+{% load i18n tz %}
+{% block message_body %}
+  {% blocktranslate with due=deletion_due_at|utc|date:"DATETIME_FORMAT" %}
+    Team '{{ team_name }}' has been disabled and is scheduled for permanent deletion on {{ due }} UTC.
+    Until then, a team admin can cancel the deletion and restore the team.
+  {% endblocktranslate %}
+{% endblock message_body %}
+
+{% block cta_link %}{{ restore_url }}{% endblock %}
+
+{% block cta_text %}{% translate "Review team deletion" %}{% endblock %}

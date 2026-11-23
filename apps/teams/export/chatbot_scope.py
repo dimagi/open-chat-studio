@@ -374,6 +374,7 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     "chat.chatmessage": _owned(lambda s: Q(chat_id__in=s.chats)),
     "chat.chatattachment": _owned(lambda s: Q(chat_id__in=s.chats)),
     "trace.trace": _owned(lambda s: Q(experiment_id__in=s.experiment_ids)),
+    "trace.customactionrequest": _owned(lambda s: Q(trace__experiment_id__in=s.experiment_ids)),
     "pipelines.pipelinechathistory": _owned(lambda s: Q(session_id__in=s.sessions)),
     "pipelines.pipelinechatmessages": _owned(lambda s: Q(chat_history__session_id__in=s.sessions)),
     # Chatbot usage only. An evaluator's usage also names the chatbot it judged, but its evaluation
@@ -420,6 +421,9 @@ CHATBOT_SCOPE_REGISTRY: dict[str, ScopeRule] = {
     "annotations.tag": _team_wide(),
     "users.customuser": _team_wide(),
     "cost_tracking.pricingrule": _team_wide(),
+    # Moderation is a team setting that applies to every chatbot.
+    "teams.team": _team_wide(),
+    "service_providers.moderationprovider": _team_wide(),
     # Notification text and links can name chatbots outside the selection. The settings form and
     # the sync report say so.
     "ocs_notifications.eventtype": _team_wide(),

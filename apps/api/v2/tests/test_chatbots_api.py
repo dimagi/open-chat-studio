@@ -122,6 +122,67 @@ def test_chatbot_anonymous_401():
     assert response.status_code == 401
 
 
+def _machine_client(team, **reach):
+    """A machine (client-credentials) client holding chatbots:read; `reach` is its allowlist or all_data."""
+    return ApiTestClient(
+        team.members.first(), team, auth_method="oauth_client_credentials", scopes=["chatbots:read"], **reach
+    )
+
+
+@pytest.mark.django_db()
+def test_a_limited_machine_token_lists_only_its_allowed_chatbots(experiment):
+    """A list has no one chatbot to refuse, so the unlisted ones are left out of it (ADR-0056)."""
+    ExperimentFactory.create(team=experiment.team)
+    client = _machine_client(experiment.team, allowed_chatbots=[experiment])
+
+    results = client.get(reverse("api:v2:chatbot-list")).json()["results"]
+
+    assert [result["id"] for result in results] == [str(experiment.public_id)]
+
+
+@pytest.mark.django_db()
+def test_a_machine_token_reaching_all_data_lists_every_chatbot(experiment):
+    other = ExperimentFactory.create(team=experiment.team)
+    client = _machine_client(experiment.team, all_data=True)
+
+    results = client.get(reverse("api:v2:chatbot-list")).json()["results"]
+
+    assert {result["id"] for result in results} == {str(experiment.public_id), str(other.public_id)}
+
+
+def _detail_url(experiment):
+    return reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id})
+
+
+def _inspect_url(experiment, version=None):
+    url = reverse("api:v2:chatbot-inspect", kwargs={"id": experiment.public_id})
+    return f"{url}?version={version}" if version else url
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "url_for",
+    [
+        pytest.param(_detail_url, id="retrieve"),
+        pytest.param(_inspect_url, id="inspect-working"),
+        pytest.param(lambda experiment: _inspect_url(experiment, version=1), id="inspect-version"),
+    ],
+)
+@pytest.mark.parametrize(
+    "listed", [pytest.param(False, id="unlisted-is-refused"), pytest.param(True, id="listed-may-read")]
+)
+def test_a_machine_token_reads_only_its_allowed_chatbots(experiment, url_for, listed):
+    """Addressed directly, an unlisted chatbot is refused rather than hidden, as every write refuses it."""
+    experiment.create_new_version()
+    client = _machine_client(experiment.team, allowed_chatbots=[experiment] if listed else [])
+
+    response = client.get(url_for(experiment))
+
+    assert response.status_code == (200 if listed else 403), response.content
+    if not listed:
+        assert response.json() == {"detail": "This application is not authorized to access this chatbot."}
+
+
 EARLIER = datetime(2026, 1, 1, tzinfo=UTC)
 LATER = datetime(2026, 2, 1, tzinfo=UTC)
 

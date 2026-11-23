@@ -8,6 +8,8 @@ urlpatterns = [
     path("create/", views.create_team, name="create_team"),
     # invitation acceptance views
     path("invitation/<uuid:invitation_id>/", views.accept_invitation, name="accept_invitation"),
+    path("<slug:slug>/pending-deletion/", views.team_pending_deletion, name="pending_deletion"),
+    path("<slug:slug>/pending-deletion/cancel/", views.cancel_team_deletion_view, name="cancel_deletion"),
 ]
 
 team_urlpatterns = (

@@ -1,12 +1,14 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import ANY
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.usage_metrics.buckets import Granularity, bucket_start
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -31,12 +33,7 @@ class TestDashboardService:
         # Test without filters
         querysets = service.get_filtered_queryset_base()
 
-        assert "experiments" in querysets
-        assert "sessions" in querysets
-        assert "messages" in querysets
-        assert "participants" in querysets
-        assert "start_date" in querysets
-        assert "end_date" in querysets
+        assert set(querysets) == {"experiments", "sessions", "messages", "participants"}
 
         # Verify team filtering
         experiments = querysets["experiments"]
@@ -111,6 +108,36 @@ class TestDashboardService:
         assert stats["total_sessions"] >= 1
         assert stats["total_messages"] >= 2
 
+    def test_overview_totals_are_what_the_team_had_by_the_end_of_the_window(self, team, experiment, participant):
+        """A chatbot or participant created after the window is not part of its totals."""
+        end = timezone.now()
+        for later in (
+            Experiment.objects.create(name="Later", team=team, owner=experiment.owner),
+            Participant.objects.create(identifier="later", team=team, platform="web"),
+        ):
+            later.created_at = end + timedelta(seconds=1)
+            later.save()
+
+        stats = DashboardService(team).get_overview_stats(start_date=end - timedelta(days=30), end_date=end)
+
+        assert (stats["total_experiments"], stats["total_participants"]) == (1, 1)
+
+    def test_completed_sessions_are_the_active_sessions_that_ended_in_the_window(self, team, experiment, participant):
+        """The completion rate's numerator and denominator describe the same window (ADR-0051)."""
+        end = timezone.now()
+        start = end - timedelta(days=30)
+        active_on = start + timedelta(days=10)
+        ended_inside = _create_session(experiment, participant, team, active_on)
+        ended_after = _create_session(experiment, participant, team, active_on)
+        _create_session(experiment, participant, team, active_on)
+        ExperimentSession.objects.filter(pk=ended_inside.pk).update(ended_at=active_on + timedelta(hours=1))
+        ExperimentSession.objects.filter(pk=ended_after.pk).update(ended_at=end + timedelta(hours=1))
+
+        stats = DashboardService(team).get_overview_stats(start_date=start, end_date=end)
+
+        assert (stats["total_sessions"], stats["completed_sessions"]) == (3, 1)
+        assert stats["completion_rate"] == pytest.approx(100 / 3)
+
     def test_get_session_analytics_data(self, team, experiment, participant, experiment_session, chat):
         """Test session analytics data generation"""
 
@@ -123,9 +150,10 @@ class TestDashboardService:
         service = DashboardService(team)
 
         data = service.get_session_analytics_data(granularity="daily")
+        day = bucket_start(message.created_at.astimezone(UTC), Granularity.DAILY).isoformat()
         assert data == {
-            "sessions": [{"date": str(message.created_at.date()), "active_sessions": 1}],
-            "participants": [{"date": str(message.created_at.date()), "active_participants": 1}],
+            "sessions": [{"date": day, "active_sessions": 1}],
+            "participants": [{"date": day, "active_participants": 1}],
         }
 
     def test_get_message_volume_data(self, team, experiment, participant, experiment_session, chat):
@@ -291,21 +319,52 @@ class TestDashboardService:
         assert isinstance(data["most_active_participants"], list)
         assert isinstance(data["session_length_distribution"], list)
 
-    def test_granularity_options(self, team, experiment, participant, experiment_session, chat):
-        """Test different granularity options"""
-        service = DashboardService(team)
+    @pytest.mark.parametrize("granularity", [pytest.param(value, id=value.value) for value in Granularity])
+    def test_series_bucket_on_the_granularity(
+        self, team, experiment, participant, experiment_session, chat, granularity
+    ):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
 
-        # Create test message
-        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Test message")
+        data = DashboardService(team).get_session_analytics_data(granularity=granularity)
 
-        granularities = ["hourly", "daily", "weekly", "monthly"]
+        bucket = bucket_start(message.created_at.astimezone(UTC), granularity).isoformat()
+        assert data["sessions"] == [{"date": bucket, "active_sessions": 1}]
 
-        for granularity in granularities:
-            data = service.get_session_analytics_data(granularity=granularity)
-            assert isinstance(data, dict)
+    def test_series_are_cached_per_timezone(self, team, experiment, participant, experiment_session, chat):
+        """A bucket edge depends on the zone the series is truncated in, so a series computed for one
+        zone is not served to a viewer in another."""
+        ChatMessage.objects.create(
+            chat=chat,
+            message_type=ChatMessageType.HUMAN,
+            content="late",
+            created_at=datetime(2026, 6, 9, 23, 30, tzinfo=UTC),
+        )
+        window = {"start_date": datetime(2026, 6, 1, tzinfo=UTC), "end_date": datetime(2026, 6, 15, tzinfo=UTC)}
 
-            # Test that the function doesn't crash with different granularities
-            # The exact data will depend on when the test is run
+        in_utc = DashboardService(team).get_session_analytics_data(granularity="daily", **window)
+        with timezone.override(ZoneInfo("Africa/Johannesburg")):
+            in_johannesburg = DashboardService(team).get_session_analytics_data(granularity="daily", **window)
+
+        assert in_utc["sessions"][0]["date"] == "2026-06-09T00:00:00+00:00"
+        assert in_johannesburg["sessions"][0]["date"] == "2026-06-10T00:00:00+02:00"
+
+    def test_bot_performance_completion_rate_counts_sessions_that_ended_in_the_window(
+        self, team, experiment, participant
+    ):
+        """The per-chatbot rate reads like the overview card: completed means ended inside the window."""
+        now = timezone.now()
+        ended_in_window, ended_after, _never_ended = (
+            _create_session(experiment, participant, team, now) for _ in range(3)
+        )
+        ExperimentSession.objects.filter(pk=ended_in_window.pk).update(ended_at=now)
+        ExperimentSession.objects.filter(pk=ended_after.pk).update(ended_at=now + timedelta(days=2))
+
+        data = DashboardService(team).get_bot_performance_summary(
+            start_date=now - timedelta(days=1), end_date=now + timedelta(days=1)
+        )
+
+        assert data["results"][0]["sessions"] == 3
+        assert data["results"][0]["completion_rate"] == pytest.approx(1 / 3)
 
     def test_histogram_creation(self, team):
         """Test histogram creation utility"""

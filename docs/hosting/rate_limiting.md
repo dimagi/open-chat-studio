@@ -81,6 +81,22 @@ requests whose running count is a multiple of 100. An identity sitting at three 
 produces a handful of lines per window rather than thousands, so judge severity by `count` and
 not by how many lines you see.
 
+### rate_limit.near_limit
+
+An identity reached 50% or 80% of its limit. Each threshold is logged once per identity per
+window, the first time the identity's count reaches it, and carries the same fields as
+`would_block` plus `percent`. With a small limit both thresholds can fall on the same count, in
+which case only the 80% line is written.
+
+These lines are what show how close traffic comes to a limit it never crosses. `would_block`
+alone says nothing about an identity that stays under its limit.
+
+### rate_limit.blocked
+
+A request was refused. It only appears once `RATE_LIMIT_ENFORCE` is `True`, never on the
+`channels` scope, and carries the same fields as `would_block`. It is sampled the same way: the
+first refused request in a window, then every 100th.
+
 ### rate_limit.backend_error
 
 The limiter could not reach Redis. Carries `scope` and `identity_type`. What happens to the
@@ -95,7 +111,21 @@ exempt and carries on to the limiter.
 ## Choosing Thresholds
 
 Take the busiest legitimate identity over your observation window and leave headroom above it.
-The `count` field on each crossing is the number to work from.
+The `count` field on each crossing is the number to work from. For identities that never cross,
+`near_limit` gives a lower bound: an 80% line means that identity used at least 80% of its
+allowance in that window.
+
+A CloudWatch Logs Insights query over the JSON logs gives the busiest identities per scope:
+
+```text
+fields scope, identity_type, key_hash, team_id, count, limit, percent
+| filter logger = "ocs.rate_limit" and message in ["rate_limit.near_limit", "rate_limit.would_block", "rate_limit.blocked"]
+| stats max(count) as peak, max(limit) as lim by scope, identity_type, key_hash, team_id
+| sort peak desc
+```
+
+Because over-limit lines are sampled, `peak` can be up to 99 below the identity's real count for
+the window.
 
 A limit applies per identity, not per deployment. A scope with a thousand active identities at
 100/5m is not bounded at 100 requests overall, because each of those identities gets its own 100.

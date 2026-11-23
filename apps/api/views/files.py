@@ -8,6 +8,7 @@ from apps.api.permissions import (
     DjangoModelPermissionsWithView,
     IsAuthenticatedOrMachineToken,
     ReadOnlyAPIKeyPermission,
+    TeamNotPendingDeletion,
 )
 from apps.files.models import File
 from apps.oauth.permissions import TokenHasOAuthScope
@@ -32,6 +33,7 @@ class FileContentView(APIView):
     permission_classes = [
         IsAuthenticatedOrMachineToken,
         ReadOnlyAPIKeyPermission,
+        TeamNotPendingDeletion,
         DjangoModelPermissionsWithView,
         TokenHasOAuthScope,
     ]

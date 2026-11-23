@@ -17,13 +17,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.export.permissions import IsTeamAdmin
-from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
+from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication, TeamNotPendingDeletion
 from apps.api.versioning import ExportVersioning
 from apps.teams.export.chatbot_scope import read_selection
 from apps.teams.export.manifest import (
     ManifestEntry,
     build_manifest,
-    entry_model,
     get_manifest_entry,
     scoped_queryset,
 )
@@ -32,9 +31,9 @@ from apps.teams.export.selection import SELECTION_CHANGED_DETAIL
 
 from .serializers import (
     ManifestSerializer,
-    build_resource_serializer,
+    build_entry_serializer,
     build_team_serializer,
-    component_name,
+    entry_component_name,
     resource_responses,
 )
 
@@ -51,7 +50,7 @@ class _ExportAPIView(APIView):
     # authenticator advertises a challenge, so ``get_authenticate_header`` keeps an unauthenticated
     # request a 401 rather than letting DRF downgrade it to a 403.
     authentication_classes = [ApiKeyAuthentication, BearerTokenAuthentication]
-    permission_classes = [IsAuthenticated, IsTeamAdmin]
+    permission_classes = [IsAuthenticated, IsTeamAdmin, TeamNotPendingDeletion]
     versioning_class = ExportVersioning
 
     def get_authenticate_header(self, request):
@@ -125,7 +124,7 @@ class ResourceView(_ExportAPIView):
         queryset = scoped_queryset(entry, request.team, scope)
         rows, next_cursor, has_more = _paginate(queryset, entry.cursor, request.query_params.get("cursor"), limit)
 
-        serializer = build_resource_serializer(entry_model(entry.model))(rows, many=True, context=context)
+        serializer = build_entry_serializer(entry)(rows, many=True, context=context)
         return Response({"cursor": next_cursor, "has_more": has_more, "results": serializer.data})
 
 
@@ -228,8 +227,7 @@ def resource_view(entry: ManifestEntry) -> type[ResourceView]:
     """A ResourceView subclass documenting a single resource, for the URLConf to mount at that
     resource's literal path. Subclassing keeps the auth and permissions (and therefore the security
     schemes) identical to the base view; the subclass exists only to carry the per-resource schema."""
-    model = entry_model(entry.model)
-    view = type(f"{component_name(model)}ResourceView", (ResourceView,), {})
+    view = type(f"{entry_component_name(entry)}ResourceView", (ResourceView,), {})
     description = None
     if entry.cursor == "updated_at_id":
         description = (

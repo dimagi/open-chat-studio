@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.data_migrations.utils.migrations import RunDataMigration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -11,6 +9,4 @@ class Migration(migrations.Migration):
         ("evaluations", "0018_evaluator_llm_provider_fks"),
     ]
 
-    operations = [
-        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
-    ]
+    operations = []

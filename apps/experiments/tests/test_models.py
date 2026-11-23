@@ -8,6 +8,8 @@ from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
+from field_audit import enable_audit
+from field_audit.models import AuditEvent
 from time_machine import travel
 
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -834,6 +836,17 @@ class TestExperimentModel:
         experiment.pipeline = PipelineFactory.create(team=experiment.team)
         experiment.save()
         return experiment
+
+    def test_unavailable_message_change_is_audited(self):
+        experiment_id = ExperimentFactory.create().id
+
+        with enable_audit():
+            experiment = Experiment.objects.get(id=experiment_id)
+            experiment.unavailable_message = "We are down for maintenance."
+            experiment.save()
+
+        events = AuditEvent.objects.by_model(Experiment).filter(object_pk=experiment.pk)
+        assert any("unavailable_message" in (event.delta or {}) for event in events)
 
     def test_first_version_is_automatically_the_default(self):
         experiment = ExperimentFactory.create()

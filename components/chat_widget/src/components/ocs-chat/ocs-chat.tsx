@@ -233,6 +233,13 @@ export class OcsChat {
   @Prop() allowFullScreen: boolean = true;
 
   /**
+   * In kiosk mode, show a new-chat button beside the message input. Kiosk mode has
+   * no header, so without this the user can only start over once the session ends.
+   * Standard mode always shows the new-chat button in the header.
+   */
+  @Prop() showNewChatButton: boolean = false;
+
+  /**
    * Allow the user to attach files to their messages.
    */
   @Prop() allowAttachments: boolean = false;
@@ -952,6 +959,7 @@ export class OcsChat {
       return [];
     }
 
+    const epoch = this.sessionEpoch;
     this.isUploadingFiles = true;
     try {
       const service = this.getChatService();
@@ -963,6 +971,8 @@ export class OcsChat {
         participantName: this.userName,
         send: (url, body) => service.sessionFetch(sessionId, url, () => ({ method: 'POST', headers: service.getUploadHeaders(), body })),
       });
+      // A new chat started while the upload ran; its result belongs to the cleared session.
+      if (epoch !== this.sessionEpoch) return [];
       this.selectedFiles = uploadResult.selectedFiles;
       if (uploadResult.consent) {
         throw new ConsentRequiredError(uploadResult.consent, uploadResult.errorMessage ?? 'Consent is required');
@@ -1013,6 +1023,7 @@ export class OcsChat {
       let attachmentIds: number[] = [];
       if (this.allowAttachments && this.selectedFiles.length > 0) {
         attachmentIds = await this.uploadFiles();
+        if (epoch !== this.sessionEpoch) return;
 
         // Check if any files have errors after upload attempt
         const hasErrors = this.selectedFiles.some(sf => sf.error);
@@ -2201,6 +2212,11 @@ export class OcsChat {
     return this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && !this.isReadOnly();
   }
 
+  /** The kiosk counterpart of the header's new-chat button; the restart button replaces it once the session ends. */
+  private shouldShowKioskNewChat(): boolean {
+    return this.isKioskMode() && this.showNewChatButton && this.messages.length > 0 && !this.isSessionBound() && !this.isReadOnly() && !this.isConversationClosed();
+  }
+
   private isSessionBound(): boolean {
     return !!this.sessionId;
   }
@@ -2421,6 +2437,17 @@ export class OcsChat {
           disabled={this.isComposerLocked()}
         ></textarea>
         {this.renderAttachmentControls()}
+        {this.shouldShowKioskNewChat() && (
+          <button
+            class="file-attachment-button kiosk-new-chat"
+            onClick={() => this.showConfirmationDialog()}
+            disabled={this.isUploadingFiles || this.isLoading}
+            title={this.translationManager.get('window.newChat')}
+            aria-label={this.translationManager.get('window.newChat')}
+          >
+            <PlusWithCircleIcon />
+          </button>
+        )}
         <button
           class={`send-button ${this.isSendReady() ? 'send-button-enabled' : 'send-button-disabled'}`}
           onClick={() => this.sendMessage(this.messageInput)}
@@ -2530,8 +2557,8 @@ export class OcsChat {
               </div>
             )}
 
-            {!this.isKioskMode() && this.showNewChatConfirmation && (
-              <div class="confirmation-overlay">
+            {this.showNewChatConfirmation && (
+              <div class={`confirmation-overlay${this.isKioskMode() ? ' confirmation-overlay-kiosk' : ''}`}>
                 <div class="confirmation-dialog">
                   <div class="confirmation-content">
                     <h3 class="confirmation-title">{this.translationManager.get('modal.newChatTitle')}</h3>

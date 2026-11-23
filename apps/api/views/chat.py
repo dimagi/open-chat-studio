@@ -26,12 +26,12 @@ from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
+from apps.api.admission import ChatCredentialKind, ChatEntryPoint, get_chat_admission
 from apps.api.authentication import (
     ChatOAuthAuthentication,
     ChatSessionOAuthAuthentication,
     EmbeddedWidgetAuthentication,
     get_embed_key_channel,
-    oauth_resolved_channel,
 )
 from apps.api.chat_consent import consent_refusal, session_consent_block
 from apps.api.exceptions import ChatApiAccessDenied, ParticipantBlocked
@@ -78,6 +78,7 @@ from apps.service_providers.llm_service.image_types import (
     DENIED_IMAGE_EXTENSIONS,
     image_type_names,
 )
+from apps.teams.roles import is_member
 from apps.users.models import CustomUser
 from apps.web.waf import WafRule, waf_allow
 
@@ -304,20 +305,20 @@ def _issue_or_opt_out_session_token(session, channel):
     return _opt_out_session_token(session)
 
 
-def _resolve_embed_key_channel(request, experiment) -> ExperimentChannel | None:
+def _resolve_embed_key_channel(request, experiment, admission) -> ExperimentChannel | None:
     """The widget channel this request's embed key proves, if any.
 
     Resolved once: it both authorizes the caller and owns the session. `request.auth` already
     holds it when the key did the authenticating, so this only queries for keys that rode along
     with another authenticator.
 
-    A bearer token also puts a channel in `request.auth`, and that one is not an embed-key
-    resolution: in `oauth` mode the key is ignored, so none is looked up either.
+    A bearer token is represented by the admission result, so its Chat API Channel is not
+    reinterpreted as an Embed Key resolution.
     """
-    if oauth_resolved_channel(request) is not None:
+    if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS:
         return None
-    if isinstance(request.auth, ExperimentChannel):
-        return request.auth
+    if admission.credential_kind == ChatCredentialKind.EMBED_KEY:
+        return admission.channel
     return get_embed_key_channel(request, experiment)
 
 
@@ -365,7 +366,7 @@ def _check_start_session_access(
             raise ChatApiAccessDenied()
         # Keyless: unchanged here — closing it is keyless-chat-start-sunset.md's work.
         return None
-    if experiment.team.members.filter(id=request.user.id).exists():
+    if is_member(request.user, experiment.team):
         return None
     # Not a member: the embed key is the only other proof, and it does not grant version selection.
     if _embed_key_admits(embed_key_channel) and version_number is None:
@@ -411,7 +412,7 @@ def _channel_disabled_response(experiment_channel) -> Response | None:
     """
     if not experiment_channel.is_disabled:
         return None
-    detail = experiment_channel.disabled_message or "This chatbot is currently unavailable."
+    detail = experiment_channel.disabled_reply or "This chatbot is currently unavailable."
     return Response({"error": detail}, status=status.HTTP_403_FORBIDDEN)
 
 
@@ -419,7 +420,8 @@ NO_PUBLISHED_VERSION = {"error": "This chatbot has no published version", "code"
 
 
 def _is_team_member(request, experiment) -> bool:
-    return request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
+    """Return whether the authenticated user belongs to the experiment's team."""
+    return request.user.is_authenticated and is_member(request.user, experiment.team)
 
 
 def _published_public_version(experiment) -> tuple[Experiment | None, Response | None]:
@@ -477,9 +479,10 @@ def _send_version(request, session, version_number) -> tuple[Experiment | None, 
 
 
 def _version_number_refusal(request, session) -> Response | None:
+    """Return the refusal response when an unauthenticated user selects a version."""
     if not request.user.is_authenticated:
         return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
-    if not session.experiment.team.members.filter(id=request.user.id).exists():
+    if not is_member(request.user, session.experiment.team):
         return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
     return None
 
@@ -563,6 +566,74 @@ def _apply_session_data(session, user, session_data) -> None:
         session.save(update_fields=["state"])
 
 
+def _resolve_start_session_admission(request, experiment):
+    """Resolve the admission and owning channels for a new Chat API session."""
+    admission = get_chat_admission(request, entry_point=ChatEntryPoint.START_SESSION)
+    oauth_channel = (
+        admission.channel if admission.credential_kind == ChatCredentialKind.OAUTH_CLIENT_CREDENTIALS else None
+    )
+    embed_key_channel = _resolve_embed_key_channel(request, experiment, admission)
+    return embed_key_channel, oauth_channel
+
+
+def _resolve_start_session_version(request, experiment, experiment_version, experiment_channel):
+    """Resolve the requested version and public-channel admission for a new session."""
+    public_visitor = _is_public_visitor(request, experiment, experiment_channel)
+    published, refusal = _public_channel_admission(public_visitor, experiment)
+    if refusal:
+        return experiment_version, public_visitor, refusal
+    return experiment_version or published, public_visitor, None
+
+
+def _prepare_start_session_participant(
+    request,
+    experiment,
+    experiment_channel,
+    remote_id,
+    name,
+    participant_timezone,
+    public_visitor,
+    team,
+):
+    """Resolve, validate, and update the participant for a new session."""
+    user = _session_user(request, public_visitor)
+    participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
+    if refusal:
+        return user, participant, refusal
+    if is_participant_blocked(team=team, participant_id=participant.id):
+        raise ParticipantBlocked()
+    if name or participant_timezone:
+        _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
+    return user, participant, None
+
+
+def _prepare_start_session_context(
+    request,
+    experiment,
+    session_data,
+    embed_key_channel,
+    oauth_channel,
+    version_number,
+):
+    """Resolve access, version and channel before creating participant or session records."""
+    denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
+    if denied:
+        return denied
+
+    experiment_version = _get_requested_version(experiment, version_number)
+    team = experiment.team
+    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel, oauth_channel)
+    if disabled := _channel_disabled_response(experiment_channel):
+        return disabled
+
+    experiment_version, public_visitor, refusal = _resolve_start_session_version(
+        request, experiment, experiment_version, experiment_channel
+    )
+    if refusal:
+        return refusal
+    return experiment_version, public_visitor, team, experiment_channel
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -616,6 +687,8 @@ def _apply_session_data(session, user, session_data) -> None:
             summary="Session started with published version",
             value={
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "session_token": "<signed token; send as X-Session-Token>",
+                "expires_at": "2026-01-01T12:00:00Z",
                 "chatbot": {
                     "id": "123e4567-e89b-12d3-a456-426614174000",
                     "name": "Example Bot",
@@ -633,6 +706,8 @@ def _apply_session_data(session, user, session_data) -> None:
             summary="Session started with specific version",
             value={
                 "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                "session_token": "<signed token; send as X-Session-Token>",
+                "expires_at": "2026-01-01T12:00:00Z",
                 "chatbot": {
                     "id": "123e4567-e89b-12d3-a456-426614174000",
                     "name": "Example Bot",
@@ -675,38 +750,32 @@ def chat_start_session(request):
         Experiment.objects.select_related("team"), public_id=experiment_id, working_version_id__isnull=True
     )
 
-    oauth_channel = oauth_resolved_channel(request)
-    embed_key_channel = _resolve_embed_key_channel(request, experiment)
+    embed_key_channel, oauth_channel = _resolve_start_session_admission(request, experiment)
 
-    denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
-    if denied:
-        return denied
+    start_context = _prepare_start_session_context(
+        request,
+        experiment,
+        session_data,
+        embed_key_channel,
+        oauth_channel,
+        version_number,
+    )
+    if isinstance(start_context, Response):
+        return start_context
+    experiment_version, public_visitor, team, experiment_channel = start_context
 
-    experiment_version = _get_requested_version(experiment, version_number)
-
-    team = experiment.team
-
-    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel, oauth_channel)
-
-    # Before the participant work below, which creates records as a side effect.
-    if disabled := _channel_disabled_response(experiment_channel):
-        return disabled
-
-    public_visitor = _is_public_visitor(request, experiment, experiment_channel)
-    published, refusal = _public_channel_admission(public_visitor, experiment)
+    user, participant, refusal = _prepare_start_session_participant(
+        request,
+        experiment,
+        experiment_channel,
+        remote_id,
+        name,
+        participant_timezone,
+        public_visitor,
+        team,
+    )
     if refusal:
         return refusal
-    experiment_version = experiment_version or published
-
-    user = _session_user(request, public_visitor)
-    participant, refusal = _resolve_participant(user, team, experiment_channel.platform, remote_id)
-    if refusal:
-        return refusal
-    if is_participant_blocked(team=team, participant_id=participant.id):
-        raise ParticipantBlocked()
-
-    if name or participant_timezone:
-        _record_participant_details(participant, experiment, team, name=name, participant_timezone=participant_timezone)
 
     session = _start_session(request, experiment, experiment_channel, participant, user, version_number)
     _apply_session_data(session, user, session_data)
@@ -944,7 +1013,7 @@ def chat_poll_task_response(request, session_id, task_id):
     _verify_task_belongs_to_session(task_id, str(session_id))
 
     experiment = session.experiment
-    task_details = get_message_task_response(experiment, task_id)
+    task_details = get_message_task_response(task_id)
     if not task_details:
         return Response({"status": "processing"}, status=status.HTTP_200_OK)
 

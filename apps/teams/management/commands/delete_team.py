@@ -9,9 +9,8 @@ Usage:
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.teams.deletion import hard_delete_team
 from apps.teams.models import Team
-from apps.teams.utils import current_team
-from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
 
 class Command(BaseCommand):
@@ -54,7 +53,6 @@ class Command(BaseCommand):
 
         self.stdout.write(f"\nDeleting team '{team.name}'...")
 
-        with current_team(team):
-            delete_object_with_auditing_of_related_objects(team)
+        hard_delete_team(team)
 
         self.stdout.write(self.style.SUCCESS(f"Team '{team_slug}' deleted successfully."))

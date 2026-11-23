@@ -492,6 +492,7 @@ class VoiceProviderType(models.TextChoices):
     elevenlabs = "elevenlabs", _("ElevenLabs")
     intron = "intron", _("Intron")
     minimax = "minimax", _("MiniMax")
+    gemini = "gemini", _("Google Gemini Transcription")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -512,6 +513,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.IntronVoiceConfigForm
             case VoiceProviderType.minimax:
                 return forms.MinimaxVoiceConfigForm
+            case VoiceProviderType.gemini:
+                return forms.GeminiVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -533,6 +536,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.IntronSpeechService(**config)
                 case VoiceProviderType.minimax:
                     return speech_service.MinimaxSpeechService(**config)
+                case VoiceProviderType.gemini:
+                    return speech_service.GeminiSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -1057,6 +1062,7 @@ class ModerationProvider(BaseTeamModel, ProviderMixin):
 
     class Meta:
         ordering = ("type", "name")
+        indexes = [models.Index(fields=["updated_at", "id"], name="modprovider_updated_at_id_idx")]
 
     def __str__(self):
         return f"{self.type_enum.label}: {self.name}"

@@ -5,16 +5,21 @@ import pytest
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
+from django.urls import get_resolver
 from django.utils import timezone
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request, clone_request
+from rest_framework.views import APIView
 
 from apps.api.models import UserAPIKey
 from apps.api.openai import ChatCompletionsView
 from apps.api.permissions import (
     BASE_PERMISSION_CLASSES,
     ApiKeyAuthentication,
+    BearerTokenAuthentication,
     ReadOnlyAPIKeyPermission,
     RequiresTeamPermission,
+    TeamNotPendingDeletion,
 )
 from apps.api.v2.discovery.views import (
     ChatbotOptionsView,
@@ -32,7 +37,8 @@ from apps.api.views.files import FileContentView
 from apps.api.views.participants import ParticipantView
 from apps.api.views.sessions import ExperimentSessionViewSet
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
-from apps.oauth.permissions import OAuth2AccessTokenAuthentication, TokenHasOAuthScope
+from apps.oauth.permissions import OAuth2AccessTokenAuthentication, TokenHasOAuthScope, is_client_credentials_request
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 # Every view that accepts API-key authentication, whether it takes the project defaults or sets its
@@ -76,6 +82,37 @@ def test_api_key_views_keep_the_read_only_gate(view):
     assert ReadOnlyAPIKeyPermission in view.permission_classes
 
 
+_TEAM_CREDENTIAL_AUTHENTICATORS = (ApiKeyAuthentication, BearerTokenAuthentication, OAuth2AccessTokenAuthentication)
+
+
+def _team_credential_views():
+    """Every routed DRF view that accepts an API key or OAuth token and requires some permission."""
+    views = set()
+
+    def walk(patterns):
+        for pattern in patterns:
+            if hasattr(pattern, "url_patterns"):
+                walk(pattern.url_patterns)
+                continue
+            view = getattr(pattern.callback, "cls", None) or getattr(pattern.callback, "view_class", None)
+            if view is None or not issubclass(view, APIView):
+                continue
+            if AllowAny in view.permission_classes:
+                continue
+            if any(issubclass(auth, _TEAM_CREDENTIAL_AUTHENTICATORS) for auth in view.authentication_classes):
+                views.add(view)
+
+    walk(get_resolver().url_patterns)
+    return sorted(views, key=lambda view: view.__name__)
+
+
+@pytest.mark.parametrize("view", _team_credential_views(), ids=lambda view: view.__name__)
+def test_team_credential_views_refuse_teams_pending_deletion(view):
+    """DRF replaces the default permission classes when a view sets its own, so every view that a team
+    credential can reach must list ``TeamNotPendingDeletion`` itself or inherit it from the defaults."""
+    assert TeamNotPendingDeletion in view.permission_classes
+
+
 class _NeedsChange(RequiresTeamPermission):
     required_permissions = ["experiments.change_experiment"]
 
@@ -86,6 +123,15 @@ def _request(*, has_perms: bool):
     request = Mock(user=Mock(has_perms=Mock(return_value=has_perms)))
     request.auth = Mock()
     return request
+
+
+@pytest.mark.django_db()
+def test_generic_permissions_do_not_treat_a_chat_channel_as_a_machine_token():
+    """A ChatOAuthAuthentication channel is not an OAuth client credential on generic API views."""
+    channel = ExperimentChannelFactory.create()
+    request = Mock(auth=channel)
+
+    assert is_client_credentials_request(request) is False
 
 
 class TestRequiresTeamPermission:
@@ -129,6 +175,7 @@ class TestRequiresTeamPermission:
         """A machine token authenticates as AnonymousUser, so there is no membership-derived
         permission to check; authorization rests on the OAuth scope and the token's pinned team."""
         request = Mock(user=AnonymousUser(), auth=machine_token)
+        request.chat_session = None
 
         assert _NeedsChange().has_permission(request, view=None) is True
 

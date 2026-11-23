@@ -34,6 +34,15 @@ Delete this section if there are no migration.
  -->
 - [ ] The migrations are backwards compatible
 
+### Prerequisite PRs
+<!--
+Merged PRs whose manual steps (for example, a data migration command) must run on a
+deployment before this PR can ship, one per line as `- #1234`. A check blocks merging
+until each one is in a tagged release.
+
+Delete this section, leave it empty, or write "None" if there are none.
+-->
+
 
 ### Demo
 <!--

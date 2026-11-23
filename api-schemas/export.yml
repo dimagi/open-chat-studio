@@ -5,6 +5,8 @@ info:
   description: Read-only, team-scoped endpoints for the Open Chat Studio data sync/export.
     **Unversioned and intended only for OCS export** — it carries no backwards-compatibility
     guarantee and may change without notice.
+  contact:
+    email: devops+openchatstudio@dimagi.com
 paths:
   /api/export/analysis_queries/:
     get:
@@ -595,6 +597,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomActionOperationList'
+          description: ''
+  /api/export/custom_action_requests/:
+    get:
+      operationId: custom_action_requests
+      summary: Custom Action Requests
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomActionRequestList'
           description: ''
   /api/export/custom_actions/:
     get:
@@ -1358,6 +1395,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/moderation_providers/:
+    get:
+      operationId: moderation_providers
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Moderation Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationProviderList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
   /api/export/notification_event_types/:
     get:
       operationId: notification_event_types
@@ -1993,6 +2074,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TeamExport'
+          description: ''
+  /api/export/team_settings/:
+    get:
+      operationId: team_settings
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Team Settings
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      - in: query
+        name: selection
+        schema:
+          type: string
+        description: The chatbot selection the client is syncing. When it no longer
+          matches the team's export allowlist the request is refused with 409, so
+          a sync cannot mix two selections.
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamSettingsList'
           description: ''
   /api/export/timeout_triggers/:
     get:
@@ -3362,6 +3481,78 @@ components:
       - cursor
       - has_more
       - results
+    CustomActionRequestDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        operation:
+          type: string
+          maxLength: 255
+        method:
+          type: string
+          maxLength: 16
+        url:
+          type: string
+        request_headers: {}
+        request_body:
+          type: string
+        status_code:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+          description: Empty when no response came back
+        response_headers: {}
+        response_body:
+          type: string
+        duration_ms:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        error:
+          type: string
+        trace:
+          type: integer
+        custom_action:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - duration_ms
+      - id
+      - method
+      - operation
+      - trace
+      - updated_at
+      - url
+    CustomActionRequestList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomActionRequestDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     CustomTaggedItemDetail:
       type: object
       properties:
@@ -4484,6 +4675,10 @@ components:
           type: string
           description: If set, send this message to the bot when the session starts,
             and prompt the user with the initial response.
+        unavailable_message:
+          type: string
+          description: Sent after the default error reply when the chatbot cannot
+            respond, for example when its LLM provider is unavailable.
         public_id:
           type: string
           format: uuid
@@ -4530,8 +4725,6 @@ components:
           type: boolean
         version_description:
           type: string
-        debug_mode_enabled:
-          type: boolean
         create_version_task_id:
           type: string
           maxLength: 128
@@ -5067,8 +5260,16 @@ components:
           description: Whether to re-read this resource from the start on every sync
             while the team has a chatbot selection. Rows can join the served set below
             a stored cursor when a selected chatbot starts using them.
+        fields:
+          type: array
+          items:
+            type: string
+          description: 'Set on a partial resource: the only fields its rows carry
+            besides `id` and `updated_at`. They update rows imported earlier in the
+            sync (for `team_settings`, the row from `team/`).'
       required:
       - cursor
+      - fields
       - model
       - reread_under_selection
       - resource
@@ -5141,6 +5342,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MessagingProviderDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ModerationProviderDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/ModerationProviderDetailTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    ModerationProviderDetailTypeEnum:
+      enum:
+      - openai
+      type: string
+      description: '* `openai` - OpenAI'
+    ModerationProviderList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModerationProviderDetail'
       required:
       - cursor
       - has_more
@@ -6363,14 +6616,8 @@ components:
           type: boolean
           description: When set, every member of this team must enrol in two-factor
             authentication.
-        created_by:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: User who created this team, if known.
       required:
       - created_at
-      - created_by
       - exportable_chatbots
       - feature_flags
       - has_public_key
@@ -6378,6 +6625,55 @@ components:
       - name
       - slug
       - updated_at
+    TeamSettingsDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: User who created this team, if known.
+        moderation_provider:
+          type: integer
+          nullable: true
+          description: The provider that checks participant messages.
+        moderation_enabled:
+          type: boolean
+          description: When set, participant messages are checked by the moderation
+            provider.
+        auto_block_enabled:
+          type: boolean
+          description: When set, participants who reach the strike limit are blocked
+            automatically.
+      required:
+      - created_by
+      - id
+      - updated_at
+    TeamSettingsList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamSettingsDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     TimeoutTriggerDetail:
       type: object
       properties:
@@ -6961,6 +7257,7 @@ components:
       - elevenlabs
       - intron
       - minimax
+      - gemini
       type: string
       description: |-
         * `aws` - AWS Polly
@@ -6970,6 +7267,7 @@ components:
         * `elevenlabs` - ElevenLabs
         * `intron` - Intron
         * `minimax` - MiniMax
+        * `gemini` - Google Gemini Transcription
     VoiceProviderList:
       type: object
       properties:
@@ -7016,7 +7314,13 @@ components:
     tokenAuth:
       type: http
       scheme: bearer
-tags: []
+tags:
+- name: Manifest
+  description: 'Discover the export surface before authenticating: resource call order,
+    per-model config and a schema checksum.'
+- name: Team
+  description: Export the team resolved from the API key and every resource nested
+    under it, paginated by `updated_at`.
 externalDocs:
   url: https://docs.openchatstudio.com/api/
   description: API Guides

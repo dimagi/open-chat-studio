@@ -1,7 +1,11 @@
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 from rest_framework import status
 
 from apps.annotations.models import Tag, TagCategories
+from apps.experiments.models import ExperimentSession
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -98,6 +102,21 @@ def test_remove_tags_from_session(auth_method, session):
 
     session.refresh_from_db()
     assert list(session.chat.tags.values_list("name", flat=True)) == ["tag2"]
+
+
+@pytest.mark.django_db()
+def test_remove_tags_moves_the_session_updated_at(session):
+    user = session.team.members.first()
+    tag = Tag.objects.create(name="tag1", team=session.team, created_by=user)
+    session.chat.add_tag(tag, session.team, user)
+    past = timezone.now() - timedelta(days=1)
+    ExperimentSession.objects.filter(pk=session.pk).update(updated_at=past)
+
+    client = ApiTestClient(user, session.team)
+    response = client.delete(f"/api/sessions/{session.external_id}/tags/", data={"tags": ["tag1"]}, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert ExperimentSession.objects.get(pk=session.pk).updated_at > past
 
 
 @pytest.mark.django_db()

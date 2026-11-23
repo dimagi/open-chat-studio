@@ -35,6 +35,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.versioning import TriggerSyncMode, sync_triggers
@@ -55,7 +56,7 @@ from apps.utils.deletion import (
     has_related_pipeline_references,
 )
 from apps.utils.fields import SanitizedJSONField
-from apps.utils.models import BaseModel
+from apps.utils.models import BaseModel, UpdatedAtOnPartialSaveMixin
 from apps.utils.time import seconds_to_human
 from apps.web.dynamic_filters.datastructures import ColumnFilterData, FilterParams
 from apps.web.meta import absolute_url
@@ -472,6 +473,7 @@ class AgentTools(models.TextChoices):
     APPEND_TO_SESSION_STATE = "append-to-session-state", gettext("Append to Session State")
     INCREMENT_SESSION_STATE_COUNTER = "increment-session-state-counter", gettext("Increment Session State Counter")
     CALCULATOR = "calculator", gettext("Calculator")
+    ATTACH_CARD = "attach-card", gettext("Attach Card (CommCare Connect)")
 
     @classmethod
     def reminder_tools(cls) -> list[Self]:
@@ -513,6 +515,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "description",
             "pipeline",
             "seed_message",
+            "unavailable_message",
             "consent_form",
             "voice_provider",
             "synthetic_voice",
@@ -522,7 +525,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
             "trace_provider",
             "trace_sample_rate",
             "participant_allowlist",
-            "debug_mode_enabled",
             "file_uploads_enabled",
         }
     )
@@ -567,6 +569,13 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default="",
         help_text="If set, send this message to the bot when the session starts, "
         "and prompt the user with the initial response.",
+    )
+    unavailable_message = models.TextField(
+        blank=True,
+        default="",
+        db_default="",
+        help_text="Sent after the default error reply when the chatbot cannot respond, "
+        "for example when its LLM provider is unavailable.",
     )
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
@@ -631,7 +640,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         default="",
     )
-    debug_mode_enabled = models.BooleanField(default=False)
     create_version_task_id = models.CharField(max_length=128, blank=True)
     file_uploads_enabled = models.BooleanField(
         default=False,
@@ -1102,6 +1110,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
             VersionField(group_name="General", name="name", raw_value=self.name),
             VersionField(group_name="General", name="description", raw_value=self.description),
             VersionField(group_name="General", name="seed_message", raw_value=self.seed_message),
+            VersionField(group_name="General", name="unavailable_message", raw_value=self.unavailable_message),
             # Consent
             VersionField(group_name="Consent", name="consent_form", raw_value=self.consent_form),
             VersionField(
@@ -1183,6 +1192,10 @@ class Participant(BaseTeamModel):
             models.Index(fields=["created_at"], name="participant_created_at_idx"),
             # The export API pages every resource by (updated_at, id).
             models.Index(fields=["updated_at", "id"], name="participant_updated_at_id_idx"),
+            models.Index(fields=["remote_id"], name="participant_remote_id_idx"),
+            # Trigram indexes on UPPER(identifier) and UPPER(name), which serve the participant
+            # filter's `icontains`, are created in migration 0158 with raw SQL: Django renders an
+            # OpClass over an expression as invalid SQL unless django.contrib.postgres is installed.
         ]
 
     @classmethod
@@ -1562,7 +1575,7 @@ class ExperimentSessionObjectManager(models.Manager):
         return queryset.annotate_with_message_count().order_by(last_activity_expression().desc())
 
 
-class ExperimentSession(BaseTeamModel):
+class ExperimentSession(UpdatedAtOnPartialSaveMixin, BaseTeamModel):
     """
     An individual session, e.g. an instance of a chat with an experiment
     """
@@ -1775,7 +1788,8 @@ class ExperimentSession(BaseTeamModel):
             trace_info: Metadata for adding to the trace
             fail_silently: Exceptions will not be suppresed if this is True
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
-            specific child bot to handle the check-in.
+            specific child bot to handle the check-in. Defaults to the published version, or the working version
+            if none is published.
             message_text: A message to deliver to the participant directly, bypassing the LLM.
         """
         if (instruction_prompt is None) == (message_text is None):
@@ -1801,7 +1815,7 @@ class ExperimentSession(BaseTeamModel):
         trace_service = None
         try:
             with transaction.atomic(), current_team(self.team):
-                experiment = use_experiment or self.experiment
+                experiment = use_experiment or self.experiment_version
                 trace_service = TracingService.create_for_experiment(experiment)
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
@@ -1817,11 +1831,14 @@ class ExperimentSession(BaseTeamModel):
                     span.set_outputs({"response": bot_message})
                     return trace_service.get_trace_metadata()
         except Exception as e:
-            log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
+            if isinstance(e, ProviderConfigurationError):
+                log.warning("Could not send message to experiment session %s. Reason: %s", self.id, e)
+            else:
+                log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
-                if trace_service:
-                    trace_metadata = trace_service.get_trace_metadata()
-                    e.trace_metadata = trace_metadata
+                # ModelRefusedTurnError exposes trace_metadata as a read-only property.
+                if trace_service and not isinstance(e, ModelRefusedTurnError):
+                    setattr(e, "trace_metadata", trace_service.get_trace_metadata())  # noqa: B010
                 raise e
 
     def _resolve_ad_hoc_message(
@@ -1876,7 +1893,7 @@ class ExperimentSession(BaseTeamModel):
             ExperimentHistoryManager,
         )
 
-        experiment = use_experiment or self.experiment
+        experiment = use_experiment or self.experiment_version
         history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
         bot = EventBot(self, experiment, trace_info, history_manager)
         return bot.get_user_message(instruction_prompt)
@@ -1916,7 +1933,13 @@ class ExperimentSession(BaseTeamModel):
 
     @cached_property
     def experiment_version(self) -> Experiment:
-        """The Chatbot Version this session executes against — Published if one exists, Working otherwise."""
+        """The Chatbot Version this session executes against.
+
+        A session bound to a version snapshot uses that snapshot. Otherwise this is the Published Version if one
+        exists, else the Working Version.
+        """
+        if not self.experiment.is_working_version:
+            return self.experiment
         return resolve_published_or_working(self.experiment)
 
     @cached_property

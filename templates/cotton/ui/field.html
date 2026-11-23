@@ -1,21 +1,29 @@
 {% comment %}
-Form field: label, help icon, the control (slot) and its errors. `render_field` renders every form field through it.
+Form field: label, help icon, the control (slot), a description and its errors. `render_field` renders every form field through it.
 
   <c-ui.field label="{% translate 'Name' %}" :input_id="form.name.id_for_label" :help="form.name.help_text" :errors="form.name.errors">
     {{ form.name }}
   </c-ui.field>
   <c-ui.field label="{% translate 'Enabled' %}" inline x-show="advanced">{{ form.enabled }}</c-ui.field>
+  <c-ui.field label="{% translate 'Domains' %}" input_id="id_domains" :errors="form.domains.errors">
+    <c-slot name="label_end"><span class="text-sm">{% translate "Optional" %}</span></c-slot>
+    <c-slot name="description">{% translate "Wildcards allowed, e.g. <code>*.example.org</code>." %}</c-slot>
+    <input id="id_domains" aria-describedby="id_domains_helptext id_domains_error" class="input w-full">
+  </c-ui.field>
 
 Params:
   label: the label text.
-  input_id: id of the control, for the label's `for`.
+  input_id: id of the control, for the label's `for`. The description gets the id `<input_id>_helptext`, the id
+    Django puts in a form field's aria-describedby; a form field's errors already render with `<input_id>_error`.
   help: help text shown behind a help icon. HTML allowed, as for a form field's help_text.
+  description: text shown under the control. Pass HTML through the `description` slot.
+  label_end: content on the right of the label row, such as a toggle. Not shown with `inline`.
   errors: the field's error list, or any renderable value. Empty for none.
   inline: boolean; puts the control inside the label, for a checkbox or toggle.
   class: extra classes, merged with the component's own.
 Anything else (x-show, id, data-*) is passed through to the wrapper.
 {% endcomment %}
-<c-vars label="" input_id="" help="" errors="" inline="" />
+<c-vars label="" input_id="" help="" description="" label_end="" errors="" inline="" />
 {% with classes=inline|yesno:"fieldset,fieldset w-full" %}
   <div {{ attrs|with_classes:classes }}>
     {% if inline %}
@@ -27,14 +35,17 @@ Anything else (x-show, id, data-*) is passed through to the wrapper.
         {{ slot }}
       </label>
     {% else %}
+      {% if label_end.strip %}<div class="flex items-center justify-between gap-2">{% endif %}
       <label class="label font-bold"{% if input_id %} for="{{ input_id }}"{% endif %}>
         <div>
           {{ label }}
           {% if help %}<small class="form-text text-muted"><c-ui.help>{{ help|safe }}</c-ui.help></small>{% endif %}
         </div>
       </label>
+      {% if label_end.strip %}{{ label_end }}</div>{% endif %}
       {{ slot }}
     {% endif %}
+    {% if description.strip %}<p class="text-sm text-base-content/70"{% if input_id %} id="{{ input_id }}_helptext"{% endif %}>{{ description }}</p>{% endif %}
     {{ errors }}
   </div>
 {% endwith %}
