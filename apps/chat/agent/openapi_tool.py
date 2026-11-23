@@ -20,6 +20,7 @@ from apps.ocs_notifications.notifications import (
     custom_action_unexpected_error_notification,
 )
 from apps.service_providers.auth_service import AuthService
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.utils import rate_limit
 from apps.utils.openapi import OpenAPISpec
 from apps.utils.schema_utils import create_model_with_sanitized_names, sanitize_property_name
@@ -98,7 +99,11 @@ class OpenAPIOperationExecutor:
 
         url = self._get_url(path_params)
         self._check_rate_limit()
-        with self.auth_service.get_http_client() as client:
+        try:
+            http_client = self.auth_service.get_http_client()
+        except ServiceProviderConfigError as e:
+            raise ToolException(str(e)) from None
+        with http_client as client:
             try:
                 return self.auth_service.call_with_retries(self._make_request, client, url, method, **kwargs)
             except httpx.HTTPStatusError as e:

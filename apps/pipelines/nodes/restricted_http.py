@@ -10,6 +10,7 @@ from django.conf import settings
 
 from apps.channels.datamodels import Attachment
 from apps.service_providers.auth_service.schemes import BLOCKED_HEADERS
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import AuthProvider
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -341,8 +342,10 @@ class RestrictedHttpClient:
                     f"Auth provider '{auth_name}' not found. Available providers: {', '.join(available) or 'none'}"
                 ) from None
 
-        auth_service = provider.get_auth_service()
-        auth_headers = auth_service.get_auth_headers()
+        try:
+            auth_headers = provider.get_auth_service().get_auth_headers()
+        except ServiceProviderConfigError as e:
+            raise HttpAuthProviderError(str(e)) from None
         self._auth_cache[auth_name] = auth_headers
         return auth_headers
 
