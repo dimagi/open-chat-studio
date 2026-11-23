@@ -67,6 +67,9 @@ def test_request_team_deletion_disables_team_and_emails_requester(mailoutbox, dj
     assert team.deletion_due_at == team.deletion_requested_at + settings.TEAM_DELETION_GRACE_PERIOD
     assert [m.to for m in mailoutbox] == [[admin.email]]
     assert "scheduled for deletion" in mailoutbox[0].subject
+    restore_path = reverse("teams:pending_deletion", args=[team.slug])
+    assert restore_path in mailoutbox[0].body
+    assert restore_path in mailoutbox[0].alternatives[0][0]
 
 
 def test_request_team_deletion_twice_is_refused(pending_team):

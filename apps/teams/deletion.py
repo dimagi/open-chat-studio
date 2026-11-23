@@ -14,6 +14,7 @@ import openai
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.audit.transaction import audit_transaction
@@ -32,6 +33,7 @@ from apps.utils.deletion import (
     send_team_deleted_notification,
     send_team_deletion_scheduled_notification,
 )
+from apps.web.meta import absolute_url
 
 logger = logging.getLogger("ocs.teams")
 
@@ -196,9 +198,10 @@ def _notification_emails(team: Team, notify_recipients: str, requester_email: st
 
 def _send_scheduled_notifications(team: Team, emails: list[str]):
     """Runs after the request has committed, so a mail failure is logged rather than raised."""
+    restore_url = absolute_url(reverse("teams:pending_deletion", args=[team.slug]))
     for chunk in chunk_list(emails, EMAIL_CHUNK_SIZE):
         try:
-            send_team_deletion_scheduled_notification(team, chunk)
+            send_team_deletion_scheduled_notification(team, chunk, restore_url)
         except Exception:
             logger.exception("Failed to send the deletion-scheduled email for team %s", team.id)
 

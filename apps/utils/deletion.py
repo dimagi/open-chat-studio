@@ -354,10 +354,11 @@ def send_team_deleted_notification(team_name, admin_emails):
     )
 
 
-def send_team_deletion_scheduled_notification(team, recipient_emails):
+def send_team_deletion_scheduled_notification(team, recipient_emails, restore_url):
     email_context = {
         "team_name": team.name,
         "deletion_due_at": team.deletion_due_at,
+        "restore_url": restore_url,
     }
     send_mail(
         subject=_("Team '{}' is scheduled for deletion").format(team.name),
