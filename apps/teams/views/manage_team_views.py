@@ -1,24 +1,30 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.formats import date_format
+from django.utils.http import urlencode
+from django.utils.timezone import localtime
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
+from apps.teams.deletion import TeamDeletionError, cancel_team_deletion, request_team_deletion
 from apps.teams.forms import (
     InvitationForm,
+    NotifyRecipientsForm,
     TeamChangeForm,
     TeamMfaForm,
     TeamMigrationForm,
     TeamPublicKeyForm,
 )
+from apps.teams.helpers import get_pending_team_access
 from apps.teams.invitations import send_invitation
-from apps.teams.models import Invitation
-from apps.teams.tasks import delete_team_async, start_team_files_export
+from apps.teams.models import Invitation, Team
+from apps.teams.tasks import start_team_files_export
 from apps.teams.utils import current_team
 from apps.teams.views.members_views import ROLE_CHOICES
 from apps.teams.views.team_settings import public_key_context, render_team_settings
@@ -51,18 +57,71 @@ def create_team(request):
 @require_POST
 @permission_required("teams.delete_team", raise_exception=True)
 def delete_team(request, team_slug):
-    notify_recipients = request.POST.get("notification_recipients", "self")
-    delete_team_async.delay(request.team.id, request.user.email, notify_recipients)
+    form = NotifyRecipientsForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, _("Choose who to notify about the deletion."))
+        return HttpResponseRedirect(reverse("single_team:manage_team", args=[team_slug]))
+    try:
+        team = request_team_deletion(request.team, request.user, form.cleaned_data["notification_recipients"])
+    except TeamDeletionError as e:
+        messages.error(request, str(e))
+        return HttpResponseRedirect(reverse("single_team:manage_team", args=[team_slug]))
 
-    notify_recipients_text = {"self": "you", "admins": "admins", "all": "all team members"}
-
+    notified = {"self": _("you"), "admins": _("the team admins"), "all": _("all team members")}
     messages.success(
         request,
         _(
-            'The "{team}" team deletion process has started. An email will be sent to {user} once it is complete.'
-        ).format(team=request.team.name, user=notify_recipients_text[notify_recipients]),
+            'The "{team}" team has been disabled and will be permanently deleted on {date}. '
+            "An email will be sent to {notified} now and again when the deletion is complete."
+        ).format(
+            team=team.name,
+            date=date_format(localtime(team.deletion_due_at), "DATETIME_FORMAT"),
+            notified=notified[team.deletion_notify_recipients],
+        ),
     )
-    return HttpResponseRedirect(reverse("prelogin:home"))
+    return HttpResponseRedirect(reverse("teams:pending_deletion", args=[team.slug]))
+
+
+def _pending_team_access(request, slug) -> tuple[Team, bool]:
+    """The pending team and whether the user may cancel its deletion; 404 for anyone who may not see it."""
+    team = get_object_or_404(Team, slug=slug, deletion_requested_at__isnull=False)
+    can_view, can_cancel = get_pending_team_access(request, team)
+    if not can_view:
+        raise Http404
+    return team, can_cancel
+
+
+@login_required
+def team_pending_deletion(request, slug):
+    """Shown in place of every page of a team that is scheduled for deletion."""
+    team = get_object_or_404(Team, slug=slug, deletion_requested_at__isnull=False)
+    can_view, can_cancel = get_pending_team_access(request, team)
+    if not can_view:
+        if not request.user.is_superuser:
+            raise Http404
+        elevate_url = reverse("web:elevate_team", args=[slug])
+        return HttpResponseRedirect(f"{elevate_url}?{urlencode({'next': request.get_full_path()})}")
+    return render(
+        request,
+        "teams/pending_deletion.html",
+        {"pending_team": team, "can_cancel": can_cancel, "page_title": _("Team pending deletion")},
+    )
+
+
+@require_POST
+@login_required
+def cancel_team_deletion_view(request, slug):
+    team, can_cancel = _pending_team_access(request, slug)
+    if not can_cancel:
+        raise Http404
+    try:
+        with current_team(team):
+            cancel_team_deletion(team)
+    except TeamDeletionError as e:
+        messages.error(request, str(e))
+        return HttpResponseRedirect(reverse("prelogin:home"))
+    messages.success(request, _('The "{team}" team has been restored.').format(team=team.name))
+    return HttpResponseRedirect(team.dashboard_url)
 
 
 @require_POST

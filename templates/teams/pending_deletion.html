@@ -1,0 +1,32 @@
+{% extends "web/base.html" %}
+{% load i18n %}
+{% block body %}
+  <section class="mt-7 section">
+    <div class="container max-w-3xl">
+      <h1 class="pg-title">{% translate "Team scheduled for deletion" %}</h1>
+      <p class="my-4">
+        {% blocktranslate with team_name=pending_team.name due=pending_team.deletion_due_at|date:"DATETIME_FORMAT" %}
+          The <strong>{{ team_name }}</strong> team has been disabled and will be permanently deleted on {{ due }}.
+          Its chatbots do not respond on any channel, and its API keys and scheduled messages are inactive.
+        {% endblocktranslate %}
+      </p>
+      {% if pending_team.deletion_requested_by %}
+        <p class="my-4 text-sm">
+          {% blocktranslate with user=pending_team.deletion_requested_by.get_display_name requested=pending_team.deletion_requested_at|date:"DATETIME_FORMAT" %}
+            Deletion requested by {{ user }} on {{ requested }}.
+          {% endblocktranslate %}
+        </p>
+      {% endif %}
+      {% if can_cancel %}
+        <form method="post" action="{% url 'teams:cancel_deletion' pending_team.slug %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">{% translate "Cancel deletion and restore team" %}</button>
+        </form>
+      {% else %}
+        <p class="my-4">
+          {% translate "Contact a team administrator if this team should be restored." %}
+        </p>
+      {% endif %}
+    </div>
+  </section>
+{% endblock body %}

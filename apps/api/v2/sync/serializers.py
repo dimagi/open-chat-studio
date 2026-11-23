@@ -29,7 +29,7 @@ class SessionQuerySerializer(SyncQuerySerializer):
 
 class SessionSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="external_id", read_only=True)
-    chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
+    chatbot_id = serializers.UUIDField(source="experiment.get_working_version.public_id", read_only=True)
     participant_id = serializers.UUIDField(source="participant.public_id", read_only=True)
     tags = serializers.SerializerMethodField()
 

@@ -183,6 +183,8 @@ class ChatOAuthAuthenticationBase(authentication.BaseAuthentication):
     def _admit(request, experiment, channel: ExperimentChannel) -> OAuth2AccessToken:
         """Validate the machine token and origin, and record its validated object on the request."""
         token = validated_machine_token(request, experiment)
+        if token.team.is_pending_deletion:
+            raise ChatApiAccessDenied()
         check_oauth_channel_origin(request, channel)
         request.team = token.team
         request.chat_oauth_token = token

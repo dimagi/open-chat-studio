@@ -159,7 +159,11 @@ def sync_document_source_task(self, document_source_id: int):
     # owning task died without releasing it) and is reclaimed rather than blocking forever.
     with transaction.atomic():
         try:
-            locked = DocumentSource.objects.select_related("collection").select_for_update().get(id=document_source_id)
+            locked = (
+                DocumentSource.objects.select_related("collection")
+                .select_for_update(of=("self", "collection"))
+                .get(id=document_source_id, team__deletion_requested_at__isnull=True)
+            )
         except DocumentSource.DoesNotExist:
             return
 
@@ -224,6 +228,7 @@ def sync_all_document_sources_task():
             auto_sync_enabled=True,
             collection__is_index=True,  # Only sync indexed collections
             collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
+            team__deletion_requested_at__isnull=True,
         )
         # Skip only sources with a *fresh* sync lock (the DB mirror of
         # DocumentSource.is_sync_in_progress). A stale lock — held past SYNC_LOCK_TIMEOUT or

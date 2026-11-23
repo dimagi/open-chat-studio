@@ -10,7 +10,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
+from apps.api.permissions import (
+    BASE_PERMISSION_CLASSES,
+    DjangoModelPermissionsWithView,
+    ReadOnlyAPIKeyPermission,
+    TeamNotPendingDeletion,
+)
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.lookups import get_authorized_chatbot, working_chatbots
@@ -270,7 +275,7 @@ class MeView(APIView):
 
     # Not BASE_PERMISSION_CLASSES: /me describes a human user, so a machine token (which has no user)
     # is refused by IsAuthenticated rather than admitted by IsAuthenticatedOrMachineToken.
-    permission_classes = [IsAuthenticated, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
+    permission_classes = [IsAuthenticated, ReadOnlyAPIKeyPermission, TeamNotPendingDeletion, TokenHasOAuthResourceScope]
     required_scopes = []  # Any valid OAuth token is accepted; no specific scope required.
 
     @extend_schema(
