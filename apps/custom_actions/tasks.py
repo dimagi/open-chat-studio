@@ -21,6 +21,7 @@ def check_all_custom_actions_health():
         CustomAction.objects.exclude(healthcheck_path__isnull=True)
         .exclude(healthcheck_path="")
         .filter(CustomAction.in_use_filter())
+        .filter(team__deletion_requested_at__isnull=True)
     )
 
     for action in custom_actions:
@@ -37,13 +38,16 @@ def check_single_custom_action_health(action_id: int):
         action_id: The ID of the CustomAction to check
     """
     try:
-        action = CustomAction.objects.get(id=action_id)
+        action = CustomAction.objects.select_related("team").get(id=action_id)
     except CustomAction.DoesNotExist:
         logger.error(f"CustomAction with id {action_id} not found")
         return
 
     if not action.health_endpoint:
         logger.warning(f"CustomAction {action.name} (id={action_id}) has no health endpoint configured")
+        return
+
+    if action.team.is_pending_deletion:
         return
 
     failure_reason = ""

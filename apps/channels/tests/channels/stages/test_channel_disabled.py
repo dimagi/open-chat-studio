@@ -18,6 +18,7 @@ def make_channel(*, enabled=True, disabled_message=""):
     channel.enabled = enabled
     channel.is_disabled = not enabled
     channel.disabled_message = disabled_message
+    channel.disabled_reply = disabled_message
     return channel
 
 
@@ -56,6 +57,14 @@ class TestChannelDisabledStageProcess:
 
     def test_disabled_without_message_aborts_silently(self):
         ctx = make_context(experiment_channel=make_channel(enabled=False))
+
+        with pytest.raises(EarlyAbort):
+            self.stage(ctx)
+
+    def test_team_pending_deletion_aborts_silently_despite_a_message(self):
+        channel = make_channel(enabled=False, disabled_message="We are down for maintenance")
+        channel.disabled_reply = ""
+        ctx = make_context(experiment_channel=channel)
 
         with pytest.raises(EarlyAbort):
             self.stage(ctx)

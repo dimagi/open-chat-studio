@@ -14,7 +14,7 @@ from oauth2_provider.views.base import AuthorizationView as BaseAuthorizationVie
 from oauthlib.oauth2 import AccessDeniedError
 
 from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
-from apps.teams.helpers import get_default_team_from_request
+from apps.teams.helpers import active_teams_for_user, get_default_team_from_request
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Team
 from apps.teams.utils import set_current_team
@@ -58,14 +58,14 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         """Return the team requested via URL parameter, or None if not found or the user is not a member."""
         if team_slug := self.request.GET.get("team"):
             try:
-                return self.request.user.teams.get(slug=team_slug)
+                return active_teams_for_user(self.request.user).get(slug=team_slug)
             except Team.DoesNotExist:
                 return None
         return None
 
     def get(self, request, *args, **kwargs):
         team = self.application_team
-        if team and not request.user.teams.filter(id=team.id).exists():
+        if team and not active_teams_for_user(request.user).filter(id=team.id).exists():
             return self._refuse_non_member(request, team)
         if not team and self.requested_team:
             # The paths that skip the authorization form (`skip_authorization`, `approval_prompt=auto`)

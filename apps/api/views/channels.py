@@ -18,6 +18,7 @@ from apps.api.permissions import (
     CanTriggerBotMessage,
     IsAuthenticatedOrMachineToken,
     ReadOnlyAPIKeyPermission,
+    TeamNotPendingDeletion,
     verify_hmac,
 )
 from apps.api.serializers import (
@@ -155,6 +156,7 @@ class TriggerBotMessageView(APIView):
     permission_classes = [
         IsAuthenticatedOrMachineToken,
         ReadOnlyAPIKeyPermission,
+        TeamNotPendingDeletion,
         CanTriggerBotMessage,
         TokenHasOAuthScope,
     ]
