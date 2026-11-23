@@ -69,6 +69,20 @@ def test_api_key_header_name_is_rejected(header_name):
     assert list(form.errors) == ["key"]
 
 
+@pytest.mark.parametrize(
+    ("header_name", "message"),
+    [
+        pytest.param("Host", "cannot be used for authentication", id="host"),
+        pytest.param("TRANSFER-ENCODING", "cannot be used for authentication", id="transfer-encoding"),
+        pytest.param("X-Api-Key\r\nX-Injected", "not a valid header name", id="line-break"),
+    ],
+)
+def test_a_stored_blocked_header_name_is_refused_when_the_service_is_built(header_name, message):
+    """Config saved before the form check, read straight from the database."""
+    with pytest.raises(ValueError, match=message):
+        AuthProviderType.api_key.get_auth_service({"key": header_name, "value": "secret"})
+
+
 USER_AGENT = "TestAgent/1.0"
 
 AUTH_SERVICES = [
