@@ -164,6 +164,27 @@ def test_machine_token_reads_messages_on_a_version_of_an_allowed_chatbot(team, a
 
 
 @pytest.mark.django_db()
+def test_machine_token_keeps_reading_an_allowed_chatbot_after_it_is_archived(team):
+    chatbot = ExperimentFactory.create(team=team)
+    first = _message(ExperimentSessionFactory.create(team=team, experiment=chatbot), minutes=1)
+    version = chatbot.create_new_version(make_default=True)
+    second = _message(ExperimentSessionFactory.create(team=team, experiment=version), minutes=2)
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[chatbot],
+    )
+    cursor = client.get(URL, {"limit": 1}).json()["cursor"]
+
+    chatbot.archive()
+
+    assert _ids(client.get(URL)) == [first.id, second.id]
+    assert _ids(client.get(URL, {"cursor": cursor})) == [second.id]
+
+
+@pytest.mark.django_db()
 def test_attachments_and_tags_load_in_the_same_queries_whatever_the_page_size(team, client):
     tag = TagFactory.create(team=team, name="refund")
 
