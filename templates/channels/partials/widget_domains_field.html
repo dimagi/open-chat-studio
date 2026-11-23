@@ -1,0 +1,57 @@
+{% comment %}
+Allowed domains as a chip editor, shared by the create and edit forms. `domains` is the bound field. Pass
+`all_domains` to put the "Allow all domains" toggle on the label row. The hidden textarea posts the list one
+domain per line, the format the form field parses.
+{% endcomment %}
+{% with input_id=domains.id_for_label %}
+  <c-ui.field label="Allowed domains" :input_id="input_id" :errors="domains.errors"
+              data-domains="{{ domains.value|default_if_none:'' }}"
+              x-data="{
+                      domains: [],
+                      draft: '',
+                      init() {
+                        this.domains = this.$el.dataset.domains.split('\n').map((d) => d.trim()).filter(Boolean);
+                      },
+                      add() {
+                        for (const domain of this.draft.split(/[\s,]+/)) {
+                          if (domain && !this.domains.includes(domain)) this.domains.push(domain);
+                        }
+                        this.draft = '';
+                      },
+                      }">
+    <c-slot name="label_end">
+      {% if all_domains %}
+        <label class="flex items-center gap-2 text-sm opacity-80 cursor-pointer">
+          Allow all domains
+          <input type="checkbox" name="{{ all_domains.html_name }}" class="toggle toggle-sm toggle-primary"
+                 x-model.boolean="allowAllDomains" {% if all_domains.value %}checked{% endif %}>
+        </label>
+      {% endif %}
+    </c-slot>
+    <c-slot name="description">
+      Only pages served from these domains can load the widget. Wildcards allowed, e.g. <code>*.mysite.org</code>.
+      <span x-show="credentialMode === '{{ extra_form.oauth_mode }}'" x-cloak>
+        With an OAuth token, an empty list makes the channel server-only: every browser request is refused.
+      </span>
+    </c-slot>
+    <textarea name="{{ domains.html_name }}" class="hidden" :value="domains.join('\n')" :disabled="allowAllDomains">{{ domains.value|default_if_none:'' }}</textarea>
+    <div :class="allowAllDomains && 'opacity-50'">
+      <div class="flex flex-wrap gap-2 mb-2" x-show="domains.length">
+        <template x-for="(domain, index) in domains" :key="domain">
+          <span class="inline-flex items-center gap-2 rounded-lg border border-base-300 bg-base-200 px-3 py-1.5 font-mono text-sm">
+            <span x-text="domain"></span>
+            <button type="button" class="opacity-60 hover:opacity-100" :aria-label="`Remove ${domain}`"
+                    :disabled="allowAllDomains" @click="domains.splice(index, 1)"><i class="fa-solid fa-xmark text-xs"></i></button>
+          </span>
+        </template>
+      </div>
+      <div class="flex gap-2">
+        <input type="text" id="{{ input_id }}" class="input flex-1 h-11 rounded-lg font-mono" placeholder="app.example.org"
+               aria-describedby="{{ input_id }}_helptext{% if domains.errors %} {{ input_id }}_error{% endif %}"
+               {% if domains.errors %}aria-invalid="true"{% endif %}
+               x-model="draft" :disabled="allowAllDomains" @keydown.enter.prevent="add()">
+        <button type="button" class="btn h-11 rounded-lg" :disabled="allowAllDomains" @click="add()">Add domain</button>
+      </div>
+    </div>
+  </c-ui.field>
+{% endwith %}

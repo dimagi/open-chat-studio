@@ -18,6 +18,8 @@ from tenacity import wait_none
 
 from apps.channels.clients.connect_client import (
     ATTACHMENT_ENCRYPTION_OVERHEAD_BYTES,
+    CARD_HTML_FORMAT,
+    CARD_LEGACY_APP_MESSAGE,
     LEGACY_APP_MESSAGE,
     MAX_ATTACHMENT_BYTES,
     CommCareConnectClient,
@@ -36,10 +38,7 @@ def disable_retry_wait():
     `wait_exponential` in the module namespace has no effect — patch the bound
     Retrying instance's `.wait` attribute directly instead.
     """
-    with (
-        mock.patch.object(CommCareConnectClient._send_fcm.retry, "wait", wait_none()),
-        mock.patch.object(CommCareConnectClient._post_create_message.retry, "wait", wait_none()),
-    ):
+    with mock.patch.object(CommCareConnectClient._post_create_message.retry, "wait", wait_none()):
         yield
 
 
@@ -47,58 +46,6 @@ def disable_retry_wait():
 def connect_credentials(settings):
     settings.COMMCARE_CONNECT_SERVER_SECRET = "123"
     settings.COMMCARE_CONNECT_SERVER_ID = "123"
-
-
-class TestConnectClientSendRetry:
-    """send_message_to_user retries transient httpx errors and reuses the same message_id
-    across retries so the server can dedupe if a previous attempt actually arrived."""
-
-    _send_url = f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/"
-
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_retries_on_read_timeout(self, httpx_mock, disable_retry_wait):
-        httpx_mock.add_exception(httpx.ReadTimeout("read timed out"), url=self._send_url)
-        httpx_mock.add_response(method="POST", url=self._send_url, status_code=200)
-
-        client = CommCareConnectClient()
-        client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
-
-        requests = httpx_mock.get_requests()
-        assert len(requests) == 2
-
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_message_already_exists_treated_as_success(self, httpx_mock, disable_retry_wait):
-        """A timeout followed by a 400 MESSAGE_ID_ALREADY_EXISTS means the message arrived; not an error."""
-        httpx_mock.add_exception(httpx.ReadTimeout("read timed out"), url=self._send_url)
-        httpx_mock.add_response(
-            method="POST", url=self._send_url, json={"errors": "MESSAGE_ID_ALREADY_EXISTS"}, status_code=400
-        )
-
-        client = CommCareConnectClient()
-        client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
-
-        assert len(httpx_mock.get_requests()) == 2
-
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_malformed_400_body_still_raises(self, httpx_mock, disable_retry_wait):
-        """A 400 with an undecodable body must not be swallowed; it still raises via _raise_for_status."""
-        httpx_mock.add_response(method="POST", url=self._send_url, content=b"\xff\xfe", status_code=400)
-
-        client = CommCareConnectClient()
-        with pytest.raises(httpx.HTTPStatusError):
-            client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
-
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_message_id_stable_across_retries(self, httpx_mock, disable_retry_wait):
-        httpx_mock.add_exception(httpx.ReadTimeout("read timed out"), url=self._send_url)
-        httpx_mock.add_response(method="POST", url=self._send_url, status_code=200)
-
-        client = CommCareConnectClient()
-        client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
-
-        requests = httpx_mock.get_requests()
-        ids = [json.loads(r.read())["message_id"] for r in requests]
-        assert ids[0] == ids[1], "message_id must be stable across retries for server-side dedupe"
 
 
 class TestConnectClient:
@@ -128,50 +75,6 @@ class TestConnectClient:
         )
         messages = connect_client.decrypt_messages(encryption_key=encryption_key, messages=[payload])
         assert messages[0] == "this is a secret message"
-
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_send_message_error_attaches_response_body(self, httpx_mock):
-        """A 400 from Connect attaches the response body as a note so it's visible in Sentry."""
-        httpx_mock.add_response(
-            method="POST",
-            url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",
-            json={"errors": "no_user_consent"},
-            status_code=400,
-        )
-
-        connect_client = CommCareConnectClient()
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            connect_client.send_message_to_user(str(uuid4()), message="hi", encryption_key=os.urandom(32))
-
-        assert any("no_user_consent" in note for note in exc_info.value.__notes__)
-
-    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-    def test_send_message_to_user(self, httpx_mock):
-        httpx_mock.add_response(
-            method="POST",
-            url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",
-            json={"message_id": "765aec754eacf3221"},
-            status_code=200,
-        )
-
-        channel_id = str(uuid4())
-        message = "Hi there human"
-        encryption_key = os.urandom(32)
-
-        connect_client = CommCareConnectClient()
-        connect_client.send_message_to_user(channel_id, message=message, encryption_key=encryption_key)
-        request = httpx_mock.get_request()
-        assert request.headers["Authorization"].split(" ")[0] == "Basic"
-        request_data = json.loads(request.read())
-        message_content = request_data["content"]
-
-        assert "content" in request_data
-        assert "channel" in request_data
-        assert "message_id" in request_data
-
-        assert "nonce" in message_content
-        assert "tag" in message_content
-        assert "ciphertext" in message_content
 
 
 _CREATE_MESSAGE_URL = f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_message/"
@@ -318,6 +221,33 @@ class TestCreateMessage:
         assert "content" not in message
         assert _decrypt_text(encryption_key, message["content_legacy_msg"]) == LEGACY_APP_MESSAGE
 
+    def test_card_message(self, httpx_mock):
+        httpx_mock.add_response(method="POST", url=_CREATE_MESSAGE_URL, status_code=200)
+        encryption_key = os.urandom(32)
+        card = OutgoingAttachment(name="index.html", content_type="text/html", content=b"<p>Card</p>")
+
+        CommCareConnectClient().create_message(
+            str(uuid4()), encryption_key, "Your chart", [card], message_format=CARD_HTML_FORMAT
+        )
+
+        request = httpx_mock.get_request()
+        assert request.headers["X-Messaging-Version"] == "2"
+        message = _sent_message(request)
+        assert message["format"] == "card-html"
+        assert _decrypt_text(encryption_key, message["content"]) == "Your chart"
+        legacy_text = _decrypt_text(encryption_key, message["content_legacy_msg"])
+        assert legacy_text == f"Your chart\n\n{CARD_LEGACY_APP_MESSAGE}"
+        assert [attachment["name"] for attachment in message["attachments"]] == ["index.html"]
+
+    def test_message_without_a_format_has_no_format_or_version(self, httpx_mock):
+        httpx_mock.add_response(method="POST", url=_CREATE_MESSAGE_URL, status_code=200)
+
+        CommCareConnectClient().create_message(str(uuid4()), os.urandom(32), "Hello", [_SITE_MAP])
+
+        request = httpx_mock.get_request()
+        assert "X-Messaging-Version" not in request.headers
+        assert "format" not in _sent_message(request)
+
     @time_machine.travel(datetime(2026, 10, 6, 12, 0, tzinfo=UTC), tick=False)
     def test_attachments_expire_after_ninety_days(self, httpx_mock):
         httpx_mock.add_response(method="POST", url=_CREATE_MESSAGE_URL, status_code=200)
@@ -368,6 +298,13 @@ class TestCreateMessageRetry:
         CommCareConnectClient().create_message(str(uuid4()), os.urandom(32), "Hello")
 
         assert len(httpx_mock.get_requests()) == 2
+
+    def test_malformed_400_body_still_raises(self, httpx_mock):
+        """A 400 with an undecodable body is not mistaken for MESSAGE_ID_ALREADY_EXISTS."""
+        httpx_mock.add_response(method="POST", url=_CREATE_MESSAGE_URL, content=b"\xff\xfe", status_code=400)
+
+        with pytest.raises(httpx.HTTPStatusError):
+            CommCareConnectClient().create_message(str(uuid4()), os.urandom(32), "Hello")
 
     @pytest.mark.parametrize(
         ("status_code", "error_code"),

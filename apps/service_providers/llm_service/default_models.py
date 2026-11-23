@@ -43,9 +43,11 @@ def k(n: int) -> int:
 
 DEFAULT_LLM_PROVIDER_MODELS = {
     "azure": [
-        Model("o4-mini", 200000, parameters=OpenAIReasoningParameters),
-        Model("o3", 200000, parameters=OpenAIReasoningParameters),
-        Model("o3-mini", 200000, parameters=OpenAIReasoningParameters),
+        # Microsoft retires o3, o3-mini and o4-mini on 2026-11-19; replacements are the ones its
+        # retirement schedule names.
+        Model("o4-mini", 200000, deprecated=True, replacement="gpt-5.6-terra", parameters=OpenAIReasoningParameters),
+        Model("o3", 200000, deprecated=True, replacement="gpt-5.6-sol", parameters=OpenAIReasoningParameters),
+        Model("o3-mini", 200000, deprecated=True, replacement="gpt-5.6-terra", parameters=OpenAIReasoningParameters),
         # Token limits are the total context window Microsoft publishes for the deployment, not the
         # separate input-only figure it also lists.
         Model("gpt-6.2-astra", 1050000, parameters=GPT6Parameters),
@@ -173,6 +175,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),
         Model("gemini-4-hydrogen", 1048576),
+        Model("gemini-4-neon", 1048576),
         Model("gemini-3.8-flash", 1048576, is_default=True, is_translation_default=True),
         Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576),
@@ -187,9 +190,10 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-4-carbon", 1048576),
         Model("gemini-4-argon", 1048576),
         Model("gemini-4-hydrogen", 1048576),
+        Model("gemini-4-neon", 1048576),
         Model("gemini-3.8-flash", 1048576, is_translation_default=True),
         Model("gemini-3.7-flash", 1048576),
-        Model("gemini-3.6-flash", 1048576),
+        Model("gemini-3.6-flash", 1048576, deprecated=True, replacement="gemini-3.8-flash"),
         Model("gemini-3.5-flash", 1048576, is_default=True),
         Model("gemini-3.5-flash-lite", 1048576),
         Model("gemini-3.1-pro-preview", 1048576),
