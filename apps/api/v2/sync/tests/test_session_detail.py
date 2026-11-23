@@ -97,6 +97,23 @@ def test_machine_token_reads_a_session_on_a_version_of_an_allowed_chatbot(team, 
 
 
 @pytest.mark.django_db()
+def test_machine_token_reads_a_session_on_an_allowed_chatbot_after_it_is_archived(team):
+    chatbot = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, experiment=chatbot.create_new_version(make_default=True))
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[chatbot],
+    )
+
+    chatbot.archive()
+
+    assert client.get(_url(session)).status_code == 200
+
+
+@pytest.mark.django_db()
 def test_a_session_on_a_version_reports_its_chatbot_without_extra_queries(team, client):
     chatbot = ExperimentFactory.create(team=team)
     on_working = ExperimentSessionFactory.create(team=team, experiment=chatbot)
