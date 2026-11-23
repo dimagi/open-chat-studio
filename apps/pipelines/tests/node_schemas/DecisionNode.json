@@ -102,7 +102,7 @@
       "items": {
         "properties": {
           "key": {
-            "description": "The temporary state key the answer is written to. Choice and score decisions also write their confidence to `<key>_confidence`, and a noul decision does when the model's provider reports one.",
+            "description": "The temporary state key the answer is written to. Each decision also writes its confidence to `<key>_confidence`, which is null when the model reports none.",
             "title": "Key",
             "type": "string"
           },
