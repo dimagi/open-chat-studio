@@ -28,6 +28,7 @@ from apps.service_providers.llm_service.index_managers import (
     VoyageAILocalIndexManager,
 )
 from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE, JEV_ROUTER_ONLY_MESSAGE, JevBackend, JevClient
+from apps.service_providers.llm_service.openai_decisions import OPENAI_API_BASE, OpenAIDecisionBackend
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
@@ -52,7 +53,9 @@ logger = logging.getLogger("ocs.llm_service")
 
 # The limits of each decision backend, by the type of the models it answers, for a caller that has a
 # model but no provider to ask for its backend.
-DECISION_LIMITS_BY_TYPE = {backend.provider_type: backend.limits for backend in (JevBackend, GoogleDecisionBackend)}
+DECISION_LIMITS_BY_TYPE = {
+    backend.provider_type: backend.limits for backend in (JevBackend, GoogleDecisionBackend, OpenAIDecisionBackend)
+}
 
 
 class OpenAIBuiltinTool(dict):
@@ -289,6 +292,13 @@ class OpenAILlmService(OpenAIGenericService):
     def get_raw_client(self) -> OpenAI:
         return build_openai_client(
             api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base
+        )
+
+    def get_decision_backend(self) -> OpenAIDecisionBackend:
+        return OpenAIDecisionBackend(
+            api_key=self.openai_api_key.get_secret_value(),
+            base_url=self.openai_api_base or OPENAI_API_BASE,
+            organization=self.openai_organization,
         )
 
     def transcribe_audio(self, audio: BytesIO) -> str:

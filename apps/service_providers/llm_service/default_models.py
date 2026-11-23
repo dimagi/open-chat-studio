@@ -126,7 +126,14 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-6.1-sol", 1050000, parameters=GPT6SolParameters),
         Model("gpt-6-astra", 1050000, parameters=GPT6Parameters),
         Model("gpt-6-sol", 1050000, parameters=GPT6SolParameters),
-        Model("gpt-6-luna", 1050000, is_default=True, is_translation_default=True, parameters=GPT6SolParameters),
+        Model(
+            "gpt-6-luna",
+            1050000,
+            is_default=True,
+            is_translation_default=True,
+            parameters=GPT6SolParameters,
+            decisions=True,
+        ),
         # OpenAI retires gpt-5, gpt-5-mini, gpt-5-nano, gpt-5-pro and o3 on 2026-12-11. Replacements are the
         # successors OpenAI names; gpt-5-pro's is gpt-5.6-sol in pro reasoning mode, which OCS does not expose.
         Model("gpt-5-mini", k(400), deprecated=True, replacement="gpt-5.6-terra", parameters=GPT5Parameters),
