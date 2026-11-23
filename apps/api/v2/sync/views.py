@@ -132,7 +132,11 @@ class MessageListView(SyncView):
 
         messages = self.reachable_messages().select_related("chat__experiment_session").prefetch_related("tags")
         if "chatbot" in params:
-            messages = messages.filter(chat__experiment_session__experiment__public_id=params["chatbot"])
+            chatbot = params["chatbot"]
+            messages = messages.filter(
+                Q(chat__experiment_session__experiment__public_id=chatbot)
+                | Q(chat__experiment_session__experiment__working_version__public_id=chatbot)
+            )
         if "session" in params:
             messages = messages.filter(chat__experiment_session__external_id=params["session"])
         if "participant" in params:
