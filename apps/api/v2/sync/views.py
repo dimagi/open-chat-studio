@@ -50,7 +50,7 @@ class SyncView(APIView):
         }
         reach = None
         if not token_reaches_all_data(self.request.auth):
-            reach = sorted(self.request.auth.application.allowed_chatbots.values_list("id", flat=True))
+            reach = sorted(self.allowed_chatbots().values_list("id", flat=True))
         selection = json.dumps([self.request.team.pk, filters, reach], sort_keys=True, default=str)
         return hashlib.sha256(selection.encode()).hexdigest()[:16]
 
@@ -58,9 +58,13 @@ class SyncView(APIView):
         sessions = ExperimentSession.objects.filter(team=self.request.team)
         if not token_reaches_all_data(self.request.auth):
             # The allowlist holds working versions, and a session may be bound to one of their versions.
-            allowed = self.request.auth.application.allowed_chatbots.values("id")
+            allowed = self.allowed_chatbots().values("id")
             sessions = sessions.filter(Q(experiment_id__in=allowed) | Q(experiment__working_version_id__in=allowed))
         return sessions
+
+    def allowed_chatbots(self):
+        """The token's allowlist, archived chatbots included: archiving one keeps its sessions readable."""
+        return self.request.auth.application.allowed_chatbots.get_all()
 
 
 class SessionListView(SyncView):
