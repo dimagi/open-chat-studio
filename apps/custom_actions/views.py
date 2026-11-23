@@ -23,6 +23,7 @@ from apps.experiments.models import Experiment
 from apps.generics.breadcrumbs import BreadcrumbsMixin, Crumb
 from apps.generics.chips import Chip
 from apps.generics.referenced_objects import render_referenced_objects_modal
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.utils import section_url
@@ -313,7 +314,7 @@ class TestCustomActionEndpoint(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 
             return JsonResponse(result)
 
-        except ValueError as e:
+        except (ValueError, ServiceProviderConfigError) as e:
             return JsonResponse({"error": str(e)}, status=400)
         except httpx.RequestError as e:
             return JsonResponse({"error": f"Request failed: {e!s}"}, status=500)
