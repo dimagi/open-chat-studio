@@ -326,6 +326,13 @@ class TestAuthProviderIntegration:
         headers = client._resolve_auth_headers("My API Key")
         assert headers.get("X-Api-Key") or headers.get("x-api-key")
 
+    def test_a_stored_blocked_auth_header_is_an_auth_provider_error(self):
+        provider = AuthProviderFactory.create(name="Old Key", type="api_key", config={"key": "Host", "value": "secret"})
+        client = RestrictedHttpClient(team=provider.team)
+
+        with pytest.raises(HttpAuthProviderError, match="cannot be used for authentication"):
+            client._resolve_auth_headers("Old Key")
+
     def test_auth_provider_cached(self):
 
         provider = AuthProviderFactory.create(

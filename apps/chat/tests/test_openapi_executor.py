@@ -6,6 +6,7 @@ from langchain_core.messages import ToolMessage
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.tests.openapi_helpers import make_openapi_schema
 from apps.service_providers.auth_service import anonymous_auth_service
+from apps.service_providers.models import AuthProviderType
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
 from apps.utils.openapi import OpenAPISpec
 
@@ -154,6 +155,20 @@ def test_openapi_tool_oauth_client_credentials_auth(mock_validate, httpx_mock, t
 
     api_request = httpx_mock.get_request(url="https://example.com/test")
     assert api_request.headers.get("authorization") == "Bearer tok-xyz"
+
+
+@pytest.mark.django_db()
+def test_a_stored_blocked_auth_header_fails_the_tool_call_not_the_turn(httpx_mock):
+    auth_service = AuthProviderType.api_key.get_auth_service({"key": "Host", "value": "secret"})
+    spec = OpenAPISpec.from_spec_dict(make_openapi_schema({"parameters": []}))
+    function_def = openapi_spec_op_to_function_def(spec, next(iter(spec.paths)), "get")
+    custom_action = Mock(auth_provider_id=None, pk=1, team_id=1)
+    tool = function_def.build_tool(auth_service=auth_service, custom_action=custom_action)
+
+    result = tool.run({}, tool_call_id="123")
+
+    assert "cannot be used for authentication" in result.content
+    assert httpx_mock.get_requests() == []
 
 
 def _test_tool_call(spec_dict, call_args: dict, path=None):

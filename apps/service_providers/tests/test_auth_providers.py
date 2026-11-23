@@ -78,10 +78,15 @@ def test_api_key_header_name_is_rejected(header_name):
         pytest.param("X-Api-Key\r\nX-Injected", "not a valid header name", id="line-break"),
     ],
 )
-def test_a_stored_blocked_header_name_is_refused_when_the_service_is_built(header_name, message):
-    """Config saved before the form check, read straight from the database."""
+@pytest.mark.parametrize(
+    "use", [pytest.param("get_http_client", id="client"), pytest.param("get_auth_headers", id="headers")]
+)
+def test_a_stored_blocked_header_name_is_refused_when_used(header_name, message, use):
+    """Config saved before the form check builds a service, but sending a request with it is refused."""
+    auth_service = AuthProviderType.api_key.get_auth_service({"key": header_name, "value": "secret"})
+
     with pytest.raises(ServiceProviderConfigError, match=message):
-        AuthProviderType.api_key.get_auth_service({"key": header_name, "value": "secret"})
+        getattr(auth_service, use)()
 
 
 USER_AGENT = "TestAgent/1.0"
