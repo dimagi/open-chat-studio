@@ -8,6 +8,7 @@ app_name = "custom_actions"
 urlpatterns = [
     *make_crud_urls(views, "CustomAction"),
     path("<int:pk>/check-health/", views.CheckCustomActionHealth.as_view(), name="check_health"),
+    path("<int:pk>/requests/", views.CustomActionRequestList.as_view(), name="requests"),
     path("<int:pk>/test-endpoints/", views.CustomActionEndpointTester.as_view(), name="test_endpoints"),
     path("<int:pk>/test-endpoint/", views.TestCustomActionEndpoint.as_view(), name="test_endpoint"),
 ]
