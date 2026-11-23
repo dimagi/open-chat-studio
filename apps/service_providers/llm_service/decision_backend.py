@@ -77,8 +77,11 @@ Answer = ChoiceAnswer | ScoreAnswer | YesNoAnswer
 
 @dataclass(frozen=True)
 class DecisionUsage:
+    # Includes the cached and cache-write counts.
     input_tokens: int
     output_tokens: int
+    cached_input_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 @dataclass(frozen=True)

@@ -147,13 +147,23 @@ def _parse_response(model: str, response: httpx.Response, questions: Mapping[str
         answers = data["answers"]
         if not isinstance(answers, list):
             raise TypeError(f"answers is not a list: {type(answers).__name__}")
-        usage = data.get("usage") or {}
-        usage = DecisionUsage(token_count(usage, "input_tokens"), token_count(usage, "output_tokens"))
+        usage = _usage(data.get("usage") or {})
     except (ValueError, KeyError, TypeError, AttributeError) as e:
         raise DecisionError(f"OpenAI returned a response that could not be read: {e}", response.status_code) from e
     raw_answers = _answers_by_name(answers, list(questions))
     parsed = {name: answer for name, question in questions.items() if (answer := _answer(raw_answers, name, question))}
     return DecisionResponse(model, parsed, usage, raw_answers=raw_answers)
+
+
+def _usage(usage: dict) -> DecisionUsage:
+    """The token counts. OpenAI's `input_tokens` already includes the cached and cache-write counts."""
+    details = usage.get("input_tokens_details") or {}
+    return DecisionUsage(
+        token_count(usage, "input_tokens"),
+        token_count(usage, "output_tokens"),
+        cached_input_tokens=token_count(details, "cached_tokens"),
+        cache_write_tokens=token_count(details, "cache_write_tokens"),
+    )
 
 
 def _answers_by_name(answers: list, names: Sequence[str]) -> dict[str, Any]:

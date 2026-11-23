@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.callbacks import CallbackManager, CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages.ai import InputTokenDetails, UsageMetadata
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 from apps.chat.exceptions import ProviderConfigurationError
@@ -14,6 +15,7 @@ from apps.service_providers.llm_service.decision_backend import (
     DecisionAuthenticationError,
     DecisionBackend,
     DecisionResponse,
+    DecisionUsage,
     Question,
 )
 from apps.service_providers.llm_service.error_classification import AUTHENTICATION_MESSAGE
@@ -93,14 +95,23 @@ def _start_call(
 
 
 def _end_call(run: CallbackManagerForLLMRun, response: DecisionResponse) -> None:
-    usage = response.usage
     message = AIMessage(
         content=json.dumps(response.raw_answers),
-        usage_metadata={
-            "input_tokens": usage.input_tokens,
-            "output_tokens": usage.output_tokens,
-            "total_tokens": usage.input_tokens + usage.output_tokens,
-        },
+        usage_metadata=_usage_metadata(response.usage),
         response_metadata={"model_name": response.model},
     )
     run.on_llm_end(LLMResult(generations=[[ChatGeneration(message=message)]]))
+
+
+def _usage_metadata(usage: DecisionUsage) -> UsageMetadata:
+    """The usage in LangChain's shape, whose `input_tokens` includes the cache counts the cost recorder splits out."""
+    metadata = UsageMetadata(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        total_tokens=usage.input_tokens + usage.output_tokens,
+    )
+    if usage.cached_input_tokens or usage.cache_write_tokens:
+        metadata["input_token_details"] = InputTokenDetails(
+            cache_read=usage.cached_input_tokens, cache_creation=usage.cache_write_tokens
+        )
+    return metadata
