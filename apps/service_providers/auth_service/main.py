@@ -5,7 +5,7 @@ import pydantic
 import tenacity
 from django.conf import settings
 
-from apps.service_providers.auth_service.schemes import CommCareAuth, HeaderAuth
+from apps.service_providers.auth_service.schemes import BLOCKED_HEADERS, HEADER_NAME_RE, CommCareAuth, HeaderAuth
 from apps.web.meta import absolute_url
 
 
@@ -70,6 +70,16 @@ class BasicAuthService(AuthService):
 class ApiKeyAuthService(AuthService):
     key: str
     value: pydantic.SecretStr
+
+    @pydantic.field_validator("key")
+    @classmethod
+    def check_header_name(cls, key: str) -> str:
+        """Apply the form's header rules to config saved before the form enforced them."""
+        if not HEADER_NAME_RE.fullmatch(key):
+            raise ValueError(f"{key!r} is not a valid header name")
+        if key.lower() in BLOCKED_HEADERS:
+            raise ValueError(f"The {key} header cannot be used for authentication")
+        return key
 
     def _get_http_client_kwargs(self) -> dict:
         return {"auth": HeaderAuth(self.key, self.value.get_secret_value())}
