@@ -97,6 +97,23 @@ def test_machine_token_reads_a_session_on_a_version_of_an_allowed_chatbot(team, 
 
 
 @pytest.mark.django_db()
+def test_a_session_on_a_version_reports_its_chatbot_without_extra_queries(team, client):
+    chatbot = ExperimentFactory.create(team=team)
+    on_working = ExperimentSessionFactory.create(team=team, experiment=chatbot)
+    on_version = ExperimentSessionFactory.create(team=team, experiment=chatbot.create_new_version())
+
+    def fetch(session):
+        with CaptureQueriesContext(connection) as queries:
+            response = client.get(_url(session))
+        assert response.status_code == 200, response.content
+        return response.json()["chatbot_id"], len(queries)
+
+    (working_chatbot, working_queries), (version_chatbot, version_queries) = fetch(on_working), fetch(on_version)
+    assert working_chatbot == version_chatbot == str(chatbot.public_id)
+    assert version_queries == working_queries
+
+
+@pytest.mark.django_db()
 def test_queries_do_not_grow_with_the_messages(team, client):
     tag = TagFactory.create(team=team)
 
