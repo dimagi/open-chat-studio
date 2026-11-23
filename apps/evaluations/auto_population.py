@@ -124,7 +124,7 @@ def auto_populate_eval_datasets():
     double-process the same rule. A failure on one rule never blocks others.
     """
     rule_ids = list(
-        DatasetAutoPopulationRule.objects.filter(is_enabled=True)
+        DatasetAutoPopulationRule.objects.filter(is_enabled=True, team__deletion_requested_at__isnull=True)
         .order_by(F("last_run_at").asc(nulls_first=True))
         .values_list("id", flat=True)
     )
@@ -133,8 +133,8 @@ def auto_populate_eval_datasets():
         try:
             with transaction.atomic():
                 rule = (
-                    DatasetAutoPopulationRule.objects.select_for_update(skip_locked=True)
-                    .filter(id=rule_id, is_enabled=True)
+                    DatasetAutoPopulationRule.objects.select_for_update(skip_locked=True, of=("self",))
+                    .filter(id=rule_id, is_enabled=True, team__deletion_requested_at__isnull=True)
                     .first()
                 )
                 if rule is None:

@@ -102,7 +102,7 @@ CONTENT_TYPES = {
     ],
     "human_annotations": ["annotationqueue", "annotationitem", "annotation", "annotationqueueaggregate"],
     "assessments": ["score"],
-    "trace": ["trace"],
+    "trace": ["trace", "customactionrequest"],
     "mcp_integrations": ["mcpserver"],
     "oauth": ["oauth2application", "oauth2accesstoken", "oauth2grant", "oauth2idtoken", "oauth2refreshtoken"],
     "ocs_notifications": [

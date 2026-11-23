@@ -54,6 +54,9 @@ def test_team_serializer_excludes_members_and_public_key_and_lists_flags():
     assert "public_key" not in data
     # is_migrating is an internal operational flag; it must not be replicated to an import target.
     assert "is_migrating" not in data
+    # A pending deletion belongs to the source server; the imported team must not inherit it.
+    for field in ("deletion_requested_at", "deletion_requested_by", "deletion_notify_recipients"):
+        assert field not in data
     assert isinstance(data["feature_flags"], list)
     assert data["id"] == team.id
     assert "created_at" in data

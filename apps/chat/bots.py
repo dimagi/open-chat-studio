@@ -19,6 +19,7 @@ from apps.pipelines.nodes.base import Intents, PipelineState
 from apps.pipelines.nodes.helpers import temporary_session
 from apps.pipelines.repository import ORMRepository
 from apps.service_providers.llm_service.default_models import get_model_parameters
+from apps.service_providers.llm_service.error_classification import translate_provider_errors
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig
@@ -399,13 +400,14 @@ class EventBot:
             notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
         ) as span:
             config = self.trace_service.get_langchain_config()
-            response = llm.invoke(
-                [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": event_prompt},
-                ],
-                config=config,
-            )
+            with translate_provider_errors():
+                response = llm.invoke(
+                    [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": event_prompt},
+                    ],
+                    config=config,
+                )
             message = response.text
             span.set_outputs({"response": message})
 

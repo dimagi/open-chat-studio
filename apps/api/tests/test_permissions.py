@@ -5,16 +5,21 @@ import pytest
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
+from django.urls import get_resolver
 from django.utils import timezone
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request, clone_request
+from rest_framework.views import APIView
 
 from apps.api.models import UserAPIKey
 from apps.api.openai import ChatCompletionsView
 from apps.api.permissions import (
     BASE_PERMISSION_CLASSES,
     ApiKeyAuthentication,
+    BearerTokenAuthentication,
     ReadOnlyAPIKeyPermission,
     RequiresTeamPermission,
+    TeamNotPendingDeletion,
 )
 from apps.api.v2.discovery.views import (
     ChatbotOptionsView,
@@ -75,6 +80,37 @@ def test_api_key_views_keep_the_read_only_gate(view):
     """Overriding ``permission_classes`` replaces the project defaults, which is how the read-only
     API-key gate (ADR-0021) gets dropped. Every API-key view must still carry it."""
     assert ReadOnlyAPIKeyPermission in view.permission_classes
+
+
+_TEAM_CREDENTIAL_AUTHENTICATORS = (ApiKeyAuthentication, BearerTokenAuthentication, OAuth2AccessTokenAuthentication)
+
+
+def _team_credential_views():
+    """Every routed DRF view that accepts an API key or OAuth token and requires some permission."""
+    views = set()
+
+    def walk(patterns):
+        for pattern in patterns:
+            if hasattr(pattern, "url_patterns"):
+                walk(pattern.url_patterns)
+                continue
+            view = getattr(pattern.callback, "cls", None) or getattr(pattern.callback, "view_class", None)
+            if view is None or not issubclass(view, APIView):
+                continue
+            if AllowAny in view.permission_classes:
+                continue
+            if any(issubclass(auth, _TEAM_CREDENTIAL_AUTHENTICATORS) for auth in view.authentication_classes):
+                views.add(view)
+
+    walk(get_resolver().url_patterns)
+    return sorted(views, key=lambda view: view.__name__)
+
+
+@pytest.mark.parametrize("view", _team_credential_views(), ids=lambda view: view.__name__)
+def test_team_credential_views_refuse_teams_pending_deletion(view):
+    """DRF replaces the default permission classes when a view sets its own, so every view that a team
+    credential can reach must list ``TeamNotPendingDeletion`` itself or inherit it from the defaults."""
+    assert TeamNotPendingDeletion in view.permission_classes
 
 
 class _NeedsChange(RequiresTeamPermission):

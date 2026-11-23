@@ -24,6 +24,11 @@ def get_next_unique_team_slug(team_name: str) -> str:
 
 
 def get_team_for_request(request, view_kwargs):
+    """The team named by the URL's ``team_slug``, or else the user's default team.
+
+    A team named in the URL is returned even when it is pending deletion; ``TeamsMiddleware`` decides
+    who may still reach it. A default team is never one that is pending deletion.
+    """
     team_slug = view_kwargs.get("team_slug", None)
     if team_slug:
         return Team.objects.filter(slug=team_slug).first()
@@ -37,7 +42,7 @@ def get_team_for_request(request, view_kwargs):
 def get_default_team_from_request(request: HttpRequest) -> Team:
     if "team" in request.session:
         try:
-            return request.user.teams.get(id=request.session["team"])
+            return active_teams_for_user(request.user).get(id=request.session["team"])
         except Team.DoesNotExist:
             # user wasn't member of team from session, or it didn't exist.
             # fall back to default behavior
@@ -46,10 +51,12 @@ def get_default_team_from_request(request: HttpRequest) -> Team:
 
 
 def get_default_team_for_user(user: CustomUser):
-    if user.teams.exists():
-        return user.teams.first()
-    else:
-        return None
+    return active_teams_for_user(user).first()
+
+
+def active_teams_for_user(user: CustomUser):
+    """The user's teams, leaving out teams that are scheduled for deletion."""
+    return user.teams.filter(deletion_requested_at__isnull=True)
 
 
 def create_default_team_for_user(user: CustomUser, team_name: str | None = None):
@@ -79,6 +86,22 @@ def set_request_attrs(request, **attrs) -> None:
     target = getattr(request, "_request", request)
     for name, value in attrs.items():
         setattr(target, name, value)
+
+
+def get_pending_team_access(request: HttpRequest, team: Team) -> tuple[bool, bool]:
+    """Whether the user may see a team that is pending deletion, and whether they may cancel it.
+
+    Members see it, and those with ``teams.delete_team`` may cancel. A superuser needs the team's
+    elevation grant, as for any other access to a team they are not a member of.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return False, False
+    if membership := Membership.objects.filter(team=team, user=user).first():
+        return True, membership.has_perm("teams.delete_team")
+    if user.is_superuser and Elevation(request).has(Grant.team(team.slug)):
+        return True, True
+    return False, False
 
 
 def get_team_membership_for_request(request: HttpRequest):

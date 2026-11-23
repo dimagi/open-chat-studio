@@ -1,0 +1,3 @@
+{% load tz %}Team '{{ team_name }}' has been disabled and is scheduled for permanent deletion on {{ deletion_due_at|utc|date:"DATETIME_FORMAT" }} UTC.
+
+Until then, a team admin can cancel the deletion and restore the team: {{ restore_url }}

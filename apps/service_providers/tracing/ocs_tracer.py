@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
+from django.db import transaction
 from langchain_core.callbacks.base import BaseCallbackHandler
 
 from apps.channels.models import ChannelPlatform
@@ -15,9 +16,9 @@ from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.llm_service.error_classification import translate_provider_error
-from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
+from apps.service_providers.tracing.const import CUSTOM_ACTION_REQUEST_EVENT, OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
-from apps.trace.models import Trace, TraceStatus
+from apps.trace.models import CustomActionRequest, Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
 
@@ -46,6 +47,7 @@ class OCSTracer(Tracer):
         self.error_span_name: str = ""
         self.error_notification_config: SpanNotificationConfig | None = None
         self.metrics_collector: MetricsCollector | None = None
+        self.custom_action_requests: list[dict[str, Any]] = []
 
     @property
     def ready(self) -> bool:
@@ -129,6 +131,7 @@ class OCSTracer(Tracer):
 
             self._update_trace_metrics()
             self.trace_record.save()
+            self._save_custom_action_requests()
             self._record_costs()
 
             session_id = self.session.id if self.session else None
@@ -145,6 +148,20 @@ class OCSTracer(Tracer):
                 self.session.id if self.session else None,
                 self.trace_record.output_message_id,
             )
+
+    def _save_custom_action_requests(self) -> None:
+        """Save the run's custom action requests. Callers such as ad hoc bot messages finalize the trace
+        inside ``transaction.atomic()``, so a rejected insert is confined to a savepoint."""
+        if not self.custom_action_requests:
+            return
+        try:
+            with transaction.atomic():
+                CustomActionRequest.objects.bulk_create(
+                    CustomActionRequest.from_request_log(request_log, self.trace_record)
+                    for request_log in self.custom_action_requests
+                )
+        except Exception:
+            logger.exception("Error saving custom action requests | trace_id=%s", self.trace_record.id)
 
     def _update_trace_metrics(self) -> None:
         """Update trace record with collected metrics."""
@@ -223,6 +240,7 @@ class OCSTracer(Tracer):
         self.error_span_name = ""
         self.error_notification_config = None
         self.metrics_collector = None
+        self.custom_action_requests = []
 
     @contextmanager
     def span(
@@ -367,6 +385,11 @@ class OCSCallbackHandler(BaseCallbackHandler):
 
     def on_tool_error(self, *args, **kwargs) -> None:
         self._capture_error(_error_arg(args, kwargs), "Tool error occurred", "Tool Error")
+
+    def on_custom_event(self, name: str, data: Any, **kwargs: Any) -> None:
+        if name == CUSTOM_ACTION_REQUEST_EVENT:
+            # Tools run on LangGraph's thread pool; list.append is atomic, so no lock is needed.
+            self.tracer.custom_action_requests.append(data)
 
 
 def _error_arg(args, kwargs) -> BaseException | None:
