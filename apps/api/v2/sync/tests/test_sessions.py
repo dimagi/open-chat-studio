@@ -241,6 +241,27 @@ def test_machine_token_reads_sessions_on_a_version_of_an_allowed_chatbot(team, a
 
 
 @pytest.mark.django_db()
+def test_machine_token_keeps_reading_an_allowed_chatbot_after_it_is_archived(team):
+    chatbot = ExperimentFactory.create(team=team)
+    version = chatbot.create_new_version(make_default=True)
+    first = _session(team, minutes=1, experiment=chatbot)
+    second = _session(team, minutes=2, experiment=version)
+    client = ApiTestClient(
+        team.members.first(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["sessions:read"],
+        allowed_chatbots=[chatbot],
+    )
+    cursor = client.get(URL, {"limit": 1}).json()["cursor"]
+
+    chatbot.archive()
+
+    assert _ids(client.get(URL)) == [str(first.external_id), str(second.external_id)]
+    assert _ids(client.get(URL, {"cursor": cursor})) == [str(second.external_id)]
+
+
+@pytest.mark.django_db()
 def test_invalid_cursor_is_a_400(client):
     assert client.get(URL, {"cursor": "not-a-cursor"}).status_code == 400
 
