@@ -164,7 +164,7 @@ class SessionDetailView(SyncView):
         messages = ChatMessage.objects.order_by("created_at", "id").prefetch_related("tags")
         session = get_object_or_404(
             self.reachable_sessions()
-            .select_related("experiment", "participant", "chat")
+            .select_related("experiment__working_version", "participant", "chat")
             .prefetch_related(Prefetch("chat__messages", queryset=messages, to_attr="synced_messages")),
             external_id=id,
         )
