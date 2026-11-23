@@ -153,7 +153,7 @@ The per-team form resolves the team from the request. Surfaces that only learn t
 view has done its own lookup, the provider webhooks among them, are not reached by it, and only
 the everyone-on form applies there.
 
-Two paths consult neither form, because both count from a place with no request to resolve the
+Three paths consult neither form, because each counts from a place with no request to resolve the
 flag against:
 
 - Rejected API key and bearer presentations are counted from inside an authentication class, so
@@ -162,6 +162,8 @@ flag against:
   the limiter cannot count.
 - Slack deliveries are counted from the Bolt listener. They keep being counted, though nothing is
   refused there in any case, since `channels` does not refuse.
+- Custom action requests are counted from the tool call. With enforcement on, a custom action over
+  its limit is still refused: the tool returns a rate-limit error without sending the request.
 
 `RATE_LIMIT_ENFORCE=False` plus a restart remains the only complete off switch.
 
