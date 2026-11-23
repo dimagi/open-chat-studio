@@ -191,7 +191,7 @@ Required only if you want users to connect Slack channels to their chatbots.
 
 | Variable | Description |
 |----------|-------------|
-| `OUTBOUND_USER_AGENT` | Optional. User-Agent sent on every request made with an auth provider: custom actions, the HTTP pipeline node, MCP servers, document sources and OAuth token requests. Defaults to `OpenChatStudio (+<site URL>)`, with the site URL built from the Site record. |
+| `OUTBOUND_USER_AGENT` | Optional. User-Agent sent on every request made with an auth provider: custom actions, the HTTP pipeline node, MCP servers, document sources and OAuth token requests. Defaults to `OpenChatStudio (+<site URL>)`, with the site URL built from the Site record. A custom action whose OpenAPI spec declares a `User-Agent` header parameter sends that value instead. |
 
 ## Observability
 

@@ -55,7 +55,8 @@ version section when a release is cut.
   every request made with an auth provider: custom actions, the HTTP pipeline
   node, MCP servers, document sources and OAuth token requests. Left unset, those
   requests send `OpenChatStudio (+<site URL>)`, built from the Site record, where
-  they previously sent httpx's `python-httpx/<version>`.
+  they previously sent httpx's `python-httpx/<version>`. A custom action whose
+  OpenAPI spec declares a `User-Agent` header parameter sends that value instead.
 - `RATE_LIMIT_CUSTOM_ACTIONS` (optional, default `1000/5m`) sets the rate for the
   new `custom_actions` scope, which counts outbound custom action calls per auth
   provider, or per action when it has none. Like the other scopes it only logs
