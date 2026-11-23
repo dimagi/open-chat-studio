@@ -139,6 +139,28 @@ def test_chatbot_filter(team, client):
 
 
 @pytest.mark.django_db()
+def test_chatbot_filter_includes_sessions_on_its_versions(team, client):
+    chatbot = ExperimentFactory.create(team=team)
+    on_working = _session(team, experiment=chatbot)
+    on_version = _session(team, minutes=1, experiment=chatbot.create_new_version(make_default=True))
+    _session(team, minutes=2)
+
+    assert _ids(client.get(URL, {"chatbot": str(chatbot.public_id)})) == [
+        str(on_working.external_id),
+        str(on_version.external_id),
+    ]
+
+
+@pytest.mark.django_db()
+def test_a_session_on_a_version_reports_its_chatbot(team, client):
+    chatbot = ExperimentFactory.create(team=team)
+    _session(team, experiment=chatbot.create_new_version(make_default=True))
+
+    (row,) = client.get(URL).json()["results"]
+    assert row["chatbot_id"] == str(chatbot.public_id)
+
+
+@pytest.mark.django_db()
 def test_participant_filter(team, client):
     wanted = _session(team)
     _session(team)
@@ -228,7 +250,9 @@ def test_queries_per_page_do_not_grow_with_the_page(team, client):
     tag = TagFactory.create(team=team)
 
     def queries_for(count):
-        for session in [_session(team) for _ in range(count)]:
+        chatbots = [ExperimentFactory.create(team=team) for _ in range(count)]
+        experiments = [chatbot.create_new_version() if i % 2 else chatbot for i, chatbot in enumerate(chatbots)]
+        for session in [_session(team, experiment=experiment) for experiment in experiments]:
             session.chat.add_tag(tag, team=team)
         ExperimentSession.objects.filter(team=team).update(updated_at=BASE)
         with CaptureQueriesContext(connection) as queries:
