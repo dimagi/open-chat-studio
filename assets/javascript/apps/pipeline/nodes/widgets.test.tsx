@@ -204,6 +204,22 @@ describe('LlmWidget', () => {
 
     expect(queryByText('Model Parameters') !== null).toBe(shown);
   });
+
+  it('shows no model parameters on a decisions field, whose calls send none', () => {
+    const schema = {type: 'integer', 'ui:widget': 'llm_provider_model', 'ui:modelUse': 'decisions'} as PropertySchema;
+    const Widget = getWidget('llm_provider_model', schema);
+    const {queryByText} = render(
+      <Widget
+        {...baseProps}
+        name="llm_provider_id"
+        schema={schema}
+        nodeParams={{name: 'x', llm_provider_id: 'provider-a', llm_provider_model_id: 'model-a'}}
+        paramValue="provider-a"
+      />,
+    );
+
+    expect(queryByText('Model Parameters')).toBeNull();
+  });
 });
 
 describe('InputField warning slot', () => {
