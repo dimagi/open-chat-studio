@@ -49,9 +49,8 @@ class ChoiceOption(BaseModel):
 class Decision(BaseModel):
     key: str = Field(
         description=(
-            "The temporary state key the answer is written to. Choice and score decisions also write "
-            "their confidence to `<key>_confidence`, and a noul decision does when the model's provider "
-            "reports one."
+            "The temporary state key the answer is written to. Each decision also writes its confidence "
+            "to `<key>_confidence`, which is null when the model reports none."
         )
     )
     type: Literal["choice", "score", "noul"] = Field(
@@ -121,17 +120,13 @@ class Decision(BaseModel):
         """The value and confidence the model gave, each None where it gave none."""
         return ANSWER_READERS[self.type](self, response)
 
-    def temp_state(self, value: Any, confidence: float | None, yes_no_confidence: bool) -> dict[str, Any]:
+    def temp_state(self, value: Any, confidence: float | None) -> dict[str, Any]:
         """The entries this decision writes: null for the value when the confidence is below the threshold.
 
-        Not every backend reports a confidence for a noul, so a noul writes one only when `yes_no_confidence`
-        says its backend does. It then writes null when this answer has none, so that an earlier node's
-        confidence under the same key does not outlive it.
+        The confidence is written even when it is null, so that an earlier node's confidence under the same
+        key does not outlive this answer.
         """
-        values = {self.key: None if self._below_threshold(confidence) else value}
-        if self.type != "noul" or yes_no_confidence:
-            values[self.confidence_key] = confidence
-        return values
+        return {self.key: None if self._below_threshold(confidence) else value, self.confidence_key: confidence}
 
     def _below_threshold(self, confidence: float | None) -> bool:
         if self.threshold is None or confidence is None:
@@ -334,17 +329,12 @@ def decision_questions(decisions: list[Decision]) -> dict[str, Question]:
     return {decision.key: decision.question() for decision in decisions}
 
 
-def temp_state_values(
-    node_name: str, decisions: list[Decision], response: DecisionResponse | None, yes_no_confidence: bool
-) -> dict[str, Any]:
-    """The temporary state each decision writes. A decision with no usable answer writes null.
-
-    `yes_no_confidence` is whether the backend reports a confidence for a noul.
-    """
+def temp_state_values(node_name: str, decisions: list[Decision], response: DecisionResponse | None) -> dict[str, Any]:
+    """The temporary state each decision writes. A decision with no usable answer writes null."""
     values = {}
     for decision in decisions:
         value, confidence = decision.answer(response) if response else (None, None)
         if response and value is None:
             logger.warning("Decision node %s got no usable answer for %s", node_name, decision.key)
-        values |= decision.temp_state(value, confidence, yes_no_confidence)
+        values |= decision.temp_state(value, confidence)
     return values

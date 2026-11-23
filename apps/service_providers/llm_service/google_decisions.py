@@ -66,7 +66,6 @@ class GoogleDecisionBackend(DecisionBackend):
     provider_type = "google"
     name = "Google Decisions"
     limits = GOOGLE_DECISION_LIMITS
-    reports_yes_no_confidence = True
 
     def __init__(self, api_key: str, url: str = GOOGLE_DECISIONS_URL, timeout: float = GOOGLE_DECISIONS_TIMEOUT):
         self.api_key = api_key

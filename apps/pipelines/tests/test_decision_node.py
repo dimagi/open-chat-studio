@@ -61,13 +61,13 @@ def _node(jev_ids, session=None, decisions=None, **params) -> DecisionNode:
     return build_decision_node(jev_ids, decisions, session, **params)
 
 
-def _run(node: DecisionNode, session, config=None) -> PipelineState:
+def _run(node: DecisionNode, session, config=None, temp_state=None) -> PipelineState:
     node._config = config or {}
     state = PipelineState(
         messages=["I was charged twice"],
         experiment_session=session,
         last_node_input="I was charged twice",
-        temp_state={"user_input": "I was charged twice"},
+        temp_state={"user_input": "I was charged twice", **(temp_state or {})},
         participant_data={"plan": "pro"},
         session_state={},
     )
@@ -330,6 +330,7 @@ class TestResults:
             "frustration": 1.7,
             "frustration_confidence": 0.55,
             "wants_refund": 0.98,
+            "wants_refund_confidence": None,
         }
 
     @pytest.mark.parametrize(
@@ -396,9 +397,19 @@ class TestResults:
             "frustration": None,
             "frustration_confidence": None,
             "wants_refund": None,
+            "wants_refund_confidence": None,
         }
         assert output["messages"] == ["I was charged twice"]
         assert "Jev returned 500" in caplog.text
+
+    def test_a_noul_clears_an_earlier_confidence_under_its_key(self, httpx_mock, jev_ids, session):
+        """Jev reports no confidence for a noul, so a value an earlier node wrote would describe another answer."""
+        httpx_mock.add_response(url=URL, json=_answers())
+        node = _node(jev_ids, session, decisions=[REFUND])
+
+        temp_state = _run(node, session, temp_state={"wants_refund_confidence": 0.4})["temp_state"]
+
+        assert (temp_state["wants_refund"], temp_state["wants_refund_confidence"]) == (0.98, None)
 
     def test_a_rejected_key_is_a_configuration_error(self, httpx_mock, jev_ids, session):
         httpx_mock.add_response(url=URL, status_code=401, json={"detail": "Invalid API key"})
@@ -414,7 +425,7 @@ class TestResults:
 
         history = node.repo.get_pipeline_chat_history(node.history_type, node.node_id)
         messages = [(m.human_message, json.loads(m.ai_message)) for m in history.messages.all()]
-        assert messages == [("I was charged twice", {"wants_refund": 0.98})]
+        assert messages == [("I was charged twice", {"wants_refund": 0.98, "wants_refund_confidence": None})]
 
 
 class TestUsage:

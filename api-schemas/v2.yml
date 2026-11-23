@@ -620,9 +620,8 @@ paths:
                       false_description: ''
                       threshold: null
                 summary: 'DecisionNode: Needs a decision model. Asks every decision
-                  in one call and writes each answer to `temp_state[key]`, plus `temp_state[key
-                  + ''_confidence'']` for choice and score decisions, and for noul
-                  decisions when the model reports a confidence.'
+                  in one call and writes each answer to `temp_state[key]` and its
+                  confidence to `temp_state[key + ''_confidence'']`.'
               StaticRouterNode:
                 value:
                   type: StaticRouterNode
@@ -3099,9 +3098,8 @@ components:
             has a ``key``, a ``type`` (``choice``, ``score`` or ``noul``), ``instructions``,
             ``options`` for a choice, ``levels`` for a score, ``true_description``
             and ``false_description`` for a noul, and an optional ``threshold``. The
-            answer is written to ``temp_state[key]``, and a choice or score's confidence
-            to ``temp_state[key + '_confidence']``, as is a noul's when the model's
-            provider reports one.
+            answer is written to ``temp_state[key]`` and its confidence to ``temp_state[key
+            + '_confidence']``, which is null when the model reports none.
     DefaultLlmProvider:
       type: object
       properties:
