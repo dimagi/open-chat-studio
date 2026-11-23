@@ -237,6 +237,16 @@ class TestResponse:
         assert name not in response.answers
         assert len(response.answers) == 2
 
+    def test_reads_the_cached_and_cache_write_counts(self, httpx_mock):
+        details = {"cached_tokens": 120, "cache_write_tokens": 30}
+        httpx_mock.add_response(
+            url=URL, json={**RESPONSE, "usage": {**RESPONSE["usage"], "input_tokens_details": details}}
+        )
+
+        assert _ask().usage == DecisionUsage(
+            input_tokens=215, output_tokens=0, cached_input_tokens=120, cache_write_tokens=30
+        )
+
     def test_missing_usage_reads_as_zero(self, httpx_mock):
         httpx_mock.add_response(url=URL, json={"answers": RESPONSE["answers"]})
 
@@ -248,6 +258,7 @@ class TestResponse:
             pytest.param({"input_tokens": -1}, id="negative"),
             pytest.param({"input_tokens": "215"}, id="string"),
             pytest.param({"input_tokens": 215, "output_tokens": True}, id="boolean"),
+            pytest.param({"input_tokens": 215, "input_tokens_details": {"cached_tokens": -5}}, id="negative-cached"),
         ],
     )
     def test_a_malformed_token_count_is_a_decision_error(self, httpx_mock, usage):
@@ -380,7 +391,6 @@ def test_the_limits_follow_the_openai_reference():
     assert (limits.min_options, limits.max_options) == (2, 255)
     assert (limits.min_levels, limits.max_levels) == (2, 10)
     assert limits.max_questions == 400
-    assert OpenAIDecisionBackend.reports_yes_no_confidence is False
 
 
 def test_the_openai_service_returns_an_openai_backend():

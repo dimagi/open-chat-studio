@@ -102,7 +102,7 @@ class TestDecisionNode:
         assert state["participant_data"] == {"plan": "pro"}
         assert state["temp_state"] == {"user_input": "I was charged twice"}
 
-    def test_writes_each_answer_and_no_yes_no_confidence(self, httpx_mock, openai_decision_ids, session):
+    def test_writes_each_answer_and_a_null_yes_no_confidence(self, httpx_mock, openai_decision_ids, session):
         score = {"name": "frustration", "type": "score", "score": 0.8, "confidence": 0.7, "probabilities": []}
         refund = {"name": "wants_refund", "type": "predicate", "probability": 0.2}
         httpx_mock.add_response(url=URL, json=_response(_choice("intent", "billing", 0.9), score, refund))
@@ -115,6 +115,7 @@ class TestDecisionNode:
             "frustration": 0.8,
             "frustration_confidence": 0.7,
             "wants_refund": 0.2,
+            "wants_refund_confidence": None,
         }
 
     def test_a_refused_decision_writes_null_and_the_others_are_written(self, httpx_mock, openai_decision_ids, session):
@@ -124,7 +125,12 @@ class TestDecisionNode:
 
         output = _run(_node(openai_decision_ids, session, decisions=[INTENT, REFUND]), session)
 
-        assert _temp_state(output) == {"intent": None, "intent_confidence": None, "wants_refund": 0.7}
+        assert _temp_state(output) == {
+            "intent": None,
+            "intent_confidence": None,
+            "wants_refund": 0.7,
+            "wants_refund_confidence": None,
+        }
 
     def test_usage_is_reported_under_openai(self, httpx_mock, openai_decision_ids, session):
         httpx_mock.add_response(url=URL, json=_response())
@@ -135,6 +141,20 @@ class TestDecisionNode:
         events = {(e.provider_type, e.model_name, e.service_kind): e.quantity for e in collector.iter_cost_events()}
         assert events == {("openai", "gpt-6-luna", ServiceKind.LLM_INPUT): 215}
         assert {e.confidence for e in collector.iter_cost_events()} == {Confidence.EXACT}
+
+    def test_cached_input_is_priced_as_cached(self, httpx_mock, openai_decision_ids, session):
+        usage = {**USAGE, "input_tokens_details": {"cached_tokens": 120, "cache_write_tokens": 30}}
+        httpx_mock.add_response(url=URL, json={**_response(), "usage": usage})
+        collector = MetricsCollector(start_time=time.time())
+
+        _run(_node(openai_decision_ids, session), session, config={"callbacks": [collector]})
+
+        events = {e.service_kind: e.quantity for e in collector.iter_cost_events()}
+        assert events == {
+            ServiceKind.LLM_INPUT: 65,
+            ServiceKind.LLM_CACHED_INPUT: 120,
+            ServiceKind.LLM_CACHE_WRITE: 30,
+        }
 
     @pytest.mark.parametrize(
         ("decisions", "message"),
