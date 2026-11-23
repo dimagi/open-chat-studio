@@ -118,6 +118,17 @@ def test_filters(team, client, param):
 
 
 @pytest.mark.django_db()
+def test_chatbot_filter_includes_messages_on_its_versions(team, client):
+    chatbot = ExperimentFactory.create(team=team)
+    on_working = _message(ExperimentSessionFactory.create(team=team, experiment=chatbot))
+    on_version_session = ExperimentSessionFactory.create(team=team, experiment=chatbot.create_new_version())
+    on_version = _message(on_version_session, minutes=1)
+    _message(_session(team), minutes=2)
+
+    assert _ids(client.get(URL, {"chatbot": str(chatbot.public_id)})) == [on_working.id, on_version.id]
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize("all_data", [pytest.param(False, id="listed-chatbots"), pytest.param(True, id="all-data")])
 def test_machine_token_reads_only_the_chatbots_it_reaches(team, all_data):
     listed_session = _session(team)
