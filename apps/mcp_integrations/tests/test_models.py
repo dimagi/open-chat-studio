@@ -55,3 +55,14 @@ class TestMcpServer:
         headers = fetch.call_args.args[0]
         assert headers["user-agent"] == "TestAgent/1.0"
         assert headers["authorization"] == "Bearer secret"
+
+    def test_a_stored_blocked_auth_header_returns_no_tools(self, team):
+        auth_provider = AuthProviderFactory.create(team=team, type="api_key", config={"key": "Host", "value": "secret"})
+        server = McpServer.objects.create(
+            team=team, name="Test Server", server_url="http://example.com/mcp", auth_provider=auth_provider
+        )
+
+        with patch("apps.mcp_integrations.models.McpServer._fetch_tools_from_mcp_server") as fetch:
+            assert server.fetch_tools() == []
+
+        fetch.assert_not_called()

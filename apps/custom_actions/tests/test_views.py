@@ -181,3 +181,21 @@ def test_endpoint_tester_sends_outbound_user_agent(auth_provider, team_with_user
 
     assert response.status_code == 200, response.content
     assert httpx_mock.get_request().headers["User-Agent"] == "TestAgent/1.0"
+
+
+@pytest.mark.django_db()
+def test_endpoint_tester_reports_a_stored_blocked_auth_header(team_with_users, client, httpx_mock):
+    provider = AuthProviderFactory.create(team=team_with_users, type="api_key", config={"key": "Host", "value": "x"})
+    action = CustomActionFactory.create(team=team_with_users, auth_provider=provider)
+    client.force_login(team_with_users.members.first())
+
+    with override_flag(Flags.TESTING_CUSTOM_ACTIONS.slug, active=True):
+        response = client.post(
+            reverse("custom_actions:test_endpoint", args=[team_with_users.slug, action.pk]),
+            data={"operation_id": "weather_get", "params": {"location": "Cape Town"}},
+            content_type="application/json",
+        )
+
+    assert response.status_code == 400
+    assert "cannot be used for authentication" in response.json()["error"]
+    assert httpx_mock.get_requests() == []
