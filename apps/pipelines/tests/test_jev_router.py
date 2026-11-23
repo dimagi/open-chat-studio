@@ -29,6 +29,7 @@ from apps.service_providers.llm_service.decision_backend import (
     DecisionResponse,
     DecisionUsage,
 )
+from apps.service_providers.llm_service.default_models import MODELS_BY_KEY, Model
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
@@ -366,3 +367,19 @@ def test_a_jev_model_takes_no_generation_parameters(jev_ids, session):
     router = _router(jev_ids, session, llm_model_parameters={"temperature": 0.7})
 
     assert router.llm_model_parameters == {}
+
+
+@pytest.mark.django_db()
+def test_a_router_on_a_decision_model_needs_a_provider_with_a_decision_backend(db):
+    """The provider has to answer decisions, or the router would only fail on its first run."""
+    config = {"anthropic_api_key": "k", "anthropic_api_base": "https://api.anthropic.com"}
+    provider = LlmProviderFactory.create(type="anthropic", config=config)
+    model = LlmProviderModelFactory.create(team=provider.team, type="anthropic", name="claude-decide")
+    decision_model = Model("claude-decide", 1000, chat=False, decisions=True)
+    ids = {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
+
+    with mock.patch.dict(MODELS_BY_KEY, {("anthropic", "claude-decide"): decision_model}):
+        with pytest.raises(PydanticValidationError, match="cannot answer decision questions") as excinfo:
+            _router(ids, None)
+
+    assert excinfo.value.errors()[0]["ctx"]["field"] == "llm_provider_id"
