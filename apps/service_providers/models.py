@@ -868,15 +868,18 @@ class AuthProviderType(models.TextChoices):
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
-        match self:
-            case AuthProviderType.basic:
-                return auth_service.BasicAuthService(**config)
-            case AuthProviderType.api_key:
-                return auth_service.ApiKeyAuthService(**config)
-            case AuthProviderType.bearer:
-                return auth_service.BearerTokenAuthService(**config)
-            case AuthProviderType.commcare:
-                return auth_service.CommCareAuthService(**config)
+        try:
+            match self:
+                case AuthProviderType.basic:
+                    return auth_service.BasicAuthService(**config)
+                case AuthProviderType.api_key:
+                    return auth_service.ApiKeyAuthService(**config)
+                case AuthProviderType.bearer:
+                    return auth_service.BearerTokenAuthService(**config)
+                case AuthProviderType.commcare:
+                    return auth_service.CommCareAuthService(**config)
+        except ValidationError as e:
+            raise ServiceProviderConfigError(self, str(e)) from e
         raise Exception(f"No auth service configured for {self}")
 
 
