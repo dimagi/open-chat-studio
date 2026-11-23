@@ -35,7 +35,7 @@ from django_cryptography.fields import encrypt
 from field_audit import audit_fields
 from field_audit.models import AuditAction, AuditingManager
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.versioning import TriggerSyncMode, sync_triggers
@@ -1836,9 +1836,9 @@ class ExperimentSession(UpdatedAtOnPartialSaveMixin, BaseTeamModel):
             else:
                 log.exception(f"Could not send message to experiment session {self.id}. Reason: {e}")
             if not fail_silently:
-                if trace_service:
-                    trace_metadata = trace_service.get_trace_metadata()
-                    e.trace_metadata = trace_metadata
+                # ModelRefusedTurnError exposes trace_metadata as a read-only property.
+                if trace_service and not isinstance(e, ModelRefusedTurnError):
+                    setattr(e, "trace_metadata", trace_service.get_trace_metadata())  # noqa: B010
                 raise e
 
     def _resolve_ad_hoc_message(

@@ -2,9 +2,10 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import anthropic
+import openai
 import pytest
 
-from apps.chat.exceptions import ProviderConfigurationError
+from apps.chat.exceptions import ModelRefusedTurnError, ProviderConfigurationError
 from apps.chat.models import ChatMessageType
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -16,6 +17,7 @@ USAGE_LIMIT_ERROR = status_error(
     400,
     "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
 )
+CONTENT_FILTER_ERROR = status_error(openai.BadRequestError, 400, "content filter", body={"code": "content_filter"})
 
 
 @pytest.mark.django_db()
@@ -107,12 +109,19 @@ class TestAdHocBotMessage:
         try_send_message.assert_not_called()
         assert [r.levelno for r in caplog.records if r.name == "ocs.experiments"] == [logging.WARNING]
 
-    def test_provider_configuration_error_is_raised_when_not_failing_silently(self):
-        session, provider = self._session_with_failing_llm(USAGE_LIMIT_ERROR)
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            pytest.param(USAGE_LIMIT_ERROR, ProviderConfigurationError, id="quota-exhausted"),
+            pytest.param(CONTENT_FILTER_ERROR, ModelRefusedTurnError, id="content-filter"),
+        ],
+    )
+    def test_translated_provider_error_is_raised_when_not_failing_silently(self, error, expected):
+        session, provider = self._session_with_failing_llm(error)
 
         with (
             patch("apps.chat.bots.EventBot.get_provider_and_model", return_value=(provider, MagicMock())),
             patch("apps.chat.bots.get_model_parameters", return_value={}),
-            pytest.raises(ProviderConfigurationError, match="no credit or quota remaining"),
+            pytest.raises(expected),
         ):
             session.ad_hoc_bot_message("check in with the user", TraceInfo(name="test"), fail_silently=False)
