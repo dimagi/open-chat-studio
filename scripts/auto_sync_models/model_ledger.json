@@ -1024,6 +1024,17 @@
       "effort_levels": []
     }
   },
+  "google_vertex_ai/gemini-4-neon-cyber-permissive": {
+    "first_seen": "2026-11-24",
+    "verdict": "rejected",
+    "reason": "Gated cybersecurity variant of gemini-4-neon, not a general chat model; same verdict as the argon and carbon cyber-permissive variants.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "xhigh"
+      ]
+    }
+  },
   "google_vertex_ai/gemini-omni-1.1-flash": {
     "first_seen": "2026-09-17",
     "verdict": "rejected",
