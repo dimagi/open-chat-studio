@@ -523,7 +523,14 @@ class BasicAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 class ApiKeyAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["value"]
 
-    key = forms.CharField(label=_("Header Name"))
+    key = forms.CharField(
+        label=_("Header Name"),
+        widget=forms.TextInput(
+            attrs={
+                "x-on:keydown.space.prevent": "$el.setRangeText('-', $el.selectionStart, $el.selectionEnd, 'end')",
+            }
+        ),
+    )
     value = forms.CharField(label=_("API Key"))
 
     def clean_key(self):

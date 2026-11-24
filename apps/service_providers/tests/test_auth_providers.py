@@ -52,6 +52,11 @@ def test_api_key_header_name_is_sent_on_the_request(header_name, httpx_mock):
     assert httpx_mock.get_request().headers[header_name] == "secret"
 
 
+def test_api_key_header_name_field_types_a_hyphen_for_a_space():
+    field_html = str(ApiKeyAuthConfigForm(None)["key"])
+    assert 'x-on:keydown.space.prevent="$el.setRangeText(&#x27;-&#x27;' in field_html
+
+
 @pytest.mark.parametrize(
     "header_name",
     [
