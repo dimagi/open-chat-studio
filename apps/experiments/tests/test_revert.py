@@ -79,7 +79,7 @@ def test_revert_restores_fields_and_remaps_pipeline_to_working_records():
     # The node relation references the working source material, not the versioned snapshot.
     llm_node = Node.objects.get(pipeline=experiment.pipeline, type=LLMResponseWithPrompt.__name__)
     assert llm_node.source_material_id == source_material.id
-    assert "source_material_id" not in llm_node.params
+    assert llm_node.params["source_material_id"] == source_material.id
 
 
 @pytest.mark.django_db()

@@ -73,7 +73,7 @@ class TestRemoveDeprecatedModelsCommand:
         assert not LlmProviderModel.objects.filter(id=old_model.id).exists()
         node.refresh_from_db()
         assert node.llm_provider_model_id == replacement_model.id
-        assert "llm_provider_model_id" not in node.params
+        assert node.params["llm_provider_model_id"] == replacement_model.id
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_stale_deleted_provider_in_params_not_resurrected(self, mock_notify):
@@ -91,7 +91,7 @@ class TestRemoveDeprecatedModelsCommand:
         provider.delete()
         node.refresh_from_db()
         assert node.llm_provider_id is None
-        # Existing rows may still carry duplicate JSON until migration 0038 runs.
+        # A deleted provider leaves its id in the JSON mirror until the next node write.
         Node.objects.filter(pk=node.pk).update(params={**node.params, "llm_provider_id": str(provider_id)})
         node.refresh_from_db()
         assert str(node.params["llm_provider_id"]) == str(provider_id)

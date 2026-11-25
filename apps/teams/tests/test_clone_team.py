@@ -365,7 +365,8 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
             assert node.llm_provider_model_id == target_llm_model.id
             assert node.llm_provider_model_id != source_llm_model.id
 
-        assert not set(node.params) & Node.resource_param_names()
+        for field_name in Node.resource_fk_fields():
+            assert node.params.get(f"{field_name}_id") == getattr(node, f"{field_name}_id")
 
 
 @pytest.mark.django_db()
@@ -417,4 +418,4 @@ def test_clone_team_remaps_relation_backed_node_resources():
 
     node.refresh_from_db()
     assert node.llm_provider_id == target_provider.id
-    assert node.params == {"keywords": ["yes", "no"]}
+    assert node.params == {"keywords": ["yes", "no"], "llm_provider_id": target_provider.id}

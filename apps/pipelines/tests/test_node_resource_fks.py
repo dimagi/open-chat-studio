@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from apps.custom_actions.models import CustomActionOperation
 from apps.pipelines.graph import PipelineGraph
-from apps.pipelines.models import Node, NodeResourceCutoverState
+from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -20,13 +20,13 @@ from apps.utils.factories.service_provider_factories import LlmProviderFactory, 
 
 
 def _write_legacy_params(node, params):
-    """Seed a resource-bearing JSON row for tests of the pre-cutover backfill command."""
+    """Seed a resource-bearing JSON row for tests of the pre-backfill command."""
     Node.objects.filter(pk=node.pk).update(params=params)
 
 
 @pytest.mark.django_db()
 class TestNodeResourceFKSync:
-    """update_from_params() persists resource references in relations, not duplicate JSON ids."""
+    """update_from_params() persists resource references in relations and mirrors them into params."""
 
     def test_llm_provider_fk_populated(self):
         provider = LlmProviderFactory.create()
@@ -40,14 +40,11 @@ class TestNodeResourceFKSync:
         assert node.llm_provider_id == provider.id
         assert node.llm_provider_model_id == model.id
 
-    def test_resource_ids_are_mirrored_while_legacy_runtime_is_serving(self):
-        """The first rolling deployment keeps resource ids readable by old tasks."""
+    def test_resource_ids_are_always_mirrored_for_legacy_runtime(self):
+        """Every write keeps resource ids readable by the previous release during a rolling deploy."""
         provider = LlmProviderFactory.create()
         model = LlmProviderModelFactory.create()
         node = NodeFactory.create(type="LLMResponseWithPrompt", params={})
-        state = NodeResourceCutoverState.objects.get(pk=1)
-        state.legacy_json_compatibility_enabled = True
-        state.save(update_fields=["legacy_json_compatibility_enabled"])
 
         node.update_from_params(
             {"llm_provider_id": provider.id, "llm_provider_model_id": model.id},
@@ -60,22 +57,6 @@ class TestNodeResourceFKSync:
             "llm_provider_id": provider.id,
             "llm_provider_model_id": model.id,
         }
-
-    def test_resource_updates_initialize_a_missing_cutover_state_row(self):
-        """A database created without migration data starts with legacy mirroring disabled."""
-        provider = LlmProviderFactory.create()
-        node = NodeFactory.create(type="LLMResponseWithPrompt", params={})
-        NodeResourceCutoverState.objects.filter(pk=1).delete()
-
-        node.update_from_params(
-            {"llm_provider_id": provider.id},
-            ordinary_params={"name": "assistant"},
-        )
-
-        state = NodeResourceCutoverState.objects.get(pk=1)
-        node.refresh_from_db()
-        assert not state.legacy_json_compatibility_enabled
-        assert node.params == {"name": "assistant"}
 
     def test_source_material_fk_populated(self):
         source_material = SourceMaterialFactory.create()
@@ -196,6 +177,35 @@ class TestNodeResourceFKSync:
         assert node.llm_provider_id == provider.id
         assert node.llm_provider_model_id == model.id
 
+    def test_moving_a_node_keeps_the_json_mirror(self):
+        """A move or relabel skips the resource sync, so it must not drop the ids it did not touch."""
+        provider = LlmProviderFactory.create()
+        pipeline = PipelineFactory.create()
+        node_data = {node.flow_id: None for node in pipeline.node_set.all()}
+        node_data["llm1"] = content_flow_node(
+            "llm1",
+            "LLMResponseWithPrompt",
+            label="LLM",
+            params={"name": "llm1", "llm_provider_id": provider.id, "prompt": "helpful"},
+        )
+        pipeline.update_nodes_from_data(node_data)
+        node = pipeline.node_set.get(flow_id="llm1")
+        assert node.params["llm_provider_id"] == provider.id
+
+        moved = dict(node_data)
+        moved["llm1"] = content_flow_node(
+            "llm1",
+            "LLMResponseWithPrompt",
+            label="Moved",
+            params=dict(node_data["llm1"].data.params),
+            position={"x": 120, "y": 80},
+        )
+        pipeline.update_nodes_from_data(moved)
+        node.refresh_from_db()
+
+        assert node.label == "Moved"
+        assert node.params["llm_provider_id"] == provider.id
+
 
 @pytest.mark.django_db()
 class TestFlowNodeReadsResourceFKs:
@@ -228,8 +238,7 @@ class TestFlowNodeReadsResourceFKs:
         node.update_from_params()
         provider.delete()
         node.refresh_from_db()
-        assert "llm_provider_id" not in node.params
-
+        assert node.resource_params()["llm_provider_id"] is None
         assert node.to_flow_node().data.params["llm_provider_id"] is None
 
     def test_collection_index_ids_come_from_the_m2m(self):
@@ -253,8 +262,7 @@ class TestFlowNodeReadsResourceFKs:
         node.collection_indexes.set([index])
         index.delete()
         node.refresh_from_db()
-        assert "collection_index_ids" not in node.params
-
+        assert node.resource_params()["collection_index_ids"] == []
         assert node.to_flow_node().data.params["collection_index_ids"] == []
 
     def test_custom_actions_come_from_the_operation_rows(self):
@@ -281,8 +289,7 @@ class TestFlowNodeReadsResourceFKs:
 
         action.delete()
         node.refresh_from_db()
-        assert "custom_actions" not in node.params
-
+        assert node.resource_params()["custom_actions"] == []
         assert node.to_flow_node().data.params["custom_actions"] == []
 
     def test_every_resource_id_is_served_from_the_columns(self):
@@ -297,7 +304,7 @@ class TestFlowNodeReadsResourceFKs:
             "custom_actions": [],
         }
 
-    def test_resource_keys_are_not_stored_in_params(self):
+    def test_resource_keys_are_stored_as_a_legacy_mirror(self):
         provider = LlmProviderFactory.create()
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
@@ -309,7 +316,7 @@ class TestFlowNodeReadsResourceFKs:
         node.to_flow_node()
 
         node.refresh_from_db()
-        assert node.params == {}
+        assert node.params == {"llm_provider_id": provider.id}
 
 
 @pytest.mark.django_db()
@@ -350,7 +357,7 @@ class TestFlowDataReadsResourceFKs:
         assert params["collection_index_ids"] == [index.id]
 
     def test_runtime_graph_receives_relation_backed_resource_ids(self):
-        """The runtime graph gets resource ids from relations after the JSON mirror is removed."""
+        """The runtime graph gets resource ids from relations, even when the JSON mirror disagrees."""
         provider = LlmProviderFactory.create()
         model = LlmProviderModelFactory.create()
         index = CollectionFactory.create(is_index=True)
@@ -363,7 +370,16 @@ class TestFlowDataReadsResourceFKs:
             },
         )
         node = pipeline.node_set.get(flow_id="llm0")
-        assert not set(node.params) & Node.resource_param_names()
+        # A stale mirror, as an old-release write during the rolling deploy could leave.
+        Node.objects.filter(pk=node.pk).update(
+            params={
+                **node.params,
+                "llm_provider_id": 999999,
+                "llm_provider_model_id": 999999,
+                "collection_index_ids": [999999],
+            }
+        )
+        pipeline.clear_node_caches()
 
         runtime_node = next(node for node in PipelineGraph.build_from_pipeline(pipeline).nodes if node.id == "llm0")
 
@@ -437,7 +453,7 @@ class TestEditorEndpointServesResourceFKs:
         assert response.status_code == 200
         served = next(node for node in response.json()["pipeline"]["data"]["nodes"] if node["id"] == "llm-1")
         assert served["data"]["params"]["llm_provider_id"] is None
-        assert "llm_provider_id" not in pipeline.node_set.get(flow_id="llm-1").params
+        assert pipeline.node_set.get(flow_id="llm-1").resource_params()["llm_provider_id"] is None
 
     @pytest.mark.parametrize(
         "llm_node_count",
@@ -487,8 +503,10 @@ class TestSetParams:
         provider = LlmProviderFactory.create()
         node = NodeFactory.create(type="LLMResponseWithPrompt", params={})
         node.set_params({"llm_provider_id": provider.id})
+
         node.refresh_from_db()
         assert node.llm_provider_id == provider.id
+        assert node.params["llm_provider_id"] == provider.id
 
     def test_syncs_m2m(self):
         c1 = CollectionFactory.create()
@@ -522,6 +540,7 @@ class TestVersioningPopulatesNodeFKFields:
         )
         new_version = node.create_new_version()
         assert new_version.collection_id == collection.id
+        assert new_version.params["collection_id"] == collection.id
 
     def test_collection_indexes_m2m_copied_to_new_version(self):
         c1 = CollectionFactory.create()
@@ -533,6 +552,7 @@ class TestVersioningPopulatesNodeFKFields:
         node.collection_indexes.set([c1, c2])
         new_version = node.create_new_version()
         assert set(new_version.collection_indexes.values_list("id", flat=True)) == {c1.id, c2.id}
+        assert new_version.params["collection_index_ids"] == sorted([c1.id, c2.id])
         # original unchanged
         assert set(node.collection_indexes.values_list("id", flat=True)) == {c1.id, c2.id}
 
@@ -608,7 +628,7 @@ def test_backfill_node_fks_command_is_idempotent():
 
 @pytest.mark.django_db()
 def test_backfill_does_not_clear_relation_only_nodes():
-    """A post-cutover row with no legacy key keeps its authoritative FK when the command reruns."""
+    """A relation-only row with no legacy key keeps its authoritative FK when the command reruns."""
     provider = LlmProviderFactory.create()
     node = NodeFactory.create(type="LLMResponseWithPrompt", params={}, llm_provider=provider)
 
@@ -716,7 +736,7 @@ def test_backfill_drops_archived_collection_index():
 @pytest.mark.django_db()
 class TestRequiresAttachmentTool:
     def test_reads_the_collection_column_not_the_stale_params_id(self):
-        """Deleting a collection nulls the FK column and the normalized params remain resource-free."""
+        """Deleting a collection nulls the FK column and the stale JSON mirror is ignored."""
         collection = CollectionFactory.create()
         collection_id = collection.id
         node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm", "collection_id": collection_id})
@@ -726,7 +746,7 @@ class TestRequiresAttachmentTool:
         collection.delete()
         node.refresh_from_db()
 
-        assert "collection_id" not in node.params
+        assert node.resource_params()["collection_id"] is None
         assert node.collection_id is None
         assert node.requires_attachment_tool() is False
 

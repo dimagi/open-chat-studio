@@ -203,10 +203,11 @@ class TestTheResponseEnvelope:
         ).json()["node"]
 
         stored = Node.objects.get(pipeline=chatbot.pipeline, flow_id=created["node_id"]).params
-        # Resource values are rendered in the response from relation columns, while ordinary params
-        # and defaults remain in the JSON column.
+        # Resource values are rendered in the response from relation columns; the row also keeps
+        # the JSON mirror that the previous release reads during a rolling deploy.
         assert Node.params_to_store(created["params"]).items() <= stored.items()
-        assert not set(stored) & Node.resource_param_names()
+        assert stored["llm_provider_id"] == provider.id
+        assert stored["llm_provider_model_id"] == model.id
         assert "mcp_tools" in stored
         assert "mcp_tools" not in created["params"]
 

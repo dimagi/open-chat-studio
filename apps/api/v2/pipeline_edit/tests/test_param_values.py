@@ -130,7 +130,7 @@ class TestReferencesMustBeReachable:
         assert response.status_code == 200, response.content
         node = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
         assert node.llm_provider_id == ours.id
-        assert "llm_provider_id" not in node.params
+        assert node.params["llm_provider_id"] == ours.id
 
     def test_a_list_valued_reference_is_checked_per_entry(self, client, chatbot, team):
         """`collection_index_ids` holds a list, so the check has to look at every entry rather than at

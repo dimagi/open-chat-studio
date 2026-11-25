@@ -107,7 +107,11 @@ def _apply_content(existing: Node, node: FlowNode, update_fields: set[str], now)
         or any(existing_resources.get(name) != value for name, value in resource_params.items())
     )
     existing.type = content.type
-    existing.params = ordinary_params
+    if resources_changed:
+        # The resource sync below rewrites params with the legacy mirror. On a move or relabel the
+        # stored params already hold it, and replacing them with the editor's ordinary params only
+        # would drop the ids old workers read during a rolling deploy.
+        existing.params = ordinary_params
     existing.label = content.label
     for field_name, value in node_position_fields(node.position).items():
         setattr(existing, field_name, value)

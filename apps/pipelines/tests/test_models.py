@@ -563,7 +563,7 @@ class TestPipelineRevert:
 
         # The version's nodes are untouched by the revert.
         version_llm.refresh_from_db()
-        assert "source_material_id" not in version_llm.params
+        assert version_llm.params["source_material_id"] == source_material.latest_version.id
         assert version_llm.source_material_id == source_material.latest_version.id
 
     def test_revert_leaves_no_stale_node_caches(self):

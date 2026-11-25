@@ -582,7 +582,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     def get_custom_actions(self, node):
         """Serialize custom-action selections from authoritative operation rows."""
         # The operation rows are authoritative. Group their prefetched action objects here rather
-        # than parsing the legacy JSON mirror, which is no longer persisted by pipeline writes.
+        # than parsing the legacy JSON mirror that older releases read.
         selections_by_action = {}
         for operation in node.custom_action_operations.all():
             selection = selections_by_action.setdefault(

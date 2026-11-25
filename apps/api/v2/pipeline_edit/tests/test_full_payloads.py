@@ -79,7 +79,13 @@ def assert_written(body: dict, chatbot, label: str, expected: dict) -> None:
     assert body["pipeline_errors"]["node"] == {}
     stored = stored_node_params(chatbot, body["node"]["node_id"])
     assert stored.items() >= Node.params_to_store(expected).items()
-    assert not set(stored) & Node.resource_param_names()
+    # The previous release still reads resource ids from the JSON mirror during a rolling deploy.
+    expected_resources = {
+        name: value
+        for name, value in expected.items()
+        if name in Node.resource_param_names() and value not in (None, [])
+    }
+    assert {name: stored[name] for name in stored if name in Node.resource_param_names()} == expected_resources
 
 
 class FullPayload:

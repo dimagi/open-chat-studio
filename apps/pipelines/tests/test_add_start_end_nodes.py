@@ -433,8 +433,8 @@ def test_pipeline_creation_with_llm(team):
     node = pipeline.node_set.get(type="LLMResponseWithPrompt")
     assert node.llm_provider_id == llm_provider.id
     assert node.llm_provider_model_id == llm_model.id
-    assert "llm_provider_id" not in node.params
-    assert "llm_provider_model_id" not in node.params
+    assert node.params["llm_provider_id"] == llm_provider.id
+    assert node.params["llm_provider_model_id"] == llm_model.id
     params = node.params
     assert params["llm_temperature"] == 0.7
     assert params["user_max_token_limit"] == llm_model.max_token_limit

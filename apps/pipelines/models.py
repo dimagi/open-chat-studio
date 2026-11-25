@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pydantic
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, connection, models, transaction
+from django.db import DatabaseError, models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -66,22 +66,6 @@ class NodeObjectManager(VersionsObjectManagerMixin, models.Manager):
 #: What a caller has to prefetch before reading a pipeline's graph. ``Node.resource_params`` reads
 #: these related rows per node, so ``flow_data`` is an N+1 without them.
 NODE_RESOURCE_PREFETCHES = ("node_set__collection_indexes", "node_set__custom_action_operations")
-NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID = 4503001
-
-
-class NodeResourceCutoverState(models.Model):
-    """Track the one-time transition from legacy JSON mirrors to relation-only storage."""
-
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
-    legacy_json_compatibility_enabled = models.BooleanField(default=False)
-    cleanup_completed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = "pipelines_node_resource_cutover_state"
-
-    def __str__(self) -> str:
-        """Identify the singleton resource cutover state in admin and logs."""
-        return "Node resource cutover state"
 
 
 class Pipeline(BaseTeamModel, VersionsMixin):
@@ -500,7 +484,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     flow_id = models.CharField(max_length=128, db_index=True)  # The ID assigned by react-flow
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
-    params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
+    # Parameters for the specific node type, plus the resource-id mirror that lets the previous
+    # release keep executing a node written by this one (see _mirror_resource_params_for_legacy_runtime).
+    params = SanitizedJSONField(default=dict)
     # Layout position on the editor canvas (ADR-0049) — the authoritative source for reads.
     # A row saved without one sits at the origin, which is what reads have always served.
     position_x = models.FloatField(default=0)
@@ -641,7 +627,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             pipeline: If provided, the new version will be assigned to this pipeline before saving,
                 avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
-        preserve_legacy_json = self._lock_resource_cutover_state()
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -665,7 +650,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         new_version.collection_indexes.set(self.collection_indexes.all())
         if self.node_type.declares("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
-        new_version._mirror_resource_params_for_legacy_runtime(preserve_legacy_json)
+        new_version._mirror_resource_params_for_legacy_runtime()
         return new_version
 
     def set_params(self, params):
@@ -707,7 +692,6 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 if name not in declared_params
             }
         )
-        preserve_legacy_json = self._lock_resource_cutover_state()
         self.params = ordinary_params
         invalid_resource_params = {}
         for field_name in self.resource_fk_fields():
@@ -720,21 +704,15 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 invalid_resource_params[param_name] = value
         self.save(update_fields=["params"])
         self._apply_resource_params(resource_params)
-        self._mirror_resource_params_for_legacy_runtime(preserve_legacy_json, invalid_resource_params)
+        self._mirror_resource_params_for_legacy_runtime(invalid_resource_params)
 
-    @staticmethod
-    def _lock_resource_cutover_state() -> bool:
-        """Read the compatibility flag while excluding a concurrent cutover transition."""
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_advisory_xact_lock_shared(%s)", [NODE_RESOURCE_PARAM_CUTOVER_LOCK_ID])
-        state, _created = NodeResourceCutoverState.objects.get_or_create(pk=1)
-        return state.legacy_json_compatibility_enabled
+    def _mirror_resource_params_for_legacy_runtime(self, invalid_params: dict | None = None) -> None:
+        """Keep JSON resource ids readable by the previous release during a rolling deploy.
 
-    def _mirror_resource_params_for_legacy_runtime(self, enabled: bool, invalid_params: dict | None = None) -> None:
-        """Keep JSON resource ids available to old application tasks during the first rollout."""
-        if not enabled:
-            return
-
+        The relations are authoritative and old workers ignore them, so every write has to leave
+        the ids in ``params`` too. This stays until a later release stops writing the mirror and
+        removes the keys in a data migration; removing it earlier breaks old tasks mid-deploy.
+        """
         params = self.params.copy()
         resource_params = self.resource_params()
         for param_name in self.node_type.declared_params & self.resource_param_names():
@@ -767,12 +745,12 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def resource_params(self) -> dict:
-        """Return resource IDs from relations, with a safe bridge for pre-cutover rows.
+        """Return resource IDs from relations, with a bridge for rows the backfill has not reached.
 
         Relations win whenever they contain a value. A legacy JSON value is considered only when
         its relation is empty and the referenced row still exists; this keeps old rows runnable
-        during the rolling deployment before the cutover migration, without resurrecting deleted
-        resources or overriding a relation that has already been cleared.
+        during a rolling deployment, without resurrecting deleted resources or overriding a
+        relation that has already been cleared.
         """
         resource_params = {
             f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
@@ -851,7 +829,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         )
 
     def runtime_params(self) -> dict:
-        """Overlay relation IDs, retaining legacy scalar values until validation or cutover."""
+        """Overlay relation IDs, retaining a dangling legacy scalar value for validation."""
         params = copy.deepcopy(self.params or {})
         if self.pk is None:
             return params
