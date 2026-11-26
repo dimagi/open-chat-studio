@@ -567,8 +567,14 @@ export const createPromptEditor = (element) => {
 
 // Global HTMX handler for reinitializing editors
 document.addEventListener("htmx:afterSettle", (e) => {
+  // A history restore settles without a swap target.
+  const target = e.detail.target;
+  if (!target) {
+    return;
+  }
+
   // Reinitialize JSON editors
-  const newJsonEditors = e.detail.target.querySelectorAll('.json-editor');
+  const newJsonEditors = target.querySelectorAll('.json-editor');
   if (newJsonEditors.length) {
     Array.from(newJsonEditors).forEach(el => {
       createJsonEditor(el);
@@ -576,7 +582,7 @@ document.addEventListener("htmx:afterSettle", (e) => {
   }
 
   // Reinitialize Python editors
-  const newPythonEditors = e.detail.target.querySelectorAll('.python-editor');
+  const newPythonEditors = target.querySelectorAll('.python-editor');
   if (newPythonEditors.length) {
     Array.from(newPythonEditors).forEach(el => {
       createPythonEditor(el);
@@ -584,7 +590,7 @@ document.addEventListener("htmx:afterSettle", (e) => {
   }
 
   // Reinitialize Prompt editors
-  const newPromptEditors = e.detail.target.querySelectorAll('.prompt-editor');
+  const newPromptEditors = target.querySelectorAll('.prompt-editor');
   if (newPromptEditors.length) {
     Array.from(newPromptEditors).forEach(el => {
       createPromptEditor(el);
@@ -592,7 +598,7 @@ document.addEventListener("htmx:afterSettle", (e) => {
   }
 
   // Reinitialize diff views (e.g. the version-details and revert-confirmation modals)
-  const newDiffViews = e.detail.target.querySelectorAll('.diff-view');
+  const newDiffViews = target.querySelectorAll('.diff-view');
   if (newDiffViews.length) {
     Array.from(newDiffViews).forEach(el => {
       createDiffView(
