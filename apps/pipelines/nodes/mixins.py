@@ -41,7 +41,6 @@ from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETE
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
-from apps.utils.fields import as_int
 from apps.utils.json import dict_to_json_schema
 from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
@@ -53,13 +52,10 @@ logger = logging.getLogger("ocs.pipelines.nodes")
 OptionalInt = Annotated[int | None, BeforeValidator(lambda x: None if isinstance(x, str) and len(x) == 0 else x)]
 
 
-def _get_llm_provider_model(model_id, django_node=None):
-    """Resolve a model from the prefetch context, the caller's loaded row, or the database."""
+def _get_llm_provider_model(model_id):
+    """Resolve a model from the enclosing prefetch context, falling back to the repository."""
     if (model := get_prefetched_llm_provider_model(model_id)) is not None:
         return model
-    if django_node is not None and as_int(getattr(django_node, "llm_provider_model_id", None)) == as_int(model_id):
-        if (model := getattr(django_node, "llm_provider_model", None)) is not None:
-            return model
     return ORMRepository().get_llm_provider_model(model_id)
 
 
@@ -112,7 +108,7 @@ class LLMResponseMixin(BaseModel):
     def ensure_default_parameters(cls, data) -> Self:
         if llm_provider_model_id := data.get("llm_provider_model_id"):
             try:
-                model = _get_llm_provider_model(llm_provider_model_id, data.get("django_node"))
+                model = _get_llm_provider_model(llm_provider_model_id)
             except RepositoryLookupError:
                 raise PipelineNodeBuildError(
                     f"LLM provider model with id {llm_provider_model_id} does not exist"
@@ -128,7 +124,7 @@ class LLMResponseMixin(BaseModel):
     @model_validator(mode="after")
     def validate_llm_model(self):
         try:
-            model = _get_llm_provider_model(self.llm_provider_model_id, getattr(self, "django_node", None))
+            model = _get_llm_provider_model(self.llm_provider_model_id)
         except RepositoryLookupError as e:
             raise PydanticCustomError(
                 "invalid_model",

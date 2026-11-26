@@ -15,19 +15,26 @@ Validation never flags an unwired node or branch (the build only checks reachabl
 from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow
 from apps.pipelines.models import Node, Pipeline
+from apps.pipelines.repository import prefetch_llm_provider_models
 from apps.service_providers.llm_service.default_models import get_deprecated_models
 from apps.service_providers.models import LlmProviderModel
 
 
 def pipeline_build_state(pipeline: Pipeline) -> dict:
     """``pipeline_valid`` + ``errors`` + the advisory ``unwired_handles`` and ``deprecated_models``."""
-    errors = pipeline.validate()
-    return {
-        "pipeline_valid": not has_errors(errors),
-        "errors": errors,
-        "unwired_handles": unwired_handles(pipeline),
-        "deprecated_models": deprecated_models(pipeline),
-    }
+    # Validation and handle rendering both resolve each node's provider model. Fetch them once here
+    # so neither has to query per node.
+    llm_model_ids = [
+        model_id for node in pipeline.node_set.all() if (model_id := node.params.get("llm_provider_model_id"))
+    ]
+    with prefetch_llm_provider_models(llm_model_ids):
+        errors = pipeline.validate()
+        return {
+            "pipeline_valid": not has_errors(errors),
+            "errors": errors,
+            "unwired_handles": unwired_handles(pipeline),
+            "deprecated_models": deprecated_models(pipeline),
+        }
 
 
 def deprecated_models(pipeline: Pipeline) -> dict:

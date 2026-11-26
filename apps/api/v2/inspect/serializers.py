@@ -36,6 +36,7 @@ from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
+from apps.pipelines.repository import prefetch_llm_provider_models
 from apps.utils.fields import as_int
 
 if TYPE_CHECKING:
@@ -616,7 +617,10 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(InspectNodeSerializer(many=True))
     def get_nodes(self, pipeline) -> list:
-        return InspectNodeSerializer(nodes_in_render_order(pipeline), many=True, context=self.context).data
+        nodes = nodes_in_render_order(pipeline)
+        llm_model_ids = [model_id for node in nodes if (model_id := node.params.get("llm_provider_model_id"))]
+        with prefetch_llm_provider_models(llm_model_ids):
+            return InspectNodeSerializer(nodes, many=True, context=self.context).data
 
 
 # ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────
