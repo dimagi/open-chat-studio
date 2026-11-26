@@ -325,8 +325,14 @@
   <script src="{% static 'js/sessionExport-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
-      SiteJS.tagMultiselect.setupTagSelects();
-      SiteJS.scrollProgress.setupScrollProgress('#table-top');
+      // A bundle the browser never ran (blocked, or served empty from cache) leaves its
+      // SiteJS namespace undefined. Check each one so it cannot break the other's setup.
+      if (window.SiteJS?.tagMultiselect) {
+        window.SiteJS.tagMultiselect.setupTagSelects();
+      }
+      if (window.SiteJS?.scrollProgress) {
+        window.SiteJS.scrollProgress.setupScrollProgress('#table-top');
+      }
     });
   </script>
 {% endblock page_js %}
