@@ -668,10 +668,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 if name not in resource_params
             }
         )
-        self.update_from_params(resource_params, ordinary_params=ordinary_params, team=self.pipeline.team)
+        self.update_from_params(resource_params, ordinary_params=ordinary_params)
 
     @transaction.atomic()
-    def update_from_params(self, resource_params=None, *, ordinary_params=None, team=None):
+    def update_from_params(self, resource_params=None, *, ordinary_params=None):
         """Apply resource relations from an editor payload without duplicate IDs in JSON.
 
         API callers validate submitted references with the pipeline-edit reference checker before

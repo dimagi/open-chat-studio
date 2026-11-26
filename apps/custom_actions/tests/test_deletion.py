@@ -99,7 +99,7 @@ def _strip_custom_actions_from_working_pipeline(working_pipeline):
     working pipeline (which saves clean) but published versions retain the snapshotted ref.
     Node content lives on the rows (ADR-0049), so the edit only touches them."""
     for node in working_pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__):
-        node.update_from_params({"custom_actions": []}, ordinary_params=node.params, team=working_pipeline.team)
+        node.update_from_params({"custom_actions": []}, ordinary_params=node.params)
 
 
 @pytest.mark.django_db()

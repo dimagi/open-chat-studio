@@ -503,7 +503,7 @@ class Importer:
 
         ordinary_params, resource_params = Node.split_resource_params(instance.params or {})
         if resource_params:
-            instance.update_from_params(resource_params, ordinary_params=ordinary_params, team=self.target_team)
+            instance.update_from_params(resource_params, ordinary_params=ordinary_params)
 
     def _adopt_existing(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict

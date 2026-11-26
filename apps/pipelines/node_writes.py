@@ -70,7 +70,7 @@ def write_content_nodes(pipeline: Pipeline, content_nodes: dict[str, FlowNode]) 
     # (the common autosave case) skips it entirely.
     for node_to_sync, editor_params in needs_resource_sync:
         _, resource_params = Node.split_resource_params(editor_params)
-        node_to_sync.update_from_params(resource_params, team=pipeline.team)
+        node_to_sync.update_from_params(resource_params)
 
 
 def _create_node(pipeline: Pipeline, node: FlowNode) -> Node:
@@ -88,7 +88,7 @@ def _create_node(pipeline: Pipeline, node: FlowNode) -> Node:
         label=content.label,
         **node_position_fields(node.position),
     )
-    created.update_from_params(resource_params, team=pipeline.team)
+    created.update_from_params(resource_params)
     return created
 
 
