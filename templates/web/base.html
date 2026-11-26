@@ -51,6 +51,11 @@
       ></script>
     {% endif %}
 
+    {% comment %}
+      Browser Back reloads the page from the server. Replaying a saved copy of the DOM would run
+      the page's inline scripts a second time and hand Alpine markup it has already rendered.
+    {% endcomment %}
+    <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
     {% htmx_script %}
     <script src="{% static 'js/morphExtension-bundle.js' %}" defer></script>
     <script src="{% static 'js/site-bundle.js' %}"></script>
