@@ -31,9 +31,6 @@ const config = {
   output: {
     path: path.resolve(__dirname, './static'),
     filename: 'js/[name]-bundle.js',
-    // Lazy chunks are requested by the webpack runtime, not through {% static %}, so the Django
-    // manifest cannot rename them. The hash goes in the name here instead.
-    chunkFilename: 'js/[name]-bundle.[contenthash:8].js',
     library: ["SiteJS", "[name]"],
   },
 

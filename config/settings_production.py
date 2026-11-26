@@ -25,11 +25,6 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS: bool = True
 
-# Content-hashed static file names, so a browser cannot pair one release's HTML with a cached
-# bundle from another. Only here because the manifest is written by collectstatic, which dev and
-# test runs skip.
-STORAGES["staticfiles"] = {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}  # noqa: F405
-
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 # Add the server's own hostname to ALLOWED_HOSTS
 ALLOWED_HOSTS.append(gethostbyname(gethostname()))
