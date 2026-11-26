@@ -83,11 +83,6 @@ version section when a release is cut.
   requests send `OpenChatStudio (+<site URL>)`, built from the Site record, where
   they previously sent httpx's `python-httpx/<version>`. A custom action whose
   OpenAPI spec declares a `User-Agent` header parameter sends that value instead.
-- `RATE_LIMIT_CUSTOM_ACTIONS` (optional, default `1000/5m`) sets the rate for the
-  new `custom_actions` scope, which counts outbound custom action calls per auth
-  provider, or per action when it has none. Like the other scopes it only logs
-  `rate_limit.would_block` until `RATE_LIMIT_ENFORCE` is on; after that an
-  over-limit call is not sent and the LLM receives a tool error.
 - `TEAM_DELETION_GRACE_PERIOD_DAYS` (optional, default `30`): how long a team stays disabled
   after an admin deletes it before its data is permanently removed. Deleting a team no longer
   removes its data straight away: the team is disabled at once, and a new daily Celery beat task,

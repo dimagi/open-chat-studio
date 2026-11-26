@@ -1,8 +1,7 @@
 # Rate Limiting
 
-Open Chat Studio counts inbound requests per surface, such as API calls and channel deliveries,
-and can refuse the ones over budget. It also counts the outbound calls chatbots make through
-custom actions, under the `custom_actions` scope. It ships counting only. A new deployment records what it would have blocked without turning anyone
+Open Chat Studio counts inbound requests per surface and can refuse the ones over budget. It
+ships counting only. A new deployment records what it would have blocked without turning anyone
 away, and enforcement is switched on separately once you have numbers to set it from.
 
 This page covers the switch-on. The variables themselves are listed in the
@@ -12,8 +11,7 @@ than a library is in
 
 ## How Counting Works
 
-Every request resolves to a **scope**, meaning the surface it arrived on or, for an outbound
-custom action call, the `custom_actions` scope, and an **identity**,
+Every request resolves to a **scope**, meaning the surface it arrived on, and an **identity**,
 meaning whose budget it spends. That pair addresses a counter in Redis which resets on a fixed
 window.
 
@@ -25,7 +23,6 @@ window.
 | `public_chat` | 100/5m | the public web chat views |
 | `channels` | 3000/5m | inbound deliveries from messaging providers |
 | `credentials` | 100/5m | OAuth token endpoints, rejected API keys, Connect key exchange |
-| `custom_actions` | 1000/5m | outbound custom action calls, per auth provider |
 
 What counts as an identity differs by scope: a team, an API key, a chat session, a widget
 channel, an identifier carried in a webhook URL, or the caller's address where nothing better is
@@ -183,7 +180,7 @@ The per-team form resolves the team from the request. Surfaces that only learn t
 view has done its own lookup, the provider webhooks among them, are not reached by it, and only
 the everyone-on form applies there.
 
-Three paths consult neither form, because each counts from a place with no request to resolve the
+Two paths consult neither form, because both count from a place with no request to resolve the
 flag against:
 
 - Rejected API key and bearer presentations are counted from inside an authentication class, so
@@ -192,8 +189,6 @@ flag against:
   the limiter cannot count.
 - Slack deliveries are counted from the Bolt listener. They keep being counted, though nothing is
   refused there in any case, since `channels` does not refuse.
-- Custom action requests are counted from the tool call. With enforcement on, a custom action over
-  its limit is still refused: the tool returns a rate-limit error without sending the request.
 
 `RATE_LIMIT_ENFORCE=False` plus a restart remains the only complete off switch.
 
