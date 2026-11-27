@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from django.apps import apps as global_apps
 from django.db import connection, transaction
+from django.db.models import Q
 from pydantic import BaseModel
 
 from apps.pipelines.models import Node
@@ -20,6 +21,7 @@ from apps.service_providers.llm_service.model_parameters import (
     GPT51Parameters,
     GPT52Parameters,
     GPT55Parameters,
+    NoParameters,
     OpenAIReasoningParameters,
 )
 from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel, LlmProviderTypes
@@ -35,6 +37,9 @@ class Model:
     is_translation_default: bool = False
     parameters: type[BaseModel] = BasicParameters
     replacement: str | None = None
+    # A chat model writes text; a decision model answers a decision backend's typed questions.
+    chat: bool = True
+    decisions: bool = False
 
 
 def k(n: int) -> int:
@@ -170,6 +175,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         # MiniMax retires the M2.7 and M2.5 families on 2026-11-18.
         Model("MiniMax-M2.5", 204800, deprecated=True, replacement="MiniMax-M3"),
         Model("MiniMax-M2", 200000),
+    ],
+    "jev": [
+        Model("jev-latest", 64000, is_default=True, parameters=NoParameters, chat=False, decisions=True),
     ],
     "google": [
         Model("gemini-4-carbon", 1048576),
@@ -309,6 +317,36 @@ for models in DEFAULT_LLM_PROVIDER_MODELS.values():
     for model in models:
         if model.parameters:
             LLM_MODEL_PARAMETERS[model.name] = model.parameters
+
+
+MODELS_BY_KEY = {
+    (provider_type, model.name): model
+    for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items()
+    for model in models
+}
+# The types whose listed models all make decisions instead of writing text.
+DECISION_ONLY_TYPES = frozenset(
+    provider_type
+    for provider_type, models in DEFAULT_LLM_PROVIDER_MODELS.items()
+    if models and not any(model.chat for model in models)
+)
+
+
+def model_uses(provider_type: str, model_name: str) -> tuple[bool, bool]:
+    """(chat, decisions) for a model; one not listed is decision-only in a `DECISION_ONLY_TYPES` type, else chat."""
+    if model := MODELS_BY_KEY.get((provider_type, model_name)):
+        return model.chat, model.decisions
+    decision_only = provider_type in DECISION_ONLY_TYPES
+    return not decision_only, decision_only
+
+
+def chat_models_q() -> Q:
+    """Matches the LlmProviderModel rows that `model_uses` says write text."""
+    decision_only = Q(type__in=DECISION_ONLY_TYPES)
+    for (provider_type, name), model in MODELS_BY_KEY.items():
+        if not model.chat and provider_type not in DECISION_ONLY_TYPES:
+            decision_only |= Q(type=provider_type, name=name)
+    return ~decision_only
 
 
 def get_model_parameters(model_name: str, **param_overrides) -> dict:

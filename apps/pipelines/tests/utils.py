@@ -249,6 +249,14 @@ def state_key_router_node(
     )
 
 
+def decision_node(provider_ids: dict, decisions: list[dict], name: str | None = None):
+    return _with_node_id_and_name(
+        name,
+        "decide",
+        {"type": nodes.DecisionNode.__name__, "params": {**provider_ids, "decisions": decisions}},
+    )
+
+
 def extract_participant_data_node(
     provider_id: str, provider_model_id: str, data_schema: str, key_name: str, name: str | None = None
 ):

@@ -77,9 +77,11 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
             [m.to_langchain_dict() for m in self.messages.all() if not m.is_excluded_from_history]
         )
 
-    def get_langchain_messages_until_marker(self, marker: str, exclude_message_id=None) -> list[BaseMessage]:
+    def get_langchain_messages_until_marker(
+        self, marker: str, exclude_message_id=None, limit: int | None = None
+    ) -> list[BaseMessage]:
         """Fetch messages from the database until a marker is found. The marker must be one of the
-        PipelineChatHistoryModes values.
+        PipelineChatHistoryModes values. With `limit`, only the newest `limit` messages are read.
         """
         from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models imports chat.models
             PipelineChatHistoryModes,
@@ -88,6 +90,8 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
         messages = []
         include_summaries = marker == PipelineChatHistoryModes.SUMMARIZE
         for message in self.message_iterator(include_summaries, exclude_message_id=exclude_message_id):
+            if limit is not None and len(messages) >= limit:
+                break
             if not message.is_excluded_from_history:
                 messages.append(message.to_langchain_dict())
             if message.compression_marker and (not marker or marker == message.compression_marker):
