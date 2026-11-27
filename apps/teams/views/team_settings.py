@@ -23,6 +23,7 @@ from apps.teams.forms import (
     TeamMetadataForm,
     TeamPublicKeyForm,
 )
+from apps.teams.group_permissions import group_permissions_context
 from apps.teams.models import Invitation
 from apps.teams.settings_sections import SettingsSection, is_team_admin
 from apps.teams.utils import DEFAULT_SETTINGS_SECTION, section_url
@@ -88,6 +89,7 @@ def _members_context(request) -> dict:
         "invitation_form": InvitationForm(team=request.team),
         "members_table_url": reverse("single_team:members_table", args=[request.team.slug]),
         "role_choices": ROLE_CHOICES,
+        **group_permissions_context(),
     }
 
 

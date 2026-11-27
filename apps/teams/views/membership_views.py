@@ -13,6 +13,7 @@ from apps.teams.breadcrumbs import team_settings_crumb
 from apps.teams.decorators import login_and_team_required
 from apps.teams.exceptions import TeamPermissionError
 from apps.teams.forms import MembershipForm
+from apps.teams.group_permissions import group_permissions_context
 from apps.teams.models import Membership
 from apps.web.forms import set_form_fields_disabled
 
@@ -53,6 +54,7 @@ def team_membership_details(request, team_slug, membership_id):
             "membership": membership,
             "membership_form": membership_form,
             "editing_self": editing_self,
+            **group_permissions_context(),
         },
     )
 
