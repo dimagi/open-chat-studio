@@ -365,11 +365,43 @@ class AzureVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 
 class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["auth_token"]
-    additional_searchable_fields = ["account_sid"]
+    obfuscate_fields = ["auth_token", "api_key_secret"]
+    additional_searchable_fields = ["account_sid", "api_key_sid"]
 
     account_sid = forms.CharField(label=_("Account SID"))
-    auth_token = forms.CharField(label=_("Auth Token"))
+    auth_token = forms.CharField(
+        label=_("Auth Token"),
+        help_text=_(
+            "Twilio signs incoming webhooks with the Auth Token, so it is required even when an API key is set."
+        ),
+    )
+    api_key_sid = forms.CharField(
+        label=_("API Key SID"),
+        required=False,
+        help_text=render_help_with_link(
+            "Optional. When an API key is set, requests to the Twilio API authenticate with it "
+            "instead of the Auth Token.",
+            "https://www.twilio.com/docs/iam/api-keys",
+            link_text="Twilio API keys documentation",
+        ),
+    )
+    api_key_secret = forms.CharField(label=_("API Key Secret"), required=False)
+
+    def clean_api_key_sid(self):
+        api_key_sid = self.cleaned_data["api_key_sid"].strip()
+        if api_key_sid and not api_key_sid.startswith("SK"):
+            raise forms.ValidationError(_("Enter the SID of an API key. API key SIDs start with 'SK'."))
+        return api_key_sid
+
+    def clean(self):
+        cleaned_data = super().clean()
+        api_key_sid = cleaned_data.get("api_key_sid")
+        api_key_secret = cleaned_data.get("api_key_secret")
+        if api_key_sid and not api_key_secret:
+            self.add_error("api_key_secret", _("Enter the secret for this API key."))
+        elif api_key_secret and not api_key_sid and "api_key_sid" not in self.errors:
+            self.add_error("api_key_sid", _("Enter the SID of the API key this secret belongs to."))
+        return cleaned_data
 
 
 class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

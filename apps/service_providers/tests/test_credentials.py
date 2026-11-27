@@ -80,10 +80,12 @@ def build(service_cls: type[pydantic.BaseModel]) -> pydantic.BaseModel:
 # --- the repr must not carry credentials ------------------------------------------------------
 
 # Fields whose name looks like a credential but holds a public identifier: an AWS access key ID is
-# the public half of the key pair, and ApiKeyAuthService.key is the header name, not its value.
+# the public half of the key pair, ApiKeyAuthService.key is the header name, not its value, and a
+# Twilio API key SID identifies the key whose secret is held separately.
 PUBLIC_IDENTIFIER_FIELDS = {
     ("AWSSpeechService", "aws_access_key_id"),
     ("ApiKeyAuthService", "key"),
+    ("TwilioService", "api_key_sid"),
 }
 
 _SECRET_NAME_PARTS = ("key", "secret", "token", "password", "credential")

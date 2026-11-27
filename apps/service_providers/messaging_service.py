@@ -280,6 +280,8 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
 
     account_sid: str
     auth_token: pydantic.SecretStr
+    api_key_sid: str = ""
+    api_key_secret: pydantic.SecretStr = pydantic.SecretStr("")
 
     TWILIO_CHANNEL_PREFIXES: ClassVar[dict[ChannelPlatform, str]] = {
         ChannelPlatform.WHATSAPP: "whatsapp",
@@ -295,7 +297,20 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
     def client(self) -> "Client":
         from twilio.rest import Client  # noqa: PLC0415 - lazy: optional provider dep (twilio SDK)
 
+        if self._uses_api_key:
+            return Client(self.api_key_sid, self.api_key_secret.get_secret_value(), self.account_sid)
         return Client(self.account_sid, self.auth_token.get_secret_value())
+
+    @property
+    def _uses_api_key(self) -> bool:
+        return bool(self.api_key_sid and self.api_key_secret.get_secret_value())
+
+    @property
+    def _basic_auth(self) -> tuple[str, str]:
+        """Username and password for REST requests made without the SDK client."""
+        if self._uses_api_key:
+            return self.api_key_sid, self.api_key_secret.get_secret_value()
+        return self.account_sid, self.auth_token.get_secret_value()
 
     @property
     def s3_client(self):
@@ -432,8 +447,9 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
         """Fetch raw bytes and content type for any inbound Twilio media (image, audio, etc.)."""
         if not message.media_url:
             raise ValueError("Cannot download Twilio media: message.media_url is empty")
-        auth = (self.account_sid, self.auth_token.get_secret_value())
-        response = httpx.get(message.media_url, auth=auth, follow_redirects=True, timeout=MEDIA_DOWNLOAD_TIMEOUT)
+        response = httpx.get(
+            message.media_url, auth=self._basic_auth, follow_redirects=True, timeout=MEDIA_DOWNLOAD_TIMEOUT
+        )
         response.raise_for_status()
         return response.content, _normalize_content_type(response.headers.get("Content-Type"))
 
