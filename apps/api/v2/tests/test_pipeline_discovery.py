@@ -394,6 +394,13 @@ def test_options_carry_no_edit_urls(team_with_resources):
     assert "edit_url" not in client.get(reverse("api:v2:pipeline-options")).content.decode()
 
 
+def test_clean_options_drops_the_builders_model_use_marker():
+    """The builder narrows its model picker with `chat`; the API validates the node instead."""
+    options = {"llm_provider_model_id": [{"value": 3, "label": "jev-latest", "type": "jev", "chat": False}]}
+
+    assert _clean_options(options) == {"llm_provider_model_id": [{"value": 3, "label": "jev-latest", "type": "jev"}]}
+
+
 def test_clean_options_recurses_into_nested_dicts():
     """`built_in_tools` nests lists one level down and `tool_config` two, so the strip has to recurse.
     `tool_config` entries have no `value` key, so the placeholder strip must leave them alone."""

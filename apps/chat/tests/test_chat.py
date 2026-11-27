@@ -106,3 +106,14 @@ def test_message_iterator_uses_prefetched_messages(chat, django_assert_num_queri
     assert [m.content for m in messages] == ["Third", "Second", "Summary of second", "Hello"]
     assert [m.content for m in messages_without_third] == [m.content for m in expected_without_third]
     assert third not in messages_without_third
+
+
+@pytest.mark.parametrize("limit", [pytest.param(n, id=f"limit-{n}") for n in range(5)])
+def test_a_limit_keeps_the_newest_messages(chat, limit):
+    ChatMessage.objects.create(chat=chat, content="Hi", message_type=ChatMessageType.AI, summary="A greeting")
+    ChatMessage.objects.create(chat=chat, content="What's up?", message_type=ChatMessageType.HUMAN)
+    every = chat.get_langchain_messages_until_marker(marker="summarize")
+
+    messages = chat.get_langchain_messages_until_marker(marker="summarize", limit=limit)
+
+    assert messages == every[max(len(every) - limit, 0) :]

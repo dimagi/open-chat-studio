@@ -23,6 +23,7 @@ export type PropertySchema = {
   "ui:visibleWhen"?: VisibleWhenCondition | VisibleWhenCondition[] | undefined;
   "ui:keepValueWhenHidden"?: boolean | undefined;
   "ui:rows"?: number | undefined;
+  "ui:modelUse"?: "chat" | "any" | undefined;
   [k: string]: unknown;
 }
 

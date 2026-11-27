@@ -228,6 +228,7 @@ class TestRouterNode(FullPayload):
             "keywords": ["schedule", "reschedule", "cancel"],
             "route_descriptions": {"schedule": "Booking a new appointment", "cancel": "Cancelling an appointment"},
             "default_keyword_index": 2,
+            "confidence_threshold": 0.5,
             "tag_output_message": True,
             "history_type": "named",
             "history_name": "triage-history",

@@ -134,11 +134,17 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
             _option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers
         ],
         OptionsSource.llm_provider_model_id: [
-            _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
+            _model_option(model)
             # `str(model)` names the owning team for custom models; join it rather than query per row.
             for model in llm_provider_models.select_related("team")
         ],
     }
+
+
+def _model_option(model: LlmProviderModel) -> dict:
+    """A model's option, marked when it is not a chat model so the builder offers it only to the nodes that take one."""
+    option = _option(model.id, str(model), model.type, None, model.max_token_limit, model.deprecated)
+    return option | ({} if model.supports_chat else {"chat": False})
 
 
 def _team_resource_options(team: Team, include_versions: bool) -> dict:
@@ -263,7 +269,7 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
     provider_id = None
     if len(llm_providers) > 0:
         for provider in llm_providers:
-            llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
+            llm_provider_model = llm_provider_models.filter(type=provider["type"]).chat().first()
             if llm_provider_model:
                 provider_id = provider["id"]
                 break

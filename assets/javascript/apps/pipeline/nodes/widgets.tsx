@@ -1245,8 +1245,13 @@ export function LlmWidget(props: WidgetParams) {
     );
   };
 
+  const modelUse = props.schema["ui:modelUse"];
+  const offeredModels = (parameterValues.llm_provider_model_id as LlmProviderModel[]).filter(
+    (model) => modelUse !== "chat" || model.chat !== false
+  );
+
   type ProviderModelsByType = { [type: string]: TypedOption[] };
-    const providerModelsByType = parameterValues.llm_provider_model_id.reduce((acc, provModel) => {
+    const providerModelsByType = offeredModels.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
       acc[provModel.type] = [];
     }
@@ -1298,7 +1303,7 @@ export function LlmWidget(props: WidgetParams) {
           })}
         </select>
       </InputField>
-      {value && llmModelParamsSchema && (
+      {value && llmModelParamsSchema && Object.keys(llmModelParamsSchema.properties ?? {}).length > 0 && (
         <ModelParametersWidget
           nodeId={props.nodeId}
           schema={llmModelParamsSchema}
