@@ -97,6 +97,7 @@ def test_webhook_signature_with_unsupported_algorithm_is_rejected():
         pytest.param({"account_sid": "AC123"}, id="no-credentials"),
         pytest.param({"account_sid": "AC123"} | API_KEY, id="api-key-only"),
         pytest.param({"account_sid": "AC123"} | SHARED_KEY, id="shared-key-only"),
+        pytest.param(NO_AUTH_TOKEN | {"webhook_shared_key_id": ""}, id="shared-key-without-id"),
     ],
 )
 def test_service_requires_auth_token_or_both_keys(config):

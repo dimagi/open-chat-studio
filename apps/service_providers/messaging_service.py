@@ -315,7 +315,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
 
     @property
     def _has_webhook_shared_key(self) -> bool:
-        return bool(self.webhook_shared_key_secret.get_secret_value())
+        return bool(self.webhook_shared_key_id and self.webhook_shared_key_secret.get_secret_value())
 
     def get_webhook_signing_secret(self, signed_with_shared_key: bool) -> str:
         """The secret Twilio signed an incoming webhook with.
