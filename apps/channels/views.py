@@ -109,7 +109,11 @@ def new_twilio_message(request):
     set_current_team(experiment_channel.team)
     request.experiment = experiment_channel.experiment  # used by RequestLoggingMiddleware
     if not tasks.validate_twillio_request(
-        experiment_channel, message_data, request.build_absolute_uri(), request.headers.get("X-Twilio-Signature")
+        experiment_channel,
+        message_data,
+        request.build_absolute_uri(),
+        request.headers.get("X-Twilio-Signature"),
+        signature_settings=request.headers.get("X-Twilio-Webhooks-Signature-Settings"),
     ):
         return HttpResponseBadRequest("Invalid signature.")
 

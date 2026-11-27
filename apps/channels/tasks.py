@@ -7,7 +7,7 @@ from django.utils import timezone
 from field_audit.models import AuditAction
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
-from twilio.request_validator import RequestValidator
+from twilio.request_validator import RequestValidator, get_signature_algorithm
 
 from apps.channels import widget_versions
 from apps.channels.api_channel import ApiChannel
@@ -97,15 +97,19 @@ def get_twilio_channel_class_and_key(message):
     raise ValueError(f"Unsupported Twilio platform: {message.platform}")
 
 
-def validate_twillio_request(experiment_channel, raw_data, request_uri, signature) -> bool:
-    """For now this just logs an error if the signature validation fails.
-    In the future we will want to raise an error.
+def validate_twillio_request(experiment_channel, raw_data, request_uri, signature, signature_settings=None) -> bool:
+    """Check the signature Twilio sent with an incoming webhook.
+
+    `signature_settings` is the `X-Twilio-Webhooks-Signature-Settings` header, which Twilio sends
+    when it signed the request with a shared key instead of the account Auth Token.
 
     See https://www.twilio.com/docs/usage/webhooks/webhooks-security
     """
     try:
-        auth_token = experiment_channel.messaging_provider.get_messaging_service().auth_token.get_secret_value()
-        return RequestValidator(auth_token).validate(request_uri, raw_data, signature)
+        service = experiment_channel.messaging_provider.get_messaging_service()
+        secret = service.get_webhook_signing_secret(signed_with_shared_key=bool(signature_settings))
+        algorithm = get_signature_algorithm(signature_settings)
+        return RequestValidator(secret).validate(request_uri, raw_data, signature, algorithm=algorithm)
     except Exception:
         log.exception("Twilio signature validation failed")
         return False

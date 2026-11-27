@@ -72,20 +72,30 @@ def _dummy_value(annotation):
 def build(service_cls: type[pydantic.BaseModel]) -> pydantic.BaseModel:
     """A service whose only occurrence of SECRET is its credential."""
     kwargs = {
-        name: _dummy_value(field.annotation) for name, field in service_cls.model_fields.items() if field.is_required()
+        name: _dummy_value(field.annotation)
+        for name, field in service_cls.model_fields.items()
+        if field.is_required() or (service_cls.__name__, name) in CREDENTIALS_WITH_A_DEFAULT
     }
     return service_cls(**kwargs)
+
+
+# Credentials the model does not require because another field can stand in for them.
+CREDENTIALS_WITH_A_DEFAULT = {
+    ("TwilioService", "auth_token"),
+}
 
 
 # --- the repr must not carry credentials ------------------------------------------------------
 
 # Fields whose name looks like a credential but holds a public identifier: an AWS access key ID is
 # the public half of the key pair, ApiKeyAuthService.key is the header name, not its value, and a
-# Twilio API key SID identifies the key whose secret is held separately.
+# Twilio API key SID or
+# shared key ID identifies a key whose secret is held separately.
 PUBLIC_IDENTIFIER_FIELDS = {
     ("AWSSpeechService", "aws_access_key_id"),
     ("ApiKeyAuthService", "key"),
     ("TwilioService", "api_key_sid"),
+    ("TwilioService", "webhook_shared_key_id"),
 }
 
 _SECRET_NAME_PARTS = ("key", "secret", "token", "password", "credential")

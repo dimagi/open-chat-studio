@@ -365,15 +365,14 @@ class AzureVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 
 class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["auth_token", "api_key_secret"]
-    additional_searchable_fields = ["account_sid", "api_key_sid"]
+    obfuscate_fields = ["auth_token", "api_key_secret", "webhook_shared_key_secret"]
+    additional_searchable_fields = ["account_sid", "api_key_sid", "webhook_shared_key_id"]
 
     account_sid = forms.CharField(label=_("Account SID"))
     auth_token = forms.CharField(
         label=_("Auth Token"),
-        help_text=_(
-            "Twilio signs incoming webhooks with the Auth Token, so it is required even when an API key is set."
-        ),
+        required=False,
+        help_text=_("Required unless both an API key and a webhook shared key are set."),
     )
     api_key_sid = forms.CharField(
         label=_("API Key SID"),
@@ -386,6 +385,18 @@ class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         ),
     )
     api_key_secret = forms.CharField(label=_("API Key Secret"), required=False)
+    webhook_shared_key_id = forms.CharField(
+        label=_("Webhook Shared Key ID"),
+        required=False,
+        help_text=render_help_with_link(
+            "Optional. Incoming webhooks that Twilio signs with this shared key are validated with its "
+            "secret instead of the Auth Token. In Twilio, a Webhook Rule must apply the key to this "
+            "server's webhook URLs.",
+            "https://www.twilio.com/docs/usage/webhooks/webhook-shared-keys",
+            link_text="Twilio webhook shared keys documentation",
+        ),
+    )
+    webhook_shared_key_secret = forms.CharField(label=_("Webhook Shared Key Secret"), required=False)
 
     def clean_api_key_sid(self):
         api_key_sid = self.cleaned_data["api_key_sid"].strip()
@@ -393,16 +404,35 @@ class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             raise forms.ValidationError(_("Enter the SID of an API key. API key SIDs start with 'SK'."))
         return api_key_sid
 
-    def clean(self):
-        cleaned_data = super().clean()
-        api_key_sid = cleaned_data.get("api_key_sid")
+    def clean_webhook_shared_key_id(self):
+        key_id = self.cleaned_data["webhook_shared_key_id"].strip()
+        if key_id and not key_id.startswith("webhooks_sharedkey_"):
+            raise forms.ValidationError(
+                _("Enter the ID of a shared key. Shared key IDs start with 'webhooks_sharedkey_'.")
+            )
+        return key_id
+
+    def _clean_key_pair(self, cleaned_data, id_field, secret_field) -> bool:
+        """Require the two halves of a key together. Returns whether the key is set."""
+        key_id = cleaned_data.get(id_field)
         # ObfuscatingMixin restores a blank secret from the saved config, which is None for a
         # provider saved before the field existed.
-        api_key_secret = cleaned_data["api_key_secret"] = cleaned_data.get("api_key_secret") or ""
-        if api_key_sid and not api_key_secret:
-            self.add_error("api_key_secret", _("Enter the secret for this API key."))
-        elif api_key_secret and not api_key_sid and "api_key_sid" not in self.errors:
-            self.add_error("api_key_sid", _("Enter the SID of the API key this secret belongs to."))
+        secret = cleaned_data[secret_field] = cleaned_data.get(secret_field) or ""
+        if key_id and not secret:
+            self.add_error(secret_field, _("Enter the secret for this key."))
+        elif secret and not key_id and id_field not in self.errors:
+            self.add_error(id_field, _("Enter the identifier of the key this secret belongs to."))
+        return bool(key_id and secret)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        has_api_key = self._clean_key_pair(cleaned_data, "api_key_sid", "api_key_secret")
+        has_shared_key = self._clean_key_pair(cleaned_data, "webhook_shared_key_id", "webhook_shared_key_secret")
+        if not cleaned_data.get("auth_token") and not self.errors and not (has_api_key and has_shared_key):
+            self.add_error(
+                "auth_token",
+                _("Enter the Auth Token, or set both an API key and a webhook shared key to work without it."),
+            )
         return cleaned_data
 
 

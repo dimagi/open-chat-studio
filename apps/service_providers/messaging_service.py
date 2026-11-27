@@ -279,9 +279,11 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
     max_file_size_mb: ClassVar[int] = 16
 
     account_sid: str
-    auth_token: pydantic.SecretStr
+    auth_token: pydantic.SecretStr = pydantic.SecretStr("")
     api_key_sid: str = ""
     api_key_secret: pydantic.SecretStr = pydantic.SecretStr("")
+    webhook_shared_key_id: str = ""
+    webhook_shared_key_secret: pydantic.SecretStr = pydantic.SecretStr("")
 
     TWILIO_CHANNEL_PREFIXES: ClassVar[dict[ChannelPlatform, str]] = {
         ChannelPlatform.WHATSAPP: "whatsapp",
@@ -301,9 +303,32 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
             return Client(self.api_key_sid, self.api_key_secret.get_secret_value(), self.account_sid)
         return Client(self.account_sid, self.auth_token.get_secret_value())
 
+    @pydantic.model_validator(mode="after")
+    def _check_credentials(self):
+        if not self.auth_token.get_secret_value() and not (self._uses_api_key and self._has_webhook_shared_key):
+            raise ValueError("An Auth Token is required unless both an API key and a webhook shared key are set")
+        return self
+
     @property
     def _uses_api_key(self) -> bool:
         return bool(self.api_key_sid and self.api_key_secret.get_secret_value())
+
+    @property
+    def _has_webhook_shared_key(self) -> bool:
+        return bool(self.webhook_shared_key_secret.get_secret_value())
+
+    def get_webhook_signing_secret(self, signed_with_shared_key: bool) -> str:
+        """The secret Twilio signed an incoming webhook with.
+
+        Twilio signs with a shared key when a Webhook Rule matching the URL names one, and with the
+        account Auth Token otherwise.
+        """
+        secret = self.webhook_shared_key_secret if signed_with_shared_key else self.auth_token
+        value = secret.get_secret_value()
+        if not value:
+            missing = "webhook shared key" if signed_with_shared_key else "Auth Token"
+            raise ServiceProviderConfigError(self._type, f"Webhook is signed with a {missing} that is not configured")
+        return value
 
     @property
     def _basic_auth(self) -> tuple[str, str]:
