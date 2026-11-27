@@ -20,7 +20,7 @@ from apps.api.v2.write.serializers import (
     RejectsUnwritableKeys,
 )
 from apps.chatbots.forms import ChatbotSettingsForm
-from apps.experiments.models import Experiment
+from apps.experiments.models import ExperimentVersionSpec
 
 
 def _writable_model_fields(serializer) -> set[str]:
@@ -28,7 +28,7 @@ def _writable_model_fields(serializer) -> set[str]:
 
 
 def test_patch_covers_every_versioned_field_except_the_pipeline():
-    """`VERSIONED_CONTENT_FIELDS` is what a published version snapshots. Everything in it except
+    """The chatbot's version spec says what a published version carries. Everything in it except
     `pipeline` -- which has its own façade at /chatbots/{id}/pipeline/* -- is writable here, so a
     new versioned field has to be an explicit decision rather than an omission.
 
@@ -36,7 +36,7 @@ def test_patch_covers_every_versioned_field_except_the_pipeline():
     place while the participant allowlist feature is removed in phases, but nothing writes to it
     through this API any more."""
     assert _writable_model_fields(ChatbotWriteSerializer()) == (
-        Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline", "participant_allowlist"}
+        ExperimentVersionSpec().travelling_fields - {"pipeline", "participant_allowlist"}
     )
 
 

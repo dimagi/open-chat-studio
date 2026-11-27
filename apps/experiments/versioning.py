@@ -1,15 +1,19 @@
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as data_field
+from enum import StrEnum
 from functools import cached_property
 from itertools import chain
-from typing import Any, Self
+from typing import Any, ClassVar, Self
 
+from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist
 from django.db import transaction
 from django.db.models import (
     BooleanField,
     Case,
+    Field,
     Q,
     QuerySet,
     When,
@@ -313,6 +317,311 @@ class VersionDetails:
                     return
 
 
+class Operation(StrEnum):
+    """What a traversal of a versioned record does."""
+
+    PUBLISH = "publish"
+    """working -> version"""
+
+    REVERT = "revert"
+    """version -> working"""
+
+    COPY = "copy"
+    """working -> new working"""
+
+
+class Strategy(StrEnum):
+    """How a referenced record travels when the record holding the reference is published."""
+
+    NEW_VERSION = "new_version"
+    """A new version of the working target."""
+
+    REUSE_UNCHANGED = "reuse_unchanged"
+    """The target's latest version when nothing changed since it, otherwise a new one."""
+
+    LIVE_REFERENCE = "live_reference"
+    """The working target itself; the version reads it live (ADR-0031)."""
+
+    PRIVATE_CLONE = "private_clone"
+    """A clone with no family link, owned by the row that references it."""
+
+
+class VersionSpecError(Exception):
+    """A spec is declared, or traversed, in a way that cannot produce a correct snapshot."""
+
+
+class Member:
+    """One declared part of a `VersionSpec`; subclasses say how it travels on each operation.
+
+    `provides` names a context key the member writes its result to; `reads` names keys an earlier
+    member must have provided, so a member declared before one it depends on raises `VersionSpecError`."""
+
+    name: str
+
+    def __init__(self, *, reads: tuple[str, ...] = (), provides: str | None = None):
+        self.reads = tuple(reads)
+        self.provides = provides
+
+    def __set_name__(self, owner, name: str):
+        self.name = name
+
+    def publish(self, working, version, context: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def copy(self, working, copy, context: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def revert(self, working, version) -> None:
+        raise NotImplementedError
+
+    def _require(self, context: dict[str, Any]) -> None:
+        missing = [key for key in self.reads if key not in context]
+        if missing:
+            raise VersionSpecError(f"{self.name} reads {missing} but no earlier member provided it")
+
+    def _provide(self, context: dict[str, Any], value) -> None:
+        if self.provides:
+            context[self.provides] = value
+
+
+class Reference(Member):
+    """A forward FK. An `owned` target belongs to this record: a copy copies it and a revert resets it in
+    place; a version that holds no owned target leaves the working target as it is."""
+
+    def __init__(
+        self, strategy: Strategy, *, owned: bool = False, reads: tuple[str, ...] = (), provides: str | None = None
+    ):
+        super().__init__(reads=reads, provides=provides)
+        self.strategy = Strategy(strategy)
+        self.owned = owned
+
+    def publish(self, working, version, context: dict[str, Any]) -> None:
+        self._require(context)
+        target = getattr(working, self.name)
+        travelled = None if target is None else self._travel(target)
+        setattr(version, self.name, travelled)
+        self._provide(context, travelled)
+
+    def _travel(self, target):
+        match self.strategy:
+            case Strategy.NEW_VERSION:
+                return target.create_new_version()
+            case Strategy.REUSE_UNCHANGED:
+                latest = target.latest_version
+                if latest and not differs(target, latest, exclude_model_fields=latest.get_fields_to_exclude()):
+                    return latest
+                return target.create_new_version()
+            case Strategy.LIVE_REFERENCE:
+                return target
+            case Strategy.PRIVATE_CLONE:
+                return target.create_new_version(is_copy=True)
+
+    def copy(self, working, copy, context: dict[str, Any]) -> None:
+        self._require(context)
+        target = getattr(working, self.name)
+        if target is not None and (self.owned or self.strategy is Strategy.PRIVATE_CLONE):
+            target = target.create_new_version(is_copy=True)
+        setattr(copy, self.name, target)
+        self._provide(context, target)
+
+    def revert(self, working, version) -> None:
+        if self.strategy is Strategy.LIVE_REFERENCE:
+            return
+        target = getattr(version, self.name)
+        if self.owned:
+            if target is None:
+                return
+            current = getattr(working, self.name)
+            if current is None:
+                raise ValueError(f"Cannot revert {self.name}: the working record has none")
+            current.revert_to_version(target)
+            return
+        if self.strategy is Strategy.PRIVATE_CLONE:
+            setattr(working, self.name, None if target is None else target.create_new_version(is_copy=True))
+            return
+        setattr(working, self.name, None if target is None else target.get_working_version())
+
+
+class OwnedSet(Member):
+    """Rows reached through reverse accessors that belong to this record.
+
+    `via` is a bridge `(working, other, operation)` that carries the set until the rows' own model
+    has a spec; `accessors` names the reverse relations it covers, the member's own name by default."""
+
+    def __init__(
+        self,
+        *,
+        via: Callable[[Any, Any, Operation], Any],
+        accessors: tuple[str, ...] | None = None,
+        reads: tuple[str, ...] = (),
+        provides: str | None = None,
+    ):
+        super().__init__(reads=reads, provides=provides)
+        self.via = via
+        self._accessors = accessors
+
+    @property
+    def accessors(self) -> tuple[str, ...]:
+        return self._accessors or (self.name,)
+
+    def publish(self, working, version, context: dict[str, Any]) -> None:
+        self._require(context)
+        self._provide(context, self.via(working, version, Operation.PUBLISH))
+
+    def copy(self, working, copy, context: dict[str, Any]) -> None:
+        self._require(context)
+        self._provide(context, self.via(working, copy, Operation.COPY))
+
+    def revert(self, working, version) -> None:
+        self.via(working, version, Operation.REVERT)
+
+
+class VersionSpec:
+    """Declares how a `VersionsMixin` model travels between its working row and its versions.
+
+    `Meta.model` is an `"app_label.Model"` label, resolved lazily. `Meta.identity` names the fields
+    that never travel: the row's own identity, the family columns and lifecycle state. Every other
+    concrete field is a row field that travels by being cloned, unless a member declares it.
+    `Meta.regenerated` maps an identity field to a factory for the clone's fresh value, applied
+    before its first save. Members run in class-body order; the hooks run after them."""
+
+    registry: ClassVar[dict[str, type["VersionSpec"]]] = {}
+    members: ClassVar[tuple[Member, ...]] = ()
+
+    class Meta:
+        model: str
+        identity: frozenset[str] = frozenset()
+        regenerated: dict[str, Callable[[], Any]] = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        label = getattr(cls.Meta, "model", None)
+        if not label:
+            raise VersionSpecError(f"{cls.__name__}.Meta.model must name the model it binds")
+        if label.lower() in cls.registry:
+            raise VersionSpecError(f"{label} already has a VersionSpec: {cls.registry[label.lower()].__name__}")
+        cls.members = tuple(value for value in cls.__dict__.values() if isinstance(value, Member))
+        cls.registry[label.lower()] = cls
+
+    @classmethod
+    def for_model(cls, model_cls) -> "VersionSpec | None":
+        spec_cls = cls.registry.get(model_cls._meta.label_lower)
+        return spec_cls() if spec_cls else None
+
+    @property
+    def model(self):
+        return apps.get_model(self.Meta.model)
+
+    @property
+    def identity(self) -> frozenset[str]:
+        return frozenset(getattr(self.Meta, "identity", frozenset()))
+
+    @property
+    def regenerated(self) -> dict[str, Callable[[], Any]]:
+        return dict(getattr(self.Meta, "regenerated", {}))
+
+    @property
+    def row_fields(self) -> list[Field]:
+        """The concrete fields that travel by being cloned: not identity, not declared by a member."""
+        declared = {member.name for member in self.members}
+        return [
+            field
+            for field in self.model._meta.concrete_fields
+            if field.name not in self.identity and field.name not in declared
+        ]
+
+    @property
+    def travelling_fields(self) -> frozenset[str]:
+        """Every field a version carries: the row fields and the declared references."""
+        references = {member.name for member in self.members if isinstance(member, Reference)}
+        return frozenset({field.name for field in self.row_fields} | references)
+
+    @property
+    def numbered(self) -> bool:
+        return _has_field(self.model, "version_number")
+
+    def on_publish(self, working, version, **options) -> None:
+        """Model-specific work after the members, before the version's final save."""
+
+    def on_copy(self, working, copy, **options) -> None:
+        """Model-specific work after the members, before the copy's final save."""
+
+    @transaction.atomic()
+    def publish(self, working, **options):
+        """Snapshot `working` into a new version, numbering it and advancing the working row."""
+        version = self._clone(working)
+        version.working_version_id = working.pk
+        if self.numbered:
+            version.version_number = self._next_number(working)
+        self._regenerate(version)
+        version.save()
+        context: dict[str, Any] = {}
+        for member in self.members:
+            member.publish(working, version, context)
+        self.on_publish(working, version, **options)
+        version.save()
+        return version
+
+    @transaction.atomic()
+    def copy(self, working, **options):
+        """Duplicate `working` into a new working record with no family link, numbered from one."""
+        copy = self._clone(working)
+        copy.working_version_id = None
+        if self.numbered:
+            copy.version_number = 1
+        self._regenerate(copy)
+        copy.save()
+        context: dict[str, Any] = {}
+        for member in self.members:
+            member.copy(working, copy, context)
+        self.on_copy(working, copy, **options)
+        copy.save()
+        return copy
+
+    @transaction.atomic()
+    def revert(self, working, version) -> None:
+        """Reset `working` to the content of `version`, leaving every version row as it is."""
+        name = self.model._meta.verbose_name
+        if not working.is_working_version:
+            raise ValueError(f"Can only revert the working version of this {name}")
+        if version.get_working_version_id() != working.pk:
+            raise ValueError(f"Can only revert to a version of this {name}")
+        for field in self.row_fields:
+            setattr(working, field.attname, getattr(version, field.attname))
+        for member in self.members:
+            member.revert(working, version)
+        working.save()
+
+    def _next_number(self, working) -> int:
+        """The working row's current number, taken under a row lock so two publishers never share
+        one; the row is advanced and `working` brought in step with it."""
+        locked = self.model.objects.select_for_update().get(pk=working.pk)
+        number = locked.version_number
+        locked.version_number = number + 1
+        locked.save(update_fields=["version_number"])
+        working.version_number = locked.version_number
+        return number
+
+    def _clone(self, working):
+        clone = self.model.objects.get(pk=working.pk)
+        clone.pk = None
+        clone.id = None
+        clone._state.adding = True
+        return clone
+
+    def _regenerate(self, clone) -> None:
+        for field_name, make in self.regenerated.items():
+            setattr(clone, field_name, make())
+
+
+def _has_field(model, name: str) -> bool:
+    try:
+        model._meta.get_field(name)
+    except FieldDoesNotExist:
+        return False
+    return True
+
+
 class VersionsMixin:
     """A model mixin that needs to be added to the model that will be versioned"""
 
@@ -325,10 +634,13 @@ class VersionsMixin:
 
     @transaction.atomic()
     def create_new_version(self, save=True, is_copy=False):
-        """
-        Creates a new version of this instance and sets the `working_version_id` (if this model supports it) to the
-        original instance ID
-        """
+        """Publish a version of this record, or copy it when `is_copy`.
+
+        A model with a bound `VersionSpec` is traversed by it. Without one the row is cloned and, when the
+        model has a `working_version`, linked to this record; `save` applies to that path only."""
+        spec = VersionSpec.for_model(type(self))
+        if spec is not None:
+            return spec.copy(self) if is_copy else spec.publish(self)
         working_version_id = self.id
         new_instance = self._meta.model.objects.get(id=working_version_id)
         new_instance.pk = None
@@ -340,6 +652,13 @@ class VersionsMixin:
         if save:
             new_instance.save()
         return new_instance
+
+    def revert_to_version(self, version: Self) -> None:
+        """Reset this working record to the content of `version`, as its `VersionSpec` declares."""
+        spec = VersionSpec.for_model(type(self))
+        if spec is None:
+            raise NotImplementedError(f"{type(self).__name__} has no VersionSpec to revert by")
+        spec.revert(self, version)
 
     @property
     def is_a_version(self):

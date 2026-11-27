@@ -132,8 +132,11 @@ recoverable by reverting the PR. For versioned models (see
 
 - Remove the feature's `VersionField` entries from `_get_version_details` so
   the version-diff UI stops showing it.
-- Remove the feature's `_copy_attr_to_new_version` calls so new snapshots stop
-  copying the field.
+- Add the field to the spec's `Meta.identity` and map it to an empty-value factory in
+  `Meta.regenerated`, so new snapshots stop carrying the stored value (cloning copies
+  every column; only `regenerated` replaces one). A retired `Reference` to a versioned
+  model needs the same two entries, or the `versioning.E002` check reports the foreign
+  key as undeclared.
 
 **Phase 2 — schema drop**, in a later release:
 
