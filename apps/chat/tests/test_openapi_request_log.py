@@ -52,7 +52,9 @@ def _build_tool(
 ):
     spec = OpenAPISpec.from_spec_dict(make_openapi_schema(operation, method=method))
     function_def = openapi_spec_op_to_function_def(spec, next(iter(spec.paths)), method)
-    custom_action = custom_action or SimpleNamespace(id=42, name="Weather API")
+    custom_action = custom_action or SimpleNamespace(
+        id=42, pk=42, name="Weather API", auth_provider_id=None, team_id=None
+    )
     return function_def.build_tool(auth_service, custom_action=custom_action)
 
 

@@ -6,6 +6,7 @@ from django.db import models
 from django.urls import reverse
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 
@@ -59,8 +60,11 @@ class McpServer(BaseTeamModel):
         """
         headers = {}
         if self.auth_provider:
-            auth_service = self.auth_provider.get_auth_service()
-            headers |= auth_service.get_auth_headers()
+            try:
+                headers |= self.auth_provider.get_auth_service().get_auth_headers()
+            except ServiceProviderConfigError:
+                logger.exception(f"Invalid auth provider config for MCP server {self.name}")
+                return []
 
         return self._fetch_tools_from_mcp_server(headers)
 

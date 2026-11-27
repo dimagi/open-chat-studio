@@ -77,6 +77,12 @@ version section when a release is cut.
      the process environment, whether or not it is required and whatever its
      default. Also a changed default that alters behavior. State the default and
      whether it is required. -->
+- `OUTBOUND_USER_AGENT` (optional, default unset) replaces the User-Agent sent on
+  every request made with an auth provider: custom actions, the HTTP pipeline
+  node, MCP servers, document sources and OAuth token requests. Left unset, those
+  requests send `OpenChatStudio (+<site URL>)`, built from the Site record, where
+  they previously sent httpx's `python-httpx/<version>`. A custom action whose
+  OpenAPI spec declares a `User-Agent` header parameter sends that value instead.
 - `TEAM_DELETION_GRACE_PERIOD_DAYS` (optional, default `30`): how long a team stays disabled
   after an admin deletes it before its data is permanently removed. Deleting a team no longer
   removes its data straight away: the team is disabled at once, and a new daily Celery beat task,

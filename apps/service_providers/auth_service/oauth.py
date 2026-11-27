@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db import transaction
 from oauthlib.oauth2 import BackendApplicationClient, OAuth2Error, WebApplicationClient
 
+from apps.service_providers.auth_service.main import outbound_user_agent
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 if TYPE_CHECKING:
@@ -238,7 +239,11 @@ def post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
         response = httpx.post(
             token_url,
             content=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": outbound_user_agent(),
+            },
             timeout=settings.RESTRICTED_HTTP_MAX_TIMEOUT,
             **request_kwargs,
         )
