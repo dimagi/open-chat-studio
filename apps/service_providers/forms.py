@@ -396,7 +396,9 @@ class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     def clean(self):
         cleaned_data = super().clean()
         api_key_sid = cleaned_data.get("api_key_sid")
-        api_key_secret = cleaned_data.get("api_key_secret")
+        # ObfuscatingMixin restores a blank secret from the saved config, which is None for a
+        # provider saved before the field existed.
+        api_key_secret = cleaned_data["api_key_secret"] = cleaned_data.get("api_key_secret") or ""
         if api_key_sid and not api_key_secret:
             self.add_error("api_key_secret", _("Enter the secret for this API key."))
         elif api_key_secret and not api_key_sid and "api_key_sid" not in self.errors:

@@ -89,3 +89,13 @@ def test_form_obfuscates_api_key_secret_and_keeps_it_on_resubmit():
     resubmitted = TwilioMessagingConfigForm(None, data=form.initial, initial=initial)
     assert resubmitted.is_valid(), resubmitted.errors
     assert resubmitted.cleaned_data["api_key_secret"] == "a-long-key-secret"
+
+
+def test_editing_a_provider_without_an_api_key_keeps_it_usable():
+    form = TwilioMessagingConfigForm(None, initial=ACCOUNT)
+    resubmitted = TwilioMessagingConfigForm(
+        None, data=form.initial | {"api_key_sid": "", "api_key_secret": ""}, initial=ACCOUNT
+    )
+    assert resubmitted.is_valid(), resubmitted.errors
+    assert resubmitted.cleaned_data["api_key_secret"] == ""
+    assert TwilioService(**resubmitted.cleaned_data).auth_token.get_secret_value() == "TOKEN"
