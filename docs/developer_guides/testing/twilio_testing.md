@@ -22,7 +22,10 @@ This generates a public HTTPS URL like `https://abc123.ngrok.io`.
 1. Go to **Team Settings → Messaging Providers**
 2. Click **Add** and select **Twilio** as the provider type
 3. Enter your Twilio Account SID and Auth Token
-4. Optionally enter an [API key](https://www.twilio.com/docs/iam/api-keys) SID and secret. OCS then uses the API key for requests to the Twilio API. The Auth Token is still required because Twilio signs incoming webhooks with it.
+4. Optionally enter an [API key](https://www.twilio.com/docs/iam/api-keys) SID and secret. OCS then uses the API key for requests to the Twilio API.
+5. Optionally enter a [webhook shared key](https://www.twilio.com/docs/usage/webhooks/webhook-shared-keys) ID and secret. OCS then validates incoming webhooks that Twilio signs with that key. The shared key only takes effect once a Webhook Setting and a Webhook Rule in your Twilio account apply it to the OCS webhook URL.
+
+The Auth Token can be left blank when both an API key and a webhook shared key are set. Twilio signs a webhook with the Auth Token whenever no Webhook Rule matches its URL, and OCS rejects those webhooks if it has no Auth Token.
 
 ## 3. Create Channel on Bot
 
@@ -44,5 +47,5 @@ This generates a public HTTPS URL like `https://abc123.ngrok.io`.
 ## Troubleshooting
 
 - **Webhook not receiving messages:** Verify ngrok is running and the URL matches exactly.
-- **Signature validation errors:** Ensure the Auth Token in OCS matches your Twilio account and that Django is using HTTPS for generating absolute URLs.
+- **Signature validation errors:** Ensure the Auth Token (or webhook shared key secret) in OCS matches your Twilio account and that Django is using HTTPS for generating absolute URLs.
 - **Voice transcription failing:** Check voice provider credentials and that the provider supports transcription.
