@@ -7,12 +7,15 @@ from django.db.migrations.executor import MigrationExecutor
 
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import (
+    DECISION_ONLY_TYPES,
     DEFAULT_EMBEDDING_PROVIDER_MODELS,
     DEFAULT_LLM_PROVIDER_MODELS,
+    MODELS_BY_KEY,
     Model,
     _repoint_evaluators,
     _update_llm_provider_models,
     get_default_model,
+    model_uses,
     update_embedding_provider_models,
     update_llm_provider_models,
 )
@@ -31,6 +34,60 @@ def test_a_provider_with_no_chat_models_has_no_default():
     """``voyage`` is an embedding-only provider, so callers get a miss rather than a KeyError."""
     assert "voyage" not in DEFAULT_LLM_PROVIDER_MODELS
     assert get_default_model("voyage") is None
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "model_name", "expected"),
+    [
+        pytest.param("jev", "jev-latest", (False, True), id="listed-decision-model"),
+        pytest.param("google", "gemini-decision-1", (False, True), id="listed-decision-model-of-a-chat-type"),
+        pytest.param("google", "gemini-3.8-flash", (True, False), id="chat-model-beside-a-decision-model"),
+        pytest.param("openai", "gpt-4.1-mini", (True, False), id="listed-chat-model"),
+        pytest.param("jev", "jev-next", (False, True), id="custom-model-of-a-decision-only-type"),
+        pytest.param("openai", "my-fine-tune", (True, False), id="custom-model-of-a-chat-type"),
+        pytest.param("litellm", "anything", (True, False), id="type-with-no-listed-models"),
+    ],
+)
+def test_model_uses(provider_type, model_name, expected):
+    assert model_uses(provider_type, model_name) == expected
+
+
+def test_jev_is_the_only_decision_only_type():
+    assert {"jev"} == DECISION_ONLY_TYPES
+
+
+@pytest.mark.django_db()
+class TestChatModels:
+    @pytest.fixture()
+    def models(self):
+        return {
+            "chat": LlmProviderModelFactory.create(type="openai", name="gpt-4.1-mini"),
+            "jev": LlmProviderModelFactory.create(type="jev", name="jev-latest"),
+            "custom-jev": LlmProviderModelFactory.create(type="jev", name="jev-next"),
+            "listed-decision": LlmProviderModelFactory.create(type="openai", name="gpt-decide"),
+            "google-decision": LlmProviderModelFactory.create(type="google", name="gemini-decision-1"),
+        }
+
+    @pytest.fixture(autouse=True)
+    def listed_decision_model(self):
+        """A decision-only model listed under a type that also has chat models."""
+        decision_model = Model("gpt-decide", 1000, chat=False, decisions=True)
+        with patch.dict(MODELS_BY_KEY, {("openai", "gpt-decide"): decision_model}):
+            yield
+
+    def test_chat_leaves_out_decision_only_models(self, models):
+        offered = set(LlmProviderModel.objects.filter(id__in=[m.id for m in models.values()]).chat())
+
+        assert offered == {models["chat"]}
+
+    def test_supports_chat_agrees_with_the_query(self, models):
+        assert {name: model.supports_chat for name, model in models.items()} == {
+            "chat": True,
+            "jev": False,
+            "custom-jev": False,
+            "listed-decision": False,
+            "google-decision": False,
+        }
 
 
 @pytest.mark.django_db()

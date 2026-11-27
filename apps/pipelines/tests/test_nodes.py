@@ -154,7 +154,9 @@ class TestHistoryMixin:
         result = node.get_history()
 
         assert result == ["session-history"]
-        mock_repo.get_session_messages.assert_called_once_with(node.get_history_mode(), exclude_message_id=None)
+        mock_repo.get_session_messages.assert_called_once_with(
+            node.get_history_mode(), exclude_message_id=None, limit=None
+        )
         mock_repo.get_pipeline_chat_history.assert_not_called()
 
     def test_get_history_uses_pipeline_history_when_configured(self, history_node_factory):
@@ -168,7 +170,7 @@ class TestHistoryMixin:
 
         assert result == ["node-history"]
         mock_repo.get_pipeline_chat_history.assert_called_once_with(PipelineChatHistoryTypes.NODE, node.node_id)
-        mock_history.get_langchain_messages_until_marker.assert_called_once_with(node.get_history_mode())
+        mock_history.get_langchain_messages_until_marker.assert_called_once_with(node.get_history_mode(), limit=None)
         mock_repo.get_session_messages.assert_not_called()
 
     def test_store_compression_checkpoint_global(self, history_node_factory):

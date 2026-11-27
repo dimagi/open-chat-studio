@@ -25,3 +25,11 @@ def llm(team):
     provider = LlmProviderFactory.create(team=team, type="openai")
     model = LlmProviderModelFactory.create(team=team, type="openai", name="gpt-4o")
     return provider, model
+
+
+@pytest.fixture()
+def jev_llm(team):
+    """A Jev provider and model, the only pairing a Decision Node accepts."""
+    provider = LlmProviderFactory.create(team=team, type="jev", config={"jev_api_key": "test-key"})
+    model = LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
+    return provider, model

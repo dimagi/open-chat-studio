@@ -15,6 +15,7 @@ from apps.documents.rerankers import Reranker, VoyageReranker
 from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.google_decisions import GoogleDecisionBackend
 from apps.service_providers.llm_service.image_types import (
     DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
     GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES,
@@ -26,6 +27,7 @@ from apps.service_providers.llm_service.index_managers import (
     OpenAIRemoteIndexManager,
     VoyageAILocalIndexManager,
 )
+from apps.service_providers.llm_service.jev import DEFAULT_JEV_API_BASE, JEV_ROUTER_ONLY_MESSAGE, JevBackend, JevClient
 from apps.service_providers.llm_service.parsers import parse_output_for_anthropic
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
@@ -44,8 +46,13 @@ if TYPE_CHECKING:
     from openai._base_client import SyncAPIClient
 
     from apps.experiments.models import ExperimentSession
+    from apps.service_providers.llm_service.decision_backend import DecisionBackend
 
 logger = logging.getLogger("ocs.llm_service")
+
+# The limits of each decision backend, by the type of the models it answers, for a caller that has a
+# model but no provider to ask for its backend.
+DECISION_LIMITS_BY_TYPE = {backend.provider_type: backend.limits for backend in (JevBackend, GoogleDecisionBackend)}
 
 
 class OpenAIBuiltinTool(dict):
@@ -102,6 +109,10 @@ class LlmService(pydantic.BaseModel):
 
         Providers with automatic server-side caching (OpenAI, Azure, DeepSeek) return None.
         """
+        return None
+
+    def get_decision_backend(self) -> DecisionBackend | None:
+        """The backend that answers this provider's decision models, or None when it has none."""
         return None
 
     def get_output_parser(self):
@@ -540,6 +551,9 @@ class GoogleLlmService(LlmService):
             contextualizer=contextualizer,
         )
 
+    def get_decision_backend(self) -> GoogleDecisionBackend:
+        return GoogleDecisionBackend(api_key=self.google_api_key.get_secret_value())
+
 
 class VoyageAILlmService(LlmService):
     voyage_api_key: pydantic.SecretStr
@@ -559,6 +573,23 @@ class VoyageAILlmService(LlmService):
 
     def get_reranker(self, model: str) -> Reranker:
         return VoyageReranker(api_key=self.voyage_api_key, model=model)
+
+
+class JevLlmService(LlmService):
+    jev_api_key: pydantic.SecretStr
+    jev_api_base: str = DEFAULT_JEV_API_BASE
+
+    def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
+        raise ServiceProviderConfigError(self._type, JEV_ROUTER_ONLY_MESSAGE)
+
+    def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
+        raise ServiceProviderConfigError(self._type, JEV_ROUTER_ONLY_MESSAGE)
+
+    def get_jev_client(self) -> JevClient:
+        return JevClient(api_key=self.jev_api_key.get_secret_value(), base_url=self.jev_api_base)
+
+    def get_decision_backend(self) -> JevBackend:
+        return JevBackend(self.get_jev_client())
 
 
 class GoogleVertexAILlmService(LlmService):

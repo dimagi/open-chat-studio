@@ -16,7 +16,8 @@ Layer 5 yields one list per rule:
   nothing is stranded. Drives the catalogue PR.
 * ``removed``     we list it, LiteLLM no longer offers it as a model OCS can
   run -- dropped from the price table, or still there but served only in some
-  other mode. Drives the catalogue PR, which retires it.
+  other mode. Drives the catalogue PR, which retires it. A provider LiteLLM
+  has no namespace for never appears here.
 * ``deprecated``  we still list it as active, its upstream deprecation date has
   passed. Drives the catalogue PR.
 * ``repriced``    a rate we hold has moved upstream. Drives the pricing PR.
@@ -61,7 +62,7 @@ from .records import (
     RateChange,
     Reconciliation,
 )
-from .upstream import UpstreamUnavailable, fetch, translate
+from .upstream import PREFIX_BY_OCS_PROVIDER, UpstreamUnavailable, fetch, translate
 
 # The table carried 386 chat-capable models that mapped to an OCS provider when
 # this floor was set. A structurally valid table translating to far fewer means
@@ -105,7 +106,7 @@ def compare(
     rejected = {key for key, entry in ledger.items() if entry.verdict == REJECTED}
     return Diff(
         added=[live[key] for key in sorted(live.keys() - ours.keys() - deleted - rejected)],
-        removed=[ours[key] for key in sorted(ours.keys() - all_chat.keys())],
+        removed=[ours[key] for key in sorted(ours.keys() - all_chat.keys()) if key[0] in PREFIX_BY_OCS_PROVIDER],
         deprecated=_newly_deprecated(ours, all_chat),
         repriced=repriced,
         backfilled=backfilled,

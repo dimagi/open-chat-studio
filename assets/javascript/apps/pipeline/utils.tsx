@@ -1,7 +1,7 @@
 import React from "react"
 import {addEdge, Connection} from "reactflow";
 import ShortUniqueId from "short-unique-id";
-import {NodeParameterValues, Option} from "./types/nodeParameterValues";
+import {LlmProviderModel, NodeParameterValues, Option} from "./types/nodeParameterValues";
 import {JsonSchema, NodeData, NodeParams, PropertySchema} from "./types/nodeParams";
 
 declare global {
@@ -141,7 +141,36 @@ export function getDefaultParamValues(schema: JsonSchema): NodeParams {
       (value) => value !== undefined && value !== null
     ) ?? null;
   }
+  const providerField = schema.properties.llm_provider_id;
+  if (providerField?.["ui:modelUse"] === "decisions") {
+    Object.assign(defaults, firstOfferedModel(providerField));
+  }
   return defaults;
+}
+
+/** Whether the provider field described by `schema` offers `model`. */
+export function offersModel(schema: PropertySchema, model: LlmProviderModel): boolean {
+  switch (schema["ui:modelUse"]) {
+    case "chat":
+      return model.chat !== false;
+    case "decisions":
+      return model.decisions === true;
+    default:
+      return true;
+  }
+}
+
+/** The first provider and model the field offers, since the site-wide default is a chat model. */
+function firstOfferedModel(providerField: PropertySchema) {
+  const {parameterValues} = getCachedData();
+  const models = parameterValues.llm_provider_model_id as LlmProviderModel[];
+  for (const provider of parameterValues.llm_provider_id) {
+    const model = models.find((option) => option.type === provider.type && offersModel(providerField, option));
+    if (model) {
+      return {llm_provider_id: provider.value, llm_provider_model_id: model.value};
+    }
+  }
+  return {llm_provider_id: null, llm_provider_model_id: null};
 }
 
 /** A fresh node of this type, before it is given an id and a place on the canvas. */
