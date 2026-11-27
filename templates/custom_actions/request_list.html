@@ -1,0 +1,39 @@
+{% load humanize %}
+<section class="mt-6" data-testid="custom-action-requests">
+  <h2 class="pg-subtitle">Recent Requests</h2>
+  <p class="text-xs text-base-content/60 mb-2">The latest {{ limit }} requests this action made, newest first. Credentials are redacted.</p>
+  {% if requests %}
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Method</th>
+            <th>URL</th>
+            <th class="text-right">Duration</th>
+            <th>Time</th>
+            {% if perms.trace.view_trace %}<th></th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in requests %}
+            <tr data-testid="custom-action-request-row">
+              <td>{% include "trace/partials/custom_action_request_status.html" %}</td>
+              <td class="font-mono font-semibold">{{ log.method }}</td>
+              <td class="font-mono"><div class="max-w-md truncate" title="{{ log.url }}">{{ log.url }}</div></td>
+              <td class="text-right tabular-nums whitespace-nowrap">{{ log.duration_ms }} ms</td>
+              <td class="whitespace-nowrap">
+                <time datetime="{{ log.created_at.isoformat }}" title="{{ log.created_at|date:"SHORT_DATETIME_FORMAT" }}">{{ log.created_at|naturaltime }}</time>
+              </td>
+              {% if perms.trace.view_trace %}
+                <td><a class="link" href="{% url 'trace:trace_detail' request.team.slug log.trace_id %}">View trace</a></td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-sm text-base-content/60">No requests logged yet.</p>
+  {% endif %}
+</section>

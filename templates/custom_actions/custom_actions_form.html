@@ -6,7 +6,7 @@
         {% include "custom_actions/health_status_column.html" with record=form.instance %}
         {% flag "flag_custom_actions_test_endpoints" %}
             <div class="mt-4">
-                <a href="{% url 'custom_actions:test_endpoints' form.instance.team.slug form.instance.id %}" 
+                <a href="{% url 'custom_actions:test_endpoints' form.instance.team.slug form.instance.id %}"
                    class="btn btn-outline btn-sm">
                     <i class="fa-solid fa-flask"></i>
                     Test Endpoints
@@ -15,3 +15,13 @@
         {% endflag %}
     {% endif %}
 {% endblock pre_form %}
+
+{% block post_form %}
+    {% if form.instance.id and perms.custom_actions.view_customaction and perms.trace.view_customactionrequest %}
+        <div hx-get="{% url 'custom_actions:requests' request.team.slug form.instance.id %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            {% include "table/table_placeholder.html" %}
+        </div>
+    {% endif %}
+{% endblock post_form %}

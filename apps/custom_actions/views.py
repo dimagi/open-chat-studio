@@ -26,6 +26,7 @@ from apps.generics.referenced_objects import render_referenced_objects_modal
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.utils import section_url
+from apps.trace.models import CustomActionRequest
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,23 @@ class CheckCustomActionHealth(LoginAndTeamRequiredMixin, PermissionRequiredMixin
             "custom_actions/health_status_column.html",
             {"team_slug": team_slug, "record": action},
         )
+
+
+class CustomActionRequestList(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    """The latest requests a custom action has made, loaded into its edit page."""
+
+    template_name = "custom_actions/request_list.html"
+    permission_required = ("custom_actions.view_customaction", "trace.view_customactionrequest")
+    limit = 50
+
+    def get_context_data(self, **kwargs):
+        custom_action = get_object_or_404(CustomAction, id=self.kwargs["pk"], team=self.request.team)
+        requests = (
+            CustomActionRequest.objects.filter(custom_action=custom_action, team=self.request.team)
+            .only("trace_id", "method", "url", "status_code", "error", "duration_ms", "created_at")
+            .order_by("-created_at")[: self.limit]
+        )
+        return {"requests": requests, "limit": self.limit}
 
 
 class CustomActionEndpointTester(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

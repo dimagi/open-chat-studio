@@ -9,13 +9,7 @@
       <details class="collapse collapse-arrow border border-base-300 bg-base-100">
         <summary class="collapse-title text-sm min-h-0 py-3">
           <div class="flex items-center gap-2 min-w-0">
-            {% if log.status_code is None %}
-              <c-ui.badge variant="error" size="sm">Failed</c-ui.badge>
-            {% elif log.status_code >= 400 or log.error %}
-              <c-ui.badge variant="error" size="sm">{{ log.status_code }}</c-ui.badge>
-            {% else %}
-              <c-ui.badge variant="success" size="sm">{{ log.status_code }}</c-ui.badge>
-            {% endif %}
+            {% include "trace/partials/custom_action_request_status.html" %}
             <span class="font-mono font-semibold">{{ log.method }}</span>
             <span class="font-mono truncate" title="{{ log.url }}">{{ log.url }}</span>
             <span class="ml-auto pl-2 text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ log.duration_ms }} ms</span>
