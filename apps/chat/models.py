@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Iterable
 from enum import StrEnum
 from urllib.parse import quote
@@ -5,7 +6,7 @@ from urllib.parse import quote
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import classproperty
@@ -202,6 +203,21 @@ def _file_matches(file: File, ids: set[str], external_ids: set[str]) -> bool:
     return str(file.id) in ids or bool(file.external_id and file.external_id in external_ids)
 
 
+def _attached_files_by_chat(chat_ids: set[int], ids: set[str], external_ids: set[str]) -> dict[int, list[File]]:
+    """The files among ``ids`` and ``external_ids`` attached to each of ``chat_ids``, in one query."""
+    files_by_chat: dict[int, list[File]] = defaultdict(list)
+    if not (ids or external_ids):
+        return files_by_chat
+    files = (
+        File.objects.filter(Q(id__in=ids) | Q(external_id__in=external_ids), chatattachment__chat_id__in=chat_ids)
+        .annotate(attached_chat_id=F("chatattachment__chat_id"))
+        .distinct()
+    )
+    for file in files:
+        files_by_chat[file.attached_chat_id].append(file)
+    return files_by_chat
+
+
 class ChatMessage(UpdatedAtOnPartialSaveMixin, BaseModel, TaggedModelMixin, UserCommentsMixin):
     """
     A message in a chat. Analogous to the BaseMessage class in langchain.
@@ -396,8 +412,8 @@ class ChatMessage(UpdatedAtOnPartialSaveMixin, BaseModel, TaggedModelMixin, User
         return ids, external_ids
 
     @classmethod
-    def prefetch_attached_files(cls, chat: Chat, messages: Iterable["ChatMessage"]) -> None:
-        """Resolve the attached files for all ``messages`` of ``chat`` with a single query.
+    def prefetch_attached_files(cls, messages: Iterable["ChatMessage"]) -> None:
+        """Resolve the attached files of ``messages``, from one chat or many, with a single query.
 
         The result is cached on each message so that ``get_attached_files`` doesn't issue a
         query per message.
@@ -407,15 +423,14 @@ class ChatMessage(UpdatedAtOnPartialSaveMixin, BaseModel, TaggedModelMixin, User
         all_ids = set().union(*(ids for ids, _ in message_file_ids.values()))
         all_external_ids = set().union(*(external_ids for _, external_ids in message_file_ids.values()))
 
-        files = []
-        if all_ids or all_external_ids:
-            files = list(
-                File.objects.filter(Q(id__in=all_ids) | Q(external_id__in=all_external_ids), chatattachment__chat=chat)
-            )
+        chat_ids = {message.chat_id for message in saved_messages}
+        files_by_chat = _attached_files_by_chat(chat_ids, all_ids, all_external_ids)
 
         for message in saved_messages:
             ids, external_ids = message_file_ids[message.pk]
-            message._prefetched_attached_files = [file for file in files if _file_matches(file, ids, external_ids)]
+            message._prefetched_attached_files = [
+                file for file in files_by_chat[message.chat_id] if _file_matches(file, ids, external_ids)
+            ]
 
     def _normalized_attachment_file_ids(self) -> tuple[set[str], set[str]]:
         """Like ``_attachment_file_ids`` but as sets of strings, for in-memory matching."""

@@ -54,6 +54,7 @@ resurfaces.
 | D8: sessions and participants keep their existing IDs | extends [ADR-0026](../adr/0026-identify-resources-by-primary-key.md) |
 | D9: `metadata` on messages | matches v1 |
 | D10: attachments and tags batch-loaded per page | no per-row queries |
+| D11: machine tokens read only the chatbots they reach | [ADR-0056](../adr/0056-client-credentials-applications-name-their-chatbots.md) |
 
 ### D2: Exact keyset cursor, returned on every page
 
@@ -138,7 +139,9 @@ sessions.
 
 ### D6: Filters in `get_queryset()`
 
-**Decision.** `chatbot`, `participant`, `channel` and `tags` are plain queryset filters in each view.
+**Decision.** `chatbot`, `participant`, `platform` and `tags` are plain queryset filters in each view.
+The platform filter and field are named `platform`, as in the v1 sessions API and the v2 usage API,
+not `channel`.
 
 **Context.** `ExperimentSessionFilter` serves the filter widget's `f_<column>` / `op_<column>` wire
 format and HTML UI, not a public `?participant=<id>` contract.
@@ -185,6 +188,19 @@ takes messages from any number of chats), message tags (`prefetch_related("tags"
 **Context.** `get_attached_files()` queries per call. Fine for one session's messages, not for a page
 of up to 1000.
 
+### D11: Machine tokens read only the chatbots they reach
+
+**Decision.** A client-credentials token whose application lacks `all_data` reads only the sessions
+and messages of its `allowed_chatbots`. Every other caller reads the whole team.
+
+**Context.** [ADR-0056](../adr/0056-client-credentials-applications-name-their-chatbots.md): the scope
+says what a machine token may do, the allowlist which chatbots it may do it to, and both must agree.
+Source material and consent forms stay readable team-wide only because they belong to no chatbot;
+sessions and messages each belong to one.
+
+**Alternatives considered.** Team-wide reads for every token: rejected, conversation content is the
+data the allowlist exists to fence.
+
 ## Known limitations
 
 - **Deletions are not synced.** A deleted session or message leaves no row to return, so a consumer
@@ -212,7 +228,7 @@ GET /api/v2/messages/
 |---|---|---|
 | `chatbot` | UUID | `public_id` |
 | `participant` | UUID | `public_id` |
-| `channel` | slug | platform, e.g. `web`, `whatsapp` |
+| `platform` | slug | e.g. `web`, `whatsapp` |
 | `tags` | string | tag name; repeat for any-of |
 | `cursor` | opaque | from the previous response |
 | `limit` | int | default 100, max 1000 |
@@ -222,7 +238,7 @@ GET /api/v2/messages/
 | `id` | `external_id` |
 | `chatbot_id` | `experiment.public_id` |
 | `participant_id` | `participant.public_id` |
-| `channel` | `platform` |
+| `platform` | direct |
 | `status`, `state`, `tags` | direct |
 | `created_at`, `updated_at`, `ended_at` | direct |
 

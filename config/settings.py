@@ -599,6 +599,13 @@ SPECTACULAR_SETTINGS = {
             ),
         },
         {
+            "name": "Sessions",
+            "description": (
+                "Pull a team's sessions and messages incrementally, so an external system can keep a copy "
+                "in sync without re-reading everything."
+            ),
+        },
+        {
             "name": "Source Material",
             "description": "List, create, update and archive the source material that pipeline nodes draw on.",
         },
