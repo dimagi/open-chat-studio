@@ -102,10 +102,20 @@ class ChatbotSettingsForm(forms.ModelForm):
 
 
 class CopyChatbotForm(forms.Form):
-    new_name = forms.CharField(
-        max_length=255,
-        required=True,
-    )
+    """Copy a chatbot into a new one, or overwrite an earlier copy of it in place."""
+
+    new_name = forms.CharField(max_length=255, required=False)
+    overwrite = forms.ModelChoiceField(queryset=Experiment.objects.none(), required=False)
+
+    def __init__(self, source: Experiment, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["overwrite"].queryset = source.copies.filter(team_id=source.team_id, working_version=None)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get("overwrite") and not cleaned_data.get("new_name"):
+            self.add_error("new_name", "Enter a name for the new chatbot.")
+        return cleaned_data
 
 
 def get_broadcast_channels(experiment: Experiment):
