@@ -22,6 +22,7 @@ This generates a public HTTPS URL like `https://abc123.ngrok.io`.
 1. Go to **Team Settings → Messaging Providers**
 2. Click **Add** and select **Twilio** as the provider type
 3. Enter your Twilio Account SID and Auth Token
+4. Optionally enter an [API key](https://www.twilio.com/docs/iam/api-keys) SID and secret. OCS then uses the API key for requests to the Twilio API. The Auth Token is still required because Twilio signs incoming webhooks with it.
 
 ## 3. Create Channel on Bot
 
