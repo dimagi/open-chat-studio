@@ -55,10 +55,10 @@ def write_content_nodes(pipeline: Pipeline, content_nodes: dict[str, FlowNode]) 
     for flow_id, node in content_nodes.items():
         existing = existing_by_flow_id.get(flow_id)
         if existing is None:
-            needs_resource_sync.append(_create_node(pipeline, node))
+            _create_node(pipeline, node)
             continue
         if _apply_content(existing, node, update_fields, now):
-            needs_resource_sync.append(existing)
+            needs_resource_sync.append((existing, node.data.params))
         to_update.append(existing)
 
     if to_update:
@@ -66,33 +66,52 @@ def write_content_nodes(pipeline: Pipeline, content_nodes: dict[str, FlowNode]) 
         # that didn't keep their loaded values, so writing them back is a no-op.
         Node.objects.bulk_update(to_update, sorted(update_fields))
 
-    # The FK/M2M/custom-action mirror only depends on type and params, so a move or relabel
+    # The FK/M2M/custom-action relations only depend on type and params, so a move or relabel
     # (the common autosave case) skips it entirely.
-    for node_to_sync in needs_resource_sync:
-        node_to_sync.update_from_params()
+    for node_to_sync, editor_params in needs_resource_sync:
+        _, resource_params = Node.split_resource_params(editor_params)
+        node_to_sync.update_from_params(resource_params)
 
 
 def _create_node(pipeline: Pipeline, node: FlowNode) -> Node:
+    """Create one node with ordinary params stored and resource values applied to relations."""
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: models imports this module
 
     content = node.data
-    return Node.objects.create(
+    ordinary_params, resource_params = Node.split_resource_params(content.params)
+    ordinary_params = content.node_type.params_to_store(ordinary_params)
+    created = Node.objects.create(
         pipeline=pipeline,
         flow_id=node.id,
         type=content.type,
-        params=content.node_type.params_to_store(content.params),
+        params=ordinary_params,
         label=content.label,
         **node_position_fields(node.position),
     )
+    created.update_from_params(resource_params)
+    return created
 
 
 def _apply_content(existing: Node, node: FlowNode, update_fields: set[str], now) -> bool:
     """Copy ``node``'s content onto ``existing`` in memory; True when its resources may have changed."""
+    from apps.pipelines.models import Node  # noqa: PLC0415 - circular: models imports this module
+
     content = node.data
-    params = content.node_type.params_to_store(content.params)
-    resources_changed = existing.type != content.type or existing.params != params
+    ordinary_params, resource_params = Node.split_resource_params(content.params)
+    ordinary_params = content.node_type.params_to_store(ordinary_params)
+    existing_resources = existing.resource_params()
+    existing_ordinary_params = Node.params_to_store(existing.params or {})
+    resources_changed = (
+        existing.type != content.type
+        or existing_ordinary_params != ordinary_params
+        or any(existing_resources.get(name) != value for name, value in resource_params.items())
+    )
     existing.type = content.type
-    existing.params = params
+    if resources_changed:
+        # The resource sync below rewrites params with the legacy mirror. On a move or relabel the
+        # stored params already hold it, and replacing them with the editor's ordinary params only
+        # would drop the ids old workers read during a rolling deploy.
+        existing.params = ordinary_params
     existing.label = content.label
     for field_name, value in node_position_fields(node.position).items():
         setattr(existing, field_name, value)

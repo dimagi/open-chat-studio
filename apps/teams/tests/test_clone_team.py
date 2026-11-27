@@ -355,21 +355,18 @@ def test_clone_team_remaps_pipeline_node_params(source_team):
     source_llm_provider = LlmProvider.objects.filter(team=source_team).first()
     source_llm_model = LlmProviderModel.objects.filter(team=source_team).first()
 
-    # Check nodes have remapped params and FK mirror (both must point at the target team)
+    # Check nodes have remapped relation-backed resources pointing at the target team.
     for node in Node.objects.filter(pipeline=target_pipeline):
-        params = node.params
-        if params.get("llm_provider_id"):
-            # Should reference target team's provider, not source
-            assert params["llm_provider_id"] == target_llm_provider.id
-            assert params["llm_provider_id"] != source_llm_provider.id
-            # FK mirror must be remapped too, not left pointing at the source team
+        if node.llm_provider_id:
             assert node.llm_provider_id == target_llm_provider.id
+            assert node.llm_provider_id != source_llm_provider.id
 
-        if params.get("llm_provider_model_id"):
-            # Should reference target team's model, not source
-            assert params["llm_provider_model_id"] == target_llm_model.id
-            assert params["llm_provider_model_id"] != source_llm_model.id
+        if node.llm_provider_model_id:
             assert node.llm_provider_model_id == target_llm_model.id
+            assert node.llm_provider_model_id != source_llm_model.id
+
+        for field_name in Node.resource_fk_fields():
+            assert node.params.get(f"{field_name}_id") == getattr(node, f"{field_name}_id")
 
 
 @pytest.mark.django_db()
@@ -397,14 +394,11 @@ def test_clone_team_copies_feature_flags(source_team):
 
 
 @pytest.mark.django_db()
-def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
-    """`changed` gates the write, and writing a node the clone had no reason to touch is lossy.
-
-    `set_params` re-derives the FK columns from params, so saving a node whose params never
-    carried a resource id nulls whatever column the params do not mirror.
-    """
+def test_clone_team_remaps_relation_backed_node_resources():
+    """Cloning reads node resources from relations and keeps the target team's provider."""
     source, target = TeamFactory.create(), TeamFactory.create()
-    provider = LlmProviderFactory.create(team=target)
+    source_provider = LlmProviderFactory.create(team=source)
+    target_provider = LlmProviderFactory.create(team=target, type=source_provider.type)
     pipeline = PipelineFactory.create(team=target, data={"nodes": [], "edges": []})
     node = Node.objects.create(
         pipeline=pipeline,
@@ -412,12 +406,16 @@ def test_clone_team_leaves_a_node_with_nothing_to_remap_alone():
         flow_id="router",
         label="Router",
         params={"keywords": ["yes", "no"]},
+        llm_provider=source_provider,
     )
-    Node.objects.filter(pk=node.pk).update(llm_provider_id=provider.id)
-    node = Node.objects.get(pk=node.pk)
 
-    Command()._remap_node_params(CloneContext(source_team=source, target_team=target), node)
+    context = CloneContext(
+        source_team=source,
+        target_team=target,
+        llm_providers={source_provider.id: target_provider},
+    )
+    Command()._remap_node_params(context, node)
 
     node.refresh_from_db()
-    assert node.llm_provider_id == provider.id
-    assert node.params == {"keywords": ["yes", "no"]}
+    assert node.llm_provider_id == target_provider.id
+    assert node.params == {"keywords": ["yes", "no"], "llm_provider_id": target_provider.id}

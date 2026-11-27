@@ -240,6 +240,7 @@ jobs:
           --cli-input-json file:///tmp/migration-task-def.json \
           --query 'taskDefinition.taskDefinitionArn' \
           --output text)
+        echo "task_definition_arn=$TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
 
         # Run the migration task
         TASK_ARN=$(aws ecs run-task \

@@ -343,12 +343,12 @@ class Command(BaseCommand):
                 ctx.consent_forms[cf.id] = new_cf
 
     def _remap_node_params(self, ctx: CloneContext, node: Node):
-        """Remap FK IDs in node params to new team's objects."""
-        params = node.params
+        """Remap relation-backed node resources to the new team's objects."""
+        params = node.runtime_params()
         changed = False
 
         # Fail if unmapped params have values (these reference objects we don't clone)
-        unmapped_params = ["collection_id", "collection_index_ids", "synthetic_voice_id"]
+        unmapped_params = ["collection_id", "collection_index_ids", "synthetic_voice_id", "custom_actions"]
         for param in unmapped_params:
             if params.get(param):
                 raise CommandError(

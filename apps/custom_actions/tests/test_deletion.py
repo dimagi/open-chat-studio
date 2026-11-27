@@ -99,9 +99,7 @@ def _strip_custom_actions_from_working_pipeline(working_pipeline):
     working pipeline (which saves clean) but published versions retain the snapshotted ref.
     Node content lives on the rows (ADR-0049), so the edit only touches them."""
     for node in working_pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__):
-        node.params["custom_actions"] = []
-        node.save(update_fields=["params"])
-        CustomActionOperation.objects.filter(node=node).delete()
+        node.update_from_params({"custom_actions": []}, ordinary_params=node.params)
 
 
 @pytest.mark.django_db()
@@ -209,6 +207,8 @@ def test_cleanup_command_strips_stale_refs_from_node(team_with_users):
     node = pipeline.node_set.get(type=LLMResponseWithPrompt.__name__)
     stale_ref = f"{stale_action.id}:weather_get"
     live_ref = f"{live_action.id}:weather_get"
+    Node.objects.filter(pk=node.pk).update(params={**node.params, "custom_actions": [stale_ref, live_ref]})
+    node.refresh_from_db()
     assert node.params["custom_actions"] == [stale_ref, live_ref]
     assert CustomActionOperation.objects.filter(node=node, custom_action=live_action).exists()
 
@@ -238,6 +238,8 @@ def test_cleanup_command_is_idempotent_and_dry_run_leaves_data_untouched(team_wi
     )
     node = pipeline.node_set.get(type=LLMResponseWithPrompt.__name__)
     stale_ref = f"{action.id}:weather_get"
+    Node.objects.filter(pk=node.pk).update(params={**node.params, "custom_actions": [stale_ref]})
+    node.refresh_from_db()
 
     _force_delete_custom_action(action)
 

@@ -89,7 +89,7 @@ def test_unarchive_restores_the_source_material_a_published_version_uses(archive
     params = {"source_material_id": str(source_material.id)}
     NodeFactory.create(type=node_type, pipeline=chatbot.pipeline, params=params)
     version = chatbot.create_new_version()
-    material_id = int(version.pipeline.node_set.get(type=node_type).params["source_material_id"])
+    material_id = version.pipeline.node_set.get(type=node_type).source_material_id
     assert material_id != source_material.id
     archived = chatbot if archive_working else version
     archived.archive()
@@ -221,8 +221,8 @@ class TestArchivingNodes:
             params={"source_material_id": str(source_material.id)},
         )
         node_a_version = node_a.create_new_version()
-        shared_version_id = node_a_version.params["source_material_id"]
-        assert shared_version_id != str(source_material.id), "pre-condition: first publish versions it"
+        shared_version_id = node_a_version.source_material_id
+        assert shared_version_id != source_material.id, "pre-condition: first publish versions it"
 
         pipeline_b = PipelineFactory.create()
         node_b = NodeFactory.create(
@@ -231,7 +231,7 @@ class TestArchivingNodes:
             params={"source_material_id": str(source_material.id)},
         )
         node_b_version = node_b.create_new_version()
-        assert node_b_version.params["source_material_id"] == shared_version_id, (
+        assert node_b_version.source_material_id == shared_version_id, (
             "pre-condition: unchanged content reuses the existing version rather than creating a new one"
         )
 

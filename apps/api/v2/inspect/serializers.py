@@ -27,7 +27,6 @@ from apps.api.v2.inspect.nodes import (
 )
 from apps.api.v2.inspect.param_serializers import node_params_schema
 from apps.api.v2.triggers.params_reference import SERVER_SET_PARAMS
-from apps.api.v2.utils import parse_custom_actions
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
 from apps.custom_actions.models import CustomAction
@@ -37,6 +36,7 @@ from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
+from apps.pipelines.repository import prefetch_llm_provider_models
 from apps.utils.fields import as_int
 
 if TYPE_CHECKING:
@@ -581,16 +581,17 @@ class InspectNodeSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(CustomActionSerializer(many=True))
     def get_custom_actions(self, node):
-        # The CustomAction objects come from the prefetched relation; params is parsed only to keep
-        # the selected operation_ids in their saved order (resolved_operations drops any no longer in
-        # the action's schema).
-        actions_by_id = {op.custom_action_id: op.custom_action for op in node.custom_action_operations.all()}
-        selections = []
-        for action_id, operation_ids in parse_custom_actions(node.params.get("custom_actions")):
-            action = actions_by_id.get(action_id)
-            if action is not None:
-                selections.append(CustomActionSelection(action, operation_ids))
-        return CustomActionSerializer(selections, many=True).data
+        """Serialize custom-action selections from authoritative operation rows."""
+        # The operation rows are authoritative. Group their prefetched action objects here rather
+        # than parsing the legacy JSON mirror that older releases read.
+        selections_by_action = {}
+        for operation in node.custom_action_operations.all():
+            selection = selections_by_action.setdefault(
+                operation.custom_action_id,
+                CustomActionSelection(operation.custom_action, []),
+            )
+            selection.operation_ids.append(operation.operation_id)
+        return CustomActionSerializer(list(selections_by_action.values()), many=True).data
 
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────────────────────────
@@ -616,7 +617,10 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(InspectNodeSerializer(many=True))
     def get_nodes(self, pipeline) -> list:
-        return InspectNodeSerializer(nodes_in_render_order(pipeline), many=True, context=self.context).data
+        nodes = nodes_in_render_order(pipeline)
+        llm_model_ids = [model_id for node in nodes if (model_id := node.params.get("llm_provider_model_id"))]
+        with prefetch_llm_provider_models(llm_model_ids):
+            return InspectNodeSerializer(nodes, many=True, context=self.context).data
 
 
 # ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ from apps.utils.factories.service_provider_factories import VoiceProviderFactory
 
 def _render(node_type, params):
     node = NodeFactory.create(type=node_type, label=node_type, params=params)
-    node.update_from_params()  # sync the FK mirror + custom_action_operations, as production does
+    node.update_from_params()  # normalize relation-backed resources, as production does
     return InspectNodeSerializer(node).data
 
 

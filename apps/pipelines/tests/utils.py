@@ -89,7 +89,9 @@ def create_pipeline_model(
     flow_nodes = [{"id": node["id"], "data": node} for node in nodes]
     layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
     pipeline.data = layout.model_dump()
+    pipeline.save(update_fields=["data"])
     pipeline.update_nodes_from_data(node_data)
+    pipeline.refresh_from_db()
     return pipeline
 
 

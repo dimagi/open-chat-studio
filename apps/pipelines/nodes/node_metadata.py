@@ -416,8 +416,8 @@ def _rows_named_by(queryset: QuerySet, values: list) -> set:
     """The supplied values that name a row in ``queryset``, one query however many were sent.
 
     A value that is not an id at all -- a string, a dict, a bool -- simply names no row. ``as_int``
-    is what ``Node._sync_resource_fk_fields`` writes the columns through, so the two agree on which
-    values are ids in the first place.
+    is what the pipeline write path uses to normalize values before it writes relation columns, so
+    the option check and persistence path agree on which values are ids in the first place.
     """
     ids = {parsed for parsed in map(as_int, values) if parsed is not None}
     if not ids:
