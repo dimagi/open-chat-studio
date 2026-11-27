@@ -21,7 +21,9 @@ from functools import cache
 from typing import TYPE_CHECKING, cast
 
 import pydantic
+from django.apps import apps
 
+from apps.experiments.versioning import ParamReference, VersionSpec
 from apps.pipelines.const import (
     CODE_NODE_TYPE,
     END_NODE_TYPE,
@@ -33,7 +35,6 @@ from apps.pipelines.const import (
     START_NODE_TYPE,
 )
 from apps.pipelines.exceptions import PipelineNodeBuildError
-from apps.pipelines.versioning import NODE_PARAM_SPECS, VersionedParamSpec
 
 if TYPE_CHECKING:
     from pydantic.fields import FieldInfo
@@ -198,9 +199,12 @@ class NodeType:
         return {START_NODE_TYPE: 0, END_NODE_TYPE: 2}.get(self.type, 1)
 
     @property
-    def versioned_param_specs(self) -> tuple[VersionedParamSpec, ...]:
-        """The params of this type that reference database records (``apps.pipelines.versioning``)."""
-        return NODE_PARAM_SPECS.get(self.type, ())
+    def versioned_param_specs(self) -> tuple[ParamReference, ...]:
+        """The params of this type that name database records, from the node model's version spec."""
+        spec = VersionSpec.for_model(apps.get_model("pipelines", "Node"))
+        if spec is None:
+            return ()
+        return tuple(member for member in spec.param_references() if self.declares(member.key))
 
     def params_to_store(self, params: dict) -> dict:
         """The params to save for a node of this type, given the params a client sent."""

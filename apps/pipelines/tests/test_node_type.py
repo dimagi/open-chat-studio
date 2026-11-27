@@ -6,6 +6,7 @@ resource lookup carries a ``django_db`` marker.
 
 import pytest
 
+from apps.experiments.versioning import Strategy
 from apps.pipelines.node_type import (
     NodeType,
     NoOutputHandles,
@@ -13,7 +14,6 @@ from apps.pipelines.node_type import (
     server_managed_node_types,
 )
 from apps.pipelines.tests.utils import NON_NODE_ATTRIBUTES
-from apps.pipelines.versioning import ParamVersioning
 
 
 class TestNodeClassResolution:
@@ -234,11 +234,15 @@ class TestRenderOrder:
 class TestVersionedParamSpecs:
     def test_a_type_with_referenced_records_lists_them(self):
         specs = NodeType("LLMResponseWithPrompt").versioned_param_specs
-        assert {spec.param_name for spec in specs} >= {"source_material_id", "collection_id"}
-        assert all(isinstance(spec.versioning, ParamVersioning) for spec in specs)
+        assert {spec.key for spec in specs} >= {"source_material_id", "collection_id"}
+        assert all(isinstance(spec.strategy, Strategy) for spec in specs)
 
     def test_a_type_with_none_lists_none(self):
         assert NodeType("RenderTemplate").versioned_param_specs == ()
+
+    @pytest.mark.usefixtures("isolated_spec_registry")
+    def test_a_type_lists_none_while_the_node_model_has_no_spec(self):
+        assert NodeType("LLMResponseWithPrompt").versioned_param_specs == ()
 
 
 class TestInputHandles:

@@ -67,8 +67,8 @@ class ChatbotWriteSerializer(RejectsUnwritableKeys, serializers.ModelSerializer)
     """The PATCH request body.
 
     The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per
-    form field, with references narrowed to ids. It is also ``Experiment.VERSIONED_CONTENT_FIELDS``
-    minus ``pipeline``, which has its own façade. Both are pinned by
+    form field, with references narrowed to ids. It is also every field the chatbot's version spec
+    carries into a version, minus ``pipeline``, which has its own façade. Both are pinned by
     ``apps/api/v2/write/tests/test_writable_fields.py``. Inspect returns more than this, because
     inspecting and editing are different jobs.
 
