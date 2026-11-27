@@ -1,7 +1,7 @@
 import json
 import logging
 import unicodedata
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Self
 
 import tiktoken
 from langchain_core.messages import BaseMessage
@@ -14,6 +14,7 @@ from pydantic_core.core_schema import FieldValidationInfo
 
 from apps.annotations.models import Tag, TagCategories
 from apps.pipelines.exceptions import (
+    NodeUserConfigRunError,
     PipelineNodeBuildError,
     PipelineNodeRunError,
 )
@@ -22,6 +23,7 @@ from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
 from apps.pipelines.nodes.base import (
+    ModelUse,
     OptionsSource,
     PipelineState,
     UiSchema,
@@ -37,10 +39,12 @@ from apps.pipelines.nodes.history_middleware import (
 from apps.pipelines.repository import ORMRepository, RepositoryLookupError, get_prefetched_llm_provider_model
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service import LlmService
+from apps.service_providers.llm_service.decision_backend import DecisionBackend
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import BasicParameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.llm_service.structured_output import NoStructuredOutputError, structured_output_runnable
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.json import dict_to_json_schema
 from apps.utils.schema_utils import VALID_PROPERTY_NAME_PATTERN, create_model_with_sanitized_names
 
@@ -72,13 +76,32 @@ class OutputMessageTagMixin(BaseModel):
         return tags
 
 
-class LLMResponseMixin(BaseModel):
-    llm_provider_id: int = Field(
+DECISION_ONLY_MODEL_MESSAGE = "This model only makes decisions, so only the LLM Router and Decision nodes can use it"
+NO_DECISION_BACKEND_MESSAGE = "The selected provider cannot answer decision questions"
+
+
+def llm_provider_id_field(
+    model_use: ModelUse = ModelUse.chat,
+    title: str = "LLM Model",
+    description: str = "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
+) -> Any:
+    return Field(
         ...,
-        title="LLM Model",
-        description="The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
-        json_schema_extra=UiSchema(widget=Widgets.llm_provider_model, options_source=OptionsSource.llm_provider_id),
+        title=title,
+        description=description,
+        json_schema_extra=UiSchema(
+            widget=Widgets.llm_provider_model,
+            options_source=OptionsSource.llm_provider_id,
+            model_use=model_use,
+        ),
     )
+
+
+class LLMResponseMixin(BaseModel):
+    # Kept in step with the `model_use` of the node's `llm_provider_id_field`.
+    model_use: ClassVar[ModelUse] = ModelUse.chat
+
+    llm_provider_id: int = llm_provider_id_field()
     llm_provider_model_id: int = Field(
         ...,
         description=(
@@ -129,11 +152,20 @@ class LLMResponseMixin(BaseModel):
                 {"field": "llm_provider_model_id"},
             ) from None
 
+        self.check_model(model)
+
         # Validate model parameters
         if params_cls := LLM_MODEL_PARAMETERS.get(model.name):
             params_cls.model_validate(self.llm_model_parameters)
 
         return self
+
+    def check_model(self, model: LlmProviderModel) -> None:
+        """Raise when this node cannot call `model`."""
+        if self.model_use == ModelUse.chat and not model.supports_chat:
+            raise PydanticCustomError("invalid_model", DECISION_ONLY_MODEL_MESSAGE, {"field": "llm_provider_model_id"})
+        if not model.supports_chat and not _provider_answers_decisions(self.llm_provider_id):
+            raise PydanticCustomError("invalid_provider", NO_DECISION_BACKEND_MESSAGE, {"field": "llm_provider_id"})
 
     def get_llm_service(self) -> LlmService:
         try:
@@ -147,6 +179,13 @@ class LLMResponseMixin(BaseModel):
             # operational failure that may be systemic -- raise a run error so it still reaches Sentry.
             raise PipelineNodeRunError("There was an issue configuring the LLM service provider") from e
 
+    def get_decision_backend(self) -> DecisionBackend:
+        """The backend that answers the node's decision model."""
+        backend = self.get_llm_service().get_decision_backend()
+        if backend is None:
+            raise NodeUserConfigRunError(NO_DECISION_BACKEND_MESSAGE)
+        return backend
+
     def get_chat_model(self):
         model_name = self.repo.get_llm_provider_model(self.llm_provider_model_id).name
         logger.debug(f"Calling {model_name} with parameters: {self.llm_model_parameters}")
@@ -159,6 +198,14 @@ HISTORY_TYPE_DESCRIPTION = (
     "remembers just this node's own turns; `named` shares one history between every node set "
     "to the same `history_name`; `global` uses the participant's whole conversation."
 )
+
+
+def _provider_answers_decisions(llm_provider_id: int) -> bool:
+    """Whether the provider has a decision backend. A provider that cannot be loaded is reported when the node runs."""
+    try:
+        return ORMRepository().get_llm_service(llm_provider_id).get_decision_backend() is not None
+    except (RepositoryLookupError, ServiceProviderConfigError):
+        return True
 
 
 class HistoryMixin(LLMResponseMixin):
@@ -229,9 +276,10 @@ class HistoryMixin(LLMResponseMixin):
     def get_history_mode(self) -> PipelineChatHistoryModes:
         return self.history_mode or PipelineChatHistoryModes.SUMMARIZE
 
-    def get_history(self, exclude_message_id: int | None = None) -> list[BaseMessage]:
+    def get_history(self, exclude_message_id: int | None = None, limit: int | None = None) -> list[BaseMessage]:
         """
-        Returns the chat history messages for the node based on its history configuration.
+        Returns the chat history messages for the node based on its history configuration, only the
+        newest `limit` of them when given.
 
         Global - Returns the chat history of the session up to the summary marker.
         Node/Named - Returns the chat history for this node from the pipeline chat history.
@@ -241,10 +289,12 @@ class HistoryMixin(LLMResponseMixin):
             return []
 
         if self.use_session_history:
-            return self.repo.get_session_messages(self.get_history_mode(), exclude_message_id=exclude_message_id)
+            return self.repo.get_session_messages(
+                self.get_history_mode(), exclude_message_id=exclude_message_id, limit=limit
+            )
         else:
             history = self.repo.get_pipeline_chat_history(self.history_type, self._get_history_name())
-            return history.get_langchain_messages_until_marker(self.get_history_mode())
+            return history.get_langchain_messages_until_marker(self.get_history_mode(), limit=limit)
 
     def store_compression_checkpoint(self, compression_marker: str, checkpoint_message_id: int):
         """Persist the correct compression marker for this node's history mode.

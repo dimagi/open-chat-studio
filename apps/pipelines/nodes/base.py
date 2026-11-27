@@ -480,6 +480,15 @@ class Widgets(StrEnum):
     voice_widget = "voice_widget"
     jinja_template = "jinja_template"
     router_prompt_mode = "router_prompt_mode"
+    decisions = "decisions"
+
+
+class ModelUse(StrEnum):
+    """The models a node can call: chat models, decision models, or either."""
+
+    chat = "chat"
+    decisions = "decisions"
+    any = "any"
 
 
 class OptionsSource(StrEnum):
@@ -540,6 +549,7 @@ _UI_SCHEMA_KEYS = {
     "rows": "ui:rows",
     "default_on_show": "ui:onShowDefault",
     "keep_value_when_hidden": "ui:keepValueWhenHidden",
+    "model_use": "ui:modelUse",
 }
 
 
@@ -573,6 +583,9 @@ class UiSchema(BaseModel):
 
     # Number of rows for textarea-based widgets (e.g. jinja_template). Defaults to 2.
     rows: int | None = None
+
+    # Which models the provider widget offers.
+    model_use: ModelUse | None = None
 
     def __call__(self, schema: JsonDict):
         for field, schema_key in _UI_SCHEMA_KEYS.items():

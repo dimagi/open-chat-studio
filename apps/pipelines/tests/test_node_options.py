@@ -15,6 +15,8 @@ from django.urls import reverse
 
 from apps.chat.agent.tools import get_tool_for_custom_action_operation
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
+from apps.service_providers.llm_service.google_decisions import GOOGLE_DECISION_LIMITS
+from apps.service_providers.llm_service.jev import JEV_LIMITS
 from apps.service_providers.models import LlmProviderModel, VoiceProviderType
 from apps.utils.factories.custom_actions import ACTION_SCHEMA, CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -126,6 +128,61 @@ def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
     assert defaults["llm_provider_id"] == provider.id
     # Which openai row is picked is up to the queryset; that it is an openai row is the contract.
     assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
+
+
+@pytest.mark.django_db()
+def test_get_node_default_values_skips_a_decision_only_provider():
+    """Every node type starts from these defaults, and only the router accepts a Jev provider."""
+    team = TeamWithUsersFactory.create()
+    LlmProviderFactory.create(team=team, type="jev")
+    LlmProviderModelFactory.create(team=team, type="jev", name="jev-latest")
+    provider = LlmProviderFactory.create(team=team, type="openai")
+    LlmProviderModelFactory.create(team=team, type="openai")
+
+    defaults = get_node_default_values(team)
+
+    assert defaults["llm_provider_id"] == provider.id
+    assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "model_name", "max_levels"),
+    [
+        pytest.param("jev", "jev-latest", JEV_LIMITS.max_levels, id="decision-only-type"),
+        pytest.param(
+            "google", "gemini-decision-1", GOOGLE_DECISION_LIMITS.max_levels, id="decision-model-of-a-chat-type"
+        ),
+    ],
+)
+def test_a_decision_only_model_is_marked_for_the_builder(team, provider_type, model_name, max_levels):
+    """The builder offers a model marked `chat: false` and `decisions: true` only to the nodes that can call it."""
+    chat_model = LlmProviderModelFactory.create(team=team, type="openai")
+    decision_model = LlmProviderModelFactory.create(team=team, type=provider_type, name=model_name)
+
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
+    options = {option["value"]: option for option in values["llm_provider_model_id"]}
+
+    assert "chat" not in options[chat_model.id]
+    assert "decisions" not in options[chat_model.id]
+    assert "max_levels" not in options[chat_model.id]
+    assert options[decision_model.id]["chat"] is False
+    assert options[decision_model.id]["decisions"] is True
+    assert options[decision_model.id]["max_levels"] == max_levels
+
+
+@pytest.mark.parametrize(
+    ("node_title", "expected"),
+    [
+        pytest.param("LLMResponseWithPrompt", "chat", id="llm-node"),
+        pytest.param("ExtractStructuredData", "chat", id="extract-node"),
+        pytest.param("RouterNode", "any", id="router"),
+        pytest.param("DecisionNode", "decisions", id="decision-node"),
+    ],
+)
+def test_each_node_names_the_models_its_picker_offers(node_title, expected):
+    schema = next(schema for schema in get_node_schemas() if schema["title"] == node_title)
+
+    assert schema["properties"]["llm_provider_id"]["ui:modelUse"] == expected
 
 
 @pytest.mark.django_db()

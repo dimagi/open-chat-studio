@@ -68,3 +68,16 @@ def test_get_messages_returns_until_marker(experiment_session):
         HumanMessage(content="how about some tea", additional_kwargs={"id": message3.id, "node_id": ""}),
         AIMessage(content="I am a robot", additional_kwargs={"id": message3.id, "node_id": ""}),
     ]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("limit", [pytest.param(n, id=f"limit-{n}") for n in range(7)])
+def test_a_limit_keeps_the_newest_messages(experiment_session, limit):
+    history = experiment_session.pipeline_chat_history.create(type=PipelineChatHistoryTypes.NAMED, name="name")
+    history.messages.create(ai_message="I am a robot", human_message="hi")
+    history.messages.create(ai_message="I can't do that", human_message="sudo", summary="argument")
+    every = history.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE)
+
+    messages = history.get_langchain_messages_until_marker(PipelineChatHistoryModes.SUMMARIZE, limit=limit)
+
+    assert messages == every[max(len(every) - limit, 0) :]

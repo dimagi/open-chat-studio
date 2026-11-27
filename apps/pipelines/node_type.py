@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from pydantic.fields import FieldInfo
 
     from apps.pipelines.models import Node
-    from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema
+    from apps.pipelines.nodes.base import BasePipelineNode, ModelUse, NodeSchema
 
 
 class NoOutputHandles(StrEnum):
@@ -129,6 +129,11 @@ class NodeType:
         """
         schema = self.schema
         return schema is not None and not schema.can_delete
+
+    @property
+    def model_use(self) -> "ModelUse | None":
+        """Which models nodes of this type call, or ``None`` for a type that calls none."""
+        return getattr(self.node_class, "model_use", None)
 
     @property
     def is_router(self) -> bool:

@@ -105,7 +105,7 @@ class TranscriptAnalysisForm(forms.ModelForm):
             provider_id, model_id = map(int, provider_model_value.split(":"))
             if not LlmProviderModel.objects.for_team(self.team).filter(id=model_id).exists():
                 raise forms.ValidationError(f"Invalid {llm_field_type} provider model selected.")
-            if not LlmProvider.objects.filter(team=self.team, id=provider_id).exists():
+            if not LlmProvider.objects.filter(team=self.team, id=provider_id).text_generating().exists():
                 raise forms.ValidationError(f"Invalid {llm_field_type} provider selected.")
         except ValueError:
             raise forms.ValidationError(f"Invalid selection for {llm_field_type} provider model.") from None

@@ -17,7 +17,8 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissions
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.base import OptionsSource
+from apps.pipelines.node_type import NodeType
+from apps.pipelines.nodes.base import ModelUse, OptionsSource
 
 from .chatbot_settings import chatbot_setting_options
 from .node_types import (
@@ -276,7 +277,7 @@ class PipelineNodeOptionsView(TeamOptionsView):
         wanted = option_keys_for_node_type(node_type)
         if wanted is None:
             raise unknown_node_type(node_type)
-        options = options_for_team(request.team)
+        options = options_for_team(request.team, NodeType(node_type).model_use or ModelUse.chat)
         filtered = {key: value for key, value in options.items() if key in wanted}
         return Response(self.get_serializer(filtered).data)
 

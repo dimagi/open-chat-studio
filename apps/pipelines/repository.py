@@ -125,10 +125,12 @@ class ORMRepository:
             node_id=node_id,
         )
 
-    def get_session_messages(self, history_mode: str, exclude_message_id: int | None = None) -> list[BaseMessage]:
-        """Get session-level chat history as LangChain messages."""
+    def get_session_messages(
+        self, history_mode: str, exclude_message_id: int | None = None, limit: int | None = None
+    ) -> list[BaseMessage]:
+        """Get session-level chat history as LangChain messages, only the newest `limit` of them when given."""
         return self.session.chat.get_langchain_messages_until_marker(
-            history_mode, exclude_message_id=exclude_message_id
+            history_mode, exclude_message_id=exclude_message_id, limit=limit
         )
 
     def save_compression_checkpoint(
@@ -362,8 +364,9 @@ class InMemoryPipelineRepository(ORMRepository):
             node_id=node_id,
         )
 
-    def get_session_messages(self, history_mode, exclude_message_id=None):
-        return list(self.session_messages)
+    def get_session_messages(self, history_mode, exclude_message_id=None, limit=None):
+        messages = list(self.session_messages)
+        return messages if limit is None else messages[max(len(messages) - limit, 0) :]
 
     def save_compression_checkpoint(self, checkpoint_message_id, history_type, compression_marker, history_mode):
         self.compression_checkpoints.append(

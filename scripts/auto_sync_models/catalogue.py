@@ -96,6 +96,10 @@ def _model_record(provider: str, node: ast.expr) -> ModelRecord | None:
     if name is None:
         return None
     keywords = {kw.arg: kw.value for kw in node.keywords if kw.arg}
+    if _const_false(keywords.get("chat")):
+        # A decision-only model. LiteLLM lists these under a mode the sync does not compare, so
+        # reading it would offer it for retirement on every run.
+        return None
     return ModelRecord(
         provider=provider,
         name=name,
@@ -148,6 +152,10 @@ def _const_str(node: ast.expr | None) -> str | None:
 
 def _const_bool(node: ast.expr | None) -> bool:
     return isinstance(node, ast.Constant) and node.value is True
+
+
+def _const_false(node: ast.expr | None) -> bool:
+    return isinstance(node, ast.Constant) and node.value is False
 
 
 # Layer 2: pricing enrichment

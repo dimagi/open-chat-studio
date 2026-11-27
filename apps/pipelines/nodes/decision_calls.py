@@ -1,0 +1,117 @@
+"""Ask a decision backend about a pipeline run's state, for the nodes that call one."""
+
+import json
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
+
+from langchain_core.callbacks import CallbackManager, CallbackManagerForLLMRun
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages.ai import InputTokenDetails, UsageMetadata
+from langchain_core.outputs import ChatGeneration, LLMResult
+
+from apps.chat.exceptions import ProviderConfigurationError
+from apps.pipelines.models import PipelineChatHistoryModes
+from apps.service_providers.llm_service.decision_backend import (
+    DecisionAuthenticationError,
+    DecisionBackend,
+    DecisionResponse,
+    DecisionUsage,
+    Question,
+)
+from apps.service_providers.llm_service.error_classification import AUTHENTICATION_MESSAGE
+
+if TYPE_CHECKING:
+    from apps.pipelines.nodes.context import NodeContext
+    from apps.pipelines.nodes.decision_node import DecisionNode
+    from apps.pipelines.nodes.nodes import RouterNode
+
+    DecidingNode = RouterNode | DecisionNode
+
+# These bounds keep the conversation well inside a decision model's context; Jev reads at most 64k tokens.
+HISTORY_LIMIT = 20
+MESSAGE_CHARACTER_LIMIT = 2000
+
+
+def ask_decisions(
+    node: "DecidingNode", context: "NodeContext", questions: Mapping[str, Question], backend: DecisionBackend
+) -> DecisionResponse:
+    """Ask every question about the run's state in one request, and report the call's usage.
+
+    Raises `DecisionError` when the request fails, and `ProviderConfigurationError` when the provider
+    rejects the credentials.
+    """
+    model_name = node.repo.get_llm_provider_model(node.llm_provider_model_id).name
+    state = build_state(node, context)
+    run = _start_call(node, backend, model_name, backend.request_text(state, questions))
+    try:
+        response = backend.ask(model_name, state, questions)
+    except Exception as e:
+        run.on_llm_error(e)
+        if isinstance(e, DecisionAuthenticationError):
+            raise ProviderConfigurationError(f"{AUTHENTICATION_MESSAGE} {e}") from e
+        raise
+    _end_call(run, response)
+    return response
+
+
+def build_state(node: "DecidingNode", context: "NodeContext") -> dict:
+    """What the model is asked about: the input, the history the node is configured to see, and the session's data."""
+    if context.session:
+        history = node.get_history(exclude_message_id=context.input_message_id, limit=_history_limit(node))
+    else:
+        history = []
+    return {
+        "input": context.input,
+        "history": [_history_entry(message) for message in history],
+        "participant_data": context.state.participant_data or {},
+        "session_state": context.state.session_state or {},
+        "temp_state": context.state.temp or {},
+    }
+
+
+def _history_limit(node: "DecidingNode") -> int:
+    if node.get_history_mode() == PipelineChatHistoryModes.MAX_HISTORY_LENGTH:
+        return max(min(node.max_history_length, HISTORY_LIMIT), 0)
+    return HISTORY_LIMIT
+
+
+def _history_entry(message: BaseMessage) -> dict:
+    return {"role": message.type, "content": message.text[:MESSAGE_CHARACTER_LIMIT]}
+
+
+def _start_call(
+    node: "DecidingNode", backend: DecisionBackend, model_name: str, request_text: str
+) -> CallbackManagerForLLMRun:
+    """Report the call to the run's callbacks as an LLM call, so tracers and cost tracking see it."""
+    config = node._config or {}
+    manager = CallbackManager.configure(
+        inheritable_callbacks=config.get("callbacks"),
+        inheritable_tags=config.get("tags"),
+        inheritable_metadata=config.get("metadata"),
+        local_metadata={"ocs_provider_type": backend.provider_type, "ls_model_name": model_name},
+    )
+    (run,) = manager.on_llm_start({"name": backend.name}, [request_text], invocation_params={"model": model_name})
+    return run
+
+
+def _end_call(run: CallbackManagerForLLMRun, response: DecisionResponse) -> None:
+    message = AIMessage(
+        content=json.dumps(response.raw_answers),
+        usage_metadata=_usage_metadata(response.usage),
+        response_metadata={"model_name": response.model},
+    )
+    run.on_llm_end(LLMResult(generations=[[ChatGeneration(message=message)]]))
+
+
+def _usage_metadata(usage: DecisionUsage) -> UsageMetadata:
+    """The usage in LangChain's shape, whose `input_tokens` includes the cache counts the cost recorder splits out."""
+    metadata = UsageMetadata(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        total_tokens=usage.input_tokens + usage.output_tokens,
+    )
+    if usage.cached_input_tokens or usage.cache_write_tokens:
+        metadata["input_token_details"] = InputTokenDetails(
+            cache_read=usage.cached_input_tokens, cache_creation=usage.cache_write_tokens
+        )
+    return metadata
