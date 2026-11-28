@@ -1625,6 +1625,18 @@
       "reasoning": true
     }
   },
+  "openai/gpt-6-astra-healthcare": {
+    "first_seen": "2026-11-28",
+    "verdict": "rejected",
+    "reason": "Healthcare-domain variant absent from OpenAI's model catalogue, which lists only gpt-6-astra.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "openai/gpt-6-astra-law": {
     "first_seen": "2026-11-06",
     "verdict": "rejected",
@@ -1657,10 +1669,46 @@
       ]
     }
   },
+  "openai/gpt-6.1-sol-healthcare": {
+    "first_seen": "2026-11-28",
+    "verdict": "rejected",
+    "reason": "Healthcare-domain variant absent from OpenAI's model catalogue, which lists only gpt-6.1-sol.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-6.2-astra-healthcare": {
+    "first_seen": "2026-11-28",
+    "verdict": "rejected",
+    "reason": "Healthcare-domain variant absent from OpenAI's model catalogue, which lists only gpt-6.2-astra and gpt-6.2-sol.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
   "openai/gpt-6.2-astra-law": {
     "first_seen": "2026-11-18",
     "verdict": "rejected",
     "reason": "Legal-domain variant absent from OpenAI's model catalogue, which lists only gpt-6.2-astra and gpt-6.2-sol.",
+    "params": {
+      "reasoning": true,
+      "effort_levels": [
+        "max",
+        "xhigh"
+      ]
+    }
+  },
+  "openai/gpt-6.2-sol-healthcare": {
+    "first_seen": "2026-11-28",
+    "verdict": "rejected",
+    "reason": "Healthcare-domain variant absent from OpenAI's model catalogue, which lists only gpt-6.2-astra and gpt-6.2-sol.",
     "params": {
       "reasoning": true,
       "effort_levels": [
